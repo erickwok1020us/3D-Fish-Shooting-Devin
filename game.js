@@ -25,11 +25,11 @@ const CONFIG = {
         // Issue 2 Fix: Per-mode rotation sensitivity
         rotationSensitivityThirdPerson: 0.001,  // 3RD PERSON mode sensitivity
         // FPS Sensitivity System: 10 levels (10% to 100%)
-        // Reduced by 30% from previous (0.00007 * 0.7 = 0.000049)
-        // Level 10: 100% = 0.28x  |  Level 5: 50% = 0.14x (default)  |  Level 1: 10% = 0.028x
+        // Reduced by 50% from previous (0.000049 * 0.5 = 0.0000245)
+        // Level 10: 100% = 0.14x  |  Level 5: 50% = 0.07x (default)  |  Level 1: 10% = 0.014x
         // Formula: effective = base * (level / 10)
-        // Range: 0.028x (level 1) to 0.28x (level 10), default 0.14x (level 5)
-        rotationSensitivityFPSBase: 0.000049,   // base value for 0.028x-0.28x range
+        // Range: 0.014x (level 1) to 0.14x (level 10), default 0.07x (level 5)
+        rotationSensitivityFPSBase: 0.0000245,  // base value for 0.014x-0.14x range
         fpsSensitivityLevelDefault: 5           // Default level (1-10), 5 = 50%
     },
     
