@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fish Shooter 3D</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            cursor: crosshair;
+        }
+        
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        /* Balance Display - Top Left */
+        #balance-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: linear-gradient(135deg, rgba(0, 200, 100, 0.3), rgba(0, 150, 80, 0.2));
+            border: 2px solid #00c864;
+            border-radius: 15px;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 15px rgba(0, 200, 100, 0.3);
+        }
+        
+        #balance-display .balance-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #00c864, #00a050);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+        }
+        
+        #balance-display .balance-value {
+            font-size: 22px;
+            font-weight: bold;
+            color: #00ff7f;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        #balance-display .balance-label {
+            font-size: 12px;
+            color: #88ffaa;
+            margin-left: -8px;
+        }
+        
+        /* Settings Button - Top Right */
+        #settings-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            cursor: pointer;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #fff;
+            transition: all 0.3s ease;
+        }
+        
+        #settings-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+        
+        /* FPS Counter */
+        #fps-counter {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            color: #0f0;
+            font-size: 12px;
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        /* Weapon Panel - Bottom Left (Issue #4 - group all buttons together) */
+        #weapon-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        
+        .weapon-group {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .weapon-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 12px;
+            border: 3px solid #444;
+            background: linear-gradient(180deg, rgba(40, 40, 50, 0.95), rgba(20, 20, 30, 0.95));
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .weapon-btn:hover {
+            transform: scale(1.1);
+            border-color: #666;
+        }
+        
+        .weapon-btn.active {
+            border-color: #00ff88;
+            box-shadow: 0 0 25px rgba(0, 255, 136, 0.6);
+        }
+        
+        .weapon-btn .weapon-icon {
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+        
+        .weapon-btn .multiplier {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 10px currentColor;
+        }
+        
+        .weapon-btn .cost {
+            font-size: 9px;
+            color: #aaa;
+            margin-top: 1px;
+        }
+        
+        .weapon-btn[data-weapon="1x"] { --weapon-color: #66ff66; }
+        .weapon-btn[data-weapon="3x"] { --weapon-color: #ffaa00; }
+        .weapon-btn[data-weapon="5x"] { --weapon-color: #00aaff; }
+        .weapon-btn[data-weapon="8x"] { --weapon-color: #ff44ff; }
+        .weapon-btn[data-weapon="20x"] { --weapon-color: #ff00ff; }
+        
+        .weapon-btn.active .multiplier {
+            color: var(--weapon-color);
+        }
+        
+        /* Auto-shoot Toggle, Center View, and View Mode - Bottom Right */
+        #auto-shoot-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        
+        #auto-shoot-btn, #center-view-btn, #view-mode-btn {
+            padding: 10px 25px;
+            background: rgba(50, 50, 60, 0.9);
+            border: 2px solid #555;
+            border-radius: 25px;
+            color: #888;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.3s ease;
+            min-width: 140px;
+        }
+        
+        #auto-shoot-btn:hover, #center-view-btn:hover, #view-mode-btn:hover {
+            border-color: #777;
+            color: #aaa;
+        }
+        
+        #auto-shoot-btn.active {
+            background: rgba(0, 200, 100, 0.3);
+            border-color: #00c864;
+            color: #00ff7f;
+            box-shadow: 0 0 15px rgba(0, 200, 100, 0.4);
+        }
+        
+        #center-view-btn {
+            background: rgba(60, 60, 80, 0.9);
+            border-color: #4488aa;
+            color: #88bbdd;
+        }
+        
+        #center-view-btn:hover {
+            background: rgba(70, 100, 130, 0.9);
+            border-color: #66aacc;
+            color: #aaddff;
+        }
+        
+        #view-mode-btn {
+            background: rgba(80, 60, 100, 0.9);
+            border-color: #8866aa;
+            color: #bb99dd;
+        }
+        
+        #view-mode-btn:hover {
+            background: rgba(100, 80, 130, 0.9);
+            border-color: #aa88cc;
+            color: #ddbbff;
+        }
+        
+        #view-mode-btn.active {
+            background: rgba(150, 100, 200, 0.3);
+            border-color: #aa66ff;
+            color: #cc99ff;
+            box-shadow: 0 0 15px rgba(150, 100, 200, 0.4);
+        }
+        
+        /* Settings Panel */
+        #settings-panel {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            width: 320px;
+            background: linear-gradient(180deg, rgba(30, 35, 50, 0.95), rgba(20, 25, 40, 0.98));
+            border: 2px solid rgba(100, 150, 200, 0.4);
+            border-radius: 16px;
+            padding: 20px;
+            pointer-events: auto;
+            display: none;
+            z-index: 50;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        
+        #settings-panel.visible {
+            display: block;
+        }
+        
+        #settings-panel h3 {
+            color: #88bbff;
+            font-size: 18px;
+            margin-bottom: 20px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid rgba(100, 150, 200, 0.3);
+            padding-bottom: 12px;
+        }
+        
+        .settings-group {
+            margin-bottom: 18px;
+        }
+        
+        .settings-group label {
+            display: block;
+            color: #aaccee;
+            font-size: 13px;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .settings-group select {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(40, 50, 70, 0.9);
+            border: 1px solid rgba(100, 150, 200, 0.3);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .settings-group select:hover {
+            border-color: rgba(100, 150, 200, 0.6);
+            background: rgba(50, 60, 80, 0.9);
+        }
+        
+        .settings-group select:focus {
+            outline: none;
+            border-color: #4488cc;
+            box-shadow: 0 0 8px rgba(68, 136, 204, 0.3);
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .slider-container input[type="range"] {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(60, 80, 120, 0.6);
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(135deg, #4488cc, #2266aa);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease;
+        }
+        
+        .slider-container input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        
+        .slider-container input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(135deg, #4488cc, #2266aa);
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+        
+        .slider-value {
+            min-width: 45px;
+            text-align: right;
+            color: #88ddff;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        #settings-panel .settings-divider {
+            height: 1px;
+            background: rgba(100, 150, 200, 0.2);
+            margin: 16px 0;
+        }
+        
+        #settings-close-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, rgba(60, 80, 120, 0.8), rgba(40, 60, 100, 0.8));
+            border: 1px solid rgba(100, 150, 200, 0.4);
+            border-radius: 8px;
+            color: #aaccee;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 10px;
+        }
+        
+        #settings-close-btn:hover {
+            background: linear-gradient(135deg, rgba(80, 100, 140, 0.9), rgba(60, 80, 120, 0.9));
+            border-color: rgba(100, 150, 200, 0.6);
+            color: #fff;
+        }
+        
+        /* Issue #16: Dynamic crosshair that shows weapon accuracy/spread */
+        #crosshair {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+            z-index: 100;
+            transform: translate(-50%, -50%);
+            display: block;
+            transition: width 0.2s ease, height 0.2s ease;
+        }
+        
+        #crosshair .crosshair-ring {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            box-sizing: border-box;
+        }
+        
+        #crosshair .crosshair-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        #crosshair .crosshair-line {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.6);
+        }
+        
+        #crosshair .crosshair-line.top {
+            width: 2px;
+            height: 8px;
+            left: 50%;
+            top: 4px;
+            transform: translateX(-50%);
+        }
+        
+        #crosshair .crosshair-line.bottom {
+            width: 2px;
+            height: 8px;
+            left: 50%;
+            bottom: 4px;
+            transform: translateX(-50%);
+        }
+        
+        #crosshair .crosshair-line.left {
+            width: 8px;
+            height: 2px;
+            top: 50%;
+            left: 4px;
+            transform: translateY(-50%);
+        }
+        
+        #crosshair .crosshair-line.right {
+            width: 8px;
+            height: 2px;
+            top: 50%;
+            right: 4px;
+            transform: translateY(-50%);
+        }
+        
+        /* Crosshair color based on weapon */
+        #crosshair.weapon-1x .crosshair-ring { border-color: rgba(102, 255, 102, 0.7); }
+        #crosshair.weapon-3x .crosshair-ring { border-color: rgba(255, 170, 0, 0.7); }
+        #crosshair.weapon-5x .crosshair-ring { border-color: rgba(0, 170, 255, 0.7); }
+        #crosshair.weapon-8x .crosshair-ring { border-color: rgba(255, 68, 255, 0.7); }
+        #crosshair.weapon-20x .crosshair-ring { border-color: rgba(255, 0, 255, 0.9); box-shadow: 0 0 10px rgba(255, 0, 255, 0.5); }
+        
+        /* Reward Animation */
+        .reward-popup {
+            position: absolute;
+            font-size: 24px;
+            font-weight: bold;
+            color: #00ff7f;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 127, 0.5);
+            pointer-events: none;
+            animation: rewardFloat 1.5s ease-out forwards;
+            z-index: 100;
+        }
+        
+        @keyframes rewardFloat {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1.5); }
+        }
+        
+        /* Loading Screen */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, #001428, #002850);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        #loading-screen h1 {
+            color: #00bfff;
+            font-size: 48px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 20px rgba(0, 191, 255, 0.5);
+        }
+        
+        #loading-bar {
+            width: 300px;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        #loading-progress {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #00bfff, #00ff88);
+            transition: width 0.3s ease;
+        }
+        
+        #loading-text {
+            color: #87ceeb;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        
+        /* Instructions */
+        #instructions {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 11px;
+            text-align: right;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 8px;
+        }
+        
+        /* Issue #5: Rare Fish Effects */
+        /* Screen shake animation */
+        @keyframes screenShake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        
+        .screen-shake {
+            animation: screenShake 0.5s ease-in-out;
+        }
+        
+        /* Issue #14: Enhanced weapon VFX - Light shake for 5x weapon */
+        @keyframes shakeLight {
+            0%, 100% { transform: translate(0, 0); }
+            10% { transform: translate(-2px, 1px); }
+            20% { transform: translate(2px, -1px); }
+            30% { transform: translate(-1px, 2px); }
+            40% { transform: translate(1px, -2px); }
+            50% { transform: translate(-2px, -1px); }
+            60% { transform: translate(2px, 1px); }
+            70% { transform: translate(-1px, -1px); }
+            80% { transform: translate(1px, 1px); }
+            90% { transform: translate(-1px, 0); }
+        }
+        
+        .shake-light {
+            animation: shakeLight 0.15s ease-in-out;
+        }
+        
+        /* Issue #14: Enhanced weapon VFX - Strong shake for 8x weapon */
+        @keyframes shakeStrong {
+            0%, 100% { transform: translate(0, 0); }
+            10% { transform: translate(-8px, 4px); }
+            20% { transform: translate(8px, -4px); }
+            30% { transform: translate(-6px, 6px); }
+            40% { transform: translate(6px, -6px); }
+            50% { transform: translate(-8px, -4px); }
+            60% { transform: translate(8px, 4px); }
+            70% { transform: translate(-4px, -6px); }
+            80% { transform: translate(4px, 6px); }
+            90% { transform: translate(-2px, 0); }
+        }
+        
+        .shake-strong {
+            animation: shakeStrong 0.3s ease-in-out;
+        }
+        
+        /* Red pulsing border */
+        @keyframes redPulse {
+            0%, 100% { box-shadow: inset 0 0 30px rgba(255, 0, 0, 0); }
+            50% { box-shadow: inset 0 0 60px rgba(255, 0, 0, 0.6); }
+        }
+        
+        .red-pulse-border {
+            animation: redPulse 0.5s ease-in-out 3;
+        }
+        
+        /* Rare fish notification */
+        .rare-fish-notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 36px;
+            font-weight: bold;
+            color: #ff4444;
+            text-shadow: 0 0 20px rgba(255, 68, 68, 0.8), 2px 2px 4px rgba(0, 0, 0, 0.8);
+            z-index: 200;
+            animation: notificationPop 2s ease-out forwards;
+            pointer-events: none;
+        }
+        
+        @keyframes notificationPop {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            40% { transform: translate(-50%, -50%) scale(1); }
+            80% { opacity: 1; }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <h1>Fish Shooter 3D</h1>
+        <div id="loading-bar">
+            <div id="loading-progress"></div>
+        </div>
+        <div id="loading-text">Loading...</div>
+    </div>
+    
+    <!-- Game Container -->
+    <div id="game-container">
+        <!-- UI Overlay -->
+        <div id="ui-overlay">
+            <!-- Balance Display - Top Left -->
+            <div id="balance-display">
+                <div class="balance-icon">$</div>
+                <span class="balance-value" id="balance-value">1000.00</span>
+                <span class="balance-label">USDT</span>
+            </div>
+            
+            <!-- Settings Button - Top Right -->
+            <button id="settings-btn">&#9881;</button>
+            
+            <!-- Settings Panel -->
+            <div id="settings-panel">
+                <h3>Settings</h3>
+                
+                <!-- Graphics Quality -->
+                <div class="settings-group">
+                    <label>Graphics Quality</label>
+                    <select id="graphics-quality">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                        <option value="ultra">Ultra</option>
+                    </select>
+                </div>
+                
+                <!-- Shadow Quality -->
+                <div class="settings-group">
+                    <label>Shadow Quality</label>
+                    <select id="shadow-quality">
+                        <option value="off">Off</option>
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                
+                <div class="settings-divider"></div>
+                
+                <!-- Third Person Sensitivity -->
+                <div class="settings-group">
+                    <label>Third Person Sensitivity</label>
+                    <div class="slider-container">
+                        <input type="range" id="third-person-sensitivity" min="0.1" max="2.0" step="0.1" value="1.0">
+                        <span class="slider-value" id="third-person-sensitivity-value">1.0x</span>
+                    </div>
+                </div>
+                
+                <!-- FPS Sensitivity -->
+                <div class="settings-group">
+                    <label>FPS Sensitivity</label>
+                    <div class="slider-container">
+                        <input type="range" id="fps-sensitivity" min="0.1" max="2.0" step="0.1" value="1.0">
+                        <span class="slider-value" id="fps-sensitivity-value">1.0x</span>
+                    </div>
+                </div>
+                
+                <button id="settings-close-btn">Close</button>
+            </div>
+            
+            <!-- FPS Counter -->
+            <div id="fps-counter">FPS: 60</div>
+            
+            <!-- Instructions -->
+            <div id="instructions">
+                Click to shoot<br>
+                Right-drag to rotate view<br>
+                A/D keys to rotate camera<br>
+                Select weapon below
+            </div>
+            
+            <!-- Auto-shoot Toggle, View Mode, and Center View - Bottom Right -->
+            <div id="auto-shoot-container">
+                <button id="auto-shoot-btn">AUTO OFF</button>
+                <button id="view-mode-btn">3RD PERSON</button>
+                <button id="center-view-btn">CENTER VIEW</button>
+            </div>
+            
+            <!-- Weapon Panel - Issue #16: Added 20x Super Weapon -->
+            <div id="weapon-panel">
+                <div class="weapon-group">
+                    <button class="weapon-btn active" data-weapon="1x">
+                        <span class="weapon-icon">&#x2022;</span>
+                        <span class="multiplier">1x</span>
+                        <span class="cost">1 USDT</span>
+                    </button>
+                    <button class="weapon-btn" data-weapon="3x">
+                        <span class="weapon-icon">&#x2234;</span>
+                        <span class="multiplier">3x</span>
+                        <span class="cost">3 USDT</span>
+                    </button>
+                </div>
+                <div class="weapon-group">
+                    <button class="weapon-btn" data-weapon="5x">
+                        <span class="weapon-icon">&#x26A1;</span>
+                        <span class="multiplier">5x</span>
+                        <span class="cost">5 USDT</span>
+                    </button>
+                    <button class="weapon-btn" data-weapon="8x">
+                        <span class="weapon-icon">&#x1F4A3;</span>
+                        <span class="multiplier">8x</span>
+                        <span class="cost">8 USDT</span>
+                    </button>
+                </div>
+                <div class="weapon-group">
+                    <button class="weapon-btn" data-weapon="20x">
+                        <span class="weapon-icon">&#x2605;</span>
+                        <span class="multiplier">20x</span>
+                        <span class="cost">200 USDT</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Issue #16: Dynamic crosshair showing weapon accuracy -->
+        <div id="crosshair" class="weapon-1x">
+            <div class="crosshair-ring"></div>
+            <div class="crosshair-dot"></div>
+            <div class="crosshair-line top"></div>
+            <div class="crosshair-line bottom"></div>
+            <div class="crosshair-line left"></div>
+            <div class="crosshair-line right"></div>
+        </div>
+    </div>
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
