@@ -25,9 +25,9 @@ const CONFIG = {
         // Issue 2 Fix: Per-mode rotation sensitivity
         rotationSensitivityThirdPerson: 0.001,  // 3RD PERSON mode sensitivity
         // FPS Sensitivity System: 10 levels (10% to 100%)
-        // User requested: previous 100% becomes new 50%, so base is doubled
-        // New range: 0.0000035 (10%) to 0.000035 (100%), default 50% = 0.0000175
-        rotationSensitivityFPSBase: 0.000035,   // 100% sensitivity (2x previous base)
+        // User requested: previous 100% becomes new 50%, so base is doubled again
+        // New range: 0.000007 (10%) to 0.00007 (100%), default 50% = 0.000035
+        rotationSensitivityFPSBase: 0.00007,    // 100% sensitivity (2x previous base)
         fpsSensitivityLevelDefault: 5           // Default level (1-10), 5 = 50%
     },
     
@@ -2891,14 +2891,20 @@ function aimCannon(targetX, targetY) {
     const yaw = Math.atan2(direction.x, direction.z);
     const pitch = Math.asin(direction.y);
     
-    // Issue #2: Enable 360° horizontal rotation (no yaw limit)
+    // FPS mode: Limited to ±90° yaw (180° total) - cannon can only face outward
+    // 3RD PERSON mode: Unlimited 360° rotation
     // FPS Pitch Limits: Different limits for FPS mode vs 3RD PERSON mode
     let minPitch, maxPitch;
+    let clampedYaw = yaw;
+    const maxYaw = Math.PI / 2;  // 90 degrees
+    
     if (gameState.viewMode === 'fps') {
         // FPS mode: 40° up ensures platform occupies lower 1/3 of screen
         // Player cannot see directly overhead
         minPitch = -30 * (Math.PI / 180);   // -30° (down)
         maxPitch = 40 * (Math.PI / 180);    // +40° (up) - platform visible at bottom
+        // Limit yaw to ±90° in FPS mode
+        clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, yaw));
     } else {
         // 3RD PERSON mode: Full range for shooting fish anywhere
         minPitch = -Math.PI / 2;   // -90° (full downward)
@@ -2909,7 +2915,7 @@ function aimCannon(targetX, targetY) {
     
     // Issue #10: Apply rotation to cannon group (yaw) and PITCH GROUP (pitch)
     // The pitch group contains both barrel and muzzle, so they rotate together
-    cannonGroup.rotation.y = yaw;  // No clamping for 360° rotation
+    cannonGroup.rotation.y = clampedYaw;  // Clamped to ±90° in FPS mode
     if (cannonPitchGroup) {
         // Issue #10: Rotate pitch group so barrel AND muzzle move together
         cannonPitchGroup.rotation.x = -clampedPitch;
@@ -2956,14 +2962,20 @@ function aimCannonAtFish(fish) {
     const yaw = Math.atan2(dir.x, dir.z);
     const pitch = Math.asin(dir.y);
     
-    // Issue #2: Full 360° horizontal rotation (no yaw limit)
+    // FPS mode: Limited to ±90° yaw (180° total) - cannon can only face outward
+    // 3RD PERSON mode: Unlimited 360° rotation
     // FPS Pitch Limits: Different limits for FPS mode vs 3RD PERSON mode
     let minPitch, maxPitch;
+    let clampedYaw = yaw;
+    const maxYaw = Math.PI / 2;  // 90 degrees
+    
     if (gameState.viewMode === 'fps') {
         // FPS mode: 40° up ensures platform occupies lower 1/3 of screen
         // Player cannot see directly overhead
         minPitch = -30 * (Math.PI / 180);   // -30° (down)
         maxPitch = 40 * (Math.PI / 180);    // +40° (up) - platform visible at bottom
+        // Limit yaw to ±90° in FPS mode
+        clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, yaw));
     } else {
         // 3RD PERSON mode: Full range for shooting fish anywhere
         minPitch = -Math.PI / 2;   // -90° (full downward)
@@ -2972,7 +2984,7 @@ function aimCannonAtFish(fish) {
     const clampedPitch = Math.max(minPitch, Math.min(maxPitch, pitch));
     
     // Issue #10: Apply rotation to cannon group (yaw) and PITCH GROUP (pitch)
-    cannonGroup.rotation.y = yaw;  // No clamping for 360° rotation
+    cannonGroup.rotation.y = clampedYaw;  // Clamped to ±90° in FPS mode
     if (cannonPitchGroup) {
         // Issue #10: Rotate pitch group so barrel AND muzzle move together
         cannonPitchGroup.rotation.x = -clampedPitch;
@@ -5824,8 +5836,12 @@ function setupEventListeners() {
             // Update based on view mode
             if (gameState.viewMode === 'fps') {
                 // In FPS mode, directly rotate the cannon (camera follows automatically)
+                // Limit yaw to ±90° (180° total) - cannon can only face outward (fish area)
+                // Player cannon is at 6 o'clock, facing -Z (yaw=0), so limit to [-90°, +90°]
+                const maxYaw = Math.PI / 2;  // 90 degrees
+                const clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
                 if (cannonGroup) {
-                    cannonGroup.rotation.y = newYaw;
+                    cannonGroup.rotation.y = clampedYaw;
                 }
                 if (cannonPitchGroup) {
                     // FPS Pitch Limits: Symmetric ±50° for balanced up/down aiming
@@ -5877,20 +5893,24 @@ function setupEventListeners() {
         });
     }
     
-    // Keyboard controls for camera rotation (Issue #5) - Issue #9: Unlimited 360°
+    // Keyboard controls for camera rotation (Issue #5)
+    // FPS mode: Limited to ±90° (180° total) - cannon can only face outward
+    // 3RD PERSON mode: Unlimited 360° rotation
     window.addEventListener('keydown', (e) => {
         const rotationSpeed = 0.05;  // Faster rotation for keyboard
+        const maxYaw = Math.PI / 2;  // 90 degrees limit for FPS mode
         
         if (e.key === 'a' || e.key === 'A') {
-            // Rotate camera left (unlimited 360°)
+            // Rotate camera left
             if (gameState.viewMode === 'fps') {
-                // In FPS mode, directly rotate the cannon (camera follows automatically)
+                // In FPS mode, directly rotate the cannon (limited to ±90°)
                 if (cannonGroup) {
-                    cannonGroup.rotation.y -= rotationSpeed;
-                    if (cannonGroup.rotation.y < -Math.PI) cannonGroup.rotation.y += 2 * Math.PI;
+                    let newYaw = cannonGroup.rotation.y - rotationSpeed;
+                    cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
                 }
                 updateFPSCamera();
             } else {
+                // 3RD PERSON mode: unlimited 360°
                 let newYaw = gameState.cameraYaw - rotationSpeed;
                 if (newYaw < -Math.PI) newYaw += 2 * Math.PI;
                 gameState.targetCameraYaw = newYaw;
@@ -5898,15 +5918,16 @@ function setupEventListeners() {
                 updateCameraRotation();
             }
         } else if (e.key === 'd' || e.key === 'D') {
-            // Rotate camera right (unlimited 360°)
+            // Rotate camera right
             if (gameState.viewMode === 'fps') {
-                // In FPS mode, directly rotate the cannon (camera follows automatically)
+                // In FPS mode, directly rotate the cannon (limited to ±90°)
                 if (cannonGroup) {
-                    cannonGroup.rotation.y += rotationSpeed;
-                    if (cannonGroup.rotation.y > Math.PI) cannonGroup.rotation.y -= 2 * Math.PI;
+                    let newYaw = cannonGroup.rotation.y + rotationSpeed;
+                    cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
                 }
                 updateFPSCamera();
             } else {
+                // 3RD PERSON mode: unlimited 360°
                 let newYaw = gameState.cameraYaw + rotationSpeed;
                 if (newYaw > Math.PI) newYaw -= 2 * Math.PI;
                 gameState.targetCameraYaw = newYaw;
