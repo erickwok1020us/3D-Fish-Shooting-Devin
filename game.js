@@ -25,9 +25,9 @@ const CONFIG = {
         // Issue 2 Fix: Per-mode rotation sensitivity
         rotationSensitivityThirdPerson: 0.001,  // 3RD PERSON mode sensitivity
         // FPS Sensitivity System: 10 levels (10% to 100%)
-        // Base sensitivity (100%) = current lowest sensitivity that user found acceptable
-        // Default level = 5 (50%), so actual sensitivity = 0.000175 * 0.5 = 0.0000875
-        rotationSensitivityFPSBase: 0.000175,   // 100% sensitivity (max, was previous lowest)
+        // User requested: previous 10% (0.0000175) becomes new 100%
+        // New range: 0.00000175 (10%) to 0.0000175 (100%), default 50% = 0.0000875
+        rotationSensitivityFPSBase: 0.0000175,  // 100% sensitivity (was previous 10%)
         fpsSensitivityLevelDefault: 5           // Default level (1-10), 5 = 50%
     },
     
@@ -2561,10 +2561,10 @@ function createStaticCannon(position, rotationY, color = 0x888888) {
 const CANNON_RING_RADIUS_Z = 500;  // For 12 o'clock and 6 o'clock (front/back) - user said "還可以"
 const CANNON_RING_RADIUS_X = 800;  // For 3 o'clock and 9 o'clock (left/right) - increased to reach edge
 
-// Cannon Y position - lowered to midpoint between water middle (Y=0) and floor (Y=-450)
-// User feedback: Y=0 was too high (too close to water surface)
-// New position: (0 + -450) / 2 = -225 (in lower half of water depth)
-const CANNON_BASE_Y = -225;  // Midpoint between water middle and floor
+// Cannon Y position - lowered again to be closer to the floor
+// Previous: Y=-225 (midpoint between water middle Y=0 and floor Y=-450)
+// New position: midpoint between -225 and -450 = -337.5 (closer to floor)
+const CANNON_BASE_Y = -337.5;  // 3/4 depth, closer to floor
 
 // Create all 4 cannons (1 player + 3 static)
 function createAllCannons() {
