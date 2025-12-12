@@ -6928,6 +6928,12 @@ function applyShadowQuality(quality) {
     
     if (!renderer) return;
     
+    // Shadow quality levels:
+    // - off: No shadows
+    // - low: BasicShadowMap, 512x512 (fastest, hard edges)
+    // - medium: PCFShadowMap, 1024x1024 (balanced)
+    // - high: PCFSoftShadowMap, 2048x2048 (best quality, soft edges)
+    
     switch (quality) {
         case 'off':
             renderer.shadowMap.enabled = false;
@@ -6946,11 +6952,21 @@ function applyShadowQuality(quality) {
             break;
     }
     
+    // Force shadow map refresh when changing type
+    renderer.shadowMap.needsUpdate = true;
+    
     // Update all lights that cast shadows
     if (scene) {
         scene.traverse((obj) => {
             if (obj.isLight && obj.shadow) {
                 obj.castShadow = quality !== 'off';
+                
+                // Dispose old shadow map to force recreation with new size
+                if (obj.shadow.map) {
+                    obj.shadow.map.dispose();
+                    obj.shadow.map = null;
+                }
+                
                 if (quality === 'high') {
                     obj.shadow.mapSize.width = 2048;
                     obj.shadow.mapSize.height = 2048;
@@ -6961,6 +6977,9 @@ function applyShadowQuality(quality) {
                     obj.shadow.mapSize.width = 512;
                     obj.shadow.mapSize.height = 512;
                 }
+                
+                // Mark shadow as needing update
+                obj.shadow.needsUpdate = true;
             }
         });
     }
