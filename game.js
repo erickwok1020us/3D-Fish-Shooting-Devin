@@ -6091,6 +6091,8 @@ function toggleViewMode() {
         }
         // 3RD PERSON MODE: Remove CSS class so crosshair follows mouse
         if (crosshair) crosshair.classList.remove('fps-mode');
+        // Hide FPS debug overlay when switching to 3RD PERSON mode
+        hideFPSDebugOverlay();
         
         // Issue 1 Fix: Use dedicated reset function with ABSOLUTE values
         // This ensures the camera always returns to the exact same position
@@ -6243,6 +6245,51 @@ function updateAutoPanning(deltaTime) {
     }
 }
 
+// ==================== DEBUG OVERLAY ====================
+// DEBUG: Temporary overlay to diagnose cannon rotation issue
+// Shows cannon and camera rotation values in real-time
+function updateFPSDebugOverlay() {
+    if (gameState.viewMode !== 'fps') return;
+    
+    let overlay = document.getElementById('fps-debug-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'fps-debug-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 80px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 8px;
+            border-radius: 4px;
+            z-index: 10000;
+            pointer-events: none;
+        `;
+        document.body.appendChild(overlay);
+    }
+    
+    const deg = r => (r * 180 / Math.PI).toFixed(1);
+    const cannonYaw = cannonGroup ? deg(cannonGroup.rotation.y) : 'N/A';
+    const cannonPitch = cannonPitchGroup ? deg(-cannonPitchGroup.rotation.x) : 'N/A';
+    const isDragging = gameState.isRightDragging ? 'YES' : 'no';
+    
+    overlay.innerHTML = `
+        <div>Cannon Yaw: ${cannonYaw} deg</div>
+        <div>Cannon Pitch: ${cannonPitch} deg</div>
+        <div>Right-Dragging: ${isDragging}</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">Build: c9ae90a-debug</div>
+    `;
+}
+
+// Hide debug overlay when not in FPS mode
+function hideFPSDebugOverlay() {
+    const overlay = document.getElementById('fps-debug-overlay');
+    if (overlay) overlay.remove();
+}
+
 // ==================== GAME LOOP ====================
 function animate() {
     requestAnimationFrame(animate);
@@ -6268,6 +6315,8 @@ function animate() {
     // This ensures camera follows when aiming (click) or auto-aim rotates the cannon
     if (gameState.viewMode === 'fps') {
         updateFPSCamera();
+        // DEBUG: Update rotation debug overlay (temporary for diagnosing cannon rotation issue)
+        updateFPSDebugOverlay();
     }
     
     // Auto-shoot with auto-aim (Issue #3 - fully automatic without mouse following)
