@@ -5794,18 +5794,22 @@ function setupEventListeners() {
             // IMPORTANT: Negate deltaX so mouse left = camera left (standard FPS controls)
             let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) - deltaX * rotationSensitivity;
             
-            // Clamp yaw to ±90° (180° total, as user requested)
-            const maxYaw = Math.PI / 2;  // 90 degrees
+            // Clamp yaw to ±50° (100° total) - calculated to cover entire fish pool width
+            // Fish pool: X from -900 to +900, cannon at Z=-500, pool far edge at Z=600
+            // atan2(900, 1100) ≈ 39°, adding margin gives ~50°
+            const maxYaw = 50 * (Math.PI / 180);  // 50 degrees
             newYaw = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
             
             // Calculate new pitch (vertical rotation)
             // IMPORTANT: Use + deltaY so mouse up = look up (standard FPS controls)
             let newPitch = (cannonPitchGroup ? cannonPitchGroup.rotation.x : 0) + deltaY * rotationSensitivity;
             
-            // Clamp pitch to FPS limits: -35° (look down) to +50° (look up)
-            // Center view is 0° (straight ahead), symmetric range for full pool coverage
-            const minRotationX = -35 * (Math.PI / 180);  // Look down at near fish
-            const maxRotationX = 50 * (Math.PI / 180);   // Look up at far fish
+            // Clamp pitch to cover entire fish pool height
+            // Fish pool: Y from -450 to +450, cannon at Y=-337.5, Z=-500
+            // Looking up at top far corner: atan2(787.5, 1100) ≈ 36°, with margin ~45°
+            // Looking down at bottom near area: atan2(-112.5, 500) ≈ -13°, with margin ~-20°
+            const minRotationX = -20 * (Math.PI / 180);  // Look down at near fish
+            const maxRotationX = 45 * (Math.PI / 180);   // Look up at far fish
             newPitch = Math.max(minRotationX, Math.min(maxRotationX, newPitch));
             
             // Apply rotation to cannon
@@ -6357,7 +6361,7 @@ function updateFPSDebugOverlay() {
         <div>Cannon Yaw: ${cannonYaw} deg</div>
         <div>Cannon Pitch: ${cannonPitch} deg</div>
         <div>Right-Dragging: ${isDragging}</div>
-        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-center-v2</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-pool-v1</div>
     `;
 }
 
