@@ -5771,18 +5771,26 @@ function setupEventListeners() {
         
         // FPS MODE: Free mouse look (no button required)
         if (gameState.viewMode === 'fps') {
-            // Initialize last mouse position on first move
-            if (gameState.lastFPSMouseX === null) {
+            // Use Pointer Lock API if available and locked
+            // movementX/Y gives raw mouse delta even when cursor is locked
+            let deltaX, deltaY;
+            
+            if (document.pointerLockElement === container) {
+                // Pointer is locked - use movementX/Y directly
+                deltaX = e.movementX || 0;
+                deltaY = e.movementY || 0;
+            } else {
+                // Fallback: track position manually (for browsers without pointer lock)
+                if (gameState.lastFPSMouseX === null) {
+                    gameState.lastFPSMouseX = e.clientX;
+                    gameState.lastFPSMouseY = e.clientY;
+                    return;
+                }
+                deltaX = e.clientX - gameState.lastFPSMouseX;
+                deltaY = e.clientY - gameState.lastFPSMouseY;
                 gameState.lastFPSMouseX = e.clientX;
                 gameState.lastFPSMouseY = e.clientY;
-                return;
             }
-            
-            // Calculate mouse delta
-            const deltaX = e.clientX - gameState.lastFPSMouseX;
-            const deltaY = e.clientY - gameState.lastFPSMouseY;
-            gameState.lastFPSMouseX = e.clientX;
-            gameState.lastFPSMouseY = e.clientY;
             
             // Apply rotation using same sensitivity as right-drag
             // FPS free-look uses 10x higher sensitivity for comfortable gameplay
@@ -6138,6 +6146,10 @@ function toggleViewMode() {
         // Hide mouse cursor in FPS mode (only crosshair visible)
         const container = document.getElementById('game-container');
         if (container) container.classList.add('fps-hide-cursor');
+        // Request Pointer Lock to keep mouse inside window
+        if (container && container.requestPointerLock) {
+            container.requestPointerLock();
+        }
         // Reset FPS mouse tracking (will be initialized on first mouse move)
         gameState.lastFPSMouseX = null;
         gameState.lastFPSMouseY = null;
@@ -6168,6 +6180,10 @@ function toggleViewMode() {
         // Show mouse cursor again in 3RD PERSON mode
         const container = document.getElementById('game-container');
         if (container) container.classList.remove('fps-hide-cursor');
+        // Release Pointer Lock when exiting FPS mode
+        if (document.exitPointerLock) {
+            document.exitPointerLock();
+        }
         // Hide FPS debug overlay when switching to 3RD PERSON mode
         hideFPSDebugOverlay();
         
@@ -6193,14 +6209,10 @@ function updateViewModeButton() {
 }
 
 // FPS Pitch Limits - centralized constants (single source of truth)
-// FPS rotation limits - calculated to cover entire fish pool
-// Fish pool: X from -900 to +900, Y from -450 to +450, cannon at (0, -337.5, -500)
-// Yaw: atan2(900, 1100) ≈ 39°, with margin ~50° each side
-// Pitch up: atan2(787.5, 1100) ≈ 36°, with margin ~45°
-// Pitch down: atan2(-112.5, 500) ≈ -13°, with margin ~-20°
-const FPS_YAW_MAX = 50 * (Math.PI / 180);     // ±50° yaw (100° total horizontal)
-const FPS_PITCH_MIN = -20 * (Math.PI / 180);  // -20° (look down at near fish)
-const FPS_PITCH_MAX = 45 * (Math.PI / 180);   // +45° (look up at far fish)
+// FPS rotation limits - user requested: 180° horizontal, 80° vertical
+const FPS_YAW_MAX = 90 * (Math.PI / 180);     // ±90° yaw (180° total horizontal)
+const FPS_PITCH_MIN = -40 * (Math.PI / 180);  // -40° (look down)
+const FPS_PITCH_MAX = 40 * (Math.PI / 180);   // +40° (look up) - total 80° vertical
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
 const FPS_CAMERA_BACK_DIST = 70;     // Distance behind muzzle (was 100, reduced to show more barrel)
@@ -6360,7 +6372,7 @@ function updateFPSDebugOverlay() {
         <div>Cannon Yaw: ${cannonYaw} deg</div>
         <div>Cannon Pitch: ${cannonPitch} deg</div>
         <div>Right-Dragging: ${isDragging}</div>
-        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-pool-v2</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-180-v1</div>
     `;
 }
 
