@@ -5785,9 +5785,9 @@ function setupEventListeners() {
             gameState.lastFPSMouseY = e.clientY;
             
             // Apply rotation using same sensitivity as right-drag
-            // FPS free-look uses 6x higher sensitivity for comfortable gameplay
+            // FPS free-look uses 10x higher sensitivity for comfortable gameplay
             const fpsLevel = Math.max(1, Math.min(10, gameState.fpsSensitivityLevel || 5));
-            const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 6.0;
+            const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 10.0;
             
             // Calculate new yaw (horizontal rotation)
             // IMPORTANT: Negate deltaX so mouse left = camera left (standard FPS controls)
@@ -6345,7 +6345,7 @@ function updateFPSDebugOverlay() {
         <div>Cannon Yaw: ${cannonYaw} deg</div>
         <div>Cannon Pitch: ${cannonPitch} deg</div>
         <div>Right-Dragging: ${isDragging}</div>
-        <div style="font-size:10px;color:#888;margin-top:4px;">Build: free-look-v3</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">Build: free-look-v4</div>
     `;
 }
 
