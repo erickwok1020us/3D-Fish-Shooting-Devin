@@ -6084,6 +6084,10 @@ function updateViewModeButton() {
 const FPS_PITCH_MIN = -50 * (Math.PI / 180);  // -50° (down) - symmetric with up
 const FPS_PITCH_MAX = 50 * (Math.PI / 180);   // +50° (up) - symmetric with down
 
+// FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
+const FPS_CAMERA_BACK_DIST = 70;     // Distance behind muzzle (was 100, reduced to show more barrel)
+const FPS_CAMERA_UP_OFFSET_Y = 25;   // Height above muzzle (was 45, reduced to lower camera)
+
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
 // This ensures camera follows gun when aiming (aimCannon, aimCannonAtFish, auto-aim)
@@ -6123,10 +6127,10 @@ function updateFPSCamera() {
     
     // Calculate camera offset in world space - CS:GO style FPS view
     // Camera positioned BEHIND the cannon body so barrel is visible in front
-    // Muzzle is at Z=60, so we need to be at Z=-20 to Z=-40 (behind pivot) = 80-100 units back
+    // Using tunable constants for easy adjustment of barrel visibility
     const backwardDir = forward.clone().negate();
-    const upOffset = new THREE.Vector3(0, 45, 0);   // Height above to see over base
-    const backOffset = backwardDir.multiplyScalar(100);  // Behind cannon body to see barrel
+    const upOffset = new THREE.Vector3(0, FPS_CAMERA_UP_OFFSET_Y, 0);   // Height above muzzle
+    const backOffset = backwardDir.multiplyScalar(FPS_CAMERA_BACK_DIST);  // Distance behind muzzle
     
     camera.position.copy(muzzleWorldPos).add(backOffset).add(upOffset);
     
