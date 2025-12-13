@@ -25,11 +25,13 @@ const CONFIG = {
         // Issue 2 Fix: Per-mode rotation sensitivity
         rotationSensitivityThirdPerson: 0.001,  // 3RD PERSON mode sensitivity
         // FPS Sensitivity System: 10 levels (10% to 100%)
-        // BUG FIX: Previous tiny values (0.0000006125) were fighting aimCannon() override
+        // BUG FIX: Previous tiny values were fighting aimCannon() override
         // Now that aimCannon is disabled in FPS mode, use proper sensitivity
-        // At 1920px screen width drag: Level 10 ≈ 19°, Level 5 ≈ 9.5°, Level 1 ≈ 1.9°
+        // Target: 1920px drag at 100% ≈ 20° rotation (CS:GO medium sensitivity)
+        // At 1920px screen width drag: Level 10 ≈ 20°, Level 5 ≈ 10°, Level 1 ≈ 2°
         // Formula: effective = base * (level / 10)
-        rotationSensitivityFPSBase: 0.000175,  // Standard FPS sensitivity (CS:GO-like feel)
+        // Math: 20° = 0.349 rad, 0.349 / 1920 = 0.000182 rad/px at 100%
+        rotationSensitivityFPSBase: 0.00018,  // Standard FPS sensitivity (CS:GO-like feel)
         fpsSensitivityLevelDefault: 5           // Default level (1-10), 5 = 50%
     },
     
@@ -5838,8 +5840,10 @@ function setupEventListeners() {
         if (gameState.isRightDragging) {
             // Issue 2 Fix: Use per-mode sensitivity from CONFIG
             // FPS mode uses level-based sensitivity (1-10 levels, each level = 10%)
+            // SAFEGUARD: Ensure fpsSensitivityLevel is always valid (1-10, default 5)
+            const fpsLevel = Math.max(1, Math.min(10, gameState.fpsSensitivityLevel || 5));
             const rotationSensitivity = gameState.viewMode === 'fps'
-                ? CONFIG.camera.rotationSensitivityFPSBase * (gameState.fpsSensitivityLevel / 10)
+                ? CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10)
                 : CONFIG.camera.rotationSensitivityThirdPerson;
             
             // Horizontal drag = yaw rotation (UNLIMITED 360°)
