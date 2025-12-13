@@ -5793,17 +5793,21 @@ function setupEventListeners() {
             // IMPORTANT: Negate deltaX so mouse left = camera left (standard FPS controls)
             let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) - deltaX * rotationSensitivity;
             
-            // Clamp yaw to ±90° (cannon can only face outward toward fish area)
-            const maxYaw = Math.PI / 2;
+            // Clamp yaw to ±45° (just enough to see entire fish pool, not beyond)
+            // Based on geometry: fish pool width 1800, cannon at Z=-500, pool center at Z=300
+            // atan2(900, 800) ≈ 48°, so ±45° covers the pool edges
+            const maxYaw = 45 * (Math.PI / 180);  // 45 degrees
             newYaw = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
             
             // Calculate new pitch (vertical rotation)
             // IMPORTANT: Use + deltaY so mouse up = look up (standard FPS controls)
             let newPitch = (cannonPitchGroup ? cannonPitchGroup.rotation.x : 0) + deltaY * rotationSensitivity;
             
-            // Clamp pitch to FPS limits: -35° (up) to +50° (down)
-            const minRotationX = -35 * (Math.PI / 180);
-            const maxRotationX = 50 * (Math.PI / 180);
+            // Clamp pitch to FPS limits: -15° (look down at near fish) to +45° (look up at far fish)
+            // Center view is +15° (looking into pool center), so range is -15° to +45°
+            // This allows seeing from near bottom to far top of the fish pool
+            const minRotationX = -15 * (Math.PI / 180);  // Look down at near fish
+            const maxRotationX = 45 * (Math.PI / 180);   // Look up at far fish
             newPitch = Math.max(minRotationX, Math.min(maxRotationX, newPitch));
             
             // Apply rotation to cannon
@@ -6126,9 +6130,14 @@ function toggleViewMode() {
                 if (child.isLight) child.visible = false;
             });
         }
-        // Initialize FPS yaw/pitch from current cannon rotation
-        gameState.fpsYaw = cannonGroup ? cannonGroup.rotation.y : 0;
-        gameState.fpsPitch = cannonPitchGroup ? cannonPitchGroup.rotation.x : 0;
+        // Initialize FPS yaw/pitch to look at fish pool CENTER
+        // Yaw = 0 (straight ahead), Pitch = +15° (looking slightly up into the pool)
+        const fpsCenterPitch = 15 * (Math.PI / 180);  // 15° up into the fish pool
+        gameState.fpsYaw = 0;
+        gameState.fpsPitch = fpsCenterPitch;
+        // Apply initial rotation to cannon
+        if (cannonGroup) cannonGroup.rotation.y = 0;
+        if (cannonPitchGroup) cannonPitchGroup.rotation.x = fpsCenterPitch;
         // Reset FPS mouse tracking (will be initialized on first mouse move)
         gameState.lastFPSMouseX = null;
         gameState.lastFPSMouseY = null;
@@ -6345,7 +6354,7 @@ function updateFPSDebugOverlay() {
         <div>Cannon Yaw: ${cannonYaw} deg</div>
         <div>Cannon Pitch: ${cannonPitch} deg</div>
         <div>Right-Dragging: ${isDragging}</div>
-        <div style="font-size:10px;color:#888;margin-top:4px;">Build: free-look-v4</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-center-v1</div>
     `;
 }
 
