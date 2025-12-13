@@ -25,10 +25,11 @@ const CONFIG = {
         // Issue 2 Fix: Per-mode rotation sensitivity
         rotationSensitivityThirdPerson: 0.001,  // 3RD PERSON mode sensitivity
         // FPS Sensitivity System: 10 levels (10% to 100%)
-        // Reduced by 50% for precise control (0.000001225 / 2 = 0.0000006125)
-        // At 1920px screen width drag: Level 10 ≈ 0.675°, Level 5 ≈ 0.3375°, Level 1 ≈ 0.0675°
+        // BUG FIX: Previous tiny values (0.0000006125) were fighting aimCannon() override
+        // Now that aimCannon is disabled in FPS mode, use proper sensitivity
+        // At 1920px screen width drag: Level 10 ≈ 19°, Level 5 ≈ 9.5°, Level 1 ≈ 1.9°
         // Formula: effective = base * (level / 10)
-        rotationSensitivityFPSBase: 0.0000006125,  // base value for precise FPS sensitivity
+        rotationSensitivityFPSBase: 0.000175,  // Standard FPS sensitivity (CS:GO-like feel)
         fpsSensitivityLevelDefault: 5           // Default level (1-10), 5 = 50%
     },
     
@@ -2885,6 +2886,10 @@ function aimCannon(targetX, targetY) {
     // Don't aim if AUTO mode is on
     if (gameState.autoShoot) return;
     
+    // FPS MODE FIX: In FPS mode, cannon rotation is controlled by right-drag only
+    // This prevents aimCannon from overriding the sensitivity-based rotation system
+    if (gameState.viewMode === 'fps') return;
+    
     // Get aim direction using shared function
     const direction = getAimDirectionFromMouse(targetX, targetY);
     
@@ -5192,8 +5197,16 @@ function fireBullet(targetX, targetY) {
     // Issue #9: Use SAME direction calculation as cannon aiming for perfect alignment
     // This ensures bullets go exactly where the cannon barrel points
     // Issue #16 CORRECTION: All weapons have 100% accuracy - point-and-click shooting
-    // Where you click is exactly where the bullet goes (no spread)
-    const direction = getAimDirectionFromMouse(targetX, targetY);
+    // FPS MODE FIX: In FPS mode, bullets go toward screen center (where crosshair is)
+    // In 3RD PERSON mode, bullets go where you click
+    let aimX = targetX;
+    let aimY = targetY;
+    if (gameState.viewMode === 'fps') {
+        // FPS: Fire toward screen center (crosshair position)
+        aimX = window.innerWidth / 2;
+        aimY = window.innerHeight / 2;
+    }
+    const direction = getAimDirectionFromMouse(aimX, aimY);
     
     // Get cannon muzzle position for bullet spawn
     const muzzlePos = new THREE.Vector3();
@@ -5747,11 +5760,18 @@ function setupEventListeners() {
         gameState.mouseY = e.clientY;
         aimCannon(e.clientX, e.clientY);
         
-        // Issue #16: Update crosshair position to follow mouse
+        // Issue #16: Update crosshair position based on view mode
         const crosshair = document.getElementById('crosshair');
         if (crosshair) {
-            crosshair.style.left = e.clientX + 'px';
-            crosshair.style.top = e.clientY + 'px';
+            if (gameState.viewMode === 'fps') {
+                // FPS MODE: Crosshair stays at screen center (CS:GO style)
+                crosshair.style.left = (window.innerWidth / 2) + 'px';
+                crosshair.style.top = (window.innerHeight / 2) + 'px';
+            } else {
+                // 3RD PERSON MODE: Crosshair follows mouse
+                crosshair.style.left = e.clientX + 'px';
+                crosshair.style.top = e.clientY + 'px';
+            }
         }
     });
     
