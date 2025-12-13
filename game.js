@@ -5766,9 +5766,8 @@ function setupEventListeners() {
         const crosshair = document.getElementById('crosshair');
         if (crosshair) {
             if (gameState.viewMode === 'fps') {
-                // FPS MODE: Crosshair stays at screen center (CS:GO style)
-                crosshair.style.left = (window.innerWidth / 2) + 'px';
-                crosshair.style.top = (window.innerHeight / 2) + 'px';
+                // FPS MODE: Crosshair centered via CSS class (more robust)
+                // No JS positioning needed - CSS handles it
             } else {
                 // 3RD PERSON MODE: Crosshair follows mouse
                 crosshair.style.left = e.clientX + 'px';
@@ -5865,6 +5864,7 @@ function setupEventListeners() {
                 // Player cannon is at 6 o'clock, facing -Z (yaw=0), so limit to [-90°, +90°]
                 const maxYaw = Math.PI / 2;  // 90 degrees
                 const clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
+                
                 if (cannonGroup) {
                     cannonGroup.rotation.y = clampedYaw;
                 }
@@ -6043,6 +6043,8 @@ function centerCameraView() {
 
 // Toggle between FPS and third-person view modes
 function toggleViewMode() {
+    const crosshair = document.getElementById('crosshair');
+    
     if (gameState.viewMode === 'third-person') {
         gameState.viewMode = 'fps';
         // Keep cannon visible in FPS mode - gun barrel should be visible
@@ -6062,6 +6064,8 @@ function toggleViewMode() {
         // Wider FOV in FPS mode for better fish visibility (視野更廣)
         camera.fov = 75;
         camera.updateProjectionMatrix();
+        // FPS MODE: Add CSS class to center crosshair (more robust than JS positioning)
+        if (crosshair) crosshair.classList.add('fps-mode');
         updateFPSCamera();
     } else {
         gameState.viewMode = 'third-person';
@@ -6079,6 +6083,8 @@ function toggleViewMode() {
         if (cannonPitchGroup) {
             cannonPitchGroup.rotation.x = 0;
         }
+        // 3RD PERSON MODE: Remove CSS class so crosshair follows mouse
+        if (crosshair) crosshair.classList.remove('fps-mode');
         
         // Issue 1 Fix: Use dedicated reset function with ABSOLUTE values
         // This ensures the camera always returns to the exact same position

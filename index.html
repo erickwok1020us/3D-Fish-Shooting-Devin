@@ -407,6 +407,12 @@
             transition: width 0.2s ease, height 0.2s ease;
         }
         
+        /* FPS mode: Crosshair always centered via CSS (more robust than JS positioning) */
+        #crosshair.fps-mode {
+            left: 50% !important;
+            top: 50% !important;
+        }
+        
         #crosshair .crosshair-ring {
             position: absolute;
             top: 0;
