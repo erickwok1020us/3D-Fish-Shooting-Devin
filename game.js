@@ -5794,27 +5794,23 @@ function setupEventListeners() {
             // IMPORTANT: Negate deltaX so mouse left = camera left (standard FPS controls)
             let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) - deltaX * rotationSensitivity;
             
-            // Clamp yaw to ±50° (100° total) - calculated to cover entire fish pool width
-            // Fish pool: X from -900 to +900, cannon at Z=-500, pool far edge at Z=600
-            // atan2(900, 1100) ≈ 39°, adding margin gives ~50°
-            const maxYaw = 50 * (Math.PI / 180);  // 50 degrees
-            newYaw = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
+            // Clamp yaw using centralized constant FPS_YAW_MAX (±50°)
+            newYaw = Math.max(-FPS_YAW_MAX, Math.min(FPS_YAW_MAX, newYaw));
             
             // Calculate new pitch (vertical rotation)
-            // IMPORTANT: Use + deltaY so mouse up = look up (standard FPS controls)
-            let newPitch = (cannonPitchGroup ? cannonPitchGroup.rotation.x : 0) + deltaY * rotationSensitivity;
+            // IMPORTANT: Use correct sign convention - rotation.x = -pitch (same as rest of codebase)
+            // Get current logical pitch (positive = look up, same as debug overlay)
+            let currentPitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+            // Apply mouse delta: mouse up (negative deltaY) = look up (positive pitch)
+            let newPitch = currentPitch - deltaY * rotationSensitivity;
             
-            // Clamp pitch to cover entire fish pool height
-            // Fish pool: Y from -450 to +450, cannon at Y=-337.5, Z=-500
-            // Looking up at top far corner: atan2(787.5, 1100) ≈ 36°, with margin ~45°
-            // Looking down at bottom near area: atan2(-112.5, 500) ≈ -13°, with margin ~-20°
-            const minRotationX = -20 * (Math.PI / 180);  // Look down at near fish
-            const maxRotationX = 45 * (Math.PI / 180);   // Look up at far fish
-            newPitch = Math.max(minRotationX, Math.min(maxRotationX, newPitch));
+            // Clamp logical pitch using centralized constants FPS_PITCH_MIN/MAX
+            newPitch = Math.max(FPS_PITCH_MIN, Math.min(FPS_PITCH_MAX, newPitch));
             
             // Apply rotation to cannon
             if (cannonGroup) cannonGroup.rotation.y = newYaw;
-            if (cannonPitchGroup) cannonPitchGroup.rotation.x = newPitch;
+            // Store using the shared convention: rotation.x = -pitch
+            if (cannonPitchGroup) cannonPitchGroup.rotation.x = -newPitch;
             
             // Update camera to follow cannon
             updateFPSCamera();
@@ -6197,11 +6193,14 @@ function updateViewModeButton() {
 }
 
 // FPS Pitch Limits - centralized constants (single source of truth)
-// Asymmetric pitch limits: more down range (fish are below), less up range (prevent looking at ceiling)
-// User requested: max upward angle ~60-70° from horizontal, NOT 90° straight up
-// -35° up limit prevents looking at ceiling while allowing comfortable fish targeting
-const FPS_PITCH_MIN = -35 * (Math.PI / 180);  // -35° (up limit) - prevents looking straight up
-const FPS_PITCH_MAX = 50 * (Math.PI / 180);   // +50° (down limit) - generous for targeting fish below
+// FPS rotation limits - calculated to cover entire fish pool
+// Fish pool: X from -900 to +900, Y from -450 to +450, cannon at (0, -337.5, -500)
+// Yaw: atan2(900, 1100) ≈ 39°, with margin ~50° each side
+// Pitch up: atan2(787.5, 1100) ≈ 36°, with margin ~45°
+// Pitch down: atan2(-112.5, 500) ≈ -13°, with margin ~-20°
+const FPS_YAW_MAX = 50 * (Math.PI / 180);     // ±50° yaw (100° total horizontal)
+const FPS_PITCH_MIN = -20 * (Math.PI / 180);  // -20° (look down at near fish)
+const FPS_PITCH_MAX = 45 * (Math.PI / 180);   // +45° (look up at far fish)
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
 const FPS_CAMERA_BACK_DIST = 70;     // Distance behind muzzle (was 100, reduced to show more barrel)
@@ -6361,7 +6360,7 @@ function updateFPSDebugOverlay() {
         <div>Cannon Yaw: ${cannonYaw} deg</div>
         <div>Cannon Pitch: ${cannonPitch} deg</div>
         <div>Right-Dragging: ${isDragging}</div>
-        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-pool-v1</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-pool-v2</div>
     `;
 }
 
