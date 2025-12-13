@@ -6211,8 +6211,8 @@ function updateViewModeButton() {
 // FPS Pitch Limits - centralized constants (single source of truth)
 // FPS rotation limits - user requested: 180° horizontal, 80° vertical
 const FPS_YAW_MAX = 90 * (Math.PI / 180);     // ±90° yaw (180° total horizontal)
-const FPS_PITCH_MIN = -40 * (Math.PI / 180);  // -40° (look down)
-const FPS_PITCH_MAX = 40 * (Math.PI / 180);   // +40° (look up) - total 80° vertical
+const FPS_PITCH_MIN = -47.5 * (Math.PI / 180);  // -47.5° (look down)
+const FPS_PITCH_MAX = 47.5 * (Math.PI / 180);   // +47.5° (look up) - total 95° vertical
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
 const FPS_CAMERA_BACK_DIST = 70;     // Distance behind muzzle (was 100, reduced to show more barrel)
@@ -6372,7 +6372,7 @@ function updateFPSDebugOverlay() {
         <div>Cannon Yaw: ${cannonYaw} deg</div>
         <div>Cannon Pitch: ${cannonPitch} deg</div>
         <div>Right-Dragging: ${isDragging}</div>
-        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-180-v1</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">Build: fps-95-v1</div>
     `;
 }
 
