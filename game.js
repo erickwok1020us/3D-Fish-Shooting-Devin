@@ -340,6 +340,9 @@ const gameState = {
     rightDragStartY: 0,
     rightDragStartYaw: 0,
     rightDragStartPitch: 0,
+    // FPS free mouse look state (for delta calculation)
+    lastFPSMouseX: null,
+    lastFPSMouseY: null,
     // Auto-panning state
     autoPanTimer: 0,
     autoPanDirection: 1,  // 1 = right, -1 = left
@@ -5765,19 +5768,75 @@ function setupEventListeners() {
     container.addEventListener('mousemove', (e) => {
         gameState.mouseX = e.clientX;
         gameState.mouseY = e.clientY;
+        
+        // FPS MODE: Free mouse look (no button required)
+        if (gameState.viewMode === 'fps') {
+            // Initialize last mouse position on first move
+            if (gameState.lastFPSMouseX === null) {
+                gameState.lastFPSMouseX = e.clientX;
+                gameState.lastFPSMouseY = e.clientY;
+                return;
+            }
+            
+            // Calculate mouse delta
+            const deltaX = e.clientX - gameState.lastFPSMouseX;
+            const deltaY = e.clientY - gameState.lastFPSMouseY;
+            gameState.lastFPSMouseX = e.clientX;
+            gameState.lastFPSMouseY = e.clientY;
+            
+            // Apply rotation using same sensitivity as right-drag
+            const fpsLevel = Math.max(1, Math.min(10, gameState.fpsSensitivityLevel || 5));
+            const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10);
+            
+            // Calculate new yaw (horizontal rotation)
+            let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) + deltaX * rotationSensitivity;
+            
+            // Clamp yaw to ±90° (cannon can only face outward toward fish area)
+            const maxYaw = Math.PI / 2;
+            newYaw = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
+            
+            // Calculate new pitch (vertical rotation) - inverted: move up = look up
+            let newPitch = (cannonPitchGroup ? cannonPitchGroup.rotation.x : 0) - deltaY * rotationSensitivity;
+            
+            // Clamp pitch to FPS limits: -35° (up) to +50° (down)
+            const minRotationX = -35 * (Math.PI / 180);
+            const maxRotationX = 50 * (Math.PI / 180);
+            newPitch = Math.max(minRotationX, Math.min(maxRotationX, newPitch));
+            
+            // Apply rotation to cannon
+            if (cannonGroup) cannonGroup.rotation.y = newYaw;
+            if (cannonPitchGroup) cannonPitchGroup.rotation.x = newPitch;
+            
+            // Update camera to follow cannon
+            updateFPSCamera();
+            
+            // Update crosshair (centered in FPS mode via CSS)
+            const crosshair = document.getElementById('crosshair');
+            if (crosshair) {
+                // FPS MODE: Crosshair centered via CSS class (more robust)
+                // No JS positioning needed - CSS handles it
+            }
+            return;
+        }
+        
+        // 3RD PERSON MODE: Aim cannon at mouse position
         aimCannon(e.clientX, e.clientY);
         
         // Issue #16: Update crosshair position based on view mode
         const crosshair = document.getElementById('crosshair');
         if (crosshair) {
-            if (gameState.viewMode === 'fps') {
-                // FPS MODE: Crosshair centered via CSS class (more robust)
-                // No JS positioning needed - CSS handles it
-            } else {
-                // 3RD PERSON MODE: Crosshair follows mouse
-                crosshair.style.left = e.clientX + 'px';
-                crosshair.style.top = e.clientY + 'px';
-            }
+            // 3RD PERSON MODE: Crosshair follows mouse
+            crosshair.style.left = e.clientX + 'px';
+            crosshair.style.top = e.clientY + 'px';
+        }
+    });
+    
+    // FPS mode: Reset mouse tracking when mouse leaves the container
+    // This prevents giant rotation jumps when mouse re-enters
+    container.addEventListener('mouseleave', () => {
+        if (gameState.viewMode === 'fps') {
+            gameState.lastFPSMouseX = null;
+            gameState.lastFPSMouseY = null;
         }
     });
     
@@ -6067,6 +6126,9 @@ function toggleViewMode() {
         // Initialize FPS yaw/pitch from current cannon rotation
         gameState.fpsYaw = cannonGroup ? cannonGroup.rotation.y : 0;
         gameState.fpsPitch = cannonPitchGroup ? cannonPitchGroup.rotation.x : 0;
+        // Reset FPS mouse tracking (will be initialized on first mouse move)
+        gameState.lastFPSMouseX = null;
+        gameState.lastFPSMouseY = null;
         // Wider FOV in FPS mode for better fish visibility (視野更廣)
         camera.fov = 75;
         camera.updateProjectionMatrix();
@@ -6280,7 +6342,7 @@ function updateFPSDebugOverlay() {
         <div>Cannon Yaw: ${cannonYaw} deg</div>
         <div>Cannon Pitch: ${cannonPitch} deg</div>
         <div>Right-Dragging: ${isDragging}</div>
-        <div style="font-size:10px;color:#888;margin-top:4px;">Build: c9ae90a-debug</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">Build: free-look-v1</div>
     `;
 }
 
