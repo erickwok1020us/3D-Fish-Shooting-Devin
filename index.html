@@ -642,6 +642,251 @@
             80% { opacity: 1; }
             100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
         }
+        
+        /* ============ MULTIPLAYER LOBBY STYLES ============ */
+        #multiplayer-lobby {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #0a1628 0%, #1a2a4a 50%, #0d1f3c 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .lobby-container {
+            background: rgba(20, 40, 80, 0.9);
+            border: 2px solid rgba(100, 150, 255, 0.3);
+            border-radius: 20px;
+            padding: 40px;
+            min-width: 400px;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(100, 150, 255, 0.2);
+        }
+        
+        .lobby-title {
+            text-align: center;
+            font-size: 36px;
+            color: #00ffff;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            margin-bottom: 5px;
+        }
+        
+        .lobby-subtitle {
+            text-align: center;
+            font-size: 18px;
+            color: #88aaff;
+            margin-bottom: 30px;
+        }
+        
+        #connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 25px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        
+        #connection-status.status-disconnected {
+            background: rgba(255, 100, 100, 0.2);
+            border: 1px solid rgba(255, 100, 100, 0.5);
+            color: #ff8888;
+        }
+        
+        #connection-status.status-connecting {
+            background: rgba(255, 200, 100, 0.2);
+            border: 1px solid rgba(255, 200, 100, 0.5);
+            color: #ffcc88;
+        }
+        
+        #connection-status.status-connected {
+            background: rgba(100, 255, 150, 0.2);
+            border: 1px solid rgba(100, 255, 150, 0.5);
+            color: #88ff99;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        #lobby-main-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        #player-name-input, #room-code-input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 18px;
+            background: rgba(0, 50, 100, 0.5);
+            border: 2px solid rgba(100, 150, 255, 0.3);
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        
+        #player-name-input:focus, #room-code-input:focus {
+            border-color: #00ffff;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+        }
+        
+        .lobby-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 15px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            background: linear-gradient(135deg, rgba(50, 100, 200, 0.6), rgba(30, 70, 150, 0.6));
+            border: 2px solid rgba(100, 150, 255, 0.4);
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .lobby-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, rgba(70, 130, 230, 0.8), rgba(50, 100, 200, 0.8));
+            border-color: #00ffff;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 255, 255, 0.3);
+        }
+        
+        .lobby-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .lobby-btn.primary {
+            background: linear-gradient(135deg, rgba(0, 200, 150, 0.7), rgba(0, 150, 100, 0.7));
+            border-color: rgba(0, 255, 200, 0.5);
+        }
+        
+        .lobby-btn.primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, rgba(0, 230, 180, 0.9), rgba(0, 180, 130, 0.9));
+            border-color: #00ffcc;
+        }
+        
+        .lobby-btn.secondary {
+            background: linear-gradient(135deg, rgba(150, 100, 100, 0.6), rgba(120, 70, 70, 0.6));
+            border-color: rgba(255, 150, 150, 0.4);
+        }
+        
+        .lobby-btn.secondary:hover:not(:disabled) {
+            background: linear-gradient(135deg, rgba(180, 120, 120, 0.8), rgba(150, 90, 90, 0.8));
+            border-color: #ff9999;
+        }
+        
+        .btn-icon {
+            font-size: 20px;
+        }
+        
+        #join-room-panel h3, #room-lobby-panel h3 {
+            text-align: center;
+            color: #88ccff;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        
+        #room-code-display {
+            color: #00ffff;
+            font-family: monospace;
+            letter-spacing: 3px;
+        }
+        
+        .panel-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .panel-buttons .lobby-btn {
+            flex: 1;
+        }
+        
+        #players-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .player-slot {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: rgba(0, 50, 100, 0.4);
+            border: 1px solid rgba(100, 150, 255, 0.2);
+            border-radius: 8px;
+        }
+        
+        .player-slot.empty {
+            opacity: 0.5;
+            border-style: dashed;
+        }
+        
+        .player-slot .player-name {
+            color: white;
+            font-weight: bold;
+        }
+        
+        .player-slot .player-status {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+        
+        .player-slot .player-status.ready {
+            background: rgba(0, 255, 150, 0.3);
+            color: #88ff99;
+        }
+        
+        .player-slot .player-status.not-ready {
+            background: rgba(255, 200, 100, 0.3);
+            color: #ffcc88;
+        }
+        
+        .player-slot .player-status.host {
+            background: rgba(255, 200, 0, 0.3);
+            color: #ffdd44;
+        }
+        
+        #room-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        #lobby-error {
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(255, 100, 100, 0.2);
+            border: 1px solid rgba(255, 100, 100, 0.5);
+            border-radius: 8px;
+            color: #ff8888;
+            text-align: center;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -652,6 +897,73 @@
             <div id="loading-progress"></div>
         </div>
         <div id="loading-text">Loading...</div>
+    </div>
+    
+    <!-- Multiplayer Lobby -->
+    <div id="multiplayer-lobby" style="display: none;">
+        <div class="lobby-container">
+            <h1 class="lobby-title">Fish Shooter 3D</h1>
+            <h2 class="lobby-subtitle">Multiplayer</h2>
+            
+            <!-- Connection Status -->
+            <div id="connection-status" class="status-disconnected">
+                <span class="status-dot"></span>
+                <span class="status-text">Disconnected</span>
+            </div>
+            
+            <!-- Main Menu -->
+            <div id="lobby-main-menu">
+                <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="20" value="Player">
+                
+                <button id="btn-single-player" class="lobby-btn primary">
+                    <span class="btn-icon">&#x1F3AE;</span>
+                    Single Player
+                </button>
+                
+                <button id="btn-create-room" class="lobby-btn">
+                    <span class="btn-icon">&#x2795;</span>
+                    Create Room
+                </button>
+                
+                <button id="btn-join-room" class="lobby-btn">
+                    <span class="btn-icon">&#x1F465;</span>
+                    Join Room
+                </button>
+                
+                <button id="btn-quick-match" class="lobby-btn" disabled>
+                    <span class="btn-icon">&#x26A1;</span>
+                    Quick Match (Coming Soon)
+                </button>
+            </div>
+            
+            <!-- Join Room Panel -->
+            <div id="join-room-panel" style="display: none;">
+                <h3>Join Room</h3>
+                <input type="text" id="room-code-input" placeholder="Enter Room Code" maxlength="6" style="text-transform: uppercase;">
+                <div class="panel-buttons">
+                    <button id="btn-join-confirm" class="lobby-btn primary">Join</button>
+                    <button id="btn-join-cancel" class="lobby-btn secondary">Cancel</button>
+                </div>
+            </div>
+            
+            <!-- Room Lobby Panel -->
+            <div id="room-lobby-panel" style="display: none;">
+                <h3>Room: <span id="room-code-display">------</span></h3>
+                
+                <div id="players-list">
+                    <!-- Player slots will be added dynamically -->
+                </div>
+                
+                <div id="room-controls">
+                    <button id="btn-ready" class="lobby-btn">Ready</button>
+                    <button id="btn-start-game" class="lobby-btn primary" style="display: none;">Start Game</button>
+                    <button id="btn-leave-room" class="lobby-btn secondary">Leave Room</button>
+                </div>
+            </div>
+            
+            <!-- Error Message -->
+            <div id="lobby-error" style="display: none;"></div>
+        </div>
     </div>
     
     <!-- Game Container -->
@@ -785,6 +1097,303 @@
     
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Socket.IO for multiplayer -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- Multiplayer Manager -->
+    <script src="multiplayer.js"></script>
+    <!-- Main Game -->
     <script src="game.js"></script>
+    
+    <!-- Lobby UI Controller -->
+    <script>
+        // Lobby UI Controller
+        (function() {
+            let multiplayer = null;
+            let isReady = false;
+            
+            // DOM Elements
+            const lobbyScreen = document.getElementById('multiplayer-lobby');
+            const loadingScreen = document.getElementById('loading-screen');
+            const gameContainer = document.getElementById('game-container');
+            const connectionStatus = document.getElementById('connection-status');
+            const mainMenu = document.getElementById('lobby-main-menu');
+            const joinRoomPanel = document.getElementById('join-room-panel');
+            const roomLobbyPanel = document.getElementById('room-lobby-panel');
+            const lobbyError = document.getElementById('lobby-error');
+            const playerNameInput = document.getElementById('player-name-input');
+            const roomCodeInput = document.getElementById('room-code-input');
+            const roomCodeDisplay = document.getElementById('room-code-display');
+            const playersList = document.getElementById('players-list');
+            
+            // Buttons
+            const btnSinglePlayer = document.getElementById('btn-single-player');
+            const btnCreateRoom = document.getElementById('btn-create-room');
+            const btnJoinRoom = document.getElementById('btn-join-room');
+            const btnJoinConfirm = document.getElementById('btn-join-confirm');
+            const btnJoinCancel = document.getElementById('btn-join-cancel');
+            const btnReady = document.getElementById('btn-ready');
+            const btnStartGame = document.getElementById('btn-start-game');
+            const btnLeaveRoom = document.getElementById('btn-leave-room');
+            
+            // Initialize lobby after game loads
+            window.addEventListener('load', function() {
+                // Wait for game to finish loading
+                const checkLoaded = setInterval(function() {
+                    if (typeof window.gameLoaded !== 'undefined' && window.gameLoaded) {
+                        clearInterval(checkLoaded);
+                        initLobby();
+                    }
+                }, 100);
+                
+                // Fallback: show lobby after 3 seconds
+                setTimeout(function() {
+                    clearInterval(checkLoaded);
+                    initLobby();
+                }, 3000);
+            });
+            
+            function initLobby() {
+                // Hide loading, show lobby
+                loadingScreen.style.display = 'none';
+                lobbyScreen.style.display = 'flex';
+                gameContainer.style.display = 'none';
+                
+                // Create multiplayer manager
+                multiplayer = new MultiplayerManager(window.game || null);
+                window.multiplayer = multiplayer;
+                
+                // Setup callbacks
+                setupMultiplayerCallbacks();
+                
+                // Connect to server
+                connectToServer();
+                
+                // Setup button handlers
+                setupButtonHandlers();
+            }
+            
+            function connectToServer() {
+                updateConnectionStatus('connecting');
+                
+                multiplayer.connect()
+                    .then(() => {
+                        updateConnectionStatus('connected');
+                    })
+                    .catch((error) => {
+                        console.error('Failed to connect:', error);
+                        updateConnectionStatus('disconnected');
+                        showError('Failed to connect to server. Please refresh and try again.');
+                    });
+            }
+            
+            function updateConnectionStatus(status) {
+                connectionStatus.className = 'status-' + status;
+                const statusText = connectionStatus.querySelector('.status-text');
+                
+                switch (status) {
+                    case 'connected':
+                        statusText.textContent = 'Connected';
+                        break;
+                    case 'connecting':
+                        statusText.textContent = 'Connecting...';
+                        break;
+                    case 'disconnected':
+                        statusText.textContent = 'Disconnected';
+                        break;
+                }
+            }
+            
+            function setupMultiplayerCallbacks() {
+                multiplayer.onConnected = () => {
+                    updateConnectionStatus('connected');
+                };
+                
+                multiplayer.onDisconnected = (reason) => {
+                    updateConnectionStatus('disconnected');
+                    showError('Disconnected from server: ' + reason);
+                };
+                
+                multiplayer.onRoomCreated = (data) => {
+                    showRoomLobby(data.roomCode, true);
+                };
+                
+                multiplayer.onRoomJoined = (data) => {
+                    showRoomLobby(data.roomCode, false);
+                };
+                
+                multiplayer.onRoomState = (data) => {
+                    updatePlayersList(data.players);
+                    
+                    // Show start button for host if all ready
+                    if (multiplayer.isHost) {
+                        btnStartGame.style.display = 'block';
+                    }
+                };
+                
+                multiplayer.onGameStarted = (data) => {
+                    startGame();
+                };
+                
+                multiplayer.onError = (message) => {
+                    showError(message);
+                };
+                
+                multiplayer.onBalanceUpdate = (data) => {
+                    // Update balance display in game
+                    const balanceEl = document.getElementById('balance-value');
+                    if (balanceEl) {
+                        balanceEl.textContent = data.balance.toFixed(2);
+                    }
+                };
+            }
+            
+            function setupButtonHandlers() {
+                // Single Player
+                btnSinglePlayer.addEventListener('click', () => {
+                    if (!multiplayer.connected) {
+                        showError('Not connected to server');
+                        return;
+                    }
+                    const playerName = playerNameInput.value.trim() || 'Player';
+                    multiplayer.startSinglePlayer(playerName);
+                });
+                
+                // Create Room
+                btnCreateRoom.addEventListener('click', () => {
+                    if (!multiplayer.connected) {
+                        showError('Not connected to server');
+                        return;
+                    }
+                    const playerName = playerNameInput.value.trim() || 'Player';
+                    multiplayer.createRoom(playerName, true);
+                });
+                
+                // Join Room (show panel)
+                btnJoinRoom.addEventListener('click', () => {
+                    mainMenu.style.display = 'none';
+                    joinRoomPanel.style.display = 'block';
+                    roomCodeInput.focus();
+                });
+                
+                // Join Room Confirm
+                btnJoinConfirm.addEventListener('click', () => {
+                    const roomCode = roomCodeInput.value.trim().toUpperCase();
+                    if (!roomCode || roomCode.length < 4) {
+                        showError('Please enter a valid room code');
+                        return;
+                    }
+                    if (!multiplayer.connected) {
+                        showError('Not connected to server');
+                        return;
+                    }
+                    const playerName = playerNameInput.value.trim() || 'Player';
+                    multiplayer.joinRoom(roomCode, playerName);
+                });
+                
+                // Join Room Cancel
+                btnJoinCancel.addEventListener('click', () => {
+                    joinRoomPanel.style.display = 'none';
+                    mainMenu.style.display = 'flex';
+                    roomCodeInput.value = '';
+                });
+                
+                // Ready Toggle
+                btnReady.addEventListener('click', () => {
+                    isReady = !isReady;
+                    multiplayer.setReady(isReady);
+                    btnReady.textContent = isReady ? 'Not Ready' : 'Ready';
+                    btnReady.classList.toggle('primary', !isReady);
+                });
+                
+                // Start Game (host only)
+                btnStartGame.addEventListener('click', () => {
+                    multiplayer.startGame();
+                });
+                
+                // Leave Room
+                btnLeaveRoom.addEventListener('click', () => {
+                    multiplayer.leaveRoom();
+                    showMainMenu();
+                });
+                
+                // Room code input - auto uppercase
+                roomCodeInput.addEventListener('input', (e) => {
+                    e.target.value = e.target.value.toUpperCase();
+                });
+            }
+            
+            function showMainMenu() {
+                mainMenu.style.display = 'flex';
+                joinRoomPanel.style.display = 'none';
+                roomLobbyPanel.style.display = 'none';
+                hideError();
+                isReady = false;
+                btnReady.textContent = 'Ready';
+                btnReady.classList.remove('primary');
+            }
+            
+            function showRoomLobby(roomCode, isHost) {
+                mainMenu.style.display = 'none';
+                joinRoomPanel.style.display = 'none';
+                roomLobbyPanel.style.display = 'block';
+                roomCodeDisplay.textContent = roomCode;
+                btnStartGame.style.display = isHost ? 'block' : 'none';
+                hideError();
+            }
+            
+            function updatePlayersList(players) {
+                playersList.innerHTML = '';
+                
+                // Create 4 slots
+                for (let i = 0; i < 4; i++) {
+                    const player = players.find(p => p.slotIndex === i);
+                    const slot = document.createElement('div');
+                    slot.className = 'player-slot' + (player ? '' : ' empty');
+                    
+                    if (player) {
+                        const nameSpan = document.createElement('span');
+                        nameSpan.className = 'player-name';
+                        nameSpan.textContent = player.playerName + (player.isHost ? ' (Host)' : '');
+                        
+                        const statusSpan = document.createElement('span');
+                        statusSpan.className = 'player-status ' + (player.isHost ? 'host' : (player.ready ? 'ready' : 'not-ready'));
+                        statusSpan.textContent = player.isHost ? 'HOST' : (player.ready ? 'READY' : 'NOT READY');
+                        
+                        slot.appendChild(nameSpan);
+                        slot.appendChild(statusSpan);
+                    } else {
+                        const nameSpan = document.createElement('span');
+                        nameSpan.className = 'player-name';
+                        nameSpan.textContent = 'Empty Slot';
+                        slot.appendChild(nameSpan);
+                    }
+                    
+                    playersList.appendChild(slot);
+                }
+            }
+            
+            function startGame() {
+                lobbyScreen.style.display = 'none';
+                gameContainer.style.display = 'block';
+                
+                // Initialize game with multiplayer mode
+                if (typeof window.startMultiplayerGame === 'function') {
+                    window.startMultiplayerGame(multiplayer);
+                }
+            }
+            
+            function showError(message) {
+                lobbyError.textContent = message;
+                lobbyError.style.display = 'block';
+                
+                // Auto-hide after 5 seconds
+                setTimeout(hideError, 5000);
+            }
+            
+            function hideError() {
+                lobbyError.style.display = 'none';
+            }
+        })();
+    </script>
 </body>
 </html>

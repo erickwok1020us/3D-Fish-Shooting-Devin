@@ -7283,5 +7283,189 @@ function applyAllSettings() {
 // Load settings before game starts
 loadSettings();
 
+// ==================== MULTIPLAYER INTEGRATION ====================
+// Flag to indicate game has finished loading
+window.gameLoaded = false;
+
+// Multiplayer mode state
+let multiplayerMode = false;
+let multiplayerManager = null;
+
+// Function called by lobby when starting multiplayer game
+window.startMultiplayerGame = function(manager) {
+    multiplayerMode = true;
+    multiplayerManager = manager;
+    
+    // Setup multiplayer callbacks
+    if (multiplayerManager) {
+        // Handle game state updates from server
+        multiplayerManager.onGameState = function(data) {
+            // Update fish from server state
+            updateFishFromServer(data.fish);
+            
+            // Update bullets from server state
+            updateBulletsFromServer(data.bullets);
+            
+            // Update other players
+            updatePlayersFromServer(data.players);
+        };
+        
+        // Handle fish killed events
+        multiplayerManager.onFishKilled = function(data) {
+            const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
+            if (fish) {
+                // Play death effects
+                spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
+                
+                // Show reward if we killed it
+                if (data.killedBy === multiplayerManager.playerId) {
+                    spawnCoinFlyToScore(fish.position.clone(), data.reward);
+                    playSound('coin');
+                }
+                
+                // Remove fish from scene
+                scene.remove(fish);
+                const index = gameState.fish.indexOf(fish);
+                if (index > -1) {
+                    gameState.fish.splice(index, 1);
+                }
+            }
+        };
+        
+        // Handle balance updates
+        multiplayerManager.onBalanceUpdate = function(data) {
+            gameState.balance = data.balance;
+            updateUI();
+        };
+        
+        // Handle boss wave events
+        multiplayerManager.onBossWave = function(data) {
+            if (data.state === 'starting') {
+                playBossFanfare();
+                showRareFishNotification('BOSS WAVE INCOMING!');
+            }
+        };
+    }
+    
+    console.log('Multiplayer game started with manager:', manager);
+};
+
+// Update fish positions from server state
+function updateFishFromServer(serverFish) {
+    if (!serverFish || !Array.isArray(serverFish)) return;
+    
+    // Create a map of existing fish by server ID
+    const existingFish = new Map();
+    gameState.fish.forEach(fish => {
+        if (fish.userData && fish.userData.serverId) {
+            existingFish.set(fish.userData.serverId, fish);
+        }
+    });
+    
+    // Update or create fish
+    serverFish.forEach(sf => {
+        let fish = existingFish.get(sf.id);
+        
+        if (fish) {
+            // Update existing fish position (convert from server 2D to 3D)
+            // Server uses x, z coordinates; we add Y for visual depth
+            const targetX = sf.x * 10; // Scale factor
+            const targetZ = sf.z * 10;
+            const targetY = sf.y !== undefined ? sf.y * 10 : fish.position.y;
+            
+            // Smooth interpolation
+            fish.position.x += (targetX - fish.position.x) * 0.1;
+            fish.position.y += (targetY - fish.position.y) * 0.1;
+            fish.position.z += (targetZ - fish.position.z) * 0.1;
+            
+            // Update rotation to face movement direction
+            if (sf.vx !== undefined && sf.vz !== undefined) {
+                const angle = Math.atan2(sf.vx, sf.vz);
+                fish.rotation.y = angle;
+            }
+            
+            // Update HP
+            if (fish.userData) {
+                fish.userData.hp = sf.hp;
+            }
+            
+            existingFish.delete(sf.id);
+        } else {
+            // Create new fish from server data
+            const fishConfig = CONFIG.fishTiers[sf.species];
+            if (fishConfig) {
+                const newFish = createFishMesh(sf.species, fishConfig);
+                newFish.position.set(sf.x * 10, (sf.y || 0) * 10, sf.z * 10);
+                newFish.userData.serverId = sf.id;
+                newFish.userData.hp = sf.hp;
+                scene.add(newFish);
+                gameState.fish.push(newFish);
+            }
+        }
+    });
+    
+    // Remove fish that no longer exist on server
+    existingFish.forEach((fish, id) => {
+        scene.remove(fish);
+        const index = gameState.fish.indexOf(fish);
+        if (index > -1) {
+            gameState.fish.splice(index, 1);
+        }
+    });
+}
+
+// Update bullets from server state
+function updateBulletsFromServer(serverBullets) {
+    if (!serverBullets || !Array.isArray(serverBullets)) return;
+    
+    // For now, just update visual positions
+    // Client-side bullets are handled locally for responsiveness
+}
+
+// Update other players from server state
+function updatePlayersFromServer(serverPlayers) {
+    if (!serverPlayers || !Array.isArray(serverPlayers)) return;
+    
+    // Update other player cannons/positions
+    serverPlayers.forEach(player => {
+        if (player.id !== multiplayerManager.playerId) {
+            // Update other player's cannon rotation if visible
+            // This would require creating visual representations of other players' cannons
+        }
+    });
+}
+
+// Override shoot function for multiplayer
+const originalShoot = typeof shoot === 'function' ? shoot : null;
+
+function multiplayerShoot(targetX, targetZ) {
+    if (!multiplayerMode || !multiplayerManager) {
+        // Single player mode - use original shoot
+        return;
+    }
+    
+    // Send shoot request to server
+    multiplayerManager.shoot(targetX, targetZ);
+    
+    // Play local effects immediately for responsiveness
+    playWeaponShot(gameState.currentWeapon);
+    spawnMuzzleFlash();
+}
+
+// Expose game reference for multiplayer manager
+window.game = {
+    scene: null,
+    camera: null,
+    gameState: gameState,
+    CONFIG: CONFIG
+};
+
 // ==================== START GAME ====================
 init();
+
+// Mark game as loaded after init completes
+setTimeout(() => {
+    window.gameLoaded = true;
+    window.game.scene = scene;
+    window.game.camera = camera;
+}, 1000);
