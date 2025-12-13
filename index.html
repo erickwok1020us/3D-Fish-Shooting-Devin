@@ -408,9 +408,14 @@
         }
         
         /* FPS mode: Crosshair always centered via CSS (more robust than JS positioning) */
+        /* Explicitly set all positioning properties to ensure centering regardless of previous state */
         #crosshair.fps-mode {
+            position: fixed !important;
             left: 50% !important;
             top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            display: block !important;
+            opacity: 1 !important;
         }
         
         #crosshair .crosshair-ring {

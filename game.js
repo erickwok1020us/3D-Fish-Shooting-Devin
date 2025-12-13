@@ -5702,7 +5702,12 @@ function updateCrosshairForWeapon(weaponKey) {
     crosshair.style.height = '40px';
     
     // Update crosshair color class based on weapon
+    // IMPORTANT: Preserve fps-mode class if present (don't use className = which replaces all)
+    const hasFpsMode = crosshair.classList.contains('fps-mode');
     crosshair.className = 'weapon-' + weaponKey;
+    if (hasFpsMode) {
+        crosshair.classList.add('fps-mode');
+    }
 }
 
 function showRewardPopup(position, amount) {
@@ -5869,11 +5874,12 @@ function setupEventListeners() {
                     cannonGroup.rotation.y = clampedYaw;
                 }
                 if (cannonPitchGroup) {
-                    // FPS Pitch Limits: Symmetric ±50° for balanced up/down aiming
+                    // FPS Pitch Limits: Use centralized constants (FPS_PITCH_MIN/MAX)
                     // Note: cannonPitchGroup.rotation.x = -pitch (negated)
-                    // So for pitch ∈ [-50°, +50°], rotation.x must be in [-50°, +50°]
-                    const minRotationX = -50 * (Math.PI / 180);   // -50° = pitch +50° (up limit)
-                    const maxRotationX = 50 * (Math.PI / 180);    // +50° = pitch -50° (down limit)
+                    // FPS_PITCH_MIN = -35° (up limit), FPS_PITCH_MAX = +50° (down limit)
+                    // For rotation.x: min = -35° (looking up), max = +50° (looking down)
+                    const minRotationX = -35 * (Math.PI / 180);   // -35° up limit (prevents looking at ceiling)
+                    const maxRotationX = 50 * (Math.PI / 180);    // +50° down limit (generous for fish)
                     cannonPitchGroup.rotation.x = Math.max(minRotationX, Math.min(maxRotationX, newPitch));
                 }
                 updateFPSCamera();
@@ -6108,10 +6114,11 @@ function updateViewModeButton() {
 }
 
 // FPS Pitch Limits - centralized constants (single source of truth)
-// Symmetric pitch limits for balanced up/down aiming from water middle position
-// ±50° provides generous range while preventing extreme angles
-const FPS_PITCH_MIN = -50 * (Math.PI / 180);  // -50° (down) - symmetric with up
-const FPS_PITCH_MAX = 50 * (Math.PI / 180);   // +50° (up) - symmetric with down
+// Asymmetric pitch limits: more down range (fish are below), less up range (prevent looking at ceiling)
+// User requested: max upward angle ~60-70° from horizontal, NOT 90° straight up
+// -35° up limit prevents looking at ceiling while allowing comfortable fish targeting
+const FPS_PITCH_MIN = -35 * (Math.PI / 180);  // -35° (up limit) - prevents looking straight up
+const FPS_PITCH_MAX = 50 * (Math.PI / 180);   // +50° (down limit) - generous for targeting fish below
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
 const FPS_CAMERA_BACK_DIST = 70;     // Distance behind muzzle (was 100, reduced to show more barrel)
