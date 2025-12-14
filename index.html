@@ -1129,26 +1129,31 @@
             <div id="settings-panel">
                 <h3>Settings</h3>
                 
-                <!-- Graphics Quality -->
+                <!-- Graphics Quality (controls both particles and shadows) -->
                 <div class="settings-group">
                     <label>Graphics Quality</label>
                     <select id="graphics-quality">
-                        <option value="low">Low</option>
-                        <option value="medium" selected>Medium</option>
-                        <option value="high">High</option>
-                        <option value="ultra">Ultra</option>
+                        <option value="low">Low (80+ FPS)</option>
+                        <option value="medium" selected>Medium (60+ FPS)</option>
+                        <option value="high">High (Best Visuals)</option>
                     </select>
+                    <small style="color: #888; font-size: 10px; display: block; margin-top: 4px;">
+                        Low/Medium: No shadows, reduced particles | High: Full shadows
+                    </small>
                 </div>
                 
-                <!-- Shadow Quality -->
-                <div class="settings-group">
-                    <label>Shadow Quality</label>
-                    <select id="shadow-quality">
+                <!-- Shadow Quality (now auto-controlled by Graphics Quality) -->
+                <div class="settings-group" style="opacity: 0.6;">
+                    <label>Shadow Quality <span style="font-size: 10px;">(Auto)</span></label>
+                    <select id="shadow-quality" disabled>
                         <option value="off">Off</option>
                         <option value="low">Low</option>
-                        <option value="medium" selected>Medium</option>
-                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="high" selected>High</option>
                     </select>
+                    <small style="color: #888; font-size: 10px; display: block; margin-top: 4px;">
+                        Controlled by Graphics Quality setting
+                    </small>
                 </div>
                 
                 <div class="settings-divider"></div>

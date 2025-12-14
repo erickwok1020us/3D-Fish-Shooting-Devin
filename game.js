@@ -411,7 +411,12 @@ const BOSS_FISH_TYPES = [
 ];
 
 // Issue #15: List of boss-only species that should NOT spawn during normal gameplay
-const BOSS_ONLY_SPECIES = BOSS_FISH_TYPES.map(boss => boss.baseSpecies);
+// BUG FIX: Removed 'sardine' from boss-only list so small schooling fish appear during normal gameplay
+// This fixes the "too few fish" bug - sardine has count:30 which was being excluded
+const BOSS_ONLY_SPECIES = BOSS_FISH_TYPES
+    .filter(boss => boss.baseSpecies !== 'sardine')  // Keep sardine for normal gameplay
+    .map(boss => boss.baseSpecies);
+// Result: ['blueWhale', 'greatWhiteShark', 'mantaRay', 'marlin'] - sardine now spawns normally
 
 // ==================== WEAPON VFX SYSTEM (Issue #14) ====================
 // Visual effects configuration and state for each weapon type
@@ -4687,6 +4692,10 @@ class Fish {
     }
     
     takeDamage(damage, weaponKey) {
+        // BUG FIX: Guard against taking damage when already dead
+        // This prevents multiple die() calls and duplicate respawn timers
+        if (!this.isActive) return false;
+        
         // Phase 2: Shield Turtle - check if fish has shield
         if (this.config.ability === 'shield' && this.shieldHP > 0) {
             // Damage shield first
@@ -4919,7 +4928,11 @@ class Fish {
         // Issue #1: Respawn fish in full 3D space around cannon (immersive 360°)
         const position = getRandomFishPositionIn3DSpace();
         this.spawn(position);
-        activeFish.push(this);
+        // BUG FIX: Only push if not already in activeFish to prevent duplicates
+        // This fixes the "fish freeze after 30 minutes" bug caused by array corruption
+        if (!activeFish.includes(this)) {
+            activeFish.push(this);
+        }
     }
 }
 
@@ -7194,44 +7207,64 @@ function saveSettings() {
 }
 
 // Apply graphics quality settings
+// User-requested optimization for FPS performance:
+// - Low: No shadows + 30% particles (Target: 80+ FPS)
+// - Medium: No shadows + 60% particles (Target: 60+ FPS)
+// - High: Full shadows + 100% particles (Target: 50+ FPS)
 function applyGraphicsQuality(quality) {
     gameSettings.graphicsQuality = quality;
     
-    // Graphics quality presets affect:
-    // - Fish model detail (segment count)
-    // - Particle count
-    // - Water effects
-    // - Render resolution
+    // Base particle count for 100% (high quality)
+    const BASE_PARTICLE_COUNT = 200;
     
     switch (quality) {
         case 'low':
-            // Reduce particle effects
+            // LOW: Best performance - No shadows, 30% particles
             if (renderer) {
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
             }
-            CONFIG.particles = { maxCount: 50, enabled: true };
+            CONFIG.particles = { 
+                maxCount: Math.floor(BASE_PARTICLE_COUNT * 0.3), // 30% = 60 particles
+                enabled: true,
+                qualityMultiplier: 0.3
+            };
+            // Disable shadows for low quality
+            applyShadowQuality('off');
             break;
+            
         case 'medium':
+            // MEDIUM: Balanced - No shadows, 60% particles
             if (renderer) {
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
             }
-            CONFIG.particles = { maxCount: 100, enabled: true };
+            CONFIG.particles = { 
+                maxCount: Math.floor(BASE_PARTICLE_COUNT * 0.6), // 60% = 120 particles
+                enabled: true,
+                qualityMultiplier: 0.6
+            };
+            // Disable shadows for medium quality
+            applyShadowQuality('off');
             break;
+            
         case 'high':
+            // HIGH: Best visuals - Full shadows, 100% particles
             if (renderer) {
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             }
-            CONFIG.particles = { maxCount: 200, enabled: true };
-            break;
-        case 'ultra':
-            if (renderer) {
-                renderer.setPixelRatio(window.devicePixelRatio);
-            }
-            CONFIG.particles = { maxCount: 500, enabled: true };
+            CONFIG.particles = { 
+                maxCount: BASE_PARTICLE_COUNT, // 100% = 200 particles
+                enabled: true,
+                qualityMultiplier: 1.0
+            };
+            // Enable high quality shadows
+            applyShadowQuality('high');
             break;
     }
     
     saveSettings();
+    
+    // Log quality change for debugging
+    console.log(`Graphics Quality set to: ${quality} (Particles: ${CONFIG.particles.maxCount}, Shadows: ${quality === 'high' ? 'ON' : 'OFF'})`);
 }
 
 // Apply shadow quality settings
