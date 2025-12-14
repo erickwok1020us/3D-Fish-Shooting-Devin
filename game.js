@@ -4757,15 +4757,23 @@ class Fish {
             this.triggerAbility(deathPosition, weaponKey);
         }
         
-        // Calculate reward with RTP
+        // NEW RTP SYSTEM: Casino-standard kill rate calculation
+        // Kill Rate = Target RTP / Effective Payout
+        // This ensures long-term RTP converges to target (30-40% based on weapon)
         const weapon = CONFIG.weapons[weaponKey];
-        const rtp = CONFIG.rtp[CONFIG.game.mode][weaponKey];
-        const baseReward = this.config.reward * weapon.multiplier;
+        const fishReward = this.config.reward;
+        const effectivePayout = fishReward * weapon.multiplier;
         
-        // RTP-based reward
-        const win = Math.random() < rtp ? baseReward : 0;
+        // Calculate kill rate using new RTP system
+        const killRate = calculateKillRate(fishReward, weaponKey);
         
+        // Determine if this kill awards a payout based on kill rate
+        const isKill = Math.random() < killRate;
+        const win = isKill ? effectivePayout : 0;
+        
+        // Record the win for RTP tracking (bet was already recorded when shot was fired)
         if (win > 0) {
+            recordWin(win);
             gameState.balance += win;
             gameState.score += Math.floor(win);
             
@@ -5002,6 +5010,138 @@ function spawnInitialFish() {
     });
 }
 
+// ==================== DYNAMIC FISH RESPAWN SYSTEM ====================
+// Maintains target fish count and adjusts spawn rate based on kill rate
+const FISH_SPAWN_CONFIG = {
+    targetCount: 20,        // Target number of fish on screen
+    minCount: 15,           // Minimum fish count before emergency spawn
+    maxCount: 30,           // Maximum fish count
+    normalSpawnInterval: 1.0,    // Normal spawn interval (seconds)
+    emergencySpawnInterval: 0.3, // Emergency spawn interval when fish < minCount
+    maintainSpawnInterval: 2.0   // Slow spawn when at target
+};
+
+let dynamicSpawnTimer = 0;
+
+function updateDynamicFishSpawn(deltaTime) {
+    dynamicSpawnTimer -= deltaTime;
+    
+    const currentFishCount = activeFish.length;
+    let spawnInterval;
+    
+    // Determine spawn interval based on current fish count
+    if (currentFishCount < FISH_SPAWN_CONFIG.minCount) {
+        // Emergency: spawn quickly
+        spawnInterval = FISH_SPAWN_CONFIG.emergencySpawnInterval;
+    } else if (currentFishCount < FISH_SPAWN_CONFIG.targetCount) {
+        // Below target: spawn normally
+        spawnInterval = FISH_SPAWN_CONFIG.normalSpawnInterval;
+    } else if (currentFishCount < FISH_SPAWN_CONFIG.maxCount) {
+        // At target: slow spawn
+        spawnInterval = FISH_SPAWN_CONFIG.maintainSpawnInterval;
+    } else {
+        // At max: don't spawn
+        return;
+    }
+    
+    if (dynamicSpawnTimer <= 0) {
+        // Find an inactive fish from the pool to spawn
+        const inactiveFish = fishPool.find(f => !f.isActive);
+        if (inactiveFish) {
+            const position = getRandomFishPositionIn3DSpace();
+            inactiveFish.spawn(position);
+            // Only push if not already in activeFish
+            if (!activeFish.includes(inactiveFish)) {
+                activeFish.push(inactiveFish);
+            }
+        }
+        dynamicSpawnTimer = spawnInterval;
+    }
+}
+
+// ==================== RTP (RETURN TO PLAYER) SYSTEM ====================
+// Casino-standard RTP calculation: RTP = (Total Wins / Total Bets) * 100%
+// Kill Rate = Target RTP / Payout Multiplier
+
+const RTP_CONFIG = {
+    // Base RTP targets by weapon (higher weapons = slightly better RTP to encourage use)
+    weaponRTP: {
+        '1x': 0.30,   // 30% RTP
+        '3x': 0.33,   // 33% RTP
+        '5x': 0.35,   // 35% RTP
+        '20x': 0.40   // 40% RTP
+    },
+    // Dynamic RTP adjustment bounds
+    minRTP: 0.25,     // Minimum RTP (25%) - increase kill rate if below
+    maxRTP: 0.35,     // Maximum RTP (35%) - decrease kill rate if above
+    // Tracking
+    sessionStats: {
+        totalBets: 0,
+        totalWins: 0,
+        shotsFired: 0,
+        fishKilled: 0
+    }
+};
+
+// Calculate kill rate based on fish payout and weapon RTP
+function calculateKillRate(fishReward, weaponKey) {
+    const targetRTP = RTP_CONFIG.weaponRTP[weaponKey] || 0.30;
+    const weapon = CONFIG.weapons[weaponKey];
+    const effectivePayout = fishReward * weapon.multiplier;
+    
+    // Base kill rate = Target RTP / Effective Payout
+    // For a 100x payout fish with 30% RTP: killRate = 0.30 / 100 = 0.3%
+    let killRate = targetRTP / effectivePayout;
+    
+    // Dynamic adjustment based on current session RTP
+    const currentRTP = getCurrentSessionRTP();
+    if (currentRTP > 0) {
+        if (currentRTP > RTP_CONFIG.maxRTP) {
+            // Player winning too much - reduce kill rate
+            killRate *= 0.8;
+        } else if (currentRTP < RTP_CONFIG.minRTP) {
+            // Player losing too much - increase kill rate
+            killRate *= 1.2;
+        }
+    }
+    
+    // Clamp kill rate to reasonable bounds (0.1% to 50%)
+    return Math.max(0.001, Math.min(0.5, killRate));
+}
+
+// Get current session RTP
+function getCurrentSessionRTP() {
+    if (RTP_CONFIG.sessionStats.totalBets <= 0) return 0;
+    return RTP_CONFIG.sessionStats.totalWins / RTP_CONFIG.sessionStats.totalBets;
+}
+
+// Record a bet (shot fired)
+function recordBet(weaponKey) {
+    const weapon = CONFIG.weapons[weaponKey];
+    const betAmount = weapon.cost;
+    RTP_CONFIG.sessionStats.totalBets += betAmount;
+    RTP_CONFIG.sessionStats.shotsFired++;
+}
+
+// Record a win (fish killed)
+function recordWin(amount) {
+    RTP_CONFIG.sessionStats.totalWins += amount;
+    RTP_CONFIG.sessionStats.fishKilled++;
+}
+
+// Get RTP stats for debugging/display
+function getRTPStats() {
+    const stats = RTP_CONFIG.sessionStats;
+    return {
+        totalBets: stats.totalBets.toFixed(2),
+        totalWins: stats.totalWins.toFixed(2),
+        currentRTP: (getCurrentSessionRTP() * 100).toFixed(1) + '%',
+        shotsFired: stats.shotsFired,
+        fishKilled: stats.fishKilled,
+        hitRate: stats.shotsFired > 0 ? ((stats.fishKilled / stats.shotsFired) * 100).toFixed(1) + '%' : '0%'
+    };
+}
+
 // ==================== BULLET SYSTEM ====================
 class Bullet {
     constructor() {
@@ -5202,6 +5342,9 @@ function fireBullet(targetX, targetY) {
     
     // Deduct cost
     gameState.balance -= weapon.cost;
+    
+    // Record bet for RTP tracking
+    recordBet(weaponKey);
     
     // Set cooldown based on shotsPerSecond
     gameState.cooldown = 1 / weapon.shotsPerSecond;
@@ -6572,15 +6715,32 @@ function animate() {
         }
     }
     
-    // Update fish
+    // Update fish with error handling to prevent freeze bugs
+    let fishUpdateErrors = 0;
     for (let i = activeFish.length - 1; i >= 0; i--) {
         const fish = activeFish[i];
-        if (fish.isActive) {
-            fish.update(deltaTime, activeFish);
+        if (fish && fish.isActive) {
+            try {
+                fish.update(deltaTime, activeFish);
+            } catch (e) {
+                fishUpdateErrors++;
+                if (fishUpdateErrors <= 3) {
+                    console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species);
+                }
+                // Attempt recovery: reset fish state
+                fish.velocity.set(0, 0, 0);
+                fish.acceleration.set(0, 0, 0);
+            }
+        } else if (fish && !fish.isActive) {
+            activeFish.splice(i, 1);
         } else {
+            // Invalid fish reference - remove it
             activeFish.splice(i, 1);
         }
     }
+    
+    // Dynamic fish respawn system - maintain target fish count
+    updateDynamicFishSpawn(deltaTime);
     
     // Update bullets
     for (let i = activeBullets.length - 1; i >= 0; i--) {
@@ -7039,7 +7199,10 @@ function spawnBossFish() {
                 );
                 fish.spawn(centerPos.clone().add(offset));
                 fish.isBoss = true;
-                activeFish.push(fish);
+                // BUG FIX: Only push if not already in activeFish to prevent duplicates
+                if (!activeFish.includes(fish)) {
+                    activeFish.push(fish);
+                }
                 swarmFish.push(fish);
             }
         }
@@ -7058,7 +7221,10 @@ function spawnBossFish() {
             fish.createMesh();
             fish.spawn(getRandomFishPositionIn3DSpace());
             fish.isBoss = true;
-            activeFish.push(fish);
+            // BUG FIX: Only push if not already in activeFish to prevent duplicates
+            if (!activeFish.includes(fish)) {
+                activeFish.push(fish);
+            }
             
             gameState.activeBoss = fish;
             createBossCrosshair(fish);
