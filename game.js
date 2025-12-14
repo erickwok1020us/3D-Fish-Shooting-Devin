@@ -5061,19 +5061,36 @@ function updateDynamicFishSpawn(deltaTime) {
 
 // ==================== RTP (RETURN TO PLAYER) SYSTEM ====================
 // Casino-standard RTP calculation: RTP = (Total Wins / Total Bets) * 100%
-// Kill Rate = Target RTP / Payout Multiplier
+// Kill Rate = Target RTP / Fish Multiplier (based on fish reward, not weapon)
+// 
+// Fish-based RTP system (higher multiplier fish = slightly higher RTP):
+// - 1x fish: 90% RTP (kill rate = 90%)
+// - 3x fish: 92% RTP (kill rate = 30.67%)
+// - 5x fish: 93% RTP (kill rate = 18.6%)
+// - 8x fish: 94% RTP (kill rate = 11.75%)
+// - 20x fish: 95% RTP (kill rate = 4.75%)
 
 const RTP_CONFIG = {
-    // Base RTP targets by weapon (higher weapons = slightly better RTP to encourage use)
-    weaponRTP: {
-        '1x': 0.30,   // 30% RTP
-        '3x': 0.33,   // 33% RTP
-        '5x': 0.35,   // 35% RTP
-        '20x': 0.40   // 40% RTP
+    // RTP targets by FISH REWARD MULTIPLIER (not weapon)
+    // Higher multiplier fish have slightly better RTP to encourage targeting them
+    fishRTP: {
+        1: 0.90,    // 1x fish: 90% RTP, killRate = 90%
+        2: 0.91,    // 2x fish: 91% RTP, killRate = 45.5%
+        3: 0.92,    // 3x fish: 92% RTP, killRate = 30.67%
+        5: 0.93,    // 5x fish: 93% RTP, killRate = 18.6%
+        8: 0.94,    // 8x fish: 94% RTP, killRate = 11.75%
+        10: 0.94,   // 10x fish: 94% RTP, killRate = 9.4%
+        15: 0.945,  // 15x fish: 94.5% RTP, killRate = 6.3%
+        20: 0.95,   // 20x fish: 95% RTP, killRate = 4.75%
+        30: 0.95,   // 30x fish: 95% RTP, killRate = 3.17%
+        50: 0.95,   // 50x fish: 95% RTP, killRate = 1.9%
+        100: 0.95,  // 100x fish: 95% RTP, killRate = 0.95%
+        200: 0.95,  // 200x fish: 95% RTP, killRate = 0.475%
+        500: 0.95   // 500x fish: 95% RTP, killRate = 0.19%
     },
-    // Dynamic RTP adjustment bounds
-    minRTP: 0.25,     // Minimum RTP (25%) - increase kill rate if below
-    maxRTP: 0.35,     // Maximum RTP (35%) - decrease kill rate if above
+    // Dynamic RTP adjustment bounds (90-95% market standard)
+    minRTP: 0.88,     // Minimum RTP (88%) - increase kill rate if below
+    maxRTP: 0.96,     // Maximum RTP (96%) - decrease kill rate if above
     // Tracking
     sessionStats: {
         totalBets: 0,
@@ -5083,30 +5100,48 @@ const RTP_CONFIG = {
     }
 };
 
-// Calculate kill rate based on fish payout and weapon RTP
-function calculateKillRate(fishReward, weaponKey) {
-    const targetRTP = RTP_CONFIG.weaponRTP[weaponKey] || 0.30;
-    const weapon = CONFIG.weapons[weaponKey];
-    const effectivePayout = fishReward * weapon.multiplier;
+// Get RTP target for a fish based on its reward multiplier
+function getFishRTP(fishReward) {
+    // Find the closest matching multiplier in our RTP table
+    const multipliers = Object.keys(RTP_CONFIG.fishRTP).map(Number).sort((a, b) => a - b);
     
-    // Base kill rate = Target RTP / Effective Payout
-    // For a 100x payout fish with 30% RTP: killRate = 0.30 / 100 = 0.3%
-    let killRate = targetRTP / effectivePayout;
+    // Find the closest multiplier that's <= fishReward
+    let closestMultiplier = 1;
+    for (const mult of multipliers) {
+        if (mult <= fishReward) {
+            closestMultiplier = mult;
+        } else {
+            break;
+        }
+    }
+    
+    return RTP_CONFIG.fishRTP[closestMultiplier] || 0.90;
+}
+
+// Calculate kill rate based on fish reward multiplier
+// Formula: killRate = targetRTP / fishReward
+function calculateKillRate(fishReward, weaponKey) {
+    // Get RTP based on fish reward (not weapon)
+    const targetRTP = getFishRTP(fishReward);
+    
+    // Kill rate formula: killRate = targetRTP / multiplier
+    // Example: 20x fish with 95% RTP → killRate = 0.95 / 20 = 4.75%
+    let killRate = targetRTP / fishReward;
     
     // Dynamic adjustment based on current session RTP
     const currentRTP = getCurrentSessionRTP();
     if (currentRTP > 0) {
         if (currentRTP > RTP_CONFIG.maxRTP) {
-            // Player winning too much - reduce kill rate
-            killRate *= 0.8;
+            // Player winning too much - reduce kill rate by 10%
+            killRate *= 0.9;
         } else if (currentRTP < RTP_CONFIG.minRTP) {
-            // Player losing too much - increase kill rate
-            killRate *= 1.2;
+            // Player losing too much - increase kill rate by 10%
+            killRate *= 1.1;
         }
     }
     
-    // Clamp kill rate to reasonable bounds (0.1% to 50%)
-    return Math.max(0.001, Math.min(0.5, killRate));
+    // Clamp kill rate to reasonable bounds (0.1% to 95%)
+    return Math.max(0.001, Math.min(0.95, killRate));
 }
 
 // Get current session RTP
