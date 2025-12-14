@@ -7167,6 +7167,9 @@ function showBossEscapedMessage() {
 const DEFAULT_SETTINGS = {
     graphicsQuality: 'medium',
     shadowQuality: 'medium',
+    // Audio volume settings (0-100%)
+    musicVolume: 50,      // Background music volume (default 50%)
+    sfxVolume: 70,        // Sound effects volume (default 70%)
     thirdPersonSensitivity: 1.0,
     // FPS Sensitivity: 10 levels (1-10), where level 10 = 100% of base sensitivity
     // Default is level 5 (50%) for more precise aiming
@@ -7349,6 +7352,31 @@ function applyFpsSensitivityLevel(level) {
     saveSettings();
 }
 
+// Apply background music volume (0-100%)
+function applyMusicVolumePercent(percent) {
+    // Clamp to 0-100
+    percent = Math.max(0, Math.min(100, Math.round(percent)));
+    gameSettings.musicVolume = percent;
+    // Convert percentage to 0-1 range for audio API
+    const volume = percent / 100;
+    setMusicVolume(volume);
+    setAmbientVolume(volume); // Also apply to ambient sounds
+    saveSettings();
+    console.log(`Music Volume set to: ${percent}%`);
+}
+
+// Apply sound effects volume (0-100%)
+function applySfxVolumePercent(percent) {
+    // Clamp to 0-100
+    percent = Math.max(0, Math.min(100, Math.round(percent)));
+    gameSettings.sfxVolume = percent;
+    // Convert percentage to 0-1 range for audio API
+    const volume = percent / 100;
+    setSfxVolume(volume);
+    saveSettings();
+    console.log(`SFX Volume set to: ${percent}%`);
+}
+
 // Initialize settings UI
 function initSettingsUI() {
     const settingsBtn = document.getElementById('settings-btn');
@@ -7392,6 +7420,32 @@ function initSettingsUI() {
         shadowSelect.value = gameSettings.shadowQuality;
         shadowSelect.addEventListener('change', (e) => {
             applyShadowQuality(e.target.value);
+        });
+    }
+    
+    // Background Music Volume slider (0-100%)
+    const musicSlider = document.getElementById('music-volume');
+    const musicValue = document.getElementById('music-volume-value');
+    if (musicSlider && musicValue) {
+        musicSlider.value = gameSettings.musicVolume;
+        musicValue.textContent = gameSettings.musicVolume + '%';
+        musicSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            musicValue.textContent = value + '%';
+            applyMusicVolumePercent(value);
+        });
+    }
+    
+    // Sound Effects Volume slider (0-100%)
+    const sfxSlider = document.getElementById('sfx-volume');
+    const sfxValue = document.getElementById('sfx-volume-value');
+    if (sfxSlider && sfxValue) {
+        sfxSlider.value = gameSettings.sfxVolume;
+        sfxValue.textContent = gameSettings.sfxVolume + '%';
+        sfxSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            sfxValue.textContent = value + '%';
+            applySfxVolumePercent(value);
         });
     }
     
@@ -7439,6 +7493,8 @@ function initSettingsUI() {
 function applyAllSettings() {
     applyGraphicsQuality(gameSettings.graphicsQuality);
     applyShadowQuality(gameSettings.shadowQuality);
+    applyMusicVolumePercent(gameSettings.musicVolume);
+    applySfxVolumePercent(gameSettings.sfxVolume);
     applyThirdPersonSensitivity(gameSettings.thirdPersonSensitivity);
     applyFpsSensitivityLevel(gameSettings.fpsSensitivityLevel || 5);
 }
