@@ -256,8 +256,9 @@ const CONFIG = {
         '3x': { 
             multiplier: 3, cost: 3, speed: 700, 
             damage: 180, shotsPerSecond: 1.5, // cooldown = 0.667s
-            // Issue 3 Fix: Changed from spread to projectile - single target only, no penetration
-            type: 'projectile',
+            // Shotgun effect: Fire 3 bullets in fan spread pattern (-15°, 0°, +15°)
+            // Each bullet does NOT penetrate - stops on hit
+            type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 10,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400
         },
