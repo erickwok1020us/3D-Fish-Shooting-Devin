@@ -888,6 +888,150 @@
             text-align: center;
             font-size: 14px;
         }
+        
+        /* Shortcut Key Labels on Buttons */
+        .shortcut-label {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: rgba(255, 200, 0, 0.9);
+            color: #000;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+        }
+        
+        /* Shortcut highlight animation when key is pressed */
+        .shortcut-highlight {
+            animation: shortcut-flash 0.2s ease-out;
+        }
+        
+        @keyframes shortcut-flash {
+            0% { 
+                transform: scale(1.15);
+                box-shadow: 0 0 20px rgba(255, 255, 0, 0.8);
+            }
+            100% { 
+                transform: scale(1);
+                box-shadow: none;
+            }
+        }
+        
+        /* Help Panel Styles */
+        #help-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(180deg, rgba(20, 30, 50, 0.98), rgba(10, 20, 40, 0.98));
+            border: 2px solid rgba(100, 200, 255, 0.5);
+            border-radius: 20px;
+            padding: 30px;
+            pointer-events: auto;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+            min-width: 350px;
+        }
+        
+        #help-panel.visible {
+            display: block;
+        }
+        
+        #help-panel h3 {
+            color: #88ddff;
+            font-size: 22px;
+            margin-bottom: 20px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            border-bottom: 2px solid rgba(100, 200, 255, 0.3);
+            padding-bottom: 15px;
+        }
+        
+        #help-panel .help-content {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        #help-panel .help-section {
+            background: rgba(50, 80, 120, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+        }
+        
+        #help-panel .help-section h4 {
+            color: #aaddff;
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        #help-panel .help-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 6px 0;
+            color: #cceeff;
+            font-size: 14px;
+        }
+        
+        #help-panel .key {
+            background: linear-gradient(180deg, #4488cc, #2266aa);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+            min-width: 60px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        #help-close-btn {
+            margin-top: 20px;
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(180deg, #4488cc, #2266aa);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        #help-close-btn:hover {
+            background: linear-gradient(180deg, #55aadd, #3388bb);
+            transform: scale(1.02);
+        }
+        
+        /* First-time help hint */
+        #help-hint {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(100, 200, 255, 0.2);
+            border: 1px solid rgba(100, 200, 255, 0.5);
+            border-radius: 20px;
+            padding: 10px 20px;
+            color: #88ddff;
+            font-size: 14px;
+            animation: hint-pulse 2s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes hint-pulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -979,7 +1123,7 @@
             </div>
             
             <!-- Settings Button - Top Right -->
-            <button id="settings-btn">&#9881;</button>
+            <button id="settings-btn">&#9881; (ESC)</button>
             
             <!-- Settings Panel -->
             <div id="settings-panel">
@@ -1037,27 +1181,29 @@
             <div id="instructions">
                 Click to shoot<br>
                 Right-drag to rotate view<br>
-                A/D keys to rotate camera<br>
-                點擊 Space 切換視角<br>
+                Q/E keys to rotate camera<br>
+                Press H for shortcuts<br>
                 Select weapon below
             </div>
             
             <!-- Auto-shoot Toggle, View Mode, and Center View - Bottom Right -->
             <div id="auto-shoot-container">
-                <button id="auto-shoot-btn">AUTO OFF</button>
-                <button id="view-mode-btn">3RD PERSON</button>
-                <button id="center-view-btn">CENTER VIEW</button>
+                <button id="auto-shoot-btn">AUTO OFF (A)</button>
+                <button id="view-mode-btn">3RD PERSON (Space)</button>
+                <button id="center-view-btn">CENTER VIEW (C)</button>
             </div>
             
             <!-- Weapon Panel - Issue #16: Added 20x Super Weapon -->
             <div id="weapon-panel">
                 <div class="weapon-group">
                     <button class="weapon-btn active" data-weapon="1x">
+                        <span class="shortcut-label">1</span>
                         <span class="weapon-icon">&#x2022;</span>
                         <span class="multiplier">1x</span>
                         <span class="cost">1 USDT</span>
                     </button>
                     <button class="weapon-btn" data-weapon="3x">
+                        <span class="shortcut-label">2</span>
                         <span class="weapon-icon">&#x2234;</span>
                         <span class="multiplier">3x</span>
                         <span class="cost">3 USDT</span>
@@ -1065,11 +1211,13 @@
                 </div>
                 <div class="weapon-group">
                     <button class="weapon-btn" data-weapon="5x">
+                        <span class="shortcut-label">3</span>
                         <span class="weapon-icon">&#x26A1;</span>
                         <span class="multiplier">5x</span>
                         <span class="cost">5 USDT</span>
                     </button>
                     <button class="weapon-btn" data-weapon="8x">
+                        <span class="shortcut-label">4</span>
                         <span class="weapon-icon">&#x1F4A3;</span>
                         <span class="multiplier">8x</span>
                         <span class="cost">8 USDT</span>
@@ -1077,6 +1225,7 @@
                 </div>
                 <div class="weapon-group">
                     <button class="weapon-btn" data-weapon="20x">
+                        <span class="shortcut-label">5</span>
                         <span class="weapon-icon">&#x2605;</span>
                         <span class="multiplier">20x</span>
                         <span class="cost">200 USDT</span>

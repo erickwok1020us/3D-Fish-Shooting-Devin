@@ -5996,41 +5996,95 @@ function setupEventListeners() {
         });
     }
     
-    // Keyboard controls for camera rotation (Issue #5)
-    // FPS mode: Limited to ±90° (180° total) - cannon can only face outward
-    // 3RD PERSON mode: Unlimited 360° rotation
+    // Keyboard controls - Complete shortcut system for FPS mode
+    // In FPS mode, mouse is locked for view control, so keyboard shortcuts are essential
     window.addEventListener('keydown', (e) => {
-        const rotationSpeed = 0.05;  // Faster rotation for keyboard
-        const maxYaw = Math.PI / 2;  // 90 degrees limit for FPS mode
+        // Weapon switching: 1-5 keys
+        if (e.key === '1') {
+            selectWeapon('1x');
+            highlightButton('.weapon-btn[data-weapon="1x"]');
+            return;
+        } else if (e.key === '2') {
+            selectWeapon('3x');
+            highlightButton('.weapon-btn[data-weapon="3x"]');
+            return;
+        } else if (e.key === '3') {
+            selectWeapon('5x');
+            highlightButton('.weapon-btn[data-weapon="5x"]');
+            return;
+        } else if (e.key === '4') {
+            selectWeapon('8x');
+            highlightButton('.weapon-btn[data-weapon="8x"]');
+            return;
+        } else if (e.key === '5') {
+            selectWeapon('20x');
+            highlightButton('.weapon-btn[data-weapon="20x"]');
+            return;
+        }
         
+        // Function toggle keys
         if (e.key === 'a' || e.key === 'A') {
+            // A key: Toggle AUTO mode
+            toggleAutoShoot();
+            highlightButton('#auto-shoot-btn');
+            return;
+        } else if (e.key === ' ') {
+            // Space key: Toggle view mode (FPS <-> 3RD PERSON)
+            e.preventDefault(); // Prevent page scroll
+            toggleViewMode();
+            highlightButton('#view-mode-btn');
+            return;
+        } else if (e.key === 'c' || e.key === 'C') {
+            // C key: Center view
+            centerCameraView();
+            if (gameState.viewMode === 'fps') {
+                updateFPSCamera();
+            } else {
+                updateCameraRotation();
+            }
+            highlightButton('#center-view-btn');
+            return;
+        } else if (e.key === 'Escape') {
+            // ESC key: Toggle settings panel
+            toggleSettingsPanel();
+            highlightButton('#settings-btn');
+            return;
+        } else if (e.key === 'h' || e.key === 'H' || e.key === 'F1') {
+            // H or F1 key: Toggle help panel
+            e.preventDefault();
+            toggleHelpPanel();
+            return;
+        }
+        
+        // Camera rotation with D key (A is now for Auto toggle)
+        // Use Q/E or arrow keys for camera rotation instead
+        const rotationSpeed = 0.05;
+        const maxYaw = Math.PI / 2;
+        
+        if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') {
             // Rotate camera left
             if (gameState.viewMode === 'fps') {
-                // In FPS mode, directly rotate the cannon (limited to ±90°)
                 if (cannonGroup) {
                     let newYaw = cannonGroup.rotation.y - rotationSpeed;
                     cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
                 }
                 updateFPSCamera();
             } else {
-                // 3RD PERSON mode: unlimited 360°
                 let newYaw = gameState.cameraYaw - rotationSpeed;
                 if (newYaw < -Math.PI) newYaw += 2 * Math.PI;
                 gameState.targetCameraYaw = newYaw;
                 gameState.cameraYaw = newYaw;
                 updateCameraRotation();
             }
-        } else if (e.key === 'd' || e.key === 'D') {
+        } else if (e.key === 'd' || e.key === 'D' || e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') {
             // Rotate camera right
             if (gameState.viewMode === 'fps') {
-                // In FPS mode, directly rotate the cannon (limited to ±90°)
                 if (cannonGroup) {
                     let newYaw = cannonGroup.rotation.y + rotationSpeed;
                     cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
                 }
                 updateFPSCamera();
             } else {
-                // 3RD PERSON mode: unlimited 360°
                 let newYaw = gameState.cameraYaw + rotationSpeed;
                 if (newYaw > Math.PI) newYaw -= 2 * Math.PI;
                 gameState.targetCameraYaw = newYaw;
@@ -6038,10 +6092,86 @@ function setupEventListeners() {
                 updateCameraRotation();
             }
         } else if (e.key === 'v' || e.key === 'V') {
-            // Toggle view mode with V key
+            // V key also toggles view mode (legacy support)
             toggleViewMode();
+            highlightButton('#view-mode-btn');
         }
     });
+}
+
+// Toggle AUTO shoot mode
+function toggleAutoShoot() {
+    gameState.autoShoot = !gameState.autoShoot;
+    const btn = document.getElementById('auto-shoot-btn');
+    if (btn) {
+        btn.textContent = gameState.autoShoot ? 'AUTO ON (A)' : 'AUTO OFF (A)';
+        btn.classList.toggle('active', gameState.autoShoot);
+    }
+    playSound('weaponSwitch'); // Audio feedback
+}
+
+// Toggle settings panel
+function toggleSettingsPanel() {
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) {
+        settingsPanel.classList.toggle('visible');
+    }
+}
+
+// Toggle help panel showing all shortcuts
+function toggleHelpPanel() {
+    let helpPanel = document.getElementById('help-panel');
+    if (!helpPanel) {
+        // Create help panel if it doesn't exist
+        helpPanel = document.createElement('div');
+        helpPanel.id = 'help-panel';
+        helpPanel.innerHTML = `
+            <div class="help-content">
+                <h3>Keyboard Shortcuts</h3>
+                <div class="help-section">
+                    <h4>Weapon Selection</h4>
+                    <div class="help-row"><span class="key">1</span> Weapon 1x</div>
+                    <div class="help-row"><span class="key">2</span> Weapon 3x</div>
+                    <div class="help-row"><span class="key">3</span> Weapon 5x</div>
+                    <div class="help-row"><span class="key">4</span> Weapon 8x</div>
+                    <div class="help-row"><span class="key">5</span> Weapon 20x</div>
+                </div>
+                <div class="help-section">
+                    <h4>Controls</h4>
+                    <div class="help-row"><span class="key">A</span> Toggle Auto Fire</div>
+                    <div class="help-row"><span class="key">Space</span> Toggle View Mode</div>
+                    <div class="help-row"><span class="key">C</span> Center View</div>
+                    <div class="help-row"><span class="key">ESC</span> Settings</div>
+                    <div class="help-row"><span class="key">H</span> This Help</div>
+                </div>
+                <div class="help-section">
+                    <h4>Camera</h4>
+                    <div class="help-row"><span class="key">Q/E</span> Rotate Left/Right</div>
+                    <div class="help-row"><span class="key">D</span> Rotate Right</div>
+                    <div class="help-row"><span class="key">Arrows</span> Rotate Camera</div>
+                </div>
+                <button id="help-close-btn">Close (H)</button>
+            </div>
+        `;
+        document.getElementById('ui-overlay').appendChild(helpPanel);
+        
+        // Close button handler
+        document.getElementById('help-close-btn').addEventListener('click', () => {
+            helpPanel.classList.remove('visible');
+        });
+    }
+    helpPanel.classList.toggle('visible');
+}
+
+// Visual feedback when pressing shortcut keys
+function highlightButton(selector) {
+    const btn = document.querySelector(selector);
+    if (btn) {
+        btn.classList.add('shortcut-highlight');
+        setTimeout(() => {
+            btn.classList.remove('shortcut-highlight');
+        }, 200);
+    }
 }
 
 // Update camera rotation based on yaw and pitch (orbit around cannon at bottom)
@@ -6199,10 +6329,10 @@ function updateViewModeButton() {
     const btn = document.getElementById('view-mode-btn');
     if (btn) {
         if (gameState.viewMode === 'fps') {
-            btn.textContent = 'FPS VIEW';
+            btn.textContent = 'FPS VIEW (Space)';
             btn.classList.add('active');
         } else {
-            btn.textContent = '3RD PERSON';
+            btn.textContent = '3RD PERSON (Space)';
             btn.classList.remove('active');
         }
     }
