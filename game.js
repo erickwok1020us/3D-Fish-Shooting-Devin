@@ -352,8 +352,324 @@ const gameState = {
     bossSpawnTimer: 60,  // Boss spawns every 60 seconds exactly
     activeBoss: null,  // Currently active boss fish
     bossCountdown: 0,  // Countdown timer for boss event
-    bossActive: false  // Whether a boss event is currently active
+    bossActive: false,  // Whether a boss event is currently active
+    // Combo System (Issue #4 - Weapon System Improvements)
+    comboCount: 0,           // Current consecutive kills
+    comboTimer: 0,           // Time remaining to continue combo
+    comboTimeWindow: 3.0,    // Seconds to get next kill to continue combo
+    lastComboBonus: 0        // Last applied combo bonus percentage
 };
+
+// ==================== PERFORMANCE OPTIMIZATION CONFIG ====================
+const PERFORMANCE_CONFIG = {
+    // LOD (Level of Detail) settings
+    lod: {
+        highDetailDistance: 300,    // Full detail within 300 units
+        mediumDetailDistance: 600,  // Medium detail 300-600 units
+        lowDetailDistance: 1000     // Low detail beyond 600 units
+    },
+    // Frustum culling
+    frustumCulling: {
+        enabled: true,
+        updateInterval: 0.1  // Update culling every 100ms
+    },
+    // Particle limits
+    particles: {
+        maxCount: 500,           // Maximum active particles
+        cullDistance: 800        // Don't render particles beyond this
+    },
+    // Shadow map quality settings
+    shadowMap: {
+        low: 512,
+        medium: 1024,
+        high: 2048
+    },
+    // Fish density monitoring
+    fishDensity: {
+        minCount: 15,            // Minimum fish before emergency spawn
+        targetCount: 20,         // Target fish count
+        maxCount: 30,            // Maximum fish count
+        monitorInterval: 1.0     // Check density every second
+    }
+};
+
+// Performance state tracking
+const performanceState = {
+    frustumCullTimer: 0,
+    fishDensityTimer: 0,
+    currentShadowQuality: 'medium',
+    visibleFishCount: 0,
+    culledFishCount: 0,
+    activeParticleCount: 0
+};
+
+// ==================== COMBO BONUS SYSTEM ====================
+const COMBO_CONFIG = {
+    // Combo tiers and their bonus percentages
+    tiers: [
+        { minKills: 3, bonus: 0.10, name: '3x COMBO!' },      // 3 kills = +10%
+        { minKills: 5, bonus: 0.25, name: '5x COMBO!' },      // 5 kills = +25%
+        { minKills: 10, bonus: 0.50, name: '10x COMBO!' },    // 10 kills = +50%
+        { minKills: 20, bonus: 0.75, name: '20x MEGA COMBO!' }, // 20 kills = +75%
+        { minKills: 50, bonus: 1.00, name: '50x ULTRA COMBO!' } // 50 kills = +100%
+    ],
+    timeWindow: 3.0,  // Seconds to continue combo
+    displayDuration: 1.5  // How long to show combo notification
+};
+
+// Get current combo bonus based on kill count
+function getComboBonus(killCount) {
+    let bonus = 0;
+    let tierName = '';
+    for (const tier of COMBO_CONFIG.tiers) {
+        if (killCount >= tier.minKills) {
+            bonus = tier.bonus;
+            tierName = tier.name;
+        }
+    }
+    return { bonus, tierName };
+}
+
+// Update combo state after a kill
+function updateComboOnKill() {
+    gameState.comboCount++;
+    gameState.comboTimer = COMBO_CONFIG.timeWindow;
+    
+    const { bonus, tierName } = getComboBonus(gameState.comboCount);
+    
+    // Show combo notification if we hit a new tier
+    if (bonus > gameState.lastComboBonus && tierName) {
+        showComboNotification(tierName, bonus);
+        gameState.lastComboBonus = bonus;
+    }
+    
+    return bonus;
+}
+
+// Reset combo when timer expires
+function updateComboTimer(deltaTime) {
+    if (gameState.comboCount > 0) {
+        gameState.comboTimer -= deltaTime;
+        if (gameState.comboTimer <= 0) {
+            // Combo ended
+            if (gameState.comboCount >= 3) {
+                showComboEndNotification(gameState.comboCount);
+            }
+            gameState.comboCount = 0;
+            gameState.comboTimer = 0;
+            gameState.lastComboBonus = 0;
+        }
+    }
+}
+
+// Show combo notification
+function showComboNotification(tierName, bonus) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 30%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 48px;
+        font-weight: bold;
+        color: #ffdd00;
+        text-shadow: 0 0 20px #ff8800, 0 0 40px #ff4400, 2px 2px 4px #000;
+        z-index: 1000;
+        pointer-events: none;
+        animation: comboPopIn 0.3s ease-out, comboFadeOut 0.5s ease-in ${COMBO_CONFIG.displayDuration - 0.5}s forwards;
+    `;
+    notification.textContent = `${tierName} +${Math.round(bonus * 100)}%`;
+    document.body.appendChild(notification);
+    
+    // Add animation styles if not already present
+    if (!document.getElementById('combo-animation-styles')) {
+        const style = document.createElement('style');
+        style.id = 'combo-animation-styles';
+        style.textContent = `
+            @keyframes comboPopIn {
+                0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+                100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            }
+            @keyframes comboFadeOut {
+                0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2) translateY(-30px); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    setTimeout(() => notification.remove(), COMBO_CONFIG.displayDuration * 1000);
+}
+
+// Show combo end notification
+function showComboEndNotification(finalCount) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 35%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 24px;
+        color: #aaaaaa;
+        text-shadow: 1px 1px 2px #000;
+        z-index: 1000;
+        pointer-events: none;
+        opacity: 0.8;
+        animation: comboFadeOut 1s ease-in forwards;
+    `;
+    notification.textContent = `Combo ended: ${finalCount} kills`;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 1000);
+}
+
+// ==================== PERFORMANCE OPTIMIZATION FUNCTIONS ====================
+
+// Update frustum culling and LOD for fish
+function updatePerformanceOptimizations(deltaTime) {
+    if (!camera) return;
+    
+    performanceState.frustumCullTimer -= deltaTime;
+    
+    if (performanceState.frustumCullTimer <= 0) {
+        performanceState.frustumCullTimer = PERFORMANCE_CONFIG.frustumCulling.updateInterval;
+        
+        // Create frustum from camera
+        const frustum = new THREE.Frustum();
+        const projScreenMatrix = new THREE.Matrix4();
+        projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustum.setFromProjectionMatrix(projScreenMatrix);
+        
+        let visibleCount = 0;
+        let culledCount = 0;
+        
+        // Update fish visibility and LOD
+        for (const fish of activeFish) {
+            if (!fish || !fish.group) continue;
+            
+            const fishPos = fish.group.position;
+            const distanceToCamera = fishPos.distanceTo(camera.position);
+            
+            // Frustum culling - hide fish outside view
+            if (PERFORMANCE_CONFIG.frustumCulling.enabled) {
+                const inFrustum = frustum.containsPoint(fishPos);
+                fish.group.visible = fish.isActive && inFrustum;
+                
+                if (inFrustum) {
+                    visibleCount++;
+                } else {
+                    culledCount++;
+                }
+            }
+            
+            // LOD - adjust detail based on distance
+            if (fish.group.visible && fish.body) {
+                const lod = PERFORMANCE_CONFIG.lod;
+                if (distanceToCamera < lod.highDetailDistance) {
+                    // High detail - full shadows
+                    fish.body.castShadow = true;
+                    if (fish.body.material) {
+                        fish.body.material.flatShading = false;
+                    }
+                } else if (distanceToCamera < lod.mediumDetailDistance) {
+                    // Medium detail - no shadows
+                    fish.body.castShadow = false;
+                } else {
+                    // Low detail - no shadows, simplified rendering
+                    fish.body.castShadow = false;
+                    if (fish.body.material) {
+                        fish.body.material.flatShading = true;
+                    }
+                }
+            }
+        }
+        
+        performanceState.visibleFishCount = visibleCount;
+        performanceState.culledFishCount = culledCount;
+    }
+}
+
+// Enforce particle limits to maintain performance
+function enforceParticleLimits() {
+    const maxParticles = PERFORMANCE_CONFIG.particles.maxCount;
+    
+    // Count active particles
+    performanceState.activeParticleCount = activeParticles.length;
+    
+    // If over limit, remove oldest particles
+    if (activeParticles.length > maxParticles) {
+        const toRemove = activeParticles.length - maxParticles;
+        for (let i = 0; i < toRemove; i++) {
+            const particle = activeParticles[0];
+            if (particle) {
+                particle.deactivate();
+                activeParticles.shift();
+            }
+        }
+    }
+    
+    // Also cull distant particles
+    const cullDistance = PERFORMANCE_CONFIG.particles.cullDistance;
+    if (camera) {
+        for (let i = activeParticles.length - 1; i >= 0; i--) {
+            const particle = activeParticles[i];
+            if (particle && particle.mesh) {
+                const dist = particle.mesh.position.distanceTo(camera.position);
+                if (dist > cullDistance) {
+                    particle.deactivate();
+                    activeParticles.splice(i, 1);
+                }
+            }
+        }
+    }
+}
+
+// Set shadow map quality based on performance setting
+function setShadowMapQuality(quality) {
+    if (!renderer) return;
+    
+    const size = PERFORMANCE_CONFIG.shadowMap[quality] || PERFORMANCE_CONFIG.shadowMap.medium;
+    
+    // Update all shadow-casting lights
+    scene.traverse(obj => {
+        if (obj.isLight && obj.shadow) {
+            obj.shadow.mapSize.width = size;
+            obj.shadow.mapSize.height = size;
+            if (obj.shadow.map) {
+                obj.shadow.map.dispose();
+                obj.shadow.map = null;
+            }
+        }
+    });
+    
+    performanceState.currentShadowQuality = quality;
+    console.log(`Shadow quality set to ${quality} (${size}x${size})`);
+}
+
+// ==================== ENHANCED WEAPON VFX ====================
+// Trigger weapon-specific effects on hit
+function triggerWeaponHitEffects(weaponKey, position) {
+    const vfx = WEAPON_VFX_CONFIG[weaponKey];
+    if (!vfx) return;
+    
+    // Screen shake based on weapon
+    if (vfx.screenShake > 0) {
+        triggerScreenShakeWithStrength(vfx.screenShake);
+    }
+    
+    // Special effects for high-tier weapons
+    if (weaponKey === '20x') {
+        // Red pulse border effect for 20x
+        triggerRedBorder();
+        // Extra screen flash
+        triggerScreenFlash(0xff0000, 0.2);
+    } else if (weaponKey === '8x') {
+        // Orange flash for 8x
+        triggerScreenFlash(0xff4400, 0.15);
+    } else if (weaponKey === '5x') {
+        // Subtle gold flash for 5x
+        triggerScreenFlash(0xffdd00, 0.1);
+    }
+}
 
 // Boss Fish Configuration (Issue #12)
 const BOSS_FISH_TYPES = [
@@ -4818,6 +5134,9 @@ class Fish {
             this.triggerAbility(deathPosition, weaponKey);
         }
         
+        // COMBO SYSTEM: Update combo and get bonus
+        const comboBonus = updateComboOnKill();
+        
         // NEW RTP SYSTEM: Casino-standard kill rate calculation
         // Kill Rate = Target RTP / Effective Payout
         // This ensures long-term RTP converges to target (30-40% based on weapon)
@@ -4830,7 +5149,9 @@ class Fish {
         
         // Determine if this kill awards a payout based on kill rate
         const isKill = Math.random() < killRate;
-        const win = isKill ? effectivePayout : 0;
+        // Apply combo bonus to winnings
+        const baseWin = isKill ? effectivePayout : 0;
+        const win = baseWin > 0 ? Math.floor(baseWin * (1 + comboBonus)) : 0;
         
         // Record the win for RTP tracking (bet was already recorded when shot was fired)
         if (win > 0) {
@@ -6860,6 +7181,15 @@ function animate() {
     
     // Issue #14: Update weapon VFX (transient effects, knockback, etc.)
     updateWeaponVFX(deltaTime);
+    
+    // COMBO SYSTEM: Update combo timer
+    updateComboTimer(deltaTime);
+    
+    // PERFORMANCE: Update frustum culling and LOD
+    updatePerformanceOptimizations(deltaTime);
+    
+    // PERFORMANCE: Enforce particle limits
+    enforceParticleLimits();
     
         // Animate seaweed
         animateSeaweed();
