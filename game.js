@@ -8331,6 +8331,11 @@ function createServerBulletMesh(weaponKey) {
 function updateBulletsFromServer(serverBullets) {
     if (!serverBullets || !Array.isArray(serverBullets)) return;
     
+    // Debug: Log when we receive bullets
+    if (serverBullets.length > 0) {
+        console.log(`[GAME] updateBulletsFromServer called with ${serverBullets.length} bullets, my playerId: ${multiplayerManager ? multiplayerManager.playerId : 'none'}`);
+    }
+    
     // Create a set of current server bullet IDs
     const currentBulletIds = new Set(serverBullets.map(b => b.id));
     
@@ -8366,16 +8371,25 @@ function updateBulletsFromServer(serverBullets) {
             // Create new bullet mesh for other players' bullets
             // Skip our own bullets (we already have local visuals)
             if (multiplayerManager && sb.owner === multiplayerManager.playerId) {
+                console.log(`[GAME] Skipping own bullet: owner=${sb.owner}, myId=${multiplayerManager.playerId}`);
                 return;
             }
+            
+            // Debug: Log when creating bullet for other player
+            console.log(`[GAME] Creating bullet mesh for other player: id=${sb.id}, owner=${sb.owner}, weapon=${sb.weapon}, pos=(${sb.x}, ${sb.z})`);
             
             // Create bullet with same visual style as local bullets
             // Use weapon info from server if available, default to '1x'
             const weaponKey = sb.weapon || '1x';
             const newBulletData = createServerBulletMesh(weaponKey);
-            newBulletData.group.position.set(sb.x * 10, -300, sb.z * 10);  // Y=-300 is typical bullet height
+            
+            // Use proper Y coordinate - check CONFIG.aquarium.floorY for reference
+            const bulletY = CONFIG.aquarium.floorY - 50;  // Slightly above floor level
+            newBulletData.group.position.set(sb.x * 10, bulletY, sb.z * 10);
             newBulletData.group.userData.serverId = sb.id;
             newBulletData.group.userData.owner = sb.owner;
+            
+            console.log(`[GAME] Bullet mesh created at position: (${sb.x * 10}, ${bulletY}, ${sb.z * 10})`);
             
             // Orient bullet in direction of travel
             if (sb.vx !== undefined && sb.vz !== undefined) {

@@ -382,8 +382,16 @@ class MultiplayerManager {
         }
         
         this.serverBullets.clear();
-        for (const bullet of data.bullets) {
-            this.serverBullets.set(bullet.id, bullet);
+        if (data.bullets && data.bullets.length > 0) {
+            // Debug: Log when we receive bullets from server
+            console.log(`[MULTIPLAYER] Received ${data.bullets.length} bullets from server, my playerId: ${this.playerId}`);
+            for (const bullet of data.bullets) {
+                this.serverBullets.set(bullet.id, bullet);
+                // Log first bullet details
+                if (data.bullets.indexOf(bullet) === 0) {
+                    console.log(`[MULTIPLAYER] First bullet: id=${bullet.id}, owner=${bullet.owner}, weapon=${bullet.weapon}, x=${bullet.x}, z=${bullet.z}`);
+                }
+            }
         }
         
         this.serverPlayers.clear();
