@@ -1499,6 +1499,10 @@
                 // Leave Room
                 btnLeaveRoom.addEventListener('click', () => {
                     multiplayer.leaveRoom();
+                    // Cleanup multiplayer game state to prevent Boss UI bug
+                    if (typeof window.cleanupMultiplayerGame === 'function') {
+                        window.cleanupMultiplayerGame();
+                    }
                     showMainMenu();
                 });
                 

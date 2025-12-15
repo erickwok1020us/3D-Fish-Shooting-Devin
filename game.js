@@ -5486,6 +5486,9 @@ const FISH_SPAWN_CONFIG = {
 let dynamicSpawnTimer = 0;
 
 function updateDynamicFishSpawn(deltaTime) {
+    // MULTIPLAYER: Skip local fish spawning in multiplayer mode - fish come from server
+    if (multiplayerMode) return;
+    
     dynamicSpawnTimer -= deltaTime;
     
     const currentFishCount = activeFish.length;
@@ -7213,31 +7216,34 @@ function animate() {
     }
     
     // Update fish with error handling to prevent freeze bugs
-    let fishUpdateErrors = 0;
-    for (let i = activeFish.length - 1; i >= 0; i--) {
-        const fish = activeFish[i];
-        if (fish && fish.isActive) {
-            try {
-                fish.update(deltaTime, activeFish);
-            } catch (e) {
-                fishUpdateErrors++;
-                if (fishUpdateErrors <= 3) {
-                    console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species);
+    // MULTIPLAYER: Skip local fish updates in multiplayer mode - fish come from server
+    if (!multiplayerMode) {
+        let fishUpdateErrors = 0;
+        for (let i = activeFish.length - 1; i >= 0; i--) {
+            const fish = activeFish[i];
+            if (fish && fish.isActive) {
+                try {
+                    fish.update(deltaTime, activeFish);
+                } catch (e) {
+                    fishUpdateErrors++;
+                    if (fishUpdateErrors <= 3) {
+                        console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species);
+                    }
+                    // Attempt recovery: reset fish state
+                    fish.velocity.set(0, 0, 0);
+                    fish.acceleration.set(0, 0, 0);
                 }
-                // Attempt recovery: reset fish state
-                fish.velocity.set(0, 0, 0);
-                fish.acceleration.set(0, 0, 0);
+            } else if (fish && !fish.isActive) {
+                activeFish.splice(i, 1);
+            } else {
+                // Invalid fish reference - remove it
+                activeFish.splice(i, 1);
             }
-        } else if (fish && !fish.isActive) {
-            activeFish.splice(i, 1);
-        } else {
-            // Invalid fish reference - remove it
-            activeFish.splice(i, 1);
         }
+        
+        // Dynamic fish respawn system - maintain target fish count (single-player only)
+        updateDynamicFishSpawn(deltaTime);
     }
-    
-    // Dynamic fish respawn system - maintain target fish count
-    updateDynamicFishSpawn(deltaTime);
     
     // Update bullets
     for (let i = activeBullets.length - 1; i >= 0; i--) {
@@ -7762,6 +7768,17 @@ function updateBossEvent(deltaTime) {
         return;
     }
     
+    // MULTIPLAYER: Skip local boss timer in multiplayer mode - boss events come from server
+    if (multiplayerMode) {
+        // In multiplayer, boss events are controlled by server via onBossWave callback
+        // Only update visual effects if boss is active (set by server)
+        if (gameState.bossActive) {
+            updateBossCrosshair();
+            updateBossGlowEffect(deltaTime);
+        }
+        return;
+    }
+    
     // Update boss spawn timer
     if (!gameState.bossActive) {
         gameState.bossSpawnTimer -= deltaTime;
@@ -8268,12 +8285,124 @@ function updateFishFromServer(serverFish) {
     });
 }
 
+// Track server bullets for multiplayer sync
+let serverBulletMeshes = new Map(); // bulletId -> { group, bullet, trail }
+
+// Create bullet mesh for other players (same style as local bullets but with transparency)
+function createServerBulletMesh(weaponKey) {
+    const weapon = CONFIG.weapons[weaponKey] || CONFIG.weapons['1x'];
+    const group = new THREE.Group();
+    
+    // Main bullet - same as local bullet but with transparency
+    const bulletGeometry = new THREE.SphereGeometry(5, 10, 6);
+    const bulletMaterial = new THREE.MeshStandardMaterial({
+        color: weapon.color,
+        emissive: weapon.color,
+        emissiveIntensity: 0.6,
+        metalness: 0.5,
+        roughness: 0.2,
+        transparent: true,
+        opacity: 0.6  // 60% opacity to distinguish from own bullets
+    });
+    const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+    group.add(bullet);
+    
+    // Trail - same as local bullet but with transparency
+    const trailGeometry = new THREE.ConeGeometry(3, 12, 6);
+    const trailMaterial = new THREE.MeshBasicMaterial({
+        color: weapon.color,
+        transparent: true,
+        opacity: 0.3  // More transparent trail
+    });
+    const trail = new THREE.Mesh(trailGeometry, trailMaterial);
+    trail.rotation.x = Math.PI / 2;
+    trail.position.z = -10;
+    group.add(trail);
+    
+    // Scale based on weapon size
+    const scale = weapon.size / 8;
+    bullet.scale.set(scale, scale, scale);
+    trail.scale.set(scale, scale, scale);
+    
+    return { group, bullet, trail, weaponKey };
+}
+
 // Update bullets from server state
 function updateBulletsFromServer(serverBullets) {
     if (!serverBullets || !Array.isArray(serverBullets)) return;
     
-    // For now, just update visual positions
-    // Client-side bullets are handled locally for responsiveness
+    // Debug: Log when we receive bullets
+    if (serverBullets.length > 0) {
+        console.log(`[GAME] updateBulletsFromServer called with ${serverBullets.length} bullets, my playerId: ${multiplayerManager ? multiplayerManager.playerId : 'none'}`);
+    }
+    
+    // Create a set of current server bullet IDs
+    const currentBulletIds = new Set(serverBullets.map(b => b.id));
+    
+    // Remove bullets that no longer exist on server
+    for (const [bulletId, bulletData] of serverBulletMeshes) {
+        if (!currentBulletIds.has(bulletId)) {
+            scene.remove(bulletData.group);
+            serverBulletMeshes.delete(bulletId);
+        }
+    }
+    
+    // Update or create bullets
+    serverBullets.forEach(sb => {
+        let bulletData = serverBulletMeshes.get(sb.id);
+        
+        if (bulletData) {
+            // Update existing bullet position (convert from server 2D to 3D)
+            const targetX = sb.x * 10;
+            const targetZ = sb.z * 10;
+            
+            // Smooth interpolation for bullet movement
+            bulletData.group.position.x += (targetX - bulletData.group.position.x) * 0.3;
+            bulletData.group.position.z += (targetZ - bulletData.group.position.z) * 0.3;
+            
+            // Update rotation to face movement direction
+            if (sb.vx !== undefined && sb.vz !== undefined) {
+                const direction = new THREE.Vector3(sb.vx, 0, sb.vz).normalize();
+                if (direction.length() > 0.01) {
+                    bulletData.group.lookAt(bulletData.group.position.clone().add(direction));
+                }
+            }
+        } else {
+            // Create new bullet mesh for other players' bullets
+            // Skip our own bullets (we already have local visuals)
+            if (multiplayerManager && sb.owner === multiplayerManager.playerId) {
+                console.log(`[GAME] Skipping own bullet: owner=${sb.owner}, myId=${multiplayerManager.playerId}`);
+                return;
+            }
+            
+            // Debug: Log when creating bullet for other player
+            console.log(`[GAME] Creating bullet mesh for other player: id=${sb.id}, owner=${sb.owner}, weapon=${sb.weapon}, pos=(${sb.x}, ${sb.z})`);
+            
+            // Create bullet with same visual style as local bullets
+            // Use weapon info from server if available, default to '1x'
+            const weaponKey = sb.weapon || '1x';
+            const newBulletData = createServerBulletMesh(weaponKey);
+            
+            // Use proper Y coordinate - check CONFIG.aquarium.floorY for reference
+            const bulletY = CONFIG.aquarium.floorY - 50;  // Slightly above floor level
+            newBulletData.group.position.set(sb.x * 10, bulletY, sb.z * 10);
+            newBulletData.group.userData.serverId = sb.id;
+            newBulletData.group.userData.owner = sb.owner;
+            
+            console.log(`[GAME] Bullet mesh created at position: (${sb.x * 10}, ${bulletY}, ${sb.z * 10})`);
+            
+            // Orient bullet in direction of travel
+            if (sb.vx !== undefined && sb.vz !== undefined) {
+                const direction = new THREE.Vector3(sb.vx, 0, sb.vz).normalize();
+                if (direction.length() > 0.01) {
+                    newBulletData.group.lookAt(newBulletData.group.position.clone().add(direction));
+                }
+            }
+            
+            scene.add(newBulletData.group);
+            serverBulletMeshes.set(sb.id, newBulletData);
+        }
+    });
 }
 
 // Update other players from server state
@@ -8305,6 +8434,40 @@ function multiplayerShoot(targetX, targetZ) {
     playWeaponShot(gameState.currentWeapon);
     spawnMuzzleFlash();
 }
+
+// Cleanup function for when leaving multiplayer game
+window.cleanupMultiplayerGame = function() {
+    console.log('[GAME] Cleaning up multiplayer game state...');
+    
+    // Reset multiplayer mode flag
+    multiplayerMode = false;
+    multiplayerManager = null;
+    
+    // Reset game scene flag to prevent boss UI from appearing on menu
+    gameState.isInGameScene = false;
+    
+    // Reset boss event state
+    gameState.bossActive = false;
+    gameState.activeBoss = null;
+    gameState.bossCountdown = 0;
+    gameState.bossSpawnTimer = 60;
+    hideBossUI();
+    hideBossWaitingUI();
+    
+    // Clear server fish
+    gameState.fish.forEach(fish => {
+        if (fish && scene) scene.remove(fish);
+    });
+    gameState.fish = [];
+    
+    // Clear server bullet meshes
+    for (const [bulletId, bulletData] of serverBulletMeshes) {
+        if (bulletData && bulletData.group && scene) scene.remove(bulletData.group);
+    }
+    serverBulletMeshes.clear();
+    
+    console.log('[GAME] Multiplayer cleanup complete');
+};
 
 // Expose game reference for multiplayer manager
 window.game = {
