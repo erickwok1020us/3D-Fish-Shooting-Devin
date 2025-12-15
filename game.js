@@ -8286,7 +8286,46 @@ function updateFishFromServer(serverFish) {
 }
 
 // Track server bullets for multiplayer sync
-let serverBulletMeshes = new Map(); // bulletId -> mesh
+let serverBulletMeshes = new Map(); // bulletId -> { group, bullet, trail }
+
+// Create bullet mesh for other players (same style as local bullets but with transparency)
+function createServerBulletMesh(weaponKey) {
+    const weapon = CONFIG.weapons[weaponKey] || CONFIG.weapons['1x'];
+    const group = new THREE.Group();
+    
+    // Main bullet - same as local bullet but with transparency
+    const bulletGeometry = new THREE.SphereGeometry(5, 10, 6);
+    const bulletMaterial = new THREE.MeshStandardMaterial({
+        color: weapon.color,
+        emissive: weapon.color,
+        emissiveIntensity: 0.6,
+        metalness: 0.5,
+        roughness: 0.2,
+        transparent: true,
+        opacity: 0.6  // 60% opacity to distinguish from own bullets
+    });
+    const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+    group.add(bullet);
+    
+    // Trail - same as local bullet but with transparency
+    const trailGeometry = new THREE.ConeGeometry(3, 12, 6);
+    const trailMaterial = new THREE.MeshBasicMaterial({
+        color: weapon.color,
+        transparent: true,
+        opacity: 0.3  // More transparent trail
+    });
+    const trail = new THREE.Mesh(trailGeometry, trailMaterial);
+    trail.rotation.x = Math.PI / 2;
+    trail.position.z = -10;
+    group.add(trail);
+    
+    // Scale based on weapon size
+    const scale = weapon.size / 8;
+    bullet.scale.set(scale, scale, scale);
+    trail.scale.set(scale, scale, scale);
+    
+    return { group, bullet, trail, weaponKey };
+}
 
 // Update bullets from server state
 function updateBulletsFromServer(serverBullets) {
@@ -8296,30 +8335,32 @@ function updateBulletsFromServer(serverBullets) {
     const currentBulletIds = new Set(serverBullets.map(b => b.id));
     
     // Remove bullets that no longer exist on server
-    for (const [bulletId, mesh] of serverBulletMeshes) {
+    for (const [bulletId, bulletData] of serverBulletMeshes) {
         if (!currentBulletIds.has(bulletId)) {
-            scene.remove(mesh);
+            scene.remove(bulletData.group);
             serverBulletMeshes.delete(bulletId);
         }
     }
     
     // Update or create bullets
     serverBullets.forEach(sb => {
-        let mesh = serverBulletMeshes.get(sb.id);
+        let bulletData = serverBulletMeshes.get(sb.id);
         
-        if (mesh) {
+        if (bulletData) {
             // Update existing bullet position (convert from server 2D to 3D)
             const targetX = sb.x * 10;
             const targetZ = sb.z * 10;
             
             // Smooth interpolation for bullet movement
-            mesh.position.x += (targetX - mesh.position.x) * 0.3;
-            mesh.position.z += (targetZ - mesh.position.z) * 0.3;
+            bulletData.group.position.x += (targetX - bulletData.group.position.x) * 0.3;
+            bulletData.group.position.z += (targetZ - bulletData.group.position.z) * 0.3;
             
             // Update rotation to face movement direction
             if (sb.vx !== undefined && sb.vz !== undefined) {
-                const angle = Math.atan2(sb.vx, sb.vz);
-                mesh.rotation.y = angle;
+                const direction = new THREE.Vector3(sb.vx, 0, sb.vz).normalize();
+                if (direction.length() > 0.01) {
+                    bulletData.group.lookAt(bulletData.group.position.clone().add(direction));
+                }
             }
         } else {
             // Create new bullet mesh for other players' bullets
@@ -8328,19 +8369,24 @@ function updateBulletsFromServer(serverBullets) {
                 return;
             }
             
-            // Create a simple bullet mesh
-            const bulletGeometry = new THREE.SphereGeometry(2, 8, 8);
-            const bulletMaterial = new THREE.MeshBasicMaterial({ 
-                color: 0xffff00,
-                emissive: 0xffaa00,
-                emissiveIntensity: 0.5
-            });
-            const newMesh = new THREE.Mesh(bulletGeometry, bulletMaterial);
-            newMesh.position.set(sb.x * 10, 0, sb.z * 10);
-            newMesh.userData.serverId = sb.id;
-            newMesh.userData.owner = sb.owner;
-            scene.add(newMesh);
-            serverBulletMeshes.set(sb.id, newMesh);
+            // Create bullet with same visual style as local bullets
+            // Use weapon info from server if available, default to '1x'
+            const weaponKey = sb.weapon || '1x';
+            const newBulletData = createServerBulletMesh(weaponKey);
+            newBulletData.group.position.set(sb.x * 10, -300, sb.z * 10);  // Y=-300 is typical bullet height
+            newBulletData.group.userData.serverId = sb.id;
+            newBulletData.group.userData.owner = sb.owner;
+            
+            // Orient bullet in direction of travel
+            if (sb.vx !== undefined && sb.vz !== undefined) {
+                const direction = new THREE.Vector3(sb.vx, 0, sb.vz).normalize();
+                if (direction.length() > 0.01) {
+                    newBulletData.group.lookAt(newBulletData.group.position.clone().add(direction));
+                }
+            }
+            
+            scene.add(newBulletData.group);
+            serverBulletMeshes.set(sb.id, newBulletData);
         }
     });
 }
@@ -8401,8 +8447,8 @@ window.cleanupMultiplayerGame = function() {
     gameState.fish = [];
     
     // Clear server bullet meshes
-    for (const [bulletId, mesh] of serverBulletMeshes) {
-        if (mesh && scene) scene.remove(mesh);
+    for (const [bulletId, bulletData] of serverBulletMeshes) {
+        if (bulletData && bulletData.group && scene) scene.remove(bulletData.group);
     }
     serverBulletMeshes.clear();
     
