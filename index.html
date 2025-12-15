@@ -1430,6 +1430,17 @@
                         return;
                     }
                     const playerName = playerNameInput.value.trim() || 'Player';
+                    
+                    // Hide lobby, show game container
+                    lobbyScreen.style.display = 'none';
+                    gameContainer.style.display = 'block';
+                    
+                    // Call the new game start function (lazy initialization)
+                    if (typeof window.startSinglePlayerGame === 'function') {
+                        window.startSinglePlayerGame();
+                    }
+                    
+                    // Also notify server
                     multiplayer.startSinglePlayer(playerName);
                 });
                 

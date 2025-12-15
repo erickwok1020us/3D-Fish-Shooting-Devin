@@ -2240,7 +2240,34 @@ let fpsTime = 0;
 let autoShootTimer = 0;
 
 // ==================== INITIALIZATION ====================
+// Flag to track if game scene has been initialized
+let gameSceneInitialized = false;
+
 function init() {
+    // Lazy initialization: Only set gameLoaded flag, defer heavy Three.js initialization
+    // This prevents the game scene from flashing before the lobby is shown
+    console.log('Lobby initialized - game scene deferred until game start');
+    window.gameLoaded = true;
+}
+
+// Full game scene initialization - called when game actually starts
+function initGameScene() {
+    // Prevent double initialization
+    if (gameSceneInitialized) {
+        console.log('Game scene already initialized');
+        return;
+    }
+    gameSceneInitialized = true;
+    
+    console.log('Initializing game scene...');
+    
+    // Show loading screen
+    const loadingScreen = document.getElementById('loading-screen');
+    const loadingText = document.getElementById('loading-text');
+    if (loadingScreen) {
+        loadingScreen.style.display = 'flex';
+    }
+    
     updateLoadingProgress(10, 'Initializing Three.js...');
     
     // Issue #6: Initialize audio system
@@ -2301,7 +2328,9 @@ function init() {
     updateLoadingProgress(100, 'Ready!');
     
     setTimeout(() => {
-        document.getElementById('loading-screen').style.display = 'none';
+        if (loadingScreen) {
+            loadingScreen.style.display = 'none';
+        }
         gameState.isLoading = false;
         lastTime = performance.now();
         
@@ -2319,6 +2348,37 @@ function init() {
         animate();
     }, 500);
 }
+
+// Start single player game - called from lobby
+window.startSinglePlayerGame = function() {
+    console.log('Starting single player game...');
+    
+    // Show game container
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+        gameContainer.style.display = 'block';
+    }
+    
+    // Initialize game scene if not already done
+    initGameScene();
+};
+
+// Start multiplayer game - called from lobby
+window.startMultiplayerGame = function(multiplayer) {
+    console.log('Starting multiplayer game...');
+    
+    // Show game container
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+        gameContainer.style.display = 'block';
+    }
+    
+    // Store multiplayer reference
+    window.multiplayer = multiplayer;
+    
+    // Initialize game scene if not already done
+    initGameScene();
+};
 
 function updateLoadingProgress(percent, text) {
     document.getElementById('loading-progress').style.width = percent + '%';
