@@ -2692,7 +2692,7 @@ window.startSinglePlayerGame = function() {
 };
 
 // Start multiplayer game - called from lobby
-window.startMultiplayerGame = function(multiplayer) {
+window.startMultiplayerGame = function(manager) {
     console.log('Starting multiplayer game...');
     
     // Show game container
@@ -2702,7 +2702,7 @@ window.startMultiplayerGame = function(multiplayer) {
     }
     
     // Store multiplayer reference
-    window.multiplayer = multiplayer;
+    window.multiplayer = manager;
     
     // Mark that we're now in the game scene (not lobby)
     gameState.isInGameScene = true;
@@ -2714,6 +2714,63 @@ window.startMultiplayerGame = function(multiplayer) {
     gameState.activeBoss = null;
     hideBossUI();
     hideBossWaitingUI();
+    
+    // Set multiplayer mode state (must be before initGameScene)
+    multiplayerMode = true;
+    multiplayerManager = manager;
+    
+    // Setup multiplayer callbacks
+    if (multiplayerManager) {
+        // Handle game state updates from server
+        multiplayerManager.onGameState = function(data) {
+            // Update fish from server state
+            updateFishFromServer(data.fish);
+            
+            // Update bullets from server state
+            updateBulletsFromServer(data.bullets);
+            
+            // Update other players
+            updatePlayersFromServer(data.players);
+        };
+        
+        // Handle fish killed events
+        multiplayerManager.onFishKilled = function(data) {
+            const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
+            if (fish) {
+                // Play death effects
+                spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
+                
+                // Show reward if we killed it
+                if (data.killedBy === multiplayerManager.playerId) {
+                    spawnCoinFlyToScore(fish.position.clone(), data.reward);
+                    playSound('coin');
+                }
+                
+                // Remove fish from scene
+                scene.remove(fish);
+                const index = gameState.fish.indexOf(fish);
+                if (index > -1) {
+                    gameState.fish.splice(index, 1);
+                }
+            }
+        };
+        
+        // Handle balance updates
+        multiplayerManager.onBalanceUpdate = function(data) {
+            gameState.balance = data.balance;
+            updateUI();
+        };
+        
+        // Handle boss wave events
+        multiplayerManager.onBossWave = function(data) {
+            if (data.state === 'starting') {
+                playBossFanfare();
+                showRareFishNotification('BOSS WAVE INCOMING!');
+            }
+        };
+    }
+    
+    console.log('Multiplayer game started with manager:', manager);
     
     // Initialize game scene if not already done
     initGameScene();
@@ -8143,64 +8200,9 @@ window.gameLoaded = false;
 let multiplayerMode = false;
 let multiplayerManager = null;
 
-// Function called by lobby when starting multiplayer game
-window.startMultiplayerGame = function(manager) {
-    multiplayerMode = true;
-    multiplayerManager = manager;
-    
-    // Setup multiplayer callbacks
-    if (multiplayerManager) {
-        // Handle game state updates from server
-        multiplayerManager.onGameState = function(data) {
-            // Update fish from server state
-            updateFishFromServer(data.fish);
-            
-            // Update bullets from server state
-            updateBulletsFromServer(data.bullets);
-            
-            // Update other players
-            updatePlayersFromServer(data.players);
-        };
-        
-        // Handle fish killed events
-        multiplayerManager.onFishKilled = function(data) {
-            const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
-            if (fish) {
-                // Play death effects
-                spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
-                
-                // Show reward if we killed it
-                if (data.killedBy === multiplayerManager.playerId) {
-                    spawnCoinFlyToScore(fish.position.clone(), data.reward);
-                    playSound('coin');
-                }
-                
-                // Remove fish from scene
-                scene.remove(fish);
-                const index = gameState.fish.indexOf(fish);
-                if (index > -1) {
-                    gameState.fish.splice(index, 1);
-                }
-            }
-        };
-        
-        // Handle balance updates
-        multiplayerManager.onBalanceUpdate = function(data) {
-            gameState.balance = data.balance;
-            updateUI();
-        };
-        
-        // Handle boss wave events
-        multiplayerManager.onBossWave = function(data) {
-            if (data.state === 'starting') {
-                playBossFanfare();
-                showRareFishNotification('BOSS WAVE INCOMING!');
-            }
-        };
-    }
-    
-    console.log('Multiplayer game started with manager:', manager);
-};
+// Note: startMultiplayerGame is defined earlier in the file (around line 2695)
+// It handles: showing game container, setting isInGameScene, resetting boss timers,
+// setting multiplayerMode/multiplayerManager, setting up callbacks, and calling initGameScene()
 
 // Update fish positions from server state
 function updateFishFromServer(serverFish) {
