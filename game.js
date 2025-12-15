@@ -5486,6 +5486,9 @@ const FISH_SPAWN_CONFIG = {
 let dynamicSpawnTimer = 0;
 
 function updateDynamicFishSpawn(deltaTime) {
+    // MULTIPLAYER: Skip local fish spawning in multiplayer mode - fish come from server
+    if (multiplayerMode) return;
+    
     dynamicSpawnTimer -= deltaTime;
     
     const currentFishCount = activeFish.length;
@@ -7213,31 +7216,34 @@ function animate() {
     }
     
     // Update fish with error handling to prevent freeze bugs
-    let fishUpdateErrors = 0;
-    for (let i = activeFish.length - 1; i >= 0; i--) {
-        const fish = activeFish[i];
-        if (fish && fish.isActive) {
-            try {
-                fish.update(deltaTime, activeFish);
-            } catch (e) {
-                fishUpdateErrors++;
-                if (fishUpdateErrors <= 3) {
-                    console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species);
+    // MULTIPLAYER: Skip local fish updates in multiplayer mode - fish come from server
+    if (!multiplayerMode) {
+        let fishUpdateErrors = 0;
+        for (let i = activeFish.length - 1; i >= 0; i--) {
+            const fish = activeFish[i];
+            if (fish && fish.isActive) {
+                try {
+                    fish.update(deltaTime, activeFish);
+                } catch (e) {
+                    fishUpdateErrors++;
+                    if (fishUpdateErrors <= 3) {
+                        console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species);
+                    }
+                    // Attempt recovery: reset fish state
+                    fish.velocity.set(0, 0, 0);
+                    fish.acceleration.set(0, 0, 0);
                 }
-                // Attempt recovery: reset fish state
-                fish.velocity.set(0, 0, 0);
-                fish.acceleration.set(0, 0, 0);
+            } else if (fish && !fish.isActive) {
+                activeFish.splice(i, 1);
+            } else {
+                // Invalid fish reference - remove it
+                activeFish.splice(i, 1);
             }
-        } else if (fish && !fish.isActive) {
-            activeFish.splice(i, 1);
-        } else {
-            // Invalid fish reference - remove it
-            activeFish.splice(i, 1);
         }
+        
+        // Dynamic fish respawn system - maintain target fish count (single-player only)
+        updateDynamicFishSpawn(deltaTime);
     }
-    
-    // Dynamic fish respawn system - maintain target fish count
-    updateDynamicFishSpawn(deltaTime);
     
     // Update bullets
     for (let i = activeBullets.length - 1; i >= 0; i--) {
@@ -7762,6 +7768,17 @@ function updateBossEvent(deltaTime) {
         return;
     }
     
+    // MULTIPLAYER: Skip local boss timer in multiplayer mode - boss events come from server
+    if (multiplayerMode) {
+        // In multiplayer, boss events are controlled by server via onBossWave callback
+        // Only update visual effects if boss is active (set by server)
+        if (gameState.bossActive) {
+            updateBossCrosshair();
+            updateBossGlowEffect(deltaTime);
+        }
+        return;
+    }
+    
     // Update boss spawn timer
     if (!gameState.bossActive) {
         gameState.bossSpawnTimer -= deltaTime;
@@ -8268,12 +8285,64 @@ function updateFishFromServer(serverFish) {
     });
 }
 
+// Track server bullets for multiplayer sync
+let serverBulletMeshes = new Map(); // bulletId -> mesh
+
 // Update bullets from server state
 function updateBulletsFromServer(serverBullets) {
     if (!serverBullets || !Array.isArray(serverBullets)) return;
     
-    // For now, just update visual positions
-    // Client-side bullets are handled locally for responsiveness
+    // Create a set of current server bullet IDs
+    const currentBulletIds = new Set(serverBullets.map(b => b.id));
+    
+    // Remove bullets that no longer exist on server
+    for (const [bulletId, mesh] of serverBulletMeshes) {
+        if (!currentBulletIds.has(bulletId)) {
+            scene.remove(mesh);
+            serverBulletMeshes.delete(bulletId);
+        }
+    }
+    
+    // Update or create bullets
+    serverBullets.forEach(sb => {
+        let mesh = serverBulletMeshes.get(sb.id);
+        
+        if (mesh) {
+            // Update existing bullet position (convert from server 2D to 3D)
+            const targetX = sb.x * 10;
+            const targetZ = sb.z * 10;
+            
+            // Smooth interpolation for bullet movement
+            mesh.position.x += (targetX - mesh.position.x) * 0.3;
+            mesh.position.z += (targetZ - mesh.position.z) * 0.3;
+            
+            // Update rotation to face movement direction
+            if (sb.vx !== undefined && sb.vz !== undefined) {
+                const angle = Math.atan2(sb.vx, sb.vz);
+                mesh.rotation.y = angle;
+            }
+        } else {
+            // Create new bullet mesh for other players' bullets
+            // Skip our own bullets (we already have local visuals)
+            if (multiplayerManager && sb.owner === multiplayerManager.playerId) {
+                return;
+            }
+            
+            // Create a simple bullet mesh
+            const bulletGeometry = new THREE.SphereGeometry(2, 8, 8);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xffff00,
+                emissive: 0xffaa00,
+                emissiveIntensity: 0.5
+            });
+            const newMesh = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            newMesh.position.set(sb.x * 10, 0, sb.z * 10);
+            newMesh.userData.serverId = sb.id;
+            newMesh.userData.owner = sb.owner;
+            scene.add(newMesh);
+            serverBulletMeshes.set(sb.id, newMesh);
+        }
+    });
 }
 
 // Update other players from server state
@@ -8305,6 +8374,40 @@ function multiplayerShoot(targetX, targetZ) {
     playWeaponShot(gameState.currentWeapon);
     spawnMuzzleFlash();
 }
+
+// Cleanup function for when leaving multiplayer game
+window.cleanupMultiplayerGame = function() {
+    console.log('[GAME] Cleaning up multiplayer game state...');
+    
+    // Reset multiplayer mode flag
+    multiplayerMode = false;
+    multiplayerManager = null;
+    
+    // Reset game scene flag to prevent boss UI from appearing on menu
+    gameState.isInGameScene = false;
+    
+    // Reset boss event state
+    gameState.bossActive = false;
+    gameState.activeBoss = null;
+    gameState.bossCountdown = 0;
+    gameState.bossSpawnTimer = 60;
+    hideBossUI();
+    hideBossWaitingUI();
+    
+    // Clear server fish
+    gameState.fish.forEach(fish => {
+        if (fish && scene) scene.remove(fish);
+    });
+    gameState.fish = [];
+    
+    // Clear server bullet meshes
+    for (const [bulletId, mesh] of serverBulletMeshes) {
+        if (mesh && scene) scene.remove(mesh);
+    }
+    serverBulletMeshes.clear();
+    
+    console.log('[GAME] Multiplayer cleanup complete');
+};
 
 // Expose game reference for multiplayer manager
 window.game = {
