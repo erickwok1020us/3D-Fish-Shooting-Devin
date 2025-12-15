@@ -5846,38 +5846,41 @@ function fireBullet(targetX, targetY) {
     // MULTIPLAYER MODE: Send shoot to server, don't do local balance/cost handling
     // Server handles balance deduction and collision detection
     if (multiplayerMode && multiplayerManager) {
-        // Calculate aim direction
+        // Calculate aim direction in 3D
         let aimX = targetX;
         let aimY = targetY;
         if (gameState.viewMode === 'fps') {
             aimX = window.innerWidth / 2;
             aimY = window.innerHeight / 2;
         }
-        const direction = getAimDirectionFromMouse(aimX, aimY);
+        const direction3D = getAimDirectionFromMouse(aimX, aimY);
         
-        // Get cannon muzzle position
+        // Get cannon muzzle position for local effects
         const muzzlePos = new THREE.Vector3();
         cannonMuzzle.getWorldPosition(muzzlePos);
         
-        // Calculate target point in 3D space (where bullet would hit at distance 1500)
-        const targetPoint3D = muzzlePos.clone().add(direction.clone().multiplyScalar(1500));
+        // PROJECT 3D direction to 2D (X-Z plane) and normalize
+        // This ensures the server uses the same aim direction regardless of cannon position mismatch
+        // Server will use its own cannon position as origin, but our direction vector
+        const dir2DLength = Math.sqrt(direction3D.x * direction3D.x + direction3D.z * direction3D.z);
+        let dirX = 0, dirZ = -1; // Default: shoot forward (negative Z in server coords)
+        if (dir2DLength > 0.001) {
+            dirX = direction3D.x / dir2DLength;
+            dirZ = direction3D.z / dir2DLength;
+        }
         
-        // Convert to server 2D coordinates (divide by 10 for scale)
-        // Server uses x, z plane; client Y maps to nothing (server is 2D)
-        const serverTargetX = targetPoint3D.x / 10;
-        const serverTargetZ = targetPoint3D.z / 10;
+        console.log(`[GAME] Multiplayer shoot: dir3D=(${direction3D.x.toFixed(3)}, ${direction3D.y.toFixed(3)}, ${direction3D.z.toFixed(3)}) -> dir2D=(${dirX.toFixed(3)}, ${dirZ.toFixed(3)})`);
         
-        console.log(`[GAME] Multiplayer shoot: target3D=(${targetPoint3D.x.toFixed(1)}, ${targetPoint3D.z.toFixed(1)}) -> server=(${serverTargetX.toFixed(1)}, ${serverTargetZ.toFixed(1)})`);
-        
-        // Send to server
-        multiplayerManager.shoot(serverTargetX, serverTargetZ);
+        // Send direction vector to server (not target coordinates)
+        // Server will calculate bullet trajectory from its cannon position using this direction
+        multiplayerManager.shoot(dirX, dirZ);
         
         // Set cooldown locally for responsiveness
         gameState.cooldown = 1 / weapon.shotsPerSecond;
         
         // Play local effects immediately for responsiveness
         playWeaponShot(weaponKey);
-        spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction.clone());
+        spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction3D.clone());
         
         return true;
     }
