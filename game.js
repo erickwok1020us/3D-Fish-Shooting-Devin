@@ -256,8 +256,9 @@ const CONFIG = {
         '3x': { 
             multiplier: 3, cost: 3, speed: 700, 
             damage: 180, shotsPerSecond: 1.5, // cooldown = 0.667s
-            // Issue 3 Fix: Changed from spread to projectile - single target only, no penetration
-            type: 'projectile',
+            // Shotgun effect: Fire 3 bullets in fan spread pattern (-15°, 0°, +15°)
+            // Each bullet does NOT penetrate - stops on hit
+            type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 10,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400
         },
@@ -351,8 +352,325 @@ const gameState = {
     bossSpawnTimer: 60,  // Boss spawns every 60 seconds exactly
     activeBoss: null,  // Currently active boss fish
     bossCountdown: 0,  // Countdown timer for boss event
-    bossActive: false  // Whether a boss event is currently active
+    bossActive: false,  // Whether a boss event is currently active
+    isInGameScene: false,  // Whether player is in active game (not lobby/menu)
+    // Combo System (Issue #4 - Weapon System Improvements)
+    comboCount: 0,           // Current consecutive kills
+    comboTimer: 0,           // Time remaining to continue combo
+    comboTimeWindow: 3.0,    // Seconds to get next kill to continue combo
+    lastComboBonus: 0        // Last applied combo bonus percentage
 };
+
+// ==================== PERFORMANCE OPTIMIZATION CONFIG ====================
+const PERFORMANCE_CONFIG = {
+    // LOD (Level of Detail) settings
+    lod: {
+        highDetailDistance: 300,    // Full detail within 300 units
+        mediumDetailDistance: 600,  // Medium detail 300-600 units
+        lowDetailDistance: 1000     // Low detail beyond 600 units
+    },
+    // Frustum culling
+    frustumCulling: {
+        enabled: true,
+        updateInterval: 0.1  // Update culling every 100ms
+    },
+    // Particle limits
+    particles: {
+        maxCount: 500,           // Maximum active particles
+        cullDistance: 800        // Don't render particles beyond this
+    },
+    // Shadow map quality settings
+    shadowMap: {
+        low: 512,
+        medium: 1024,
+        high: 2048
+    },
+    // Fish density monitoring
+    fishDensity: {
+        minCount: 15,            // Minimum fish before emergency spawn
+        targetCount: 20,         // Target fish count
+        maxCount: 30,            // Maximum fish count
+        monitorInterval: 1.0     // Check density every second
+    }
+};
+
+// Performance state tracking
+const performanceState = {
+    frustumCullTimer: 0,
+    fishDensityTimer: 0,
+    currentShadowQuality: 'medium',
+    visibleFishCount: 0,
+    culledFishCount: 0,
+    activeParticleCount: 0
+};
+
+// ==================== COMBO BONUS SYSTEM ====================
+const COMBO_CONFIG = {
+    // Combo tiers and their bonus percentages
+    tiers: [
+        { minKills: 3, bonus: 0.10, name: '3x COMBO!' },      // 3 kills = +10%
+        { minKills: 5, bonus: 0.25, name: '5x COMBO!' },      // 5 kills = +25%
+        { minKills: 10, bonus: 0.50, name: '10x COMBO!' },    // 10 kills = +50%
+        { minKills: 20, bonus: 0.75, name: '20x MEGA COMBO!' }, // 20 kills = +75%
+        { minKills: 50, bonus: 1.00, name: '50x ULTRA COMBO!' } // 50 kills = +100%
+    ],
+    timeWindow: 3.0,  // Seconds to continue combo
+    displayDuration: 1.5  // How long to show combo notification
+};
+
+// Get current combo bonus based on kill count
+function getComboBonus(killCount) {
+    let bonus = 0;
+    let tierName = '';
+    for (const tier of COMBO_CONFIG.tiers) {
+        if (killCount >= tier.minKills) {
+            bonus = tier.bonus;
+            tierName = tier.name;
+        }
+    }
+    return { bonus, tierName };
+}
+
+// Update combo state after a kill
+function updateComboOnKill() {
+    gameState.comboCount++;
+    gameState.comboTimer = COMBO_CONFIG.timeWindow;
+    
+    const { bonus, tierName } = getComboBonus(gameState.comboCount);
+    
+    // Show combo notification if we hit a new tier
+    if (bonus > gameState.lastComboBonus && tierName) {
+        showComboNotification(tierName, bonus);
+        gameState.lastComboBonus = bonus;
+    }
+    
+    return bonus;
+}
+
+// Reset combo when timer expires
+function updateComboTimer(deltaTime) {
+    if (gameState.comboCount > 0) {
+        gameState.comboTimer -= deltaTime;
+        if (gameState.comboTimer <= 0) {
+            // Combo ended
+            if (gameState.comboCount >= 3) {
+                showComboEndNotification(gameState.comboCount);
+            }
+            gameState.comboCount = 0;
+            gameState.comboTimer = 0;
+            gameState.lastComboBonus = 0;
+        }
+    }
+}
+
+// Show combo notification
+function showComboNotification(tierName, bonus) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 30%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 48px;
+        font-weight: bold;
+        color: #ffdd00;
+        text-shadow: 0 0 20px #ff8800, 0 0 40px #ff4400, 2px 2px 4px #000;
+        z-index: 1000;
+        pointer-events: none;
+        animation: comboPopIn 0.3s ease-out, comboFadeOut 0.5s ease-in ${COMBO_CONFIG.displayDuration - 0.5}s forwards;
+    `;
+    notification.textContent = `${tierName} +${Math.round(bonus * 100)}%`;
+    document.body.appendChild(notification);
+    
+    // Add animation styles if not already present
+    if (!document.getElementById('combo-animation-styles')) {
+        const style = document.createElement('style');
+        style.id = 'combo-animation-styles';
+        style.textContent = `
+            @keyframes comboPopIn {
+                0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+                100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            }
+            @keyframes comboFadeOut {
+                0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2) translateY(-30px); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    setTimeout(() => notification.remove(), COMBO_CONFIG.displayDuration * 1000);
+}
+
+// Show combo end notification
+function showComboEndNotification(finalCount) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 35%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 24px;
+        color: #aaaaaa;
+        text-shadow: 1px 1px 2px #000;
+        z-index: 1000;
+        pointer-events: none;
+        opacity: 0.8;
+        animation: comboFadeOut 1s ease-in forwards;
+    `;
+    notification.textContent = `Combo ended: ${finalCount} kills`;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 1000);
+}
+
+// ==================== PERFORMANCE OPTIMIZATION FUNCTIONS ====================
+
+// Update frustum culling and LOD for fish
+function updatePerformanceOptimizations(deltaTime) {
+    if (!camera) return;
+    
+    performanceState.frustumCullTimer -= deltaTime;
+    
+    if (performanceState.frustumCullTimer <= 0) {
+        performanceState.frustumCullTimer = PERFORMANCE_CONFIG.frustumCulling.updateInterval;
+        
+        // Create frustum from camera
+        const frustum = new THREE.Frustum();
+        const projScreenMatrix = new THREE.Matrix4();
+        projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustum.setFromProjectionMatrix(projScreenMatrix);
+        
+        let visibleCount = 0;
+        let culledCount = 0;
+        
+        // Update fish visibility and LOD
+        for (const fish of activeFish) {
+            if (!fish || !fish.group) continue;
+            
+            const fishPos = fish.group.position;
+            const distanceToCamera = fishPos.distanceTo(camera.position);
+            
+            // Frustum culling - hide fish outside view
+            if (PERFORMANCE_CONFIG.frustumCulling.enabled) {
+                const inFrustum = frustum.containsPoint(fishPos);
+                fish.group.visible = fish.isActive && inFrustum;
+                
+                if (inFrustum) {
+                    visibleCount++;
+                } else {
+                    culledCount++;
+                }
+            }
+            
+            // LOD - adjust detail based on distance
+            if (fish.group.visible && fish.body) {
+                const lod = PERFORMANCE_CONFIG.lod;
+                if (distanceToCamera < lod.highDetailDistance) {
+                    // High detail - full shadows
+                    fish.body.castShadow = true;
+                    if (fish.body.material) {
+                        fish.body.material.flatShading = false;
+                    }
+                } else if (distanceToCamera < lod.mediumDetailDistance) {
+                    // Medium detail - no shadows
+                    fish.body.castShadow = false;
+                } else {
+                    // Low detail - no shadows, simplified rendering
+                    fish.body.castShadow = false;
+                    if (fish.body.material) {
+                        fish.body.material.flatShading = true;
+                    }
+                }
+            }
+        }
+        
+        performanceState.visibleFishCount = visibleCount;
+        performanceState.culledFishCount = culledCount;
+    }
+}
+
+// Enforce particle limits to maintain performance
+function enforceParticleLimits() {
+    const maxParticles = PERFORMANCE_CONFIG.particles.maxCount;
+    
+    // Count active particles
+    performanceState.activeParticleCount = activeParticles.length;
+    
+    // If over limit, remove oldest particles
+    if (activeParticles.length > maxParticles) {
+        const toRemove = activeParticles.length - maxParticles;
+        for (let i = 0; i < toRemove; i++) {
+            const particle = activeParticles[0];
+            if (particle) {
+                particle.deactivate();
+                activeParticles.shift();
+            }
+        }
+    }
+    
+    // Also cull distant particles
+    const cullDistance = PERFORMANCE_CONFIG.particles.cullDistance;
+    if (camera) {
+        for (let i = activeParticles.length - 1; i >= 0; i--) {
+            const particle = activeParticles[i];
+            if (particle && particle.mesh) {
+                const dist = particle.mesh.position.distanceTo(camera.position);
+                if (dist > cullDistance) {
+                    particle.deactivate();
+                    activeParticles.splice(i, 1);
+                }
+            }
+        }
+    }
+}
+
+// Set shadow map quality based on performance setting
+function setShadowMapQuality(quality) {
+    if (!renderer) return;
+    
+    const size = PERFORMANCE_CONFIG.shadowMap[quality] || PERFORMANCE_CONFIG.shadowMap.medium;
+    
+    // Update all shadow-casting lights
+    scene.traverse(obj => {
+        if (obj.isLight && obj.shadow) {
+            obj.shadow.mapSize.width = size;
+            obj.shadow.mapSize.height = size;
+            if (obj.shadow.map) {
+                obj.shadow.map.dispose();
+                obj.shadow.map = null;
+            }
+        }
+    });
+    
+    performanceState.currentShadowQuality = quality;
+    console.log(`Shadow quality set to ${quality} (${size}x${size})`);
+}
+
+// ==================== ENHANCED WEAPON VFX ====================
+// Trigger weapon-specific effects on hit
+function triggerWeaponHitEffects(weaponKey, position) {
+    const vfx = WEAPON_VFX_CONFIG[weaponKey];
+    if (!vfx) return;
+    
+    // Screen shake based on weapon
+    if (vfx.screenShake > 0) {
+        triggerScreenShakeWithStrength(vfx.screenShake);
+    }
+    
+    // Special effects for high-tier weapons
+    if (weaponKey === '20x') {
+        // Red pulse border effect for 20x
+        triggerRedBorder();
+        // Extra screen flash
+        triggerScreenFlash(0xff0000, 0.2);
+    } else if (weaponKey === '8x') {
+        // Orange flash for 8x
+        triggerScreenFlash(0xff4400, 0.15);
+    } else if (weaponKey === '5x') {
+        // Subtle gold flash for 5x
+        triggerScreenFlash(0xffdd00, 0.1);
+    }
+}
 
 // Boss Fish Configuration (Issue #12)
 const BOSS_FISH_TYPES = [
@@ -411,7 +729,12 @@ const BOSS_FISH_TYPES = [
 ];
 
 // Issue #15: List of boss-only species that should NOT spawn during normal gameplay
-const BOSS_ONLY_SPECIES = BOSS_FISH_TYPES.map(boss => boss.baseSpecies);
+// BUG FIX: Removed 'sardine' from boss-only list so small schooling fish appear during normal gameplay
+// This fixes the "too few fish" bug - sardine has count:30 which was being excluded
+const BOSS_ONLY_SPECIES = BOSS_FISH_TYPES
+    .filter(boss => boss.baseSpecies !== 'sardine')  // Keep sardine for normal gameplay
+    .map(boss => boss.baseSpecies);
+// Result: ['blueWhale', 'greatWhiteShark', 'mantaRay', 'marlin'] - sardine now spawns normally
 
 // ==================== WEAPON VFX SYSTEM (Issue #14) ====================
 // Visual effects configuration and state for each weapon type
@@ -2234,7 +2557,34 @@ let fpsTime = 0;
 let autoShootTimer = 0;
 
 // ==================== INITIALIZATION ====================
+// Flag to track if game scene has been initialized
+let gameSceneInitialized = false;
+
 function init() {
+    // Lazy initialization: Only set gameLoaded flag, defer heavy Three.js initialization
+    // This prevents the game scene from flashing before the lobby is shown
+    console.log('Lobby initialized - game scene deferred until game start');
+    window.gameLoaded = true;
+}
+
+// Full game scene initialization - called when game actually starts
+function initGameScene() {
+    // Prevent double initialization
+    if (gameSceneInitialized) {
+        console.log('Game scene already initialized');
+        return;
+    }
+    gameSceneInitialized = true;
+    
+    console.log('Initializing game scene...');
+    
+    // Show loading screen
+    const loadingScreen = document.getElementById('loading-screen');
+    const loadingText = document.getElementById('loading-text');
+    if (loadingScreen) {
+        loadingScreen.style.display = 'flex';
+    }
+    
     updateLoadingProgress(10, 'Initializing Three.js...');
     
     // Issue #6: Initialize audio system
@@ -2295,7 +2645,9 @@ function init() {
     updateLoadingProgress(100, 'Ready!');
     
     setTimeout(() => {
-        document.getElementById('loading-screen').style.display = 'none';
+        if (loadingScreen) {
+            loadingScreen.style.display = 'none';
+        }
         gameState.isLoading = false;
         lastTime = performance.now();
         
@@ -2313,6 +2665,116 @@ function init() {
         animate();
     }, 500);
 }
+
+// Start single player game - called from lobby
+window.startSinglePlayerGame = function() {
+    console.log('Starting single player game...');
+    
+    // Show game container
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+        gameContainer.style.display = 'block';
+    }
+    
+    // Mark that we're now in the game scene (not lobby)
+    gameState.isInGameScene = true;
+    
+    // Reset boss event timers for fresh game start
+    gameState.bossSpawnTimer = 60;
+    gameState.bossActive = false;
+    gameState.bossCountdown = 0;
+    gameState.activeBoss = null;
+    hideBossUI();
+    hideBossWaitingUI();
+    
+    // Initialize game scene if not already done
+    initGameScene();
+};
+
+// Start multiplayer game - called from lobby
+window.startMultiplayerGame = function(manager) {
+    console.log('Starting multiplayer game...');
+    
+    // Show game container
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+        gameContainer.style.display = 'block';
+    }
+    
+    // Store multiplayer reference
+    window.multiplayer = manager;
+    
+    // Mark that we're now in the game scene (not lobby)
+    gameState.isInGameScene = true;
+    
+    // Reset boss event timers for fresh game start
+    gameState.bossSpawnTimer = 60;
+    gameState.bossActive = false;
+    gameState.bossCountdown = 0;
+    gameState.activeBoss = null;
+    hideBossUI();
+    hideBossWaitingUI();
+    
+    // Set multiplayer mode state (must be before initGameScene)
+    multiplayerMode = true;
+    multiplayerManager = manager;
+    
+    // Setup multiplayer callbacks
+    if (multiplayerManager) {
+        // Handle game state updates from server
+        multiplayerManager.onGameState = function(data) {
+            // Update fish from server state
+            updateFishFromServer(data.fish);
+            
+            // Update bullets from server state
+            updateBulletsFromServer(data.bullets);
+            
+            // Update other players
+            updatePlayersFromServer(data.players);
+        };
+        
+        // Handle fish killed events
+        multiplayerManager.onFishKilled = function(data) {
+            const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
+            if (fish) {
+                // Play death effects
+                spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
+                
+                // Show reward if we killed it
+                if (data.killedBy === multiplayerManager.playerId) {
+                    spawnCoinFlyToScore(fish.position.clone(), data.reward);
+                    playSound('coin');
+                }
+                
+                // Remove fish from scene
+                scene.remove(fish);
+                const index = gameState.fish.indexOf(fish);
+                if (index > -1) {
+                    gameState.fish.splice(index, 1);
+                }
+            }
+        };
+        
+        // Handle balance updates
+        multiplayerManager.onBalanceUpdate = function(data) {
+            gameState.balance = data.balance;
+            updateUI();
+        };
+        
+        // Handle boss wave events
+        multiplayerManager.onBossWave = function(data) {
+            if (data.state === 'starting') {
+                playBossFanfare();
+                showRareFishNotification('BOSS WAVE INCOMING!');
+            }
+        };
+    }
+    
+    console.log('Multiplayer game started with manager:', manager);
+    
+    // Initialize game scene if not already done
+    initGameScene();
+};
 
 function updateLoadingProgress(percent, text) {
     document.getElementById('loading-progress').style.width = percent + '%';
@@ -4687,6 +5149,10 @@ class Fish {
     }
     
     takeDamage(damage, weaponKey) {
+        // BUG FIX: Guard against taking damage when already dead
+        // This prevents multiple die() calls and duplicate respawn timers
+        if (!this.isActive) return false;
+        
         // Phase 2: Shield Turtle - check if fish has shield
         if (this.config.ability === 'shield' && this.shieldHP > 0) {
             // Damage shield first
@@ -4748,15 +5214,28 @@ class Fish {
             this.triggerAbility(deathPosition, weaponKey);
         }
         
-        // Calculate reward with RTP
+        // COMBO SYSTEM: Update combo and get bonus
+        const comboBonus = updateComboOnKill();
+        
+        // NEW RTP SYSTEM: Casino-standard kill rate calculation
+        // Kill Rate = Target RTP / Effective Payout
+        // This ensures long-term RTP converges to target (30-40% based on weapon)
         const weapon = CONFIG.weapons[weaponKey];
-        const rtp = CONFIG.rtp[CONFIG.game.mode][weaponKey];
-        const baseReward = this.config.reward * weapon.multiplier;
+        const fishReward = this.config.reward;
+        const effectivePayout = fishReward * weapon.multiplier;
         
-        // RTP-based reward
-        const win = Math.random() < rtp ? baseReward : 0;
+        // Calculate kill rate using new RTP system
+        const killRate = calculateKillRate(fishReward, weaponKey);
         
+        // Determine if this kill awards a payout based on kill rate
+        const isKill = Math.random() < killRate;
+        // Apply combo bonus to winnings
+        const baseWin = isKill ? effectivePayout : 0;
+        const win = baseWin > 0 ? Math.floor(baseWin * (1 + comboBonus)) : 0;
+        
+        // Record the win for RTP tracking (bet was already recorded when shot was fired)
         if (win > 0) {
+            recordWin(win);
             gameState.balance += win;
             gameState.score += Math.floor(win);
             
@@ -4919,7 +5398,11 @@ class Fish {
         // Issue #1: Respawn fish in full 3D space around cannon (immersive 360°)
         const position = getRandomFishPositionIn3DSpace();
         this.spawn(position);
-        activeFish.push(this);
+        // BUG FIX: Only push if not already in activeFish to prevent duplicates
+        // This fixes the "fish freeze after 30 minutes" bug caused by array corruption
+        if (!activeFish.includes(this)) {
+            activeFish.push(this);
+        }
     }
 }
 
@@ -4987,6 +5470,173 @@ function spawnInitialFish() {
         fish.spawn(position);
         activeFish.push(fish);
     });
+}
+
+// ==================== DYNAMIC FISH RESPAWN SYSTEM ====================
+// Maintains target fish count and adjusts spawn rate based on kill rate
+const FISH_SPAWN_CONFIG = {
+    targetCount: 20,        // Target number of fish on screen
+    minCount: 15,           // Minimum fish count before emergency spawn
+    maxCount: 30,           // Maximum fish count
+    normalSpawnInterval: 1.0,    // Normal spawn interval (seconds)
+    emergencySpawnInterval: 0.3, // Emergency spawn interval when fish < minCount
+    maintainSpawnInterval: 2.0   // Slow spawn when at target
+};
+
+let dynamicSpawnTimer = 0;
+
+function updateDynamicFishSpawn(deltaTime) {
+    dynamicSpawnTimer -= deltaTime;
+    
+    const currentFishCount = activeFish.length;
+    let spawnInterval;
+    
+    // Determine spawn interval based on current fish count
+    if (currentFishCount < FISH_SPAWN_CONFIG.minCount) {
+        // Emergency: spawn quickly
+        spawnInterval = FISH_SPAWN_CONFIG.emergencySpawnInterval;
+    } else if (currentFishCount < FISH_SPAWN_CONFIG.targetCount) {
+        // Below target: spawn normally
+        spawnInterval = FISH_SPAWN_CONFIG.normalSpawnInterval;
+    } else if (currentFishCount < FISH_SPAWN_CONFIG.maxCount) {
+        // At target: slow spawn
+        spawnInterval = FISH_SPAWN_CONFIG.maintainSpawnInterval;
+    } else {
+        // At max: don't spawn
+        return;
+    }
+    
+    if (dynamicSpawnTimer <= 0) {
+        // Find an inactive fish from the pool to spawn
+        const inactiveFish = fishPool.find(f => !f.isActive);
+        if (inactiveFish) {
+            const position = getRandomFishPositionIn3DSpace();
+            inactiveFish.spawn(position);
+            // Only push if not already in activeFish
+            if (!activeFish.includes(inactiveFish)) {
+                activeFish.push(inactiveFish);
+            }
+        }
+        dynamicSpawnTimer = spawnInterval;
+    }
+}
+
+// ==================== RTP (RETURN TO PLAYER) SYSTEM ====================
+// Casino-standard RTP calculation: RTP = (Total Wins / Total Bets) * 100%
+// Kill Rate = Target RTP / Fish Multiplier (based on fish reward, not weapon)
+// 
+// Fish-based RTP system (higher multiplier fish = slightly higher RTP):
+// - 1x fish: 90% RTP (kill rate = 90%)
+// - 3x fish: 92% RTP (kill rate = 30.67%)
+// - 5x fish: 93% RTP (kill rate = 18.6%)
+// - 8x fish: 94% RTP (kill rate = 11.75%)
+// - 20x fish: 95% RTP (kill rate = 4.75%)
+
+const RTP_CONFIG = {
+    // RTP targets by FISH REWARD MULTIPLIER (not weapon)
+    // Higher multiplier fish have slightly better RTP to encourage targeting them
+    fishRTP: {
+        1: 0.90,    // 1x fish: 90% RTP, killRate = 90%
+        2: 0.91,    // 2x fish: 91% RTP, killRate = 45.5%
+        3: 0.92,    // 3x fish: 92% RTP, killRate = 30.67%
+        5: 0.93,    // 5x fish: 93% RTP, killRate = 18.6%
+        8: 0.94,    // 8x fish: 94% RTP, killRate = 11.75%
+        10: 0.94,   // 10x fish: 94% RTP, killRate = 9.4%
+        15: 0.945,  // 15x fish: 94.5% RTP, killRate = 6.3%
+        20: 0.95,   // 20x fish: 95% RTP, killRate = 4.75%
+        30: 0.95,   // 30x fish: 95% RTP, killRate = 3.17%
+        50: 0.95,   // 50x fish: 95% RTP, killRate = 1.9%
+        100: 0.95,  // 100x fish: 95% RTP, killRate = 0.95%
+        200: 0.95,  // 200x fish: 95% RTP, killRate = 0.475%
+        500: 0.95   // 500x fish: 95% RTP, killRate = 0.19%
+    },
+    // Dynamic RTP adjustment bounds (90-95% market standard)
+    minRTP: 0.88,     // Minimum RTP (88%) - increase kill rate if below
+    maxRTP: 0.96,     // Maximum RTP (96%) - decrease kill rate if above
+    // Tracking
+    sessionStats: {
+        totalBets: 0,
+        totalWins: 0,
+        shotsFired: 0,
+        fishKilled: 0
+    }
+};
+
+// Get RTP target for a fish based on its reward multiplier
+function getFishRTP(fishReward) {
+    // Find the closest matching multiplier in our RTP table
+    const multipliers = Object.keys(RTP_CONFIG.fishRTP).map(Number).sort((a, b) => a - b);
+    
+    // Find the closest multiplier that's <= fishReward
+    let closestMultiplier = 1;
+    for (const mult of multipliers) {
+        if (mult <= fishReward) {
+            closestMultiplier = mult;
+        } else {
+            break;
+        }
+    }
+    
+    return RTP_CONFIG.fishRTP[closestMultiplier] || 0.90;
+}
+
+// Calculate kill rate based on fish reward multiplier
+// Formula: killRate = targetRTP / fishReward
+function calculateKillRate(fishReward, weaponKey) {
+    // Get RTP based on fish reward (not weapon)
+    const targetRTP = getFishRTP(fishReward);
+    
+    // Kill rate formula: killRate = targetRTP / multiplier
+    // Example: 20x fish with 95% RTP → killRate = 0.95 / 20 = 4.75%
+    let killRate = targetRTP / fishReward;
+    
+    // Dynamic adjustment based on current session RTP
+    const currentRTP = getCurrentSessionRTP();
+    if (currentRTP > 0) {
+        if (currentRTP > RTP_CONFIG.maxRTP) {
+            // Player winning too much - reduce kill rate by 10%
+            killRate *= 0.9;
+        } else if (currentRTP < RTP_CONFIG.minRTP) {
+            // Player losing too much - increase kill rate by 10%
+            killRate *= 1.1;
+        }
+    }
+    
+    // Clamp kill rate to reasonable bounds (0.1% to 95%)
+    return Math.max(0.001, Math.min(0.95, killRate));
+}
+
+// Get current session RTP
+function getCurrentSessionRTP() {
+    if (RTP_CONFIG.sessionStats.totalBets <= 0) return 0;
+    return RTP_CONFIG.sessionStats.totalWins / RTP_CONFIG.sessionStats.totalBets;
+}
+
+// Record a bet (shot fired)
+function recordBet(weaponKey) {
+    const weapon = CONFIG.weapons[weaponKey];
+    const betAmount = weapon.cost;
+    RTP_CONFIG.sessionStats.totalBets += betAmount;
+    RTP_CONFIG.sessionStats.shotsFired++;
+}
+
+// Record a win (fish killed)
+function recordWin(amount) {
+    RTP_CONFIG.sessionStats.totalWins += amount;
+    RTP_CONFIG.sessionStats.fishKilled++;
+}
+
+// Get RTP stats for debugging/display
+function getRTPStats() {
+    const stats = RTP_CONFIG.sessionStats;
+    return {
+        totalBets: stats.totalBets.toFixed(2),
+        totalWins: stats.totalWins.toFixed(2),
+        currentRTP: (getCurrentSessionRTP() * 100).toFixed(1) + '%',
+        shotsFired: stats.shotsFired,
+        fishKilled: stats.fishKilled,
+        hitRate: stats.shotsFired > 0 ? ((stats.fishKilled / stats.shotsFired) * 100).toFixed(1) + '%' : '0%'
+    };
 }
 
 // ==================== BULLET SYSTEM ====================
@@ -5189,6 +5839,9 @@ function fireBullet(targetX, targetY) {
     
     // Deduct cost
     gameState.balance -= weapon.cost;
+    
+    // Record bet for RTP tracking
+    recordBet(weaponKey);
     
     // Set cooldown based on shotsPerSecond
     gameState.cooldown = 1 / weapon.shotsPerSecond;
@@ -5793,14 +6446,14 @@ function setupEventListeners() {
             }
             
             // Apply rotation using same sensitivity as right-drag
-            // FPS free-look uses 10x higher sensitivity for comfortable gameplay
-            // User requested additional 20% increase (multiply by 1.2)
+            // FPS free-look uses higher sensitivity for comfortable gameplay
+            // Increased multiplier from 10.0 to 30.0 for better responsiveness
             const fpsLevel = Math.max(1, Math.min(10, gameState.fpsSensitivityLevel || 5));
-            const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 10.0 * 1.2;
+            const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 30.0 * 1.2;
             
             // Calculate new yaw (horizontal rotation)
-            // IMPORTANT: Negate deltaX so mouse left = camera left (standard FPS controls)
-            let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) - deltaX * rotationSensitivity;
+            // FIX: Changed sign so mouse left = view left, mouse right = view right (standard FPS controls)
+            let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) + deltaX * rotationSensitivity;
             
             // Clamp yaw using centralized constant FPS_YAW_MAX (±50°)
             newYaw = Math.max(-FPS_YAW_MAX, Math.min(FPS_YAW_MAX, newYaw));
@@ -5996,41 +6649,95 @@ function setupEventListeners() {
         });
     }
     
-    // Keyboard controls for camera rotation (Issue #5)
-    // FPS mode: Limited to ±90° (180° total) - cannon can only face outward
-    // 3RD PERSON mode: Unlimited 360° rotation
+    // Keyboard controls - Complete shortcut system for FPS mode
+    // In FPS mode, mouse is locked for view control, so keyboard shortcuts are essential
     window.addEventListener('keydown', (e) => {
-        const rotationSpeed = 0.05;  // Faster rotation for keyboard
-        const maxYaw = Math.PI / 2;  // 90 degrees limit for FPS mode
+        // Weapon switching: 1-5 keys
+        if (e.key === '1') {
+            selectWeapon('1x');
+            highlightButton('.weapon-btn[data-weapon="1x"]');
+            return;
+        } else if (e.key === '2') {
+            selectWeapon('3x');
+            highlightButton('.weapon-btn[data-weapon="3x"]');
+            return;
+        } else if (e.key === '3') {
+            selectWeapon('5x');
+            highlightButton('.weapon-btn[data-weapon="5x"]');
+            return;
+        } else if (e.key === '4') {
+            selectWeapon('8x');
+            highlightButton('.weapon-btn[data-weapon="8x"]');
+            return;
+        } else if (e.key === '5') {
+            selectWeapon('20x');
+            highlightButton('.weapon-btn[data-weapon="20x"]');
+            return;
+        }
         
+        // Function toggle keys
         if (e.key === 'a' || e.key === 'A') {
+            // A key: Toggle AUTO mode
+            toggleAutoShoot();
+            highlightButton('#auto-shoot-btn');
+            return;
+        } else if (e.key === ' ') {
+            // Space key: Toggle view mode (FPS <-> 3RD PERSON)
+            e.preventDefault(); // Prevent page scroll
+            toggleViewMode();
+            highlightButton('#view-mode-btn');
+            return;
+        } else if (e.key === 'c' || e.key === 'C') {
+            // C key: Center view
+            centerCameraView();
+            if (gameState.viewMode === 'fps') {
+                updateFPSCamera();
+            } else {
+                updateCameraRotation();
+            }
+            highlightButton('#center-view-btn');
+            return;
+        } else if (e.key === 'Escape') {
+            // ESC key: Toggle settings panel
+            toggleSettingsPanel();
+            highlightButton('#settings-btn');
+            return;
+        } else if (e.key === 'h' || e.key === 'H' || e.key === 'F1') {
+            // H or F1 key: Toggle help panel
+            e.preventDefault();
+            toggleHelpPanel();
+            return;
+        }
+        
+        // Camera rotation with D key (A is now for Auto toggle)
+        // Use Q/E or arrow keys for camera rotation instead
+        const rotationSpeed = 0.05;
+        const maxYaw = Math.PI / 2;
+        
+        if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') {
             // Rotate camera left
             if (gameState.viewMode === 'fps') {
-                // In FPS mode, directly rotate the cannon (limited to ±90°)
                 if (cannonGroup) {
                     let newYaw = cannonGroup.rotation.y - rotationSpeed;
                     cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
                 }
                 updateFPSCamera();
             } else {
-                // 3RD PERSON mode: unlimited 360°
                 let newYaw = gameState.cameraYaw - rotationSpeed;
                 if (newYaw < -Math.PI) newYaw += 2 * Math.PI;
                 gameState.targetCameraYaw = newYaw;
                 gameState.cameraYaw = newYaw;
                 updateCameraRotation();
             }
-        } else if (e.key === 'd' || e.key === 'D') {
+        } else if (e.key === 'd' || e.key === 'D' || e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') {
             // Rotate camera right
             if (gameState.viewMode === 'fps') {
-                // In FPS mode, directly rotate the cannon (limited to ±90°)
                 if (cannonGroup) {
                     let newYaw = cannonGroup.rotation.y + rotationSpeed;
                     cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
                 }
                 updateFPSCamera();
             } else {
-                // 3RD PERSON mode: unlimited 360°
                 let newYaw = gameState.cameraYaw + rotationSpeed;
                 if (newYaw > Math.PI) newYaw -= 2 * Math.PI;
                 gameState.targetCameraYaw = newYaw;
@@ -6038,10 +6745,86 @@ function setupEventListeners() {
                 updateCameraRotation();
             }
         } else if (e.key === 'v' || e.key === 'V') {
-            // Toggle view mode with V key
+            // V key also toggles view mode (legacy support)
             toggleViewMode();
+            highlightButton('#view-mode-btn');
         }
     });
+}
+
+// Toggle AUTO shoot mode
+function toggleAutoShoot() {
+    gameState.autoShoot = !gameState.autoShoot;
+    const btn = document.getElementById('auto-shoot-btn');
+    if (btn) {
+        btn.textContent = gameState.autoShoot ? 'AUTO ON (A)' : 'AUTO OFF (A)';
+        btn.classList.toggle('active', gameState.autoShoot);
+    }
+    playSound('weaponSwitch'); // Audio feedback
+}
+
+// Toggle settings panel
+function toggleSettingsPanel() {
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) {
+        settingsPanel.classList.toggle('visible');
+    }
+}
+
+// Toggle help panel showing all shortcuts
+function toggleHelpPanel() {
+    let helpPanel = document.getElementById('help-panel');
+    if (!helpPanel) {
+        // Create help panel if it doesn't exist
+        helpPanel = document.createElement('div');
+        helpPanel.id = 'help-panel';
+        helpPanel.innerHTML = `
+            <div class="help-content">
+                <h3>Keyboard Shortcuts</h3>
+                <div class="help-section">
+                    <h4>Weapon Selection</h4>
+                    <div class="help-row"><span class="key">1</span> Weapon 1x</div>
+                    <div class="help-row"><span class="key">2</span> Weapon 3x</div>
+                    <div class="help-row"><span class="key">3</span> Weapon 5x</div>
+                    <div class="help-row"><span class="key">4</span> Weapon 8x</div>
+                    <div class="help-row"><span class="key">5</span> Weapon 20x</div>
+                </div>
+                <div class="help-section">
+                    <h4>Controls</h4>
+                    <div class="help-row"><span class="key">A</span> Toggle Auto Fire</div>
+                    <div class="help-row"><span class="key">Space</span> Toggle View Mode</div>
+                    <div class="help-row"><span class="key">C</span> Center View</div>
+                    <div class="help-row"><span class="key">ESC</span> Settings</div>
+                    <div class="help-row"><span class="key">H</span> This Help</div>
+                </div>
+                <div class="help-section">
+                    <h4>Camera</h4>
+                    <div class="help-row"><span class="key">Q/E</span> Rotate Left/Right</div>
+                    <div class="help-row"><span class="key">D</span> Rotate Right</div>
+                    <div class="help-row"><span class="key">Arrows</span> Rotate Camera</div>
+                </div>
+                <button id="help-close-btn">Close (H)</button>
+            </div>
+        `;
+        document.getElementById('ui-overlay').appendChild(helpPanel);
+        
+        // Close button handler
+        document.getElementById('help-close-btn').addEventListener('click', () => {
+            helpPanel.classList.remove('visible');
+        });
+    }
+    helpPanel.classList.toggle('visible');
+}
+
+// Visual feedback when pressing shortcut keys
+function highlightButton(selector) {
+    const btn = document.querySelector(selector);
+    if (btn) {
+        btn.classList.add('shortcut-highlight');
+        setTimeout(() => {
+            btn.classList.remove('shortcut-highlight');
+        }, 200);
+    }
 }
 
 // Update camera rotation based on yaw and pitch (orbit around cannon at bottom)
@@ -6199,10 +6982,10 @@ function updateViewModeButton() {
     const btn = document.getElementById('view-mode-btn');
     if (btn) {
         if (gameState.viewMode === 'fps') {
-            btn.textContent = 'FPS VIEW';
+            btn.textContent = 'FPS VIEW (Space)';
             btn.classList.add('active');
         } else {
-            btn.textContent = '3RD PERSON';
+            btn.textContent = '3RD PERSON (Space)';
             btn.classList.remove('active');
         }
     }
@@ -6429,15 +7212,32 @@ function animate() {
         }
     }
     
-    // Update fish
+    // Update fish with error handling to prevent freeze bugs
+    let fishUpdateErrors = 0;
     for (let i = activeFish.length - 1; i >= 0; i--) {
         const fish = activeFish[i];
-        if (fish.isActive) {
-            fish.update(deltaTime, activeFish);
+        if (fish && fish.isActive) {
+            try {
+                fish.update(deltaTime, activeFish);
+            } catch (e) {
+                fishUpdateErrors++;
+                if (fishUpdateErrors <= 3) {
+                    console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species);
+                }
+                // Attempt recovery: reset fish state
+                fish.velocity.set(0, 0, 0);
+                fish.acceleration.set(0, 0, 0);
+            }
+        } else if (fish && !fish.isActive) {
+            activeFish.splice(i, 1);
         } else {
+            // Invalid fish reference - remove it
             activeFish.splice(i, 1);
         }
     }
+    
+    // Dynamic fish respawn system - maintain target fish count
+    updateDynamicFishSpawn(deltaTime);
     
     // Update bullets
     for (let i = activeBullets.length - 1; i >= 0; i--) {
@@ -6461,6 +7261,15 @@ function animate() {
     
     // Issue #14: Update weapon VFX (transient effects, knockback, etc.)
     updateWeaponVFX(deltaTime);
+    
+    // COMBO SYSTEM: Update combo timer
+    updateComboTimer(deltaTime);
+    
+    // PERFORMANCE: Update frustum culling and LOD
+    updatePerformanceOptimizations(deltaTime);
+    
+    // PERFORMANCE: Enforce particle limits
+    enforceParticleLimits();
     
         // Animate seaweed
         animateSeaweed();
@@ -6630,6 +7439,8 @@ function createBossWaitingUI() {
 
 // Issue #15: Update waiting timer UI (shows 60s → 16s, hides when boss mode starts)
 function updateBossWaitingTimerUI(secondsLeft) {
+    // Guard: Don't show boss waiting UI when not in game scene
+    if (!gameState.isInGameScene) return;
     if (!bossWaitingUI) createBossWaitingUI();
     
     const s = Math.ceil(secondsLeft);
@@ -6688,6 +7499,8 @@ function showBossAlert(bossType) {
 }
 
 function updateBossCountdownUI(timeLeft) {
+    // Guard: Don't show boss UI when not in game scene
+    if (!gameState.isInGameScene) return;
     if (!bossUIContainer) return;
     const countdownEl = document.getElementById('boss-countdown');
     if (countdownEl) {
@@ -6896,7 +7709,10 @@ function spawnBossFish() {
                 );
                 fish.spawn(centerPos.clone().add(offset));
                 fish.isBoss = true;
-                activeFish.push(fish);
+                // BUG FIX: Only push if not already in activeFish to prevent duplicates
+                if (!activeFish.includes(fish)) {
+                    activeFish.push(fish);
+                }
                 swarmFish.push(fish);
             }
         }
@@ -6915,7 +7731,10 @@ function spawnBossFish() {
             fish.createMesh();
             fish.spawn(getRandomFishPositionIn3DSpace());
             fish.isBoss = true;
-            activeFish.push(fish);
+            // BUG FIX: Only push if not already in activeFish to prevent duplicates
+            if (!activeFish.includes(fish)) {
+                activeFish.push(fish);
+            }
             
             gameState.activeBoss = fish;
             createBossCrosshair(fish);
@@ -6929,6 +7748,20 @@ function spawnBossFish() {
 }
 
 function updateBossEvent(deltaTime) {
+    // Guard: Only run boss system when in active game scene (not lobby/menu)
+    if (!gameState.isInGameScene) {
+        // Ensure boss system is fully dormant on lobby
+        if (gameState.bossActive || gameState.bossCountdown > 0) {
+            gameState.bossActive = false;
+            gameState.activeBoss = null;
+            gameState.bossCountdown = 0;
+            gameState.bossSpawnTimer = 60;
+            hideBossUI();
+            hideBossWaitingUI();
+        }
+        return;
+    }
+    
     // Update boss spawn timer
     if (!gameState.bossActive) {
         gameState.bossSpawnTimer -= deltaTime;
@@ -7024,6 +7857,9 @@ function showBossEscapedMessage() {
 const DEFAULT_SETTINGS = {
     graphicsQuality: 'medium',
     shadowQuality: 'medium',
+    // Audio volume settings (0-100%)
+    musicVolume: 50,      // Background music volume (default 50%)
+    sfxVolume: 70,        // Sound effects volume (default 70%)
     thirdPersonSensitivity: 1.0,
     // FPS Sensitivity: 10 levels (1-10), where level 10 = 100% of base sensitivity
     // Default is level 5 (50%) for more precise aiming
@@ -7064,44 +7900,64 @@ function saveSettings() {
 }
 
 // Apply graphics quality settings
+// User-requested optimization for FPS performance:
+// - Low: No shadows + 30% particles (Target: 80+ FPS)
+// - Medium: No shadows + 60% particles (Target: 60+ FPS)
+// - High: Full shadows + 100% particles (Target: 50+ FPS)
 function applyGraphicsQuality(quality) {
     gameSettings.graphicsQuality = quality;
     
-    // Graphics quality presets affect:
-    // - Fish model detail (segment count)
-    // - Particle count
-    // - Water effects
-    // - Render resolution
+    // Base particle count for 100% (high quality)
+    const BASE_PARTICLE_COUNT = 200;
     
     switch (quality) {
         case 'low':
-            // Reduce particle effects
+            // LOW: Best performance - No shadows, 30% particles
             if (renderer) {
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
             }
-            CONFIG.particles = { maxCount: 50, enabled: true };
+            CONFIG.particles = { 
+                maxCount: Math.floor(BASE_PARTICLE_COUNT * 0.3), // 30% = 60 particles
+                enabled: true,
+                qualityMultiplier: 0.3
+            };
+            // Disable shadows for low quality
+            applyShadowQuality('off');
             break;
+            
         case 'medium':
+            // MEDIUM: Balanced - No shadows, 60% particles
             if (renderer) {
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
             }
-            CONFIG.particles = { maxCount: 100, enabled: true };
+            CONFIG.particles = { 
+                maxCount: Math.floor(BASE_PARTICLE_COUNT * 0.6), // 60% = 120 particles
+                enabled: true,
+                qualityMultiplier: 0.6
+            };
+            // Disable shadows for medium quality
+            applyShadowQuality('off');
             break;
+            
         case 'high':
+            // HIGH: Best visuals - Full shadows, 100% particles
             if (renderer) {
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             }
-            CONFIG.particles = { maxCount: 200, enabled: true };
-            break;
-        case 'ultra':
-            if (renderer) {
-                renderer.setPixelRatio(window.devicePixelRatio);
-            }
-            CONFIG.particles = { maxCount: 500, enabled: true };
+            CONFIG.particles = { 
+                maxCount: BASE_PARTICLE_COUNT, // 100% = 200 particles
+                enabled: true,
+                qualityMultiplier: 1.0
+            };
+            // Enable high quality shadows
+            applyShadowQuality('high');
             break;
     }
     
     saveSettings();
+    
+    // Log quality change for debugging
+    console.log(`Graphics Quality set to: ${quality} (Particles: ${CONFIG.particles.maxCount}, Shadows: ${quality === 'high' ? 'ON' : 'OFF'})`);
 }
 
 // Apply shadow quality settings
@@ -7186,6 +8042,31 @@ function applyFpsSensitivityLevel(level) {
     saveSettings();
 }
 
+// Apply background music volume (0-100%)
+function applyMusicVolumePercent(percent) {
+    // Clamp to 0-100
+    percent = Math.max(0, Math.min(100, Math.round(percent)));
+    gameSettings.musicVolume = percent;
+    // Convert percentage to 0-1 range for audio API
+    const volume = percent / 100;
+    setMusicVolume(volume);
+    setAmbientVolume(volume); // Also apply to ambient sounds
+    saveSettings();
+    console.log(`Music Volume set to: ${percent}%`);
+}
+
+// Apply sound effects volume (0-100%)
+function applySfxVolumePercent(percent) {
+    // Clamp to 0-100
+    percent = Math.max(0, Math.min(100, Math.round(percent)));
+    gameSettings.sfxVolume = percent;
+    // Convert percentage to 0-1 range for audio API
+    const volume = percent / 100;
+    setSfxVolume(volume);
+    saveSettings();
+    console.log(`SFX Volume set to: ${percent}%`);
+}
+
 // Initialize settings UI
 function initSettingsUI() {
     const settingsBtn = document.getElementById('settings-btn');
@@ -7229,6 +8110,32 @@ function initSettingsUI() {
         shadowSelect.value = gameSettings.shadowQuality;
         shadowSelect.addEventListener('change', (e) => {
             applyShadowQuality(e.target.value);
+        });
+    }
+    
+    // Background Music Volume slider (0-100%)
+    const musicSlider = document.getElementById('music-volume');
+    const musicValue = document.getElementById('music-volume-value');
+    if (musicSlider && musicValue) {
+        musicSlider.value = gameSettings.musicVolume;
+        musicValue.textContent = gameSettings.musicVolume + '%';
+        musicSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            musicValue.textContent = value + '%';
+            applyMusicVolumePercent(value);
+        });
+    }
+    
+    // Sound Effects Volume slider (0-100%)
+    const sfxSlider = document.getElementById('sfx-volume');
+    const sfxValue = document.getElementById('sfx-volume-value');
+    if (sfxSlider && sfxValue) {
+        sfxSlider.value = gameSettings.sfxVolume;
+        sfxValue.textContent = gameSettings.sfxVolume + '%';
+        sfxSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            sfxValue.textContent = value + '%';
+            applySfxVolumePercent(value);
         });
     }
     
@@ -7276,6 +8183,8 @@ function initSettingsUI() {
 function applyAllSettings() {
     applyGraphicsQuality(gameSettings.graphicsQuality);
     applyShadowQuality(gameSettings.shadowQuality);
+    applyMusicVolumePercent(gameSettings.musicVolume);
+    applySfxVolumePercent(gameSettings.sfxVolume);
     applyThirdPersonSensitivity(gameSettings.thirdPersonSensitivity);
     applyFpsSensitivityLevel(gameSettings.fpsSensitivityLevel || 5);
 }
@@ -7291,64 +8200,9 @@ window.gameLoaded = false;
 let multiplayerMode = false;
 let multiplayerManager = null;
 
-// Function called by lobby when starting multiplayer game
-window.startMultiplayerGame = function(manager) {
-    multiplayerMode = true;
-    multiplayerManager = manager;
-    
-    // Setup multiplayer callbacks
-    if (multiplayerManager) {
-        // Handle game state updates from server
-        multiplayerManager.onGameState = function(data) {
-            // Update fish from server state
-            updateFishFromServer(data.fish);
-            
-            // Update bullets from server state
-            updateBulletsFromServer(data.bullets);
-            
-            // Update other players
-            updatePlayersFromServer(data.players);
-        };
-        
-        // Handle fish killed events
-        multiplayerManager.onFishKilled = function(data) {
-            const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
-            if (fish) {
-                // Play death effects
-                spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
-                
-                // Show reward if we killed it
-                if (data.killedBy === multiplayerManager.playerId) {
-                    spawnCoinFlyToScore(fish.position.clone(), data.reward);
-                    playSound('coin');
-                }
-                
-                // Remove fish from scene
-                scene.remove(fish);
-                const index = gameState.fish.indexOf(fish);
-                if (index > -1) {
-                    gameState.fish.splice(index, 1);
-                }
-            }
-        };
-        
-        // Handle balance updates
-        multiplayerManager.onBalanceUpdate = function(data) {
-            gameState.balance = data.balance;
-            updateUI();
-        };
-        
-        // Handle boss wave events
-        multiplayerManager.onBossWave = function(data) {
-            if (data.state === 'starting') {
-                playBossFanfare();
-                showRareFishNotification('BOSS WAVE INCOMING!');
-            }
-        };
-    }
-    
-    console.log('Multiplayer game started with manager:', manager);
-};
+// Note: startMultiplayerGame is defined earlier in the file (around line 2695)
+// It handles: showing game container, setting isInGameScene, resetting boss timers,
+// setting multiplayerMode/multiplayerManager, setting up callbacks, and calling initGameScene()
 
 // Update fish positions from server state
 function updateFishFromServer(serverFish) {

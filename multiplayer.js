@@ -12,9 +12,18 @@
 // Server URL - Change this for production
 const MULTIPLAYER_CONFIG = {
     serverUrl: 'https://fishing-socket-server.onrender.com',
-    reconnectAttempts: 5,
+    reconnectAttempts: 10,           // Increased for better reconnection
     reconnectDelay: 1000,
-    interpolationDelay: 100 // ms delay for smooth interpolation
+    reconnectDelayMax: 5000,         // Max delay between reconnect attempts
+    interpolationDelay: 100,         // ms delay for smooth interpolation
+    predictionEnabled: true,         // Enable client-side prediction
+    maxPredictionTime: 200,          // Max ms to predict ahead
+    snapshotBufferSize: 20,          // Number of snapshots to keep for interpolation
+    networkOptimization: {
+        positionPrecision: 2,        // Decimal places for position data
+        anglePrecision: 3,           // Decimal places for angle data
+        minUpdateInterval: 50        // Minimum ms between updates
+    }
 };
 
 /**
@@ -45,8 +54,25 @@ class MultiplayerManager {
         this.serverTimeOffset = 0;
         this.timeSyncSamples = [];
         
+        // Reconnection state
+        this.reconnectAttempt = 0;
+        this.lastRoomCode = null;
+        this.lastPlayerId = null;
+        this.isReconnecting = false;
+        
+        // Client-side prediction
+        this.pendingInputs = [];      // Inputs waiting for server confirmation
+        this.lastProcessedInput = 0;  // Last input ID confirmed by server
+        this.localBullets = new Map(); // Locally predicted bullets
+        
+        // Network optimization
+        this.lastUpdateTime = 0;
+        this.updateQueue = [];        // Queued updates to batch send
+        
         // Callbacks
         this.onConnected = null;
+        this.onReconnecting = null;
+        this.onReconnected = null;
         this.onDisconnected = null;
         this.onRoomCreated = null;
         this.onRoomJoined = null;
@@ -106,7 +132,46 @@ class MultiplayerManager {
             this.socket.on('disconnect', (reason) => {
                 console.log('[MULTIPLAYER] Disconnected:', reason);
                 this.connected = false;
+                
+                // Save state for reconnection
+                if (this.roomCode) {
+                    this.lastRoomCode = this.roomCode;
+                    this.lastPlayerId = this.playerId;
+                }
+                
                 if (this.onDisconnected) this.onDisconnected(reason);
+                
+                // Auto-reconnect for unexpected disconnections
+                if (reason === 'io server disconnect' || reason === 'transport close') {
+                    this._attemptReconnect();
+                }
+            });
+            
+            this.socket.on('reconnect_attempt', (attemptNumber) => {
+                console.log('[MULTIPLAYER] Reconnection attempt:', attemptNumber);
+                this.isReconnecting = true;
+                this.reconnectAttempt = attemptNumber;
+                if (this.onReconnecting) this.onReconnecting(attemptNumber);
+            });
+            
+            this.socket.on('reconnect', () => {
+                console.log('[MULTIPLAYER] Reconnected successfully');
+                this.isReconnecting = false;
+                this.reconnectAttempt = 0;
+                this._startTimeSync();
+                
+                // Try to rejoin previous room
+                if (this.lastRoomCode) {
+                    this._rejoinRoom();
+                }
+                
+                if (this.onReconnected) this.onReconnected();
+            });
+            
+            this.socket.on('reconnect_failed', () => {
+                console.error('[MULTIPLAYER] Reconnection failed after all attempts');
+                this.isReconnecting = false;
+                if (this.onError) this.onError('Connection lost. Please refresh the page.');
             });
             
             this.socket.on('connect_error', (error) => {
@@ -604,6 +669,92 @@ class MultiplayerManager {
     }
     
     /**
+     * Attempt to reconnect to server
+     */
+    _attemptReconnect() {
+        if (this.isReconnecting) return;
+        
+        this.isReconnecting = true;
+        console.log('[MULTIPLAYER] Attempting to reconnect...');
+        
+        // Socket.IO handles reconnection automatically, but we can trigger it manually
+        if (this.socket && !this.socket.connected) {
+            this.socket.connect();
+        }
+    }
+    
+    /**
+     * Rejoin previous room after reconnection
+     */
+    _rejoinRoom() {
+        if (!this.lastRoomCode || !this.socket) return;
+        
+        console.log('[MULTIPLAYER] Attempting to rejoin room:', this.lastRoomCode);
+        
+        this.socket.emit('rejoinRoom', {
+            roomCode: this.lastRoomCode,
+            playerId: this.lastPlayerId
+        });
+        
+        // Listen for rejoin result
+        this.socket.once('rejoinSuccess', (data) => {
+            console.log('[MULTIPLAYER] Rejoined room successfully:', data);
+            this.roomCode = data.roomCode;
+            this.playerId = data.playerId;
+            this.slotIndex = data.slotIndex;
+            this.isHost = data.isHost;
+            this.lastRoomCode = null;
+            this.lastPlayerId = null;
+        });
+        
+        this.socket.once('rejoinError', (data) => {
+            console.error('[MULTIPLAYER] Failed to rejoin room:', data.message);
+            this.lastRoomCode = null;
+            this.lastPlayerId = null;
+            if (this.onError) this.onError('Could not rejoin game: ' + data.message);
+        });
+    }
+    
+    /**
+     * Predict fish position for smoother movement
+     * Uses velocity to extrapolate position between server updates
+     */
+    predictFishPosition(fish, deltaTime) {
+        if (!MULTIPLAYER_CONFIG.predictionEnabled) return fish;
+        
+        const predicted = { ...fish };
+        if (fish.velocity) {
+            predicted.x += fish.velocity.x * deltaTime;
+            predicted.y += fish.velocity.y * deltaTime;
+            predicted.z += fish.velocity.z * deltaTime;
+        }
+        return predicted;
+    }
+    
+    /**
+     * Optimize network data by reducing precision
+     */
+    optimizeNetworkData(data) {
+        const opt = MULTIPLAYER_CONFIG.networkOptimization;
+        const optimized = {};
+        
+        if (data.x !== undefined) optimized.x = parseFloat(data.x.toFixed(opt.positionPrecision));
+        if (data.y !== undefined) optimized.y = parseFloat(data.y.toFixed(opt.positionPrecision));
+        if (data.z !== undefined) optimized.z = parseFloat(data.z.toFixed(opt.positionPrecision));
+        if (data.yaw !== undefined) optimized.yaw = parseFloat(data.yaw.toFixed(opt.anglePrecision));
+        if (data.pitch !== undefined) optimized.pitch = parseFloat(data.pitch.toFixed(opt.anglePrecision));
+        
+        // Copy other properties as-is
+        for (const key of Object.keys(data)) {
+            if (optimized[key] === undefined) {
+                optimized[key] = data[key];
+            }
+        }
+        
+        return optimized;
+    }
+    
+    /**
      * Disconnect from server
      */
     disconnect() {
@@ -616,6 +767,9 @@ class MultiplayerManager {
         this.playerId = null;
         this.slotIndex = null;
         this.isHost = false;
+        this.lastRoomCode = null;
+        this.lastPlayerId = null;
+        this.isReconnecting = false;
     }
 }
 
