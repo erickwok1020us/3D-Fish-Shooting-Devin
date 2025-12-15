@@ -5464,6 +5464,12 @@ function getRandomFishPositionIn3DSpace() {
 }
 
 function spawnInitialFish() {
+    // MULTIPLAYER: Skip local fish spawning in multiplayer mode - fish come from server
+    if (multiplayerMode) {
+        console.log('[GAME] Skipping local fish spawn - multiplayer mode uses server fish');
+        return;
+    }
+    
     fishPool.forEach(fish => {
         // Issue #1: Spawn fish in full 3D space around cannon (immersive 360°)
         const position = getRandomFishPositionIn3DSpace();
@@ -8263,14 +8269,21 @@ function updateFishFromServer(serverFish) {
             existingFish.delete(sf.id);
         } else {
             // Create new fish from server data
-            const fishConfig = CONFIG.fishTiers[sf.species];
+            // Server sends 'type' field, not 'species' - use sf.type for lookup
+            const fishType = sf.type || sf.species;
+            const fishConfig = CONFIG.fishTiers[fishType];
             if (fishConfig) {
-                const newFish = createFishMesh(sf.species, fishConfig);
+                const newFish = createFishMesh(fishType, fishConfig);
                 newFish.position.set(sf.x * 10, (sf.y || 0) * 10, sf.z * 10);
                 newFish.userData.serverId = sf.id;
                 newFish.userData.hp = sf.hp;
+                newFish.userData.maxHp = sf.maxHp;
+                newFish.userData.isBoss = sf.isBoss;
                 scene.add(newFish);
                 gameState.fish.push(newFish);
+                console.log(`[GAME] Created new fish from server: id=${sf.id}, type=${fishType}`);
+            } else {
+                console.warn(`[GAME] Unknown fish type from server: ${fishType}`);
             }
         }
     });
