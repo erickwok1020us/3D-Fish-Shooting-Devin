@@ -1406,6 +1406,13 @@
                 };
                 
                 multiplayer.onGameStarted = (data) => {
+                    // Guard: Don't call startGame() for single-player mode
+                    // Single-player already called startSinglePlayerGame() directly
+                    // Calling startGame() would incorrectly set multiplayerMode = true
+                    if (multiplayer.isSinglePlayer) {
+                        console.log('[LOBBY] Skipping startGame() for single-player mode');
+                        return;
+                    }
                     startGame();
                 };
                 
