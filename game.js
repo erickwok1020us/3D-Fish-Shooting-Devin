@@ -5843,6 +5843,46 @@ function fireBullet(targetX, targetY) {
     // Check cooldown - use shotsPerSecond to calculate cooldown
     if (gameState.cooldown > 0) return false;
     
+    // MULTIPLAYER MODE: Send shoot to server, don't do local balance/cost handling
+    // Server handles balance deduction and collision detection
+    if (multiplayerMode && multiplayerManager) {
+        // Calculate aim direction
+        let aimX = targetX;
+        let aimY = targetY;
+        if (gameState.viewMode === 'fps') {
+            aimX = window.innerWidth / 2;
+            aimY = window.innerHeight / 2;
+        }
+        const direction = getAimDirectionFromMouse(aimX, aimY);
+        
+        // Get cannon muzzle position
+        const muzzlePos = new THREE.Vector3();
+        cannonMuzzle.getWorldPosition(muzzlePos);
+        
+        // Calculate target point in 3D space (where bullet would hit at distance 1500)
+        const targetPoint3D = muzzlePos.clone().add(direction.clone().multiplyScalar(1500));
+        
+        // Convert to server 2D coordinates (divide by 10 for scale)
+        // Server uses x, z plane; client Y maps to nothing (server is 2D)
+        const serverTargetX = targetPoint3D.x / 10;
+        const serverTargetZ = targetPoint3D.z / 10;
+        
+        console.log(`[GAME] Multiplayer shoot: target3D=(${targetPoint3D.x.toFixed(1)}, ${targetPoint3D.z.toFixed(1)}) -> server=(${serverTargetX.toFixed(1)}, ${serverTargetZ.toFixed(1)})`);
+        
+        // Send to server
+        multiplayerManager.shoot(serverTargetX, serverTargetZ);
+        
+        // Set cooldown locally for responsiveness
+        gameState.cooldown = 1 / weapon.shotsPerSecond;
+        
+        // Play local effects immediately for responsiveness
+        playWeaponShot(weaponKey);
+        spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction.clone());
+        
+        return true;
+    }
+    
+    // SINGLE PLAYER MODE: Original logic
     // Check balance
     if (gameState.balance < weapon.cost) return false;
     
