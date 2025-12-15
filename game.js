@@ -5859,21 +5859,54 @@ function fireBullet(targetX, targetY) {
         const muzzlePos = new THREE.Vector3();
         cannonMuzzle.getWorldPosition(muzzlePos);
         
-        // PROJECT 3D direction to 2D (X-Z plane) and normalize
-        // This ensures the server uses the same aim direction regardless of cannon position mismatch
-        // Server will use its own cannon position as origin, but our direction vector
-        const dir2DLength = Math.sqrt(direction3D.x * direction3D.x + direction3D.z * direction3D.z);
-        let dirX = 0, dirZ = -1; // Default: shoot forward (negative Z in server coords)
-        if (dir2DLength > 0.001) {
-            dirX = direction3D.x / dir2DLength;
-            dirZ = direction3D.z / dir2DLength;
+        // RAY-PLANE INTERSECTION: Find where aim ray hits the fish plane (Y=0)
+        // This gives us a concrete 3D world point that we can convert to server coordinates
+        // Fish swim at Y=0 in 3D world, so we intersect with that plane
+        // Ray equation: P(t) = muzzlePos + direction3D * t
+        // Plane equation: Y = 0
+        // Solve: muzzlePos.y + direction3D.y * t = 0 => t = -muzzlePos.y / direction3D.y
+        
+        // Check if ray can intersect the fish plane (direction.y must be positive to aim upward toward fish)
+        if (direction3D.y <= 0.001) {
+            // Aiming downward or horizontal - can't hit fish plane
+            // Still play local effects but don't send to server
+            console.log(`[GAME] Multiplayer shoot: aiming away from fish plane (dir.y=${direction3D.y.toFixed(3)}), skipping server shot`);
+            gameState.cooldown = 1 / weapon.shotsPerSecond;
+            playWeaponShot(weaponKey);
+            spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction3D.clone());
+            return true;
         }
         
-        console.log(`[GAME] Multiplayer shoot: dir3D=(${direction3D.x.toFixed(3)}, ${direction3D.y.toFixed(3)}, ${direction3D.z.toFixed(3)}) -> dir2D=(${dirX.toFixed(3)}, ${dirZ.toFixed(3)})`);
+        // Calculate intersection parameter t
+        const t = -muzzlePos.y / direction3D.y;
         
-        // Send direction vector to server (not target coordinates)
-        // Server will calculate bullet trajectory from its cannon position using this direction
-        multiplayerManager.shoot(dirX, dirZ);
+        if (t <= 0) {
+            // Intersection is behind the muzzle - shouldn't happen if direction.y > 0 and muzzle.y < 0
+            console.log(`[GAME] Multiplayer shoot: intersection behind muzzle (t=${t.toFixed(3)}), skipping server shot`);
+            gameState.cooldown = 1 / weapon.shotsPerSecond;
+            playWeaponShot(weaponKey);
+            spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction3D.clone());
+            return true;
+        }
+        
+        // Calculate intersection point in 3D world coordinates
+        const intersectionX = muzzlePos.x + direction3D.x * t;
+        const intersectionZ = muzzlePos.z + direction3D.z * t;
+        
+        // Convert to server coordinates using the same mapping as fish rendering (divide by 10)
+        // Client: world = server * 10, so server = world / 10
+        const serverTargetX = intersectionX / 10;
+        const serverTargetZ = intersectionZ / 10;
+        
+        // Clamp to server MAP_BOUNDS to avoid shooting way off-map
+        const clampedX = Math.max(-90, Math.min(90, serverTargetX));
+        const clampedZ = Math.max(-60, Math.min(60, serverTargetZ));
+        
+        console.log(`[GAME] Multiplayer shoot: muzzle=(${muzzlePos.x.toFixed(1)},${muzzlePos.y.toFixed(1)},${muzzlePos.z.toFixed(1)}) dir=(${direction3D.x.toFixed(3)},${direction3D.y.toFixed(3)},${direction3D.z.toFixed(3)}) t=${t.toFixed(1)} intersection=(${intersectionX.toFixed(1)},${intersectionZ.toFixed(1)}) -> server=(${clampedX.toFixed(1)},${clampedZ.toFixed(1)})`);
+        
+        // Send target coordinates to server (not direction vector)
+        // Server will calculate bullet trajectory from its cannon position to this target
+        multiplayerManager.shoot(clampedX, clampedZ);
         
         // Set cooldown locally for responsiveness
         gameState.cooldown = 1 / weapon.shotsPerSecond;
