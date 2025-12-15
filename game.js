@@ -2734,13 +2734,18 @@ window.startMultiplayerGame = function(manager) {
         };
         
         // Handle fish killed events
+        // Server sends: fishId, typeName, topContributorId (normalized to killedBy), totalReward (normalized to reward), isBoss, position
         multiplayerManager.onFishKilled = function(data) {
+            console.log('[GAME] Fish killed event received:', data.fishId, data.typeName, 'killedBy:', data.killedBy, 'reward:', data.reward);
+            
             const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
             if (fish) {
+                console.log('[GAME] Found fish mesh to remove:', data.fishId);
+                
                 // Play death effects
                 spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
                 
-                // Show reward if we killed it
+                // Show reward if we killed it (or contributed to the kill)
                 if (data.killedBy === multiplayerManager.playerId) {
                     spawnCoinFlyToScore(fish.position.clone(), data.reward);
                     playSound('coin');
@@ -2751,7 +2756,10 @@ window.startMultiplayerGame = function(manager) {
                 const index = gameState.fish.indexOf(fish);
                 if (index > -1) {
                     gameState.fish.splice(index, 1);
+                    console.log('[GAME] Fish removed from gameState.fish, remaining:', gameState.fish.length);
                 }
+            } else {
+                console.log('[GAME] Fish mesh not found for fishId:', data.fishId, '- may have already been removed by gameState update');
             }
         };
         
