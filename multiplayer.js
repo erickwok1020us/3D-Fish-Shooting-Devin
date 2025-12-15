@@ -364,6 +364,17 @@ class MultiplayerManager {
      * Handle game state update from server
      */
     _handleGameState(data) {
+        // DEBUG: Log fish count received from server (every 60 updates to avoid spam)
+        if (!this._gameStateLogCounter) this._gameStateLogCounter = 0;
+        this._gameStateLogCounter++;
+        if (this._gameStateLogCounter % 60 === 1) {
+            const fishTypes = {};
+            for (const fish of data.fish) {
+                fishTypes[fish.type] = (fishTypes[fish.type] || 0) + 1;
+            }
+            console.log(`[MULTIPLAYER] gameState received: fish=${data.fish.length}, bullets=${data.bullets?.length || 0}, players=${data.players?.length || 0}, types=${JSON.stringify(fishTypes)}`);
+        }
+        
         // Store snapshot for interpolation
         this.fishSnapshots.push({
             timestamp: data.timestamp,
@@ -422,6 +433,9 @@ class MultiplayerManager {
      * Handle fish hit event
      */
     _handleFishHit(data) {
+        // DEBUG: Log every fishHit event received
+        console.log(`[MULTIPLAYER] fishHit received: fishId=${data.fishId}, damage=${data.damage}, newHealth=${data.newHealth}, maxHealth=${data.maxHealth}, hitBy=${data.hitByPlayerId}`);
+        
         const fish = this.serverFish.get(data.fishId);
         if (fish) {
             fish.hp = data.newHealth;
