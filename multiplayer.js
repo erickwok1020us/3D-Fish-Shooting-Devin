@@ -435,17 +435,30 @@ class MultiplayerManager {
     
     /**
      * Handle fish killed event
+     * Server sends: fishId, typeName, topContributorId, totalReward, rewardDistribution, isBoss, position
+     * We normalize field names for game.js compatibility
      */
     _handleFishKilled(data) {
         this.serverFish.delete(data.fishId);
         
-        console.log('[MULTIPLAYER] Fish killed:', data.typeName, 'by Player', data.killedByPlayerId, 'reward:', data.reward);
+        // Normalize field names from server to what game.js expects
+        const killedBy = data.topContributorId;
+        const reward = data.totalReward;
         
-        if (this.onFishKilled) this.onFishKilled(data);
+        console.log('[MULTIPLAYER] Fish killed:', data.fishId, data.typeName, 'by Player', killedBy, 'reward:', reward);
+        
+        // Create enriched data with normalized field names
+        const enrichedData = {
+            ...data,
+            killedBy: killedBy,
+            reward: reward
+        };
+        
+        if (this.onFishKilled) this.onFishKilled(enrichedData);
         
         // Trigger death VFX in game
         if (this.game && this.game.triggerFishDeath) {
-            this.game.triggerFishDeath(data.fishId, data.position, data.reward, data.isBoss);
+            this.game.triggerFishDeath(data.fishId, data.position, reward, data.isBoss);
         }
     }
     
