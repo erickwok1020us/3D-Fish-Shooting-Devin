@@ -353,6 +353,7 @@ const gameState = {
     activeBoss: null,  // Currently active boss fish
     bossCountdown: 0,  // Countdown timer for boss event
     bossActive: false,  // Whether a boss event is currently active
+    isInGameScene: false,  // Whether player is in active game (not lobby/menu)
     // Combo System (Issue #4 - Weapon System Improvements)
     comboCount: 0,           // Current consecutive kills
     comboTimer: 0,           // Time remaining to continue combo
@@ -2675,6 +2676,17 @@ window.startSinglePlayerGame = function() {
         gameContainer.style.display = 'block';
     }
     
+    // Mark that we're now in the game scene (not lobby)
+    gameState.isInGameScene = true;
+    
+    // Reset boss event timers for fresh game start
+    gameState.bossSpawnTimer = 60;
+    gameState.bossActive = false;
+    gameState.bossCountdown = 0;
+    gameState.activeBoss = null;
+    hideBossUI();
+    hideBossWaitingUI();
+    
     // Initialize game scene if not already done
     initGameScene();
 };
@@ -2691,6 +2703,17 @@ window.startMultiplayerGame = function(multiplayer) {
     
     // Store multiplayer reference
     window.multiplayer = multiplayer;
+    
+    // Mark that we're now in the game scene (not lobby)
+    gameState.isInGameScene = true;
+    
+    // Reset boss event timers for fresh game start
+    gameState.bossSpawnTimer = 60;
+    gameState.bossActive = false;
+    gameState.bossCountdown = 0;
+    gameState.activeBoss = null;
+    hideBossUI();
+    hideBossWaitingUI();
     
     // Initialize game scene if not already done
     initGameScene();
@@ -7359,6 +7382,8 @@ function createBossWaitingUI() {
 
 // Issue #15: Update waiting timer UI (shows 60s → 16s, hides when boss mode starts)
 function updateBossWaitingTimerUI(secondsLeft) {
+    // Guard: Don't show boss waiting UI when not in game scene
+    if (!gameState.isInGameScene) return;
     if (!bossWaitingUI) createBossWaitingUI();
     
     const s = Math.ceil(secondsLeft);
@@ -7417,6 +7442,8 @@ function showBossAlert(bossType) {
 }
 
 function updateBossCountdownUI(timeLeft) {
+    // Guard: Don't show boss UI when not in game scene
+    if (!gameState.isInGameScene) return;
     if (!bossUIContainer) return;
     const countdownEl = document.getElementById('boss-countdown');
     if (countdownEl) {
@@ -7664,6 +7691,20 @@ function spawnBossFish() {
 }
 
 function updateBossEvent(deltaTime) {
+    // Guard: Only run boss system when in active game scene (not lobby/menu)
+    if (!gameState.isInGameScene) {
+        // Ensure boss system is fully dormant on lobby
+        if (gameState.bossActive || gameState.bossCountdown > 0) {
+            gameState.bossActive = false;
+            gameState.activeBoss = null;
+            gameState.bossCountdown = 0;
+            gameState.bossSpawnTimer = 60;
+            hideBossUI();
+            hideBossWaitingUI();
+        }
+        return;
+    }
+    
     // Update boss spawn timer
     if (!gameState.bossActive) {
         gameState.bossSpawnTimer -= deltaTime;
