@@ -8316,6 +8316,9 @@ let multiplayerManager = null;
 function updateFishFromServer(serverFish) {
     if (!serverFish || !Array.isArray(serverFish)) return;
     
+    // DEBUG: Log fish counts for debugging multiplayer fish spawn issue
+    console.log(`[GAME] updateFishFromServer: serverFish.len=${serverFish.length}, meshes.before=${gameState.fish.length}`);
+    
     // Create a map of existing fish by server ID
     const existingFish = new Map();
     gameState.fish.forEach(fish => {
@@ -8325,6 +8328,7 @@ function updateFishFromServer(serverFish) {
     });
     
     // Update or create fish
+    let created = 0, updated = 0, unknown = 0;
     serverFish.forEach(sf => {
         let fish = existingFish.get(sf.id);
         
@@ -8352,6 +8356,7 @@ function updateFishFromServer(serverFish) {
             }
             
             existingFish.delete(sf.id);
+            updated++;
         } else {
             // Create new fish from server data
             // Server sends 'type' field, not 'species' - use sf.type for lookup
@@ -8366,21 +8371,29 @@ function updateFishFromServer(serverFish) {
                 newFish.userData.isBoss = sf.isBoss;
                 scene.add(newFish);
                 gameState.fish.push(newFish);
-                console.log(`[GAME] Created new fish from server: id=${sf.id}, type=${fishType}`);
+                created++;
             } else {
                 console.warn(`[GAME] Unknown fish type from server: ${fishType}`);
+                unknown++;
             }
         }
     });
     
     // Remove fish that no longer exist on server
+    let removed = 0;
     existingFish.forEach((fish, id) => {
         scene.remove(fish);
         const index = gameState.fish.indexOf(fish);
         if (index > -1) {
             gameState.fish.splice(index, 1);
         }
+        removed++;
     });
+    
+    // DEBUG: Log summary of fish update
+    if (created > 0 || removed > 0 || unknown > 0) {
+        console.log(`[GAME] Fish update: created=${created}, updated=${updated}, removed=${removed}, unknown=${unknown}, meshes.after=${gameState.fish.length}`);
+    }
 }
 
 // Track server bullets for multiplayer sync
