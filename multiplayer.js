@@ -364,15 +364,28 @@ class MultiplayerManager {
      * Handle game state update from server
      */
     _handleGameState(data) {
-        // Guard against missing data
-        if (!data || !data.fish || !data.players) {
-            console.warn('[MULTIPLAYER] Invalid gameState data received:', data);
+        // DEBUG: Log raw payload keys to verify data structure
+        if (!this._gameStateLogCounter) this._gameStateLogCounter = 0;
+        this._gameStateLogCounter++;
+        
+        // Log every 30 updates (0.5 seconds) for better visibility
+        if (this._gameStateLogCounter % 30 === 1) {
+            console.log(`[MULTIPLAYER] gameState keys=${data ? Object.keys(data).join(',') : 'null'}, fish.len=${data?.fish?.length}, players.len=${data?.players?.length}`);
+        }
+        
+        // Guard against missing fish data (required for rendering)
+        if (!data || !Array.isArray(data.fish)) {
+            console.warn('[MULTIPLAYER] Invalid gameState (no fish array):', data);
             return;
         }
         
+        // Warn but don't block if players is missing
+        if (!Array.isArray(data.players)) {
+            console.warn('[MULTIPLAYER] gameState players not array:', data.players);
+            // Continue processing fish even if players is malformed
+        }
+        
         // DEBUG: Log fish count received from server (every 60 updates to avoid spam)
-        if (!this._gameStateLogCounter) this._gameStateLogCounter = 0;
-        this._gameStateLogCounter++;
         if (this._gameStateLogCounter % 60 === 1) {
             const fishTypes = {};
             for (const fish of data.fish) {
