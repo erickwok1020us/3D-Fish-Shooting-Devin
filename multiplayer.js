@@ -364,6 +364,12 @@ class MultiplayerManager {
      * Handle game state update from server
      */
     _handleGameState(data) {
+        // Guard against missing data
+        if (!data || !data.fish || !data.players) {
+            console.warn('[MULTIPLAYER] Invalid gameState data received:', data);
+            return;
+        }
+        
         // DEBUG: Log fish count received from server (every 60 updates to avoid spam)
         if (!this._gameStateLogCounter) this._gameStateLogCounter = 0;
         this._gameStateLogCounter++;
