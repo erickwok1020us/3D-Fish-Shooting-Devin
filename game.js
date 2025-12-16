@@ -314,6 +314,7 @@ const gameState = {
     balance: CONFIG.game.initialBalance,
     score: 0,
     currentWeapon: '1x',
+    fish: [],  // Array of fish meshes (used in multiplayer mode)
     lastWeaponKey: '1x',
     cooldown: 0,
     isLoading: true,
