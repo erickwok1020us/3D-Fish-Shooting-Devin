@@ -2790,6 +2790,124 @@ function updateLoadingProgress(percent, text) {
     document.getElementById('loading-text').textContent = text;
 }
 
+// ==================== 3D MAP LOADING ====================
+const MAP_URL = 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/MAP.glb';
+let loadedMapScene = null;  // Cache loaded map to avoid reloading
+
+function loadMap3D(onComplete) {
+    // Check if map is already loaded
+    if (loadedMapScene) {
+        console.log('[MAP] Using cached map');
+        onComplete(loadedMapScene.clone());
+        return;
+    }
+    
+    const overlay = document.getElementById('map-loading-overlay');
+    const bar = document.getElementById('map-loading-bar');
+    const percent = document.getElementById('map-loading-percent');
+    const sizeInfo = document.getElementById('map-loading-size');
+    
+    // Show loading overlay
+    overlay.style.display = 'flex';
+    
+    const loader = new THREE.GLTFLoader();
+    
+    loader.load(
+        MAP_URL,
+        // onLoad callback
+        (gltf) => {
+            console.log('[MAP] Map loaded successfully');
+            loadedMapScene = gltf.scene;
+            
+            // Setup map materials and shadows
+            setupMapMaterials(gltf.scene);
+            
+            // Hide loading overlay
+            overlay.style.display = 'none';
+            
+            onComplete(gltf.scene);
+        },
+        // onProgress callback
+        (xhr) => {
+            if (xhr.total) {
+                const percentValue = (xhr.loaded / xhr.total) * 100;
+                bar.style.width = percentValue.toFixed(1) + '%';
+                percent.textContent = percentValue.toFixed(0) + '%';
+                
+                // Update size info
+                const loadedMB = (xhr.loaded / 1024 / 1024).toFixed(1);
+                const totalMB = (xhr.total / 1024 / 1024).toFixed(1);
+                sizeInfo.textContent = loadedMB + ' / ' + totalMB + ' MB';
+            } else {
+                // Indeterminate progress
+                percent.textContent = 'Loading...';
+            }
+        },
+        // onError callback
+        (error) => {
+            console.error('[MAP] Failed to load map:', error);
+            overlay.style.display = 'none';
+            // Fall back to procedural aquarium
+            createProceduralAquarium();
+        }
+    );
+}
+
+function setupMapMaterials(mapScene) {
+    // Preserve original materials, only adjust rendering settings
+    mapScene.traverse((obj) => {
+        if (obj.isMesh) {
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+            
+            // Ensure textures use correct color space
+            if (obj.material) {
+                const mat = obj.material;
+                if (mat.map && mat.map.isTexture) {
+                    mat.map.colorSpace = THREE.SRGBColorSpace || THREE.sRGBEncoding;
+                }
+            }
+        }
+    });
+}
+
+function scaleAndPositionMap(mapScene) {
+    const { width, height, depth, floorY } = CONFIG.aquarium;
+    
+    // Calculate map bounding box
+    const box = new THREE.Box3().setFromObject(mapScene);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    
+    console.log('[MAP] Original size:', size);
+    console.log('[MAP] Original center:', center);
+    
+    // Center the map at origin first
+    mapScene.position.sub(center);
+    
+    // Calculate uniform scale to fit aquarium while preserving aspect ratio
+    const scaleX = width / size.x;
+    const scaleZ = depth / size.z;
+    const uniformScale = Math.min(scaleX, scaleZ);
+    
+    mapScene.scale.setScalar(uniformScale);
+    
+    console.log('[MAP] Applied scale:', uniformScale);
+    
+    // Recalculate bounds after scaling
+    const scaledBox = new THREE.Box3().setFromObject(mapScene);
+    
+    // Position so bottom of map aligns with aquarium floor
+    const deltaY = floorY - scaledBox.min.y;
+    mapScene.position.y += deltaY;
+    
+    console.log('[MAP] Final position:', mapScene.position);
+    
+    return mapScene;
+}
+
 // ==================== CLEAN AQUARIUM SCENE ====================
 function createTunnelScene() {
     // Renamed but kept for compatibility - now creates aquarium
@@ -2800,6 +2918,17 @@ function createAquariumScene() {
     tunnelGroup = new THREE.Group();
     scene.add(tunnelGroup);
     
+    // Load 3D map from R2
+    loadMap3D((mapScene) => {
+        // Scale and position the map to fit aquarium bounds
+        scaleAndPositionMap(mapScene);
+        tunnelGroup.add(mapScene);
+        console.log('[MAP] 3D map added to scene');
+    });
+}
+
+// Fallback procedural aquarium (used if map fails to load)
+function createProceduralAquarium() {
     const { width, height, depth, floorY } = CONFIG.aquarium;
     
     // Room background (outside the tank)
