@@ -364,6 +364,39 @@ const gameState = {
 
 // ==================== PERFORMANCE OPTIMIZATION CONFIG ====================
 const PERFORMANCE_CONFIG = {
+    // Graphics quality presets (low/medium/high)
+    graphicsQuality: {
+        // Pixel ratio limits for each quality level
+        pixelRatio: {
+            low: 0.75,
+            medium: 1.0,
+            high: 1.5
+        },
+        // Texture anisotropy for each quality level
+        textureAnisotropy: {
+            low: 1,
+            medium: 2,
+            high: 4
+        },
+        // Whether to enable shadows for each quality level
+        shadowsEnabled: {
+            low: false,
+            medium: true,
+            high: true
+        },
+        // Shadow map type for each quality level
+        shadowMapType: {
+            low: 'basic',      // No shadows
+            medium: 'pcf',     // THREE.PCFShadowMap
+            high: 'pcfsoft'    // THREE.PCFSoftShadowMap
+        },
+        // Number of lights for each quality level
+        lightCount: {
+            low: 2,      // Ambient + 1 main light
+            medium: 3,   // Ambient + main + 1 side
+            high: 5      // All lights
+        }
+    },
     // LOD (Level of Detail) settings
     lod: {
         highDetailDistance: 300,    // Full detail within 300 units
@@ -382,6 +415,7 @@ const PERFORMANCE_CONFIG = {
     },
     // Shadow map quality settings
     shadowMap: {
+        off: 0,
         low: 512,
         medium: 1024,
         high: 2048
@@ -402,7 +436,8 @@ const performanceState = {
     currentShadowQuality: 'medium',
     visibleFishCount: 0,
     culledFishCount: 0,
-    activeParticleCount: 0
+    activeParticleCount: 0,
+    graphicsQuality: 'medium'  // 'low', 'medium', or 'high'
 };
 
 // ==================== COMBO BONUS SYSTEM ====================
@@ -645,6 +680,216 @@ function setShadowMapQuality(quality) {
     
     performanceState.currentShadowQuality = quality;
     console.log(`Shadow quality set to ${quality} (${size}x${size})`);
+}
+
+// ==================== GRAPHICS QUALITY SYSTEM ====================
+// Set overall graphics quality (low/medium/high)
+function setGraphicsQuality(quality) {
+    if (!['low', 'medium', 'high'].includes(quality)) {
+        console.warn('[PERF] Invalid quality level:', quality);
+        return;
+    }
+    
+    performanceState.graphicsQuality = quality;
+    console.log(`[PERF] Setting graphics quality to: ${quality}`);
+    
+    // Apply all quality-dependent settings
+    updateRendererPixelRatio();
+    updateShadowSettings();
+    
+    // Save preference to localStorage
+    try {
+        localStorage.setItem('graphicsQuality', quality);
+    } catch (e) {
+        console.warn('[PERF] Could not save graphics quality preference');
+    }
+}
+
+// Load saved graphics quality preference
+function loadGraphicsQualityPreference() {
+    try {
+        const saved = localStorage.getItem('graphicsQuality');
+        if (saved && ['low', 'medium', 'high'].includes(saved)) {
+            performanceState.graphicsQuality = saved;
+            console.log(`[PERF] Loaded saved graphics quality: ${saved}`);
+        }
+    } catch (e) {
+        console.warn('[PERF] Could not load graphics quality preference');
+    }
+}
+
+// Update renderer pixel ratio based on quality
+function updateRendererPixelRatio() {
+    if (!renderer) return;
+    
+    const quality = performanceState.graphicsQuality;
+    const baseRatio = window.devicePixelRatio || 1;
+    const maxRatio = PERFORMANCE_CONFIG.graphicsQuality.pixelRatio[quality] || 1.0;
+    
+    const ratio = Math.min(baseRatio, maxRatio);
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    console.log(`[PERF] Pixel ratio set to ${ratio.toFixed(2)} (quality: ${quality})`);
+}
+
+// Update shadow settings based on quality
+function updateShadowSettings() {
+    if (!renderer) return;
+    
+    const quality = performanceState.graphicsQuality;
+    const shadowsEnabled = PERFORMANCE_CONFIG.graphicsQuality.shadowsEnabled[quality];
+    const shadowMapType = PERFORMANCE_CONFIG.graphicsQuality.shadowMapType[quality];
+    
+    // Enable/disable shadows globally
+    renderer.shadowMap.enabled = shadowsEnabled;
+    
+    // Set shadow map type
+    if (shadowsEnabled) {
+        if (shadowMapType === 'pcfsoft') {
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        } else {
+            renderer.shadowMap.type = THREE.PCFShadowMap;
+        }
+    }
+    
+    // Update shadow map size
+    const shadowSize = shadowsEnabled ? PERFORMANCE_CONFIG.shadowMap[quality] : 0;
+    scene.traverse(obj => {
+        if (obj.isLight && obj.shadow) {
+            obj.castShadow = shadowsEnabled;
+            if (shadowsEnabled) {
+                obj.shadow.mapSize.width = shadowSize;
+                obj.shadow.mapSize.height = shadowSize;
+            }
+            if (obj.shadow.map) {
+                obj.shadow.map.dispose();
+                obj.shadow.map = null;
+            }
+        }
+    });
+    
+    console.log(`[PERF] Shadows ${shadowsEnabled ? 'enabled' : 'disabled'} (quality: ${quality})`);
+}
+
+// Optimize texture sampling for map materials
+function optimizeMapTextures(mapScene) {
+    const quality = performanceState.graphicsQuality;
+    const maxAnisotropy = PERFORMANCE_CONFIG.graphicsQuality.textureAnisotropy[quality] || 2;
+    
+    let textureCount = 0;
+    mapScene.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+        
+        materials.forEach((mat) => {
+            ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap'].forEach((key) => {
+                const tex = mat[key];
+                if (tex && tex.isTexture) {
+                    // Reduce anisotropy for lower quality
+                    tex.anisotropy = Math.min(tex.anisotropy || maxAnisotropy, maxAnisotropy);
+                    
+                    // Use cheaper filtering for low quality
+                    if (quality === 'low') {
+                        tex.magFilter = THREE.LinearFilter;
+                        tex.minFilter = THREE.LinearFilter;
+                    } else {
+                        tex.magFilter = THREE.LinearFilter;
+                        tex.minFilter = THREE.LinearMipMapLinearFilter;
+                    }
+                    
+                    tex.needsUpdate = true;
+                    textureCount++;
+                }
+            });
+        });
+    });
+    
+    console.log(`[PERF] Optimized ${textureCount} textures (anisotropy: ${maxAnisotropy})`);
+}
+
+// Downscale a texture using canvas (for low quality mode)
+function downscaleTexture(texture, scale) {
+    if (!texture || !texture.image) return texture;
+    
+    const img = texture.image;
+    const width = Math.max(1, Math.floor(img.width * scale));
+    const height = Math.max(1, Math.floor(img.height * scale));
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+    
+    const newTex = new THREE.CanvasTexture(canvas);
+    newTex.wrapS = texture.wrapS;
+    newTex.wrapT = texture.wrapT;
+    newTex.repeat.copy(texture.repeat);
+    newTex.offset.copy(texture.offset);
+    newTex.rotation = texture.rotation;
+    newTex.flipY = texture.flipY;
+    newTex.colorSpace = texture.colorSpace || THREE.SRGBColorSpace;
+    newTex.anisotropy = 1;
+    
+    texture.dispose();
+    return newTex;
+}
+
+// Downscale all map textures (for low quality mode)
+function downscaleMapTextures(mapScene, scale) {
+    if (scale >= 1.0) return;
+    
+    let downscaledCount = 0;
+    mapScene.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+        
+        materials.forEach((mat) => {
+            ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap'].forEach((key) => {
+                if (mat[key] && mat[key].isTexture && mat[key].image) {
+                    mat[key] = downscaleTexture(mat[key], scale);
+                    downscaledCount++;
+                }
+            });
+        });
+    });
+    
+    console.log(`[PERF] Downscaled ${downscaledCount} textures by ${(scale * 100).toFixed(0)}%`);
+}
+
+// Setup map materials with quality-dependent shadow settings
+function setupMapMaterialsWithQuality(mapScene) {
+    const quality = performanceState.graphicsQuality;
+    
+    mapScene.traverse((obj) => {
+        if (!obj.isMesh) return;
+        
+        // Quality-dependent shadow settings
+        if (quality === 'high') {
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+        } else if (quality === 'medium') {
+            obj.castShadow = false;    // Only main objects cast shadows
+            obj.receiveShadow = true;  // Map still receives shadows
+        } else { // low
+            obj.castShadow = false;
+            obj.receiveShadow = false; // No shadows at all
+        }
+        
+        // Ensure textures use correct color space
+        if (obj.material) {
+            const mat = obj.material;
+            if (mat.map && mat.map.isTexture) {
+                mat.map.colorSpace = THREE.SRGBColorSpace || THREE.sRGBEncoding;
+            }
+        }
+    });
+    
+    console.log(`[PERF] Map materials configured for ${quality} quality`);
 }
 
 // ==================== ENHANCED WEAPON VFX ====================
@@ -2579,6 +2824,11 @@ function initGameScene() {
     
     console.log('Initializing game scene...');
     
+    // Load saved graphics quality preference BEFORE creating renderer
+    loadGraphicsQualityPreference();
+    const quality = performanceState.graphicsQuality;
+    console.log(`[INIT] Using graphics quality: ${quality}`);
+    
     // Show loading screen
     const loadingScreen = document.getElementById('loading-screen');
     const loadingText = document.getElementById('loading-text');
@@ -2609,12 +2859,24 @@ function initGameScene() {
     camera.position.set(0, initialHeight, -orbitRadius);
     camera.lookAt(0, targetY, 0);  // Look at tank center
     
-    // Create renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Create renderer with quality-based settings
+    const antialias = quality !== 'low';  // Disable antialiasing for low quality
+    renderer = new THREE.WebGLRenderer({ antialias: antialias });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    
+    // Apply quality-based pixel ratio
+    const baseRatio = window.devicePixelRatio || 1;
+    const maxRatio = PERFORMANCE_CONFIG.graphicsQuality.pixelRatio[quality] || 1.0;
+    renderer.setPixelRatio(Math.min(baseRatio, maxRatio));
+    
+    // Apply quality-based shadow settings
+    const shadowsEnabled = PERFORMANCE_CONFIG.graphicsQuality.shadowsEnabled[quality];
+    renderer.shadowMap.enabled = shadowsEnabled;
+    if (shadowsEnabled) {
+        const shadowMapType = PERFORMANCE_CONFIG.graphicsQuality.shadowMapType[quality];
+        renderer.shadowMap.type = shadowMapType === 'pcfsoft' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    }
+    
     document.getElementById('game-container').appendChild(renderer.domElement);
     
     // Raycaster for shooting
@@ -2817,15 +3079,30 @@ function loadMap3D(onComplete) {
         // onLoad callback
         (gltf) => {
             console.log('[MAP] Map loaded successfully');
-            loadedMapScene = gltf.scene;
+            const mapScene = gltf.scene;
             
-            // Setup map materials and shadows
-            setupMapMaterials(gltf.scene);
+            // Apply quality-based optimizations
+            const quality = performanceState.graphicsQuality;
+            console.log(`[MAP] Applying ${quality} quality optimizations`);
+            
+            // 1. Setup materials with quality-dependent shadow settings
+            setupMapMaterialsWithQuality(mapScene);
+            
+            // 2. Optimize texture sampling
+            optimizeMapTextures(mapScene);
+            
+            // 3. Downscale textures for low quality (reduces GPU memory)
+            if (quality === 'low') {
+                downscaleMapTextures(mapScene, 0.5);  // 50% texture size
+            }
+            
+            // Cache the optimized map
+            loadedMapScene = mapScene;
             
             // Hide loading overlay
             overlay.style.display = 'none';
             
-            onComplete(gltf.scene);
+            onComplete(mapScene);
         },
         // onProgress callback
         (xhr) => {
@@ -3058,41 +3335,58 @@ function createSeaweed() {
 // ==================== LIGHTING ====================
 function createLights() {
     const { width, height, depth, floorY } = CONFIG.aquarium;
+    const quality = performanceState.graphicsQuality;
+    const shadowsEnabled = PERFORMANCE_CONFIG.graphicsQuality.shadowsEnabled[quality];
     
-    // Reduced ambient light - pure black background needs less ambient
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    console.log(`[LIGHTS] Creating lights for ${quality} quality`);
+    
+    // Ambient light - slightly brighter for low quality to compensate for fewer lights
+    const ambientIntensity = quality === 'low' ? 0.5 : 0.3;
+    const ambientLight = new THREE.AmbientLight(0xffffff, ambientIntensity);
     scene.add(ambientLight);
     
-    // Remove hemisphere light - it creates grey background
-    // Only use focused lights on the aquarium
-    
-    // Aquarium tank light (from above the tank) - main light source
+    // Main tank light (from above) - always present
     const tankLight = new THREE.SpotLight(0xaaddff, 2.0, 1500, Math.PI / 3, 0.3, 1);
     tankLight.position.set(0, floorY + height + 400, 0);
     tankLight.target.position.set(0, floorY + height / 2, 0);
-    tankLight.castShadow = true;
+    tankLight.castShadow = shadowsEnabled;
+    if (shadowsEnabled) {
+        // Optimize shadow camera bounds for better shadow quality
+        tankLight.shadow.camera.near = 100;
+        tankLight.shadow.camera.far = 1200;
+        tankLight.shadow.mapSize.width = PERFORMANCE_CONFIG.shadowMap[quality] || 1024;
+        tankLight.shadow.mapSize.height = PERFORMANCE_CONFIG.shadowMap[quality] || 1024;
+    }
     scene.add(tankLight);
     scene.add(tankLight.target);
     
-    // Side lights for better fish visibility - focused on tank
-    const leftLight = new THREE.SpotLight(0xffffff, 0.8, 1200, Math.PI / 4, 0.5, 1);
-    leftLight.position.set(-width * 0.8, floorY + height / 2, 0);
-    leftLight.target.position.set(0, floorY + height / 2, 0);
-    scene.add(leftLight);
-    scene.add(leftLight.target);
+    // Additional lights only for medium and high quality
+    if (quality !== 'low') {
+        // Side lights for better fish visibility
+        const leftLight = new THREE.SpotLight(0xffffff, 0.8, 1200, Math.PI / 4, 0.5, 1);
+        leftLight.position.set(-width * 0.8, floorY + height / 2, 0);
+        leftLight.target.position.set(0, floorY + height / 2, 0);
+        scene.add(leftLight);
+        scene.add(leftLight.target);
+        
+        // Right light only for high quality
+        if (quality === 'high') {
+            const rightLight = new THREE.SpotLight(0xffffff, 0.8, 1200, Math.PI / 4, 0.5, 1);
+            rightLight.position.set(width * 0.8, floorY + height / 2, 0);
+            rightLight.target.position.set(0, floorY + height / 2, 0);
+            scene.add(rightLight);
+            scene.add(rightLight.target);
+            
+            // Front light only for high quality
+            const frontLight = new THREE.SpotLight(0xffffff, 0.6, 1500, Math.PI / 4, 0.5, 1);
+            frontLight.position.set(0, 100, -900);
+            frontLight.target.position.set(0, floorY + height / 2, 0);
+            scene.add(frontLight);
+            scene.add(frontLight.target);
+        }
+    }
     
-    const rightLight = new THREE.SpotLight(0xffffff, 0.8, 1200, Math.PI / 4, 0.5, 1);
-    rightLight.position.set(width * 0.8, floorY + height / 2, 0);
-    rightLight.target.position.set(0, floorY + height / 2, 0);
-    scene.add(rightLight);
-    scene.add(rightLight.target);
-    
-    // Front light for camera view - focused on tank
-    const frontLight = new THREE.SpotLight(0xffffff, 0.6, 1500, Math.PI / 4, 0.5, 1);
-    frontLight.position.set(0, 100, -900);
-    frontLight.target.position.set(0, floorY + height / 2, 0);
-    scene.add(frontLight);
-    scene.add(frontLight.target);
+    console.log(`[LIGHTS] Created ${quality === 'low' ? 2 : (quality === 'medium' ? 3 : 5)} lights`);
 }
 
 // ==================== CANNON ====================
@@ -8144,57 +8438,46 @@ function saveSettings() {
 function applyGraphicsQuality(quality) {
     gameSettings.graphicsQuality = quality;
     
+    // Update the performance state for 3D map optimizations
+    setGraphicsQuality(quality);
+    
     // Base particle count for 100% (high quality)
     const BASE_PARTICLE_COUNT = 200;
     
     switch (quality) {
         case 'low':
-            // LOW: Best performance - No shadows, 30% particles
-            if (renderer) {
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
-            }
+            // LOW: Best performance - No shadows, 30% particles, reduced resolution
             CONFIG.particles = { 
                 maxCount: Math.floor(BASE_PARTICLE_COUNT * 0.3), // 30% = 60 particles
                 enabled: true,
                 qualityMultiplier: 0.3
             };
-            // Disable shadows for low quality
-            applyShadowQuality('off');
             break;
             
         case 'medium':
-            // MEDIUM: Balanced - No shadows, 60% particles
-            if (renderer) {
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-            }
+            // MEDIUM: Balanced - Shadows on, 60% particles
             CONFIG.particles = { 
                 maxCount: Math.floor(BASE_PARTICLE_COUNT * 0.6), // 60% = 120 particles
                 enabled: true,
                 qualityMultiplier: 0.6
             };
-            // Disable shadows for medium quality
-            applyShadowQuality('off');
             break;
             
         case 'high':
             // HIGH: Best visuals - Full shadows, 100% particles
-            if (renderer) {
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            }
             CONFIG.particles = { 
                 maxCount: BASE_PARTICLE_COUNT, // 100% = 200 particles
                 enabled: true,
                 qualityMultiplier: 1.0
             };
-            // Enable high quality shadows
-            applyShadowQuality('high');
             break;
     }
     
     saveSettings();
     
     // Log quality change for debugging
-    console.log(`Graphics Quality set to: ${quality} (Particles: ${CONFIG.particles.maxCount}, Shadows: ${quality === 'high' ? 'ON' : 'OFF'})`);
+    const shadowsEnabled = PERFORMANCE_CONFIG.graphicsQuality.shadowsEnabled[quality];
+    console.log(`Graphics Quality set to: ${quality} (Particles: ${CONFIG.particles.maxCount}, Shadows: ${shadowsEnabled ? 'ON' : 'OFF'})`);
 }
 
 // Apply shadow quality settings
