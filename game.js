@@ -6969,8 +6969,10 @@ function setupEventListeners() {
             const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 30.0 * 1.2;
             
             // Calculate new yaw (horizontal rotation)
-            // FIX: Changed sign so mouse left = view left, mouse right = view right (standard FPS controls)
-            let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) + deltaX * rotationSensitivity;
+            // FIX: Negate deltaX so mouse right = view right (standard FPS controls)
+            // In Three.js, positive rotation.y = counter-clockwise = turn left
+            // So we need: mouse right (positive deltaX) -> decrease yaw -> turn right
+            let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) - deltaX * rotationSensitivity;
             
             // Clamp yaw using centralized constant FPS_YAW_MAX (±50°)
             newYaw = Math.max(-FPS_YAW_MAX, Math.min(FPS_YAW_MAX, newYaw));
@@ -7093,8 +7095,9 @@ function setupEventListeners() {
                 : CONFIG.camera.rotationSensitivityThirdPerson;
             
             // Horizontal drag = yaw rotation (UNLIMITED 360°)
+            // FIX: Negate dragDeltaX so drag right = view right (standard FPS controls)
             const dragDeltaX = e.clientX - gameState.rightDragStartX;
-            let newYaw = gameState.rightDragStartYaw + dragDeltaX * rotationSensitivity;
+            let newYaw = gameState.rightDragStartYaw - dragDeltaX * rotationSensitivity;
             
             // Normalize yaw to [-PI, PI] to prevent unbounded growth
             while (newYaw > Math.PI) newYaw -= 2 * Math.PI;
@@ -7233,21 +7236,7 @@ function setupEventListeners() {
         
         if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') {
             // Rotate camera left
-            if (gameState.viewMode === 'fps') {
-                if (cannonGroup) {
-                    let newYaw = cannonGroup.rotation.y - rotationSpeed;
-                    cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
-                }
-                updateFPSCamera();
-            } else {
-                let newYaw = gameState.cameraYaw - rotationSpeed;
-                if (newYaw < -Math.PI) newYaw += 2 * Math.PI;
-                gameState.targetCameraYaw = newYaw;
-                gameState.cameraYaw = newYaw;
-                updateCameraRotation();
-            }
-        } else if (e.key === 'd' || e.key === 'D' || e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') {
-            // Rotate camera right
+            // FIX: In Three.js, increase yaw = turn left (counter-clockwise from above)
             if (gameState.viewMode === 'fps') {
                 if (cannonGroup) {
                     let newYaw = cannonGroup.rotation.y + rotationSpeed;
@@ -7261,7 +7250,23 @@ function setupEventListeners() {
                 gameState.cameraYaw = newYaw;
                 updateCameraRotation();
             }
-        } else if (e.key === 'v' || e.key === 'V') {
+        } else if (e.key === 'd' || e.key === 'D' || e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') {
+            // Rotate camera right
+            // FIX: In Three.js, decrease yaw = turn right (clockwise from above)
+            if (gameState.viewMode === 'fps') {
+                if (cannonGroup) {
+                    let newYaw = cannonGroup.rotation.y - rotationSpeed;
+                    cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
+                }
+                updateFPSCamera();
+            } else {
+                let newYaw = gameState.cameraYaw - rotationSpeed;
+                if (newYaw < -Math.PI) newYaw += 2 * Math.PI;
+                gameState.targetCameraYaw = newYaw;
+                gameState.cameraYaw = newYaw;
+                updateCameraRotation();
+            }
+        }else if (e.key === 'v' || e.key === 'V') {
             // V key also toggles view mode (legacy support)
             toggleViewMode();
             highlightButton('#view-mode-btn');
