@@ -48,198 +48,215 @@ const CONFIG = {
         marginZ: 300
     },
     
-    // Issue #11: 20 Fish Species System with diverse behaviors and forms
+    // ==================== 6-TIER FISH VALUE SYSTEM ====================
+    // Tier 1: Small Fish - 2-3 points (40% spawn rate)
+    // Tier 2: Normal Fish - 5-8 points (30% spawn rate)
+    // Tier 3: Medium Fish - 10-15 points (15% spawn rate)
+    // Tier 4: Large Fish - 20-30 points (10% spawn rate)
+    // Tier 5: Rare Fish - 40-60 points (4% spawn rate)
+    // Tier 6: Boss Fish - 100-200 points (1% spawn rate, special event)
+    
+    // Spawn rate configuration for each tier
+    fishSpawnRates: {
+        small: 0.40,    // 40% - Tier 1
+        normal: 0.30,   // 30% - Tier 2
+        medium: 0.15,   // 15% - Tier 3
+        large: 0.10,    // 10% - Tier 4
+        rare: 0.04,     // 4%  - Tier 5
+        boss: 0.01      // 1%  - Tier 6 (special event only)
+    },
+    
     fishTiers: {
-        // ==================== LARGE SOLITARY PREDATORS (4 species) ====================
-        // 1. Blue Whale - Largest, slow gentle filter feeder, solitary/pairs
-        blueWhale: { 
-            hp: 800, speedMin: 20, speedMax: 35, reward: 500, size: 140, 
-            color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, 
-            pattern: 'cruise', schoolSize: [1, 2], form: 'whale',
-            category: 'largePredator'
-        },
-        // 2. Great White Shark - Torpedo-shaped apex predator, solitary
-        greatWhiteShark: { 
-            hp: 600, speedMin: 60, speedMax: 120, reward: 400, size: 100, 
-            color: 0x667788, secondaryColor: 0xcccccc, count: 2, 
-            pattern: 'burstAttack', schoolSize: [1, 1], form: 'shark',
-            category: 'largePredator'
-        },
-        // 3. Marlin - Long bill blue fish, solo/small groups(2-3)
-        marlin: { 
-            hp: 400, speedMin: 100, speedMax: 200, reward: 300, size: 80, 
-            color: 0x2266aa, secondaryColor: 0x44aaff, count: 3, 
-            pattern: 'burstSprint', schoolSize: [1, 3], form: 'marlin',
-            category: 'largePredator'
-        },
-        // 4. Hammerhead Shark - T-shaped head, groups by day/solo hunts
-        hammerheadShark: { 
-            hp: 450, speedMin: 50, speedMax: 90, reward: 300, size: 85, 
-            color: 0x556677, secondaryColor: 0x889999, count: 3, 
-            pattern: 'sShape', schoolSize: [1, 4], form: 'hammerhead',
-            category: 'largePredator'
-        },
+        // ==================== TIER 1: SMALL FISH (2-3 points, 40% spawn rate) ====================
+        // Each tier has 2-3 visual variants with same stats
         
-        // ==================== MEDIUM-LARGE SCHOOLING FISH (4 species) ====================
-        // 5. Yellowfin Tuna - Muscular torpedo, medium schools(10-30)
-        yellowfinTuna: { 
-            hp: 200, speedMin: 80, speedMax: 140, reward: 250, size: 50, 
-            color: 0x3355aa, secondaryColor: 0xffdd00, count: 8, 
-            pattern: 'synchronizedFast', schoolSize: [5, 12], form: 'tuna',
-            category: 'mediumLarge'
-        },
-        // 6. Mahi-Mahi/Dolphinfish - Blunt head gold-green, small schools(5-10)
-        mahiMahi: { 
-            hp: 150, speedMin: 70, speedMax: 130, reward: 200, size: 45, 
-            color: 0x44aa44, secondaryColor: 0xffcc00, count: 6, 
-            pattern: 'irregularTurns', schoolSize: [3, 8], form: 'dolphinfish',
-            category: 'mediumLarge'
-        },
-        // 7. Barracuda - Long silver ambush predator
-        barracuda: { 
-            hp: 180, speedMin: 30, speedMax: 180, reward: 200, size: 55, 
-            color: 0xaabbcc, secondaryColor: 0x667788, count: 5, 
-            pattern: 'ambush', schoolSize: [1, 6], form: 'barracuda',
-            category: 'mediumLarge'
-        },
-        // 8. Grouper - Wide thick body brown spots, solitary/pairs
-        grouper: { 
-            hp: 250, speedMin: 25, speedMax: 60, reward: 180, size: 60, 
-            color: 0x886644, secondaryColor: 0x553322, count: 4, 
-            pattern: 'bottomBurst', schoolSize: [1, 2], form: 'grouper',
-            category: 'mediumLarge'
-        },
-        
-        // ==================== MEDIUM COLORFUL REEF FISH (4 species) ====================
-        // 9. Parrotfish - Parrot beak rainbow colors, small groups(3-8)
-        parrotfish: { 
-            hp: 100, speedMin: 40, speedMax: 70, reward: 150, size: 35, 
-            color: 0x44ddaa, secondaryColor: 0xff66aa, count: 6, 
-            pattern: 'stopAndGo', schoolSize: [3, 8], form: 'parrotfish',
-            category: 'reefFish'
-        },
-        // 10. Angelfish - Flat disc yellow-blue stripes, pairs/small groups(3-5)
-        angelfish: { 
-            hp: 80, speedMin: 35, speedMax: 60, reward: 120, size: 30, 
-            color: 0xffdd44, secondaryColor: 0x4488ff, count: 8, 
-            pattern: 'elegantGlide', schoolSize: [2, 5], form: 'angelfish',
-            category: 'reefFish'
-        },
-        // 11. Butterflyfish - Flat small white-black-yellow, paired
-        butterflyfish: { 
-            hp: 60, speedMin: 45, speedMax: 80, reward: 100, size: 22, 
-            color: 0xffffaa, secondaryColor: 0x222222, count: 10, 
-            pattern: 'agileWeave', schoolSize: [2, 4], form: 'butterflyfish',
-            category: 'reefFish'
-        },
-        // 12. Blue Tang - Oval flat bright blue, small schools(5-15)
-        blueTang: { 
-            hp: 50, speedMin: 50, speedMax: 85, reward: 100, size: 20, 
-            color: 0x2288ff, secondaryColor: 0xffff00, count: 12, 
-            pattern: 'groupCoordination', schoolSize: [5, 12], form: 'tang',
-            category: 'reefFish'
-        },
-        
-        // ==================== SMALL SCHOOLING FISH (4 species) ====================
-        // 13. Sardine - Small streamlined silver, huge schools
-        sardine: { 
-            hp: 15, speedMin: 80, speedMax: 120, reward: 50, size: 10, 
-            color: 0xccddee, secondaryColor: 0x88aacc, count: 30, 
-            pattern: 'waveFormation', schoolSize: [15, 30], form: 'sardine',
-            category: 'smallSchool'
-        },
-        // 14. Anchovy - Thin silver semi-transparent, massive schools
+        // Variant 1A: Anchovy - Thin silver semi-transparent
         anchovy: { 
-            hp: 10, speedMin: 90, speedMax: 140, reward: 40, size: 8, 
-            color: 0xaabbcc, secondaryColor: 0x778899, count: 35, 
-            pattern: 'baitBall', schoolSize: [20, 35], form: 'anchovy',
-            category: 'smallSchool'
+            hp: 10, speedMin: 90, speedMax: 140, reward: 2, size: 8, 
+            color: 0xaabbcc, secondaryColor: 0x778899, count: 12, 
+            pattern: 'baitBall', schoolSize: [8, 15], form: 'anchovy',
+            category: 'small', tier: 1, spawnWeight: 0.40
         },
-        // 15. Clownfish - Round small orange-white stripes, family groups(3-6)
+        // Variant 1B: Sardine - Small streamlined silver
+        sardine: { 
+            hp: 12, speedMin: 80, speedMax: 120, reward: 2, size: 10, 
+            color: 0xccddee, secondaryColor: 0x88aacc, count: 12, 
+            pattern: 'waveFormation', schoolSize: [8, 15], form: 'sardine',
+            category: 'small', tier: 1, spawnWeight: 0.40
+        },
+        // Variant 1C: Damselfish - Small oval blue-purple
+        damselfish: { 
+            hp: 15, speedMin: 55, speedMax: 90, reward: 3, size: 12, 
+            color: 0x6644ff, secondaryColor: 0xffdd00, count: 10, 
+            pattern: 'defensiveCharge', schoolSize: [5, 10], form: 'damselfish',
+            category: 'small', tier: 1, spawnWeight: 0.40
+        },
+        
+        // ==================== TIER 2: NORMAL FISH (5-8 points, 30% spawn rate) ====================
+        // Variant 2A: Clownfish - Round small orange-white stripes
         clownfish: { 
-            hp: 40, speedMin: 30, speedMax: 55, reward: 80, size: 15, 
+            hp: 30, speedMin: 30, speedMax: 55, reward: 5, size: 15, 
             color: 0xff6600, secondaryColor: 0xffffff, count: 8, 
             pattern: 'territorial', schoolSize: [3, 6], form: 'clownfish',
-            category: 'smallSchool'
+            category: 'normal', tier: 2, spawnWeight: 0.30
         },
-        // 16. Damselfish - Small oval blue-purple-yellow, loose groups(5-20)
-        damselfish: { 
-            hp: 30, speedMin: 55, speedMax: 90, reward: 60, size: 12, 
-            color: 0x6644ff, secondaryColor: 0xffdd00, count: 15, 
-            pattern: 'defensiveCharge', schoolSize: [5, 15], form: 'damselfish',
-            category: 'smallSchool'
+        // Variant 2B: Blue Tang - Oval flat bright blue
+        blueTang: { 
+            hp: 35, speedMin: 50, speedMax: 85, reward: 6, size: 20, 
+            color: 0x2288ff, secondaryColor: 0xffff00, count: 8, 
+            pattern: 'groupCoordination', schoolSize: [4, 8], form: 'tang',
+            category: 'normal', tier: 2, spawnWeight: 0.30
+        },
+        // Variant 2C: Butterflyfish - Flat small white-black-yellow
+        butterflyfish: { 
+            hp: 40, speedMin: 45, speedMax: 80, reward: 8, size: 22, 
+            color: 0xffffaa, secondaryColor: 0x222222, count: 6, 
+            pattern: 'agileWeave', schoolSize: [2, 4], form: 'butterflyfish',
+            category: 'normal', tier: 2, spawnWeight: 0.30
         },
         
-        // ==================== SPECIAL FORM FISH (4 species) ====================
-        // 17. Manta Ray - Flat wing-shaped black top white belly, solo/2-3
-        mantaRay: { 
-            hp: 350, speedMin: 40, speedMax: 70, reward: 280, size: 90, 
-            color: 0x222233, secondaryColor: 0xeeeeee, count: 2, 
-            pattern: 'wingGlide', schoolSize: [1, 3], form: 'mantaRay',
-            category: 'specialForm'
+        // ==================== TIER 3: MEDIUM FISH (10-15 points, 15% spawn rate) ====================
+        // Variant 3A: Angelfish - Flat disc yellow-blue stripes
+        angelfish: { 
+            hp: 60, speedMin: 35, speedMax: 60, reward: 10, size: 30, 
+            color: 0xffdd44, secondaryColor: 0x4488ff, count: 5, 
+            pattern: 'elegantGlide', schoolSize: [2, 4], form: 'angelfish',
+            category: 'medium', tier: 3, spawnWeight: 0.15
         },
-        // 18. Pufferfish - Round ball inflatable with spikes, solitary
+        // Variant 3B: Parrotfish - Parrot beak rainbow colors
+        parrotfish: { 
+            hp: 70, speedMin: 40, speedMax: 70, reward: 12, size: 35, 
+            color: 0x44ddaa, secondaryColor: 0xff66aa, count: 4, 
+            pattern: 'stopAndGo', schoolSize: [2, 4], form: 'parrotfish',
+            category: 'medium', tier: 3, spawnWeight: 0.15
+        },
+        // Variant 3C: Pufferfish - Round ball inflatable
         pufferfish: { 
-            hp: 120, speedMin: 20, speedMax: 40, reward: 120, size: 25, 
-            color: 0xddcc88, secondaryColor: 0x886644, count: 5, 
-            pattern: 'slowRotation', schoolSize: [1, 1], form: 'pufferfish',
-            category: 'specialForm'
-        },
-        // 19. Seahorse - Vertical S-shape horse head curled tail, pairs/solo
-        seahorse: { 
-            hp: 80, speedMin: 15, speedMax: 30, reward: 150, size: 20, 
-            color: 0xffaa44, secondaryColor: 0xcc8833, count: 4, 
-            pattern: 'verticalDrift', schoolSize: [1, 2], form: 'seahorse',
-            category: 'specialForm'
-        },
-        // 20. Flying Fish - Streamlined large pectoral fins, medium schools(10-50)
-        flyingFish: { 
-            hp: 70, speedMin: 100, speedMax: 180, reward: 100, size: 18, 
-            color: 0x4488cc, secondaryColor: 0x88ccff, count: 10, 
-            pattern: 'glideJump', schoolSize: [5, 12], form: 'flyingFish',
-            category: 'specialForm'
+            hp: 80, speedMin: 20, speedMax: 40, reward: 15, size: 25, 
+            color: 0xddcc88, secondaryColor: 0x886644, count: 4, 
+            pattern: 'slowRotation', schoolSize: [1, 2], form: 'pufferfish',
+            category: 'medium', tier: 3, spawnWeight: 0.15
         },
         
-        // ==================== SPECIAL ABILITY FISH (Phase 2) ====================
-        // 21. Bomb Crab - Explodes when killed, damaging nearby fish
-        bombCrab: { 
-            hp: 150, speedMin: 25, speedMax: 45, reward: 200, size: 35, 
-            color: 0xff4400, secondaryColor: 0xcc2200, count: 2, 
-            pattern: 'slowRotation', schoolSize: [1, 1], form: 'crab',
-            category: 'abilityFish',
-            ability: 'bomb', // Explodes on death, damages nearby fish
-            abilityRadius: 200, // Explosion radius
-            abilityDamage: 300 // Damage to nearby fish
+        // ==================== TIER 4: LARGE FISH (20-30 points, 10% spawn rate) ====================
+        // Variant 4A: Grouper - Wide thick body brown spots
+        grouper: { 
+            hp: 150, speedMin: 25, speedMax: 60, reward: 20, size: 60, 
+            color: 0x886644, secondaryColor: 0x553322, count: 3, 
+            pattern: 'bottomBurst', schoolSize: [1, 2], form: 'grouper',
+            category: 'large', tier: 4, spawnWeight: 0.10
         },
-        // 22. Electric Eel - Chain lightning on death
-        electricEel: { 
-            hp: 180, speedMin: 40, speedMax: 70, reward: 250, size: 50, 
-            color: 0x00ffff, secondaryColor: 0xffff00, count: 2, 
-            pattern: 'sShape', schoolSize: [1, 2], form: 'eel',
-            category: 'abilityFish',
-            ability: 'lightning', // Chain lightning on death
-            abilityChains: 4, // Number of chain jumps
-            abilityDamage: 150, // Damage per chain
-            abilityDecay: 0.6 // Damage reduction per jump
+        // Variant 4B: Barracuda - Long silver ambush predator
+        barracuda: { 
+            hp: 120, speedMin: 30, speedMax: 180, reward: 25, size: 55, 
+            color: 0xaabbcc, secondaryColor: 0x667788, count: 3, 
+            pattern: 'ambush', schoolSize: [1, 3], form: 'barracuda',
+            category: 'large', tier: 4, spawnWeight: 0.10
         },
-        // 23. Shield Turtle - Has protective shield that must be broken first
-        shieldTurtle: { 
-            hp: 100, speedMin: 15, speedMax: 30, reward: 180, size: 40, 
-            color: 0x228844, secondaryColor: 0x44aa66, count: 3, 
-            pattern: 'cruise', schoolSize: [1, 2], form: 'turtle',
-            category: 'abilityFish',
-            ability: 'shield', // Has protective shield
-            shieldHP: 200, // Shield HP (must break shield first)
-            shieldColor: 0x00ffff // Cyan shield bubble
+        // Variant 4C: Yellowfin Tuna - Muscular torpedo
+        yellowfinTuna: { 
+            hp: 140, speedMin: 80, speedMax: 140, reward: 30, size: 50, 
+            color: 0x3355aa, secondaryColor: 0xffdd00, count: 2, 
+            pattern: 'synchronizedFast', schoolSize: [2, 4], form: 'tuna',
+            category: 'large', tier: 4, spawnWeight: 0.10
         },
-        // 24. Gold Fish - Bonus coins on death
+        
+        // ==================== TIER 5: RARE FISH (40-60 points, 4% spawn rate) ====================
+        // Variant 5A: Seahorse - Vertical S-shape horse head
+        seahorse: { 
+            hp: 100, speedMin: 15, speedMax: 30, reward: 40, size: 20, 
+            color: 0xffaa44, secondaryColor: 0xcc8833, count: 2, 
+            pattern: 'verticalDrift', schoolSize: [1, 2], form: 'seahorse',
+            category: 'rare', tier: 5, spawnWeight: 0.04
+        },
+        // Variant 5B: Flying Fish - Streamlined large pectoral fins
+        flyingFish: { 
+            hp: 90, speedMin: 100, speedMax: 180, reward: 50, size: 18, 
+            color: 0x4488cc, secondaryColor: 0x88ccff, count: 2, 
+            pattern: 'glideJump', schoolSize: [1, 3], form: 'flyingFish',
+            category: 'rare', tier: 5, spawnWeight: 0.04
+        },
+        // Variant 5C: Gold Fish - Shiny golden appearance
         goldFish: { 
-            hp: 60, speedMin: 60, speedMax: 100, reward: 500, size: 25, 
+            hp: 80, speedMin: 60, speedMax: 100, reward: 60, size: 25, 
             color: 0xffdd00, secondaryColor: 0xffaa00, count: 1, 
             pattern: 'agileWeave', schoolSize: [1, 1], form: 'goldfish',
-            category: 'abilityFish',
-            ability: 'bonus', // Extra coin burst on death
-            bonusCoins: 10 // Number of bonus coins
+            category: 'rare', tier: 5, spawnWeight: 0.04,
+            ability: 'bonus', bonusCoins: 5
+        },
+        
+        // ==================== TIER 6: BOSS FISH (100-200 points, 1% special event) ====================
+        // Boss fish spawn during special Boss Wave events, not regular gameplay
+        
+        // Variant 6A: Blue Whale - Largest, slow gentle filter feeder
+        blueWhale: { 
+            hp: 800, speedMin: 20, speedMax: 35, reward: 200, size: 140, 
+            color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, 
+            pattern: 'cruise', schoolSize: [1, 1], form: 'whale',
+            category: 'boss', tier: 6, spawnWeight: 0.01, isBoss: true
+        },
+        // Variant 6B: Great White Shark - Torpedo-shaped apex predator
+        greatWhiteShark: { 
+            hp: 600, speedMin: 60, speedMax: 120, reward: 150, size: 100, 
+            color: 0x667788, secondaryColor: 0xcccccc, count: 1, 
+            pattern: 'burstAttack', schoolSize: [1, 1], form: 'shark',
+            category: 'boss', tier: 6, spawnWeight: 0.01, isBoss: true
+        },
+        // Variant 6C: Manta Ray - Flat wing-shaped black top white belly
+        mantaRay: { 
+            hp: 500, speedMin: 40, speedMax: 70, reward: 120, size: 90, 
+            color: 0x222233, secondaryColor: 0xeeeeee, count: 1, 
+            pattern: 'wingGlide', schoolSize: [1, 1], form: 'mantaRay',
+            category: 'boss', tier: 6, spawnWeight: 0.01, isBoss: true
+        },
+        // Variant 6D: Marlin - Long bill blue fish
+        marlin: { 
+            hp: 450, speedMin: 100, speedMax: 200, reward: 100, size: 80, 
+            color: 0x2266aa, secondaryColor: 0x44aaff, count: 1, 
+            pattern: 'burstSprint', schoolSize: [1, 1], form: 'marlin',
+            category: 'boss', tier: 6, spawnWeight: 0.01, isBoss: true
+        },
+        // Variant 6E: Hammerhead Shark - T-shaped head
+        hammerheadShark: { 
+            hp: 550, speedMin: 50, speedMax: 90, reward: 130, size: 85, 
+            color: 0x556677, secondaryColor: 0x889999, count: 1, 
+            pattern: 'sShape', schoolSize: [1, 1], form: 'hammerhead',
+            category: 'boss', tier: 6, spawnWeight: 0.01, isBoss: true
+        },
+        
+        // ==================== SPECIAL ABILITY FISH ====================
+        // These spawn rarely and have special effects on death
+        
+        // Bomb Crab - Explodes when killed, damaging nearby fish
+        bombCrab: { 
+            hp: 100, speedMin: 25, speedMax: 45, reward: 25, size: 35, 
+            color: 0xff4400, secondaryColor: 0xcc2200, count: 2, 
+            pattern: 'slowRotation', schoolSize: [1, 1], form: 'crab',
+            category: 'large', tier: 4, spawnWeight: 0.10,
+            ability: 'bomb', abilityRadius: 200, abilityDamage: 300
+        },
+        // Electric Eel - Chain lightning on death
+        electricEel: { 
+            hp: 120, speedMin: 40, speedMax: 70, reward: 30, size: 50, 
+            color: 0x00ffff, secondaryColor: 0xffff00, count: 2, 
+            pattern: 'sShape', schoolSize: [1, 2], form: 'eel',
+            category: 'large', tier: 4, spawnWeight: 0.10,
+            ability: 'lightning', abilityChains: 4, abilityDamage: 150, abilityDecay: 0.6
+        },
+        // Shield Turtle - Has protective shield that must be broken first
+        shieldTurtle: { 
+            hp: 80, speedMin: 15, speedMax: 30, reward: 20, size: 40, 
+            color: 0x228844, secondaryColor: 0x44aa66, count: 2, 
+            pattern: 'cruise', schoolSize: [1, 2], form: 'turtle',
+            category: 'large', tier: 4, spawnWeight: 0.10,
+            ability: 'shield', shieldHP: 150, shieldColor: 0x00ffff
+        },
+        // Mahi-Mahi/Dolphinfish - Blunt head gold-green
+        mahiMahi: { 
+            hp: 100, speedMin: 70, speedMax: 130, reward: 25, size: 45, 
+            color: 0x44aa44, secondaryColor: 0xffcc00, count: 3, 
+            pattern: 'irregularTurns', schoolSize: [2, 4], form: 'dolphinfish',
+            category: 'large', tier: 4, spawnWeight: 0.10
         }
     },
     
@@ -251,7 +268,8 @@ const CONFIG = {
             multiplier: 1, cost: 1, speed: 800, 
             damage: 100, shotsPerSecond: 2, // cooldown = 0.5s
             type: 'projectile', color: 0xcccccc, size: 8,
-            cannonColor: 0xcccccc, cannonEmissive: 0x666666
+            cannonColor: 0xcccccc, cannonEmissive: 0x666666,
+            rtp: 0.91  // 91% RTP
         },
         '3x': { 
             multiplier: 3, cost: 3, speed: 700, 
@@ -260,7 +278,8 @@ const CONFIG = {
             // Each bullet does NOT penetrate - stops on hit
             type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 10,
-            cannonColor: 0xff8800, cannonEmissive: 0xff4400
+            cannonColor: 0xff8800, cannonEmissive: 0xff4400,
+            rtp: 0.92  // 92% RTP
         },
         '5x': { 
             multiplier: 5, cost: 5, speed: 750, 
@@ -268,28 +287,40 @@ const CONFIG = {
             // Issue #15: Chain lightning jumps 2-3 times with 50% damage reduction per jump
             type: 'chain', maxChains: 3, chainDecay: 0.5, chainRadius: 250,
             color: 0xffdd00, size: 12,  // Golden color for lightning
-            cannonColor: 0xffcc00, cannonEmissive: 0xffaa00
+            cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
+            rtp: 0.93  // 93% RTP
         },
         '8x': { 
             multiplier: 8, cost: 8, speed: 600, 
             damage: 250, damageEdge: 100, shotsPerSecond: 2.5, // cooldown = 0.4s
             type: 'aoe', aoeRadius: 150,
             color: 0xff4444, size: 14,
-            cannonColor: 0xff2222, cannonEmissive: 0xcc0000
+            cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
+            rtp: 0.94  // 94% RTP
         },
         '20x': { 
-            multiplier: 20, cost: 200, speed: 900, 
-            damage: 800, damageEdge: 400, shotsPerSecond: 0.5, // cooldown = 2s (slow but powerful)
-            type: 'superAoe', aoeRadius: 350,
-            color: 0xff00ff, size: 24,  // Purple/magenta for super weapon
-            cannonColor: 0xcc00cc, cannonEmissive: 0xff00ff
+            // PIERCING LASER - Blue-white energy beam with electric arc effects
+            // Penetrates up to 5 fish with diminishing damage
+            multiplier: 20, cost: 200, speed: 1200, 
+            damage: 500, shotsPerSecond: 0.5, // cooldown = 2s (slow but powerful)
+            type: 'piercingLaser',
+            maxPenetrations: 5,  // Penetrates up to 5 fish
+            // Damage decay: 100% -> 80% -> 60% -> 40% -> 20%
+            penetrationDamageDecay: [1.0, 0.8, 0.6, 0.4, 0.2],
+            color: 0x88ccff, size: 20,  // Blue-white color for laser
+            glowColor: 0x00aaff,  // Electric blue glow
+            cannonColor: 0x4488ff, cannonEmissive: 0x00ccff,
+            rtp: 0.97  // 97% RTP
         }
     },
     
-    // RTP settings - Issue #16: Added 20x weapon
+    // RTP settings - Updated with new weapon RTP values
     rtp: {
-        entertainment: { '1x': 0.915, '3x': 0.945, '5x': 0.975, '8x': 0.995, '20x': 0.999 },
-        real: { '1x': 0.88, '3x': 0.91, '5x': 0.94, '8x': 0.96, '20x': 0.98 }
+        // Weapon-based RTP (used for display and kill rate calculation)
+        weapons: { '1x': 0.91, '3x': 0.92, '5x': 0.93, '8x': 0.94, '20x': 0.97 },
+        // Legacy entertainment/real modes (kept for backwards compatibility)
+        entertainment: { '1x': 0.91, '3x': 0.92, '5x': 0.93, '8x': 0.94, '20x': 0.97 },
+        real: { '1x': 0.88, '3x': 0.89, '5x': 0.90, '8x': 0.91, '20x': 0.94 }
     },
     
     // Game settings - Issue #10: Adjusted fish count for 1.5x tank
@@ -5911,54 +5942,145 @@ function spawnInitialFish() {
 }
 
 // ==================== DYNAMIC FISH RESPAWN SYSTEM ====================
-// Maintains target fish count and adjusts spawn rate based on kill rate
+// Maintains target fish count (40-60) and adjusts spawn rate based on weapon type
+// 
+// Base Parameters:
+// - Minimum fish count: 40
+// - Maximum fish count: 60
+// - Target fish count: 50
+//
+// Respawn Logic:
+// - If fish < 50: delay 0.5-2s respawn 1 fish
+// - If fish < 40: immediately batch respawn to 45 fish
+//
+// Weapon-Adaptive Respawn Rates:
+// - 1x-3x weapons: Normal respawn (1-2s delay)
+// - 5x-8x weapons: Fast respawn (0.5-1s delay)
+// - 20x laser (penetrates multiple): Fastest respawn (0.2-0.5s delay)
+//   * During 20x auto-play: respawn count = killed fish count
+//   * Max refill to 55 fish
+//
+// Anti-Overflow Protection:
+// - Max 10 fish per single respawn batch
+// - Respawn cooldown: 2 seconds
+
 const FISH_SPAWN_CONFIG = {
-    targetCount: 20,        // Target number of fish on screen
-    minCount: 15,           // Minimum fish count before emergency spawn
-    maxCount: 30,           // Maximum fish count
-    normalSpawnInterval: 1.0,    // Normal spawn interval (seconds)
-    emergencySpawnInterval: 0.3, // Emergency spawn interval when fish < minCount
-    maintainSpawnInterval: 2.0   // Slow spawn when at target
+    // Base fish count parameters
+    targetCount: 50,        // Target number of fish on screen
+    minCount: 40,           // Minimum fish count before emergency spawn
+    maxCount: 60,           // Maximum fish count
+    emergencyRefillTarget: 45, // Refill to this count during emergency
+    autoPlayMaxRefill: 55,  // Max refill during 20x auto-play
+    
+    // Respawn intervals by weapon tier (seconds)
+    respawnIntervals: {
+        '1x': { min: 1.0, max: 2.0 },   // Normal: 1-2s delay
+        '3x': { min: 1.0, max: 2.0 },   // Normal: 1-2s delay
+        '5x': { min: 0.5, max: 1.0 },   // Fast: 0.5-1s delay
+        '8x': { min: 0.5, max: 1.0 },   // Fast: 0.5-1s delay
+        '20x': { min: 0.2, max: 0.5 }   // Fastest: 0.2-0.5s delay
+    },
+    
+    // Anti-overflow protection
+    maxBatchSpawn: 10,      // Max fish per single respawn batch
+    respawnCooldown: 2.0,   // Cooldown between batch spawns (seconds)
+    
+    // Emergency spawn settings
+    emergencySpawnInterval: 0.1  // Very fast spawn during emergency
 };
 
 let dynamicSpawnTimer = 0;
+let respawnCooldownTimer = 0;
+let pendingRespawnCount = 0;  // Track fish killed by 20x laser for respawn
+
+// Get respawn interval based on current weapon
+function getWeaponRespawnInterval() {
+    const weapon = gameState.currentWeapon || '1x';
+    const intervals = FISH_SPAWN_CONFIG.respawnIntervals[weapon] || FISH_SPAWN_CONFIG.respawnIntervals['1x'];
+    return intervals.min + Math.random() * (intervals.max - intervals.min);
+}
+
+// Called when fish is killed to track respawn needs (especially for 20x laser)
+function onFishKilledForRespawn(killedCount = 1) {
+    const weapon = gameState.currentWeapon || '1x';
+    
+    // For 20x laser during auto-play, track killed fish for batch respawn
+    if (weapon === '20x' && gameState.autoFire) {
+        pendingRespawnCount += killedCount;
+    }
+}
 
 function updateDynamicFishSpawn(deltaTime) {
     // MULTIPLAYER: Skip local fish spawning in multiplayer mode - fish come from server
     if (multiplayerMode) return;
     
     dynamicSpawnTimer -= deltaTime;
+    respawnCooldownTimer -= deltaTime;
     
     const currentFishCount = activeFish.length;
-    let spawnInterval;
+    const weapon = gameState.currentWeapon || '1x';
     
-    // Determine spawn interval based on current fish count
-    if (currentFishCount < FISH_SPAWN_CONFIG.minCount) {
-        // Emergency: spawn quickly
-        spawnInterval = FISH_SPAWN_CONFIG.emergencySpawnInterval;
-    } else if (currentFishCount < FISH_SPAWN_CONFIG.targetCount) {
-        // Below target: spawn normally
-        spawnInterval = FISH_SPAWN_CONFIG.normalSpawnInterval;
-    } else if (currentFishCount < FISH_SPAWN_CONFIG.maxCount) {
-        // At target: slow spawn
-        spawnInterval = FISH_SPAWN_CONFIG.maintainSpawnInterval;
-    } else {
-        // At max: don't spawn
+    // EMERGENCY: If fish count drops below minimum, batch spawn immediately
+    if (currentFishCount < FISH_SPAWN_CONFIG.minCount && respawnCooldownTimer <= 0) {
+        const targetRefill = FISH_SPAWN_CONFIG.emergencyRefillTarget;
+        const fishToSpawn = Math.min(
+            targetRefill - currentFishCount,
+            FISH_SPAWN_CONFIG.maxBatchSpawn
+        );
+        
+        for (let i = 0; i < fishToSpawn; i++) {
+            spawnSingleFish();
+        }
+        
+        respawnCooldownTimer = FISH_SPAWN_CONFIG.respawnCooldown;
+        dynamicSpawnTimer = FISH_SPAWN_CONFIG.emergencySpawnInterval;
         return;
     }
     
-    if (dynamicSpawnTimer <= 0) {
-        // Find an inactive fish from the pool to spawn
-        const inactiveFish = fishPool.find(f => !f.isActive);
-        if (inactiveFish) {
-            const position = getRandomFishPositionIn3DSpace();
-            inactiveFish.spawn(position);
-            // Only push if not already in activeFish
-            if (!activeFish.includes(inactiveFish)) {
-                activeFish.push(inactiveFish);
+    // SPECIAL: 20x auto-play batch respawn
+    if (weapon === '20x' && gameState.autoFire && pendingRespawnCount > 0 && respawnCooldownTimer <= 0) {
+        const maxRefill = FISH_SPAWN_CONFIG.autoPlayMaxRefill;
+        const fishToSpawn = Math.min(
+            pendingRespawnCount,
+            maxRefill - currentFishCount,
+            FISH_SPAWN_CONFIG.maxBatchSpawn
+        );
+        
+        if (fishToSpawn > 0 && currentFishCount < maxRefill) {
+            for (let i = 0; i < fishToSpawn; i++) {
+                spawnSingleFish();
             }
+            pendingRespawnCount = Math.max(0, pendingRespawnCount - fishToSpawn);
+            respawnCooldownTimer = FISH_SPAWN_CONFIG.respawnCooldown;
         }
-        dynamicSpawnTimer = spawnInterval;
+        return;
+    }
+    
+    // NORMAL: Regular respawn based on weapon type
+    if (dynamicSpawnTimer <= 0 && currentFishCount < FISH_SPAWN_CONFIG.maxCount) {
+        // Only spawn if below target, or slowly if between target and max
+        if (currentFishCount < FISH_SPAWN_CONFIG.targetCount) {
+            spawnSingleFish();
+            dynamicSpawnTimer = getWeaponRespawnInterval();
+        } else if (currentFishCount < FISH_SPAWN_CONFIG.maxCount) {
+            // Slow spawn when at target - double the interval
+            spawnSingleFish();
+            dynamicSpawnTimer = getWeaponRespawnInterval() * 2;
+        }
+    }
+}
+
+// Helper function to spawn a single fish
+function spawnSingleFish() {
+    // Find an inactive fish from the pool to spawn
+    const inactiveFish = fishPool.find(f => !f.isActive);
+    if (inactiveFish) {
+        const position = getRandomFishPositionIn3DSpace();
+        inactiveFish.spawn(position);
+        // Only push if not already in activeFish
+        if (!activeFish.includes(inactiveFish)) {
+            activeFish.push(inactiveFish);
+        }
     }
 }
 
@@ -6126,6 +6248,9 @@ class Bullet {
         this.weaponKey = weaponKey;
         const weapon = CONFIG.weapons[weaponKey];
         this.isGrenade = (weapon.type === 'aoe' || weapon.type === 'superAoe');  // Issue #4: Track if this is a grenade (8x or 20x)
+        this.isPiercingLaser = (weapon.type === 'piercingLaser');  // Track if this is a piercing laser (20x)
+        this.penetrationCount = 0;  // Track how many fish this laser has penetrated
+        this.hitFishIds = new Set();  // Track which fish have been hit to avoid double-hits
         
         this.group.position.copy(origin);
         this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
@@ -6193,13 +6318,58 @@ class Bullet {
         for (const fish of activeFish) {
             if (!fish.isActive) continue;
             
+            // For piercing laser, skip fish we've already hit
+            if (this.isPiercingLaser && this.hitFishIds.has(fish.id)) continue;
+            
             const distance = this.group.position.distanceTo(fish.group.position);
             // Very large collision radius for reliable hit detection (100 units + fish size)
             if (distance < fish.boundingRadius + 100) {
                 const hitPos = this.group.position.clone();
                 
                 // Handle different weapon types
-                if (weapon.type === 'chain') {
+                if (weapon.type === 'piercingLaser') {
+                    // PIERCING LASER: Penetrates up to 5 fish with diminishing damage
+                    // Damage decay: 100% -> 80% -> 60% -> 40% -> 20%
+                    const maxPenetrations = weapon.maxPenetrations || 5;
+                    const damageDecay = weapon.penetrationDamageDecay || [1.0, 0.8, 0.6, 0.4, 0.2];
+                    
+                    // Calculate damage based on penetration count
+                    const damageMultiplier = damageDecay[Math.min(this.penetrationCount, damageDecay.length - 1)];
+                    const actualDamage = Math.floor(weapon.damage * damageMultiplier);
+                    
+                    // Deal damage to this fish
+                    const killed = fish.takeDamage(actualDamage, this.weaponKey);
+                    
+                    // Track this fish as hit
+                    this.hitFishIds.add(fish.id);
+                    this.penetrationCount++;
+                    
+                    // Visual effects - blue-white laser hit with electric arcs
+                    createHitParticles(hitPos, weapon.color, 10);
+                    spawnLightningBurst(hitPos);  // Electric arc effect
+                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish);
+                    
+                    // Track for respawn system
+                    if (killed) {
+                        onFishKilledForRespawn(1);
+                    }
+                    
+                    // Screen effects for powerful laser
+                    if (this.penetrationCount === 1) {
+                        triggerScreenShakeWithStrength(3);
+                        triggerScreenFlash(0x88ccff, 0.15);  // Blue-white flash
+                    }
+                    
+                    // Check if we've reached max penetrations
+                    if (this.penetrationCount >= maxPenetrations) {
+                        this.deactivate();
+                        return;
+                    }
+                    
+                    // Continue to next fish (don't deactivate yet)
+                    continue;
+                    
+                } else if (weapon.type === 'chain') {
                     // Chain lightning: hit first fish, then chain to nearby fish
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
                     createHitParticles(hitPos, weapon.color, 8);
