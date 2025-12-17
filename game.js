@@ -6969,9 +6969,23 @@ function setupEventListeners() {
             const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 30.0 * 1.2;
             
             // Calculate new yaw (horizontal rotation)
-            // FIX: Negate deltaX so mouse right = view right (standard FPS controls)
-            // In Three.js, positive rotation.y = counter-clockwise = turn left
-            // So we need: mouse right (positive deltaX) -> decrease yaw -> turn right
+            // Standard FPS controls: mouse right = view right, mouse left = view left
+            // 
+            // In Three.js coordinate system:
+            // - Positive rotation.y = counter-clockwise rotation (from above) = turn LEFT
+            // - Negative rotation.y = clockwise rotation (from above) = turn RIGHT
+            // 
+            // Mouse movement (per spec):
+            // - Positive deltaX/movementX = mouse moved RIGHT
+            // - Negative deltaX/movementX = mouse moved LEFT
+            // 
+            // For standard FPS controls:
+            // - Mouse RIGHT (deltaX > 0) -> view turns RIGHT -> yaw should DECREASE
+            // - Mouse LEFT (deltaX < 0) -> view turns LEFT -> yaw should INCREASE
+            // 
+            // Formula: newYaw = currentYaw - deltaX * sensitivity
+            // - Mouse RIGHT: newYaw = 0 - (+deltaX) = negative -> turn RIGHT (correct)
+            // - Mouse LEFT: newYaw = 0 - (-deltaX) = positive -> turn LEFT (correct)
             let newYaw = (cannonGroup ? cannonGroup.rotation.y : 0) - deltaX * rotationSensitivity;
             
             // Clamp yaw using centralized constant FPS_YAW_MAX (±50°)
