@@ -276,14 +276,21 @@ const CONFIG = {
             type: 'aoe', aoeRadius: 150,
             color: 0xff4444, size: 14,
             cannonColor: 0xff2222, cannonEmissive: 0xcc0000
+        },
+        '20x': { 
+            multiplier: 20, cost: 200, speed: 1200, 
+            damage: 500, shotsPerSecond: 1, // cooldown = 1s
+            type: 'penetrating', maxPenetrations: 5,
+            penetrationDamageMultipliers: [1.0, 0.8, 0.6, 0.4, 0.2],
+            color: 0x00ffff, size: 16,
+            cannonColor: 0x00ffff, cannonEmissive: 0x00aaaa
         }
-        // Note: 20x weapon removed per latest specification
     },
     
-    // RTP settings - Updated: 4 weapons only (1x, 3x, 5x, 8x)
+    // RTP settings - PDF Specification values
     rtp: {
-        entertainment: { '1x': 0.91, '3x': 0.93, '5x': 0.94, '8x': 0.95 },
-        real: { '1x': 0.88, '3x': 0.90, '5x': 0.92, '8x': 0.93 }
+        entertainment: { '1x': 0.915, '3x': 0.945, '5x': 0.975, '8x': 0.995, '20x': 0.999 },
+        real: { '1x': 0.88, '3x': 0.90, '5x': 0.92, '8x': 0.93, '20x': 0.95 }
     },
     
     // Game settings - Issue #10: Adjusted fish count for 1.5x tank
@@ -7158,8 +7165,11 @@ function setupEventListeners() {
             selectWeapon('8x');
             highlightButton('.weapon-btn[data-weapon="8x"]');
             return;
+        } else if (e.key === '5') {
+            selectWeapon('20x');
+            highlightButton('.weapon-btn[data-weapon="20x"]');
+            return;
         }
-        // Note: Key '5' for 20x weapon removed per latest specification
         
         // Function toggle keys
         if (e.key === 'a' || e.key === 'A') {
@@ -7275,6 +7285,7 @@ function toggleHelpPanel() {
                     <div class="help-row"><span class="key">2</span> Weapon 3x</div>
                     <div class="help-row"><span class="key">3</span> Weapon 5x</div>
                     <div class="help-row"><span class="key">4</span> Weapon 8x</div>
+                    <div class="help-row"><span class="key">5</span> Weapon 20x (Beam)</div>
                 </div>
                 <div class="help-section">
                     <h4>Controls</h4>

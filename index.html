@@ -212,7 +212,7 @@
         .weapon-btn[data-weapon="3x"] { --weapon-color: #ffaa00; }
         .weapon-btn[data-weapon="5x"] { --weapon-color: #00aaff; }
         .weapon-btn[data-weapon="8x"] { --weapon-color: #ff44ff; }
-        /* Note: 20x weapon removed per latest specification */
+        .weapon-btn[data-weapon="20x"] { --weapon-color: #00ffff; }
         
         .weapon-btn.active .multiplier {
             color: var(--weapon-color);
@@ -1345,8 +1345,13 @@
                         <span class="multiplier">8x</span>
                         <span class="cost">8 USDT</span>
                     </button>
+                    <button class="weapon-btn" data-weapon="20x">
+                        <span class="shortcut-label">5</span>
+                        <span class="weapon-icon">&#x269B;</span>
+                        <span class="multiplier">20x</span>
+                        <span class="cost">200 USDT</span>
+                    </button>
                 </div>
-                <!-- Note: 20x weapon removed per latest specification -->
             </div>
         </div>
         
