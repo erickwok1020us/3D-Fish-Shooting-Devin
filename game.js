@@ -7001,7 +7001,7 @@ function setupEventListeners() {
         // Don't shoot if clicking on UI elements
         if (e.target.closest('#weapon-panel') || 
             e.target.closest('#auto-shoot-btn') ||
-            e.target.closest('#settings-btn')) {
+            e.target.closest('#settings-container')) {
             return;
         }
         
@@ -7186,7 +7186,7 @@ function setupEventListeners() {
         } else if (e.key === 'Escape') {
             // ESC key: Toggle settings panel
             toggleSettingsPanel();
-            highlightButton('#settings-btn');
+            highlightButton('#settings-container');
             return;
         } else if (e.key === 'h' || e.key === 'H' || e.key === 'F1') {
             // H or F1 key: Toggle help panel
@@ -8559,7 +8559,7 @@ function applySfxVolumePercent(percent) {
 
 // Initialize settings UI
 function initSettingsUI() {
-    const settingsBtn = document.getElementById('settings-btn');
+    const settingsContainer = document.getElementById('settings-container');
     const settingsPanel = document.getElementById('settings-panel');
     const closeBtn = document.getElementById('settings-close-btn');
     
