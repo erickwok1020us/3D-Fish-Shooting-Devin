@@ -1,0 +1,200 @@
+{
+  "version": "1.0.0",
+  "description": "Fish GLB model manifest for 3D Fish Shooting game (PDF Spec compliant)",
+  "constraints": {
+    "maxFileSizeMB": 2,
+    "triangleRange": [2000, 5000],
+    "textureSize": [512, 1024]
+  },
+  "tiers": {
+    "tier1": {
+      "name": "Common Fish",
+      "variants": [
+        {
+          "id": "sardine_01",
+          "form": "sardine",
+          "url": "/assets/fish/tier1/sardine_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#87CEEB"
+        },
+        {
+          "id": "anchovy_01",
+          "form": "anchovy",
+          "url": "/assets/fish/tier1/anchovy_01.glb",
+          "scale": 0.9,
+          "fallbackColor": "#B0C4DE"
+        },
+        {
+          "id": "clownfish_01",
+          "form": "clownfish",
+          "url": "/assets/fish/tier1/clownfish_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#FF6347"
+        }
+      ]
+    },
+    "tier2": {
+      "name": "Uncommon Fish",
+      "variants": [
+        {
+          "id": "angelfish_01",
+          "form": "angelfish",
+          "url": "/assets/fish/tier2/angelfish_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#FFD700"
+        },
+        {
+          "id": "butterflyfish_01",
+          "form": "butterflyfish",
+          "url": "/assets/fish/tier2/butterflyfish_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#FFFF00"
+        },
+        {
+          "id": "damselfish_01",
+          "form": "damselfish",
+          "url": "/assets/fish/tier2/damselfish_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#4169E1"
+        }
+      ]
+    },
+    "tier3": {
+      "name": "Rare Fish",
+      "variants": [
+        {
+          "id": "parrotfish_01",
+          "form": "parrotfish",
+          "url": "/assets/fish/tier3/parrotfish_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#32CD32"
+        },
+        {
+          "id": "tang_01",
+          "form": "tang",
+          "url": "/assets/fish/tier3/tang_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#1E90FF"
+        },
+        {
+          "id": "grouper_01",
+          "form": "grouper",
+          "url": "/assets/fish/tier3/grouper_01.glb",
+          "scale": 1.2,
+          "fallbackColor": "#8B4513"
+        }
+      ]
+    },
+    "tier4": {
+      "name": "Epic Fish",
+      "variants": [
+        {
+          "id": "barracuda_01",
+          "form": "barracuda",
+          "url": "/assets/fish/tier4/barracuda_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#C0C0C0"
+        },
+        {
+          "id": "tuna_01",
+          "form": "tuna",
+          "url": "/assets/fish/tier4/tuna_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#4682B4"
+        },
+        {
+          "id": "dolphinfish_01",
+          "form": "dolphinfish",
+          "url": "/assets/fish/tier4/dolphinfish_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#00CED1"
+        }
+      ]
+    },
+    "tier5": {
+      "name": "Legendary Fish",
+      "variants": [
+        {
+          "id": "marlin_01",
+          "form": "marlin",
+          "url": "/assets/fish/tier5/marlin_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#000080"
+        },
+        {
+          "id": "shark_01",
+          "form": "shark",
+          "url": "/assets/fish/tier5/shark_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#708090"
+        },
+        {
+          "id": "hammerhead_01",
+          "form": "hammerhead",
+          "url": "/assets/fish/tier5/hammerhead_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#696969"
+        }
+      ]
+    },
+    "tier6": {
+      "name": "Mythic Fish (Boss)",
+      "variants": [
+        {
+          "id": "whale_01",
+          "form": "whale",
+          "url": "/assets/fish/tier6/whale_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#1C1C1C"
+        },
+        {
+          "id": "mantaray_01",
+          "form": "mantaRay",
+          "url": "/assets/fish/tier6/mantaray_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#2F4F4F"
+        }
+      ]
+    },
+    "special": {
+      "name": "Special Ability Fish",
+      "variants": [
+        {
+          "id": "goldfish_01",
+          "form": "goldfish",
+          "url": "/assets/fish/special/goldfish_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#FFD700"
+        },
+        {
+          "id": "pufferfish_01",
+          "form": "pufferfish",
+          "url": "/assets/fish/special/pufferfish_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#FFDAB9"
+        },
+        {
+          "id": "turtle_01",
+          "form": "turtle",
+          "url": "/assets/fish/special/turtle_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#228B22"
+        },
+        {
+          "id": "eel_01",
+          "form": "eel",
+          "url": "/assets/fish/special/eel_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#4B0082"
+        },
+        {
+          "id": "crab_01",
+          "form": "crab",
+          "url": "/assets/fish/special/crab_01.glb",
+          "scale": 1.0,
+          "fallbackColor": "#FF4500"
+        }
+      ]
+    }
+  }
+}
