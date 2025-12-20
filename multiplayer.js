@@ -639,7 +639,7 @@ class MultiplayerManager {
     
     /**
      * Change weapon
-     * @param {string} weapon - Weapon type ('1x', '3x', '5x', '8x', '20x')
+     * @param {string} weapon - Weapon type ('1x', '3x', '5x', '8x')
      */
     changeWeapon(weapon) {
         if (!this.connected || !this.roomCode) return;
