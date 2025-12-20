@@ -85,29 +85,56 @@
             margin-left: -8px;
         }
         
-        /* Settings Button - Top Right */
-        #settings-btn {
+        /* Settings Container - Top Right (Issue #19: Unified container) */
+        #settings-container {
             position: absolute;
             top: 20px;
             right: 20px;
-            width: 50px;
-            height: 50px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 12px;
-            cursor: pointer;
-            pointer-events: auto;
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            color: #fff;
+            gap: 10px;
+            background: linear-gradient(180deg, rgba(40, 40, 50, 0.95), rgba(20, 20, 30, 0.95));
+            padding: 8px 16px;
+            border-radius: 25px;
+            border: 2px solid rgba(100, 100, 120, 0.5);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            pointer-events: auto;
+            cursor: pointer;
             transition: all 0.3s ease;
         }
         
-        #settings-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: scale(1.1);
+        #settings-container:hover {
+            background: linear-gradient(180deg, rgba(50, 50, 60, 0.95), rgba(30, 30, 40, 0.95));
+            border-color: rgba(150, 150, 170, 0.6);
+            transform: scale(1.05);
+        }
+        
+        #settings-container .settings-icon {
+            font-size: 22px;
+            color: #aabbcc;
+            transition: all 0.3s ease;
+        }
+        
+        #settings-container:hover .settings-icon {
+            color: #ddeeff;
+            transform: rotate(45deg);
+        }
+        
+        #settings-container .settings-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #aabbcc;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        #settings-container .settings-shortcut {
+            font-size: 11px;
+            color: #778899;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 4px;
         }
         
         /* FPS Counter */
@@ -1189,8 +1216,12 @@
                 <span class="balance-label">USDT</span>
             </div>
             
-            <!-- Settings Button - Top Right -->
-            <button id="settings-btn">&#9881; (ESC)</button>
+            <!-- Settings Container - Top Right (Issue #19: Unified container) -->
+            <div id="settings-container" onclick="toggleSettingsPanel()">
+                <span class="settings-icon">&#9881;</span>
+                <span class="settings-label">Settings</span>
+                <span class="settings-shortcut">ESC</span>
+            </div>
             
             <!-- Settings Panel -->
             <div id="settings-panel">
