@@ -185,7 +185,7 @@
         .weapon-btn[data-weapon="3x"] { --weapon-color: #ffaa00; }
         .weapon-btn[data-weapon="5x"] { --weapon-color: #00aaff; }
         .weapon-btn[data-weapon="8x"] { --weapon-color: #ff44ff; }
-        .weapon-btn[data-weapon="20x"] { --weapon-color: #ff00ff; }
+        /* Note: 20x weapon removed per latest specification */
         
         .weapon-btn.active .multiplier {
             color: var(--weapon-color);
@@ -488,7 +488,7 @@
         #crosshair.weapon-3x .crosshair-ring { border-color: rgba(255, 170, 0, 0.7); }
         #crosshair.weapon-5x .crosshair-ring { border-color: rgba(0, 170, 255, 0.7); }
         #crosshair.weapon-8x .crosshair-ring { border-color: rgba(255, 68, 255, 0.7); }
-        #crosshair.weapon-20x .crosshair-ring { border-color: rgba(255, 0, 255, 0.9); box-shadow: 0 0 10px rgba(255, 0, 255, 0.5); }
+        /* Note: 20x weapon removed per latest specification */
         
         /* Reward Animation */
         .reward-popup {
@@ -1285,7 +1285,7 @@
                 <button id="center-view-btn">CENTER VIEW (C)</button>
             </div>
             
-            <!-- Weapon Panel - Issue #16: Added 20x Super Weapon -->
+            <!-- Weapon Panel - Updated: 4 weapons only (1x, 3x, 5x, 8x) -->
             <div id="weapon-panel">
                 <div class="weapon-group">
                     <button class="weapon-btn active" data-weapon="1x">
@@ -1315,14 +1315,7 @@
                         <span class="cost">8 USDT</span>
                     </button>
                 </div>
-                <div class="weapon-group">
-                    <button class="weapon-btn" data-weapon="20x">
-                        <span class="shortcut-label">5</span>
-                        <span class="weapon-icon">&#x2605;</span>
-                        <span class="multiplier">20x</span>
-                        <span class="cost">200 USDT</span>
-                    </button>
-                </div>
+                <!-- Note: 20x weapon removed per latest specification -->
             </div>
         </div>
         

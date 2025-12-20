@@ -276,20 +276,14 @@ const CONFIG = {
             type: 'aoe', aoeRadius: 150,
             color: 0xff4444, size: 14,
             cannonColor: 0xff2222, cannonEmissive: 0xcc0000
-        },
-        '20x': { 
-            multiplier: 20, cost: 200, speed: 900, 
-            damage: 800, damageEdge: 400, shotsPerSecond: 0.5, // cooldown = 2s (slow but powerful)
-            type: 'superAoe', aoeRadius: 350,
-            color: 0xff00ff, size: 24,  // Purple/magenta for super weapon
-            cannonColor: 0xcc00cc, cannonEmissive: 0xff00ff
         }
+        // Note: 20x weapon removed per latest specification
     },
     
-    // RTP settings - Issue #16: Added 20x weapon
+    // RTP settings - Updated: 4 weapons only (1x, 3x, 5x, 8x)
     rtp: {
-        entertainment: { '1x': 0.915, '3x': 0.945, '5x': 0.975, '8x': 0.995, '20x': 0.999 },
-        real: { '1x': 0.88, '3x': 0.91, '5x': 0.94, '8x': 0.96, '20x': 0.98 }
+        entertainment: { '1x': 0.91, '3x': 0.93, '5x': 0.94, '8x': 0.95 },
+        real: { '1x': 0.88, '3x': 0.90, '5x': 0.92, '8x': 0.93 }
     },
     
     // Game settings - Issue #10: Adjusted fish count for 1.5x tank
@@ -904,12 +898,9 @@ function triggerWeaponHitEffects(weaponKey, position) {
     }
     
     // Special effects for high-tier weapons
-    if (weaponKey === '20x') {
-        // Red pulse border effect for 20x
+    if (weaponKey === '8x') {
+        // Red pulse border effect for 8x (highest tier)
         triggerRedBorder();
-        // Extra screen flash
-        triggerScreenFlash(0xff0000, 0.2);
-    } else if (weaponKey === '8x') {
         // Orange flash for 8x
         triggerScreenFlash(0xff4400, 0.15);
     } else if (weaponKey === '5x') {
@@ -1018,16 +1009,8 @@ const WEAPON_VFX_CONFIG = {
         recoilStrength: 15,
         screenShake: 3,             // Strong shake
         chargeTime: 0.3             // 0.3s charge effect
-    },
-    '20x': {
-        muzzleColor: 0xff00ff,      // Magenta/purple
-        trailColor: 0xff88ff,       // Light magenta
-        hitColor: 0xff00ff,         // Magenta
-        ringColor: 0xff00ff,        // Magenta for weapon switch
-        recoilStrength: 25,         // Massive recoil
-        screenShake: 5,             // Very strong shake
-        chargeTime: 0.5             // 0.5s charge effect (slow but powerful)
     }
+    // Note: 20x weapon removed per latest specification
 };
 
 // VFX state tracking
@@ -1211,38 +1194,10 @@ function playWeaponShot(weaponKey) {
             gain8.connect(sfxGain);
             osc8.start(now);
             osc8.stop(now + 0.4);
+            // Trigger screen shake for 8x (highest tier)
+            triggerScreenShakeWithStrength(10, 300);
             break;
-            
-        case '20x':
-            // Massive "EXPLOSION" with screen shake
-            playNoise(150, 0.5, 0.6, 0.4, 'lowpass');
-            // Low rumble
-            const osc20a = audioContext.createOscillator();
-            const gain20a = audioContext.createGain();
-            osc20a.type = 'sine';
-            osc20a.frequency.setValueAtTime(60, now);
-            osc20a.frequency.exponentialRampToValueAtTime(20, now + 0.6);
-            gain20a.gain.setValueAtTime(0.3, now);
-            gain20a.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-            osc20a.connect(gain20a);
-            gain20a.connect(sfxGain);
-            osc20a.start(now);
-            osc20a.stop(now + 0.6);
-            // High crack
-            const osc20b = audioContext.createOscillator();
-            const gain20b = audioContext.createGain();
-            osc20b.type = 'sawtooth';
-            osc20b.frequency.setValueAtTime(400, now);
-            osc20b.frequency.exponentialRampToValueAtTime(50, now + 0.3);
-            gain20b.gain.setValueAtTime(0.25, now);
-            gain20b.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-            osc20b.connect(gain20b);
-            gain20b.connect(sfxGain);
-            osc20b.start(now);
-            osc20b.stop(now + 0.3);
-            // Trigger screen shake
-            triggerScreenShakeWithStrength(15, 500);
-            break;
+            // Note: 20x weapon removed per latest specification
             
         default:
             // Fallback to basic shoot
@@ -7203,11 +7158,8 @@ function setupEventListeners() {
             selectWeapon('8x');
             highlightButton('.weapon-btn[data-weapon="8x"]');
             return;
-        } else if (e.key === '5') {
-            selectWeapon('20x');
-            highlightButton('.weapon-btn[data-weapon="20x"]');
-            return;
         }
+        // Note: Key '5' for 20x weapon removed per latest specification
         
         // Function toggle keys
         if (e.key === 'a' || e.key === 'A') {
@@ -7323,7 +7275,6 @@ function toggleHelpPanel() {
                     <div class="help-row"><span class="key">2</span> Weapon 3x</div>
                     <div class="help-row"><span class="key">3</span> Weapon 5x</div>
                     <div class="help-row"><span class="key">4</span> Weapon 8x</div>
-                    <div class="help-row"><span class="key">5</span> Weapon 20x</div>
                 </div>
                 <div class="help-section">
                     <h4>Controls</h4>
