@@ -355,6 +355,151 @@ const gameState = {
     lastComboBonus: 0        // Last applied combo bonus percentage
 };
 
+// ==================== GLB FISH MODEL LOADER (PDF Spec Compliant) ====================
+const glbLoaderState = {
+    manifest: null,
+    manifestLoaded: false,
+    modelCache: new Map(),
+    loadingPromises: new Map(),
+    enabled: true,
+    manifestUrl: '/assets/fish/fish_models.json'
+};
+
+async function loadFishManifest() {
+    if (glbLoaderState.manifestLoaded) return glbLoaderState.manifest;
+    
+    try {
+        const response = await fetch(glbLoaderState.manifestUrl);
+        if (!response.ok) {
+            console.warn('[GLB-LOADER] Manifest not found, using procedural meshes');
+            glbLoaderState.enabled = false;
+            return null;
+        }
+        glbLoaderState.manifest = await response.json();
+        glbLoaderState.manifestLoaded = true;
+        console.log('[GLB-LOADER] Fish manifest loaded:', Object.keys(glbLoaderState.manifest.tiers).length, 'tiers');
+        return glbLoaderState.manifest;
+    } catch (error) {
+        console.warn('[GLB-LOADER] Failed to load manifest:', error.message);
+        glbLoaderState.enabled = false;
+        return null;
+    }
+}
+
+function getTierFromConfig(tierConfig) {
+    const tierName = tierConfig.tier || 'tier1';
+    if (tierName.startsWith('tier')) return tierName;
+    const tierNum = parseInt(tierName) || 1;
+    return `tier${tierNum}`;
+}
+
+function getVariantForForm(tierName, form) {
+    if (!glbLoaderState.manifest || !glbLoaderState.manifest.tiers) return null;
+    
+    const tier = glbLoaderState.manifest.tiers[tierName];
+    if (!tier || !tier.variants) {
+        const specialTier = glbLoaderState.manifest.tiers.special;
+        if (specialTier && specialTier.variants) {
+            const specialVariant = specialTier.variants.find(v => v.form === form);
+            if (specialVariant) return specialVariant;
+        }
+        return null;
+    }
+    
+    const variant = tier.variants.find(v => v.form === form);
+    if (variant) return variant;
+    
+    if (tier.variants.length > 0) {
+        const randomIndex = Math.floor(Math.random() * tier.variants.length);
+        return tier.variants[randomIndex];
+    }
+    
+    return null;
+}
+
+async function loadGLBModel(url) {
+    if (glbLoaderState.modelCache.has(url)) {
+        return glbLoaderState.modelCache.get(url).clone();
+    }
+    
+    if (glbLoaderState.loadingPromises.has(url)) {
+        const model = await glbLoaderState.loadingPromises.get(url);
+        return model ? model.clone() : null;
+    }
+    
+    const loadPromise = new Promise((resolve) => {
+        if (typeof THREE.GLTFLoader === 'undefined') {
+            console.warn('[GLB-LOADER] GLTFLoader not available');
+            resolve(null);
+            return;
+        }
+        
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            url,
+            (gltf) => {
+                const model = gltf.scene;
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+                glbLoaderState.modelCache.set(url, model);
+                console.log('[GLB-LOADER] Loaded model:', url);
+                resolve(model);
+            },
+            undefined,
+            (error) => {
+                console.warn('[GLB-LOADER] Failed to load model:', url, error.message);
+                resolve(null);
+            }
+        );
+    });
+    
+    glbLoaderState.loadingPromises.set(url, loadPromise);
+    const model = await loadPromise;
+    glbLoaderState.loadingPromises.delete(url);
+    
+    return model ? model.clone() : null;
+}
+
+async function tryLoadGLBForFish(tierConfig, form) {
+    if (!glbLoaderState.enabled || !glbLoaderState.manifest) {
+        return null;
+    }
+    
+    const tierName = getTierFromConfig(tierConfig);
+    const variant = getVariantForForm(tierName, form);
+    
+    if (!variant || !variant.url) {
+        return null;
+    }
+    
+    try {
+        const model = await loadGLBModel(variant.url);
+        if (model) {
+            const scale = variant.scale || 1.0;
+            const size = tierConfig.size || 1.0;
+            model.scale.setScalar(size * scale * 0.5);
+            return model;
+        }
+    } catch (error) {
+        console.warn('[GLB-LOADER] Error loading GLB for', form, ':', error.message);
+    }
+    
+    return null;
+}
+
+function getGLBLoaderStats() {
+    return {
+        enabled: glbLoaderState.enabled,
+        manifestLoaded: glbLoaderState.manifestLoaded,
+        cachedModels: glbLoaderState.modelCache.size,
+        pendingLoads: glbLoaderState.loadingPromises.size
+    };
+}
+
 // ==================== PERFORMANCE OPTIMIZATION CONFIG ====================
 const PERFORMANCE_CONFIG = {
     // Graphics quality presets (low/medium/high)
