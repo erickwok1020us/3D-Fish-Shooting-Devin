@@ -8570,8 +8570,8 @@ function initSettingsUI() {
     }
     
     // Toggle settings panel
-    if (settingsBtn) {
-        settingsBtn.addEventListener('click', (e) => {
+    if (settingsContainer) {
+        settingsContainer.addEventListener('click', (e) => {
             e.stopPropagation();
             settingsPanel.classList.toggle('visible');
         });
@@ -8662,7 +8662,7 @@ function initSettingsUI() {
     // Close panel when clicking outside
     document.addEventListener('click', (e) => {
         if (settingsPanel && settingsPanel.classList.contains('visible')) {
-            if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+            if (!settingsPanel.contains(e.target) && !settingsContainer.contains(e.target)) {
                 settingsPanel.classList.remove('visible');
             }
         }
