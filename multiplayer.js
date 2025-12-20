@@ -12,6 +12,9 @@
 // Server URL - Change this for production
 const MULTIPLAYER_CONFIG = {
     serverUrl: 'https://fishing-socket-server.onrender.com',
+    // Binary protocol configuration (PDF Spec Section 4.3)
+    useBinaryProtocol: true,         // Enable binary WebSocket protocol
+    binaryWsPath: '/ws-game',        // Binary WebSocket endpoint path
     reconnectAttempts: 10,           // Increased for better reconnection
     reconnectDelay: 1000,
     reconnectDelayMax: 5000,         // Max delay between reconnect attempts
@@ -34,6 +37,8 @@ class MultiplayerManager {
     constructor(game) {
         this.game = game; // Reference to main game
         this.socket = null;
+        this.binarySocket = null;    // BinarySocket instance (PDF Spec Section 4.3)
+        this.useBinaryProtocol = MULTIPLAYER_CONFIG.useBinaryProtocol;
         this.connected = false;
         this.roomCode = null;
         this.playerId = null;
@@ -87,26 +92,184 @@ class MultiplayerManager {
     
     /**
      * Connect to the multiplayer server
+     * Uses BinarySocket if useBinaryProtocol is enabled, otherwise Socket.IO
      */
     connect() {
         return new Promise((resolve, reject) => {
-            if (this.socket && this.connected) {
+            if ((this.socket || this.binarySocket) && this.connected) {
                 resolve();
                 return;
             }
             
             console.log('[MULTIPLAYER] Connecting to server:', MULTIPLAYER_CONFIG.serverUrl);
+            console.log('[MULTIPLAYER] Using binary protocol:', this.useBinaryProtocol);
             
-            // Load Socket.IO if not already loaded
-            if (typeof io === 'undefined') {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
-                script.onload = () => this._initSocket(resolve, reject);
-                script.onerror = () => reject(new Error('Failed to load Socket.IO'));
-                document.head.appendChild(script);
+            if (this.useBinaryProtocol) {
+                // Use BinarySocket (PDF Spec Section 4.3)
+                this._initBinarySocket(resolve, reject);
             } else {
-                this._initSocket(resolve, reject);
+                // Fallback to Socket.IO
+                if (typeof io === 'undefined') {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
+                    script.onload = () => this._initSocket(resolve, reject);
+                    script.onerror = () => reject(new Error('Failed to load Socket.IO'));
+                    document.head.appendChild(script);
+                } else {
+                    this._initSocket(resolve, reject);
+                }
             }
+        });
+    }
+    
+    /**
+     * Initialize BinarySocket connection (PDF Spec Section 4.3)
+     */
+    _initBinarySocket(resolve, reject) {
+        try {
+            // Construct WebSocket URL
+            const baseUrl = MULTIPLAYER_CONFIG.serverUrl.replace(/^http/, 'ws');
+            const wsUrl = baseUrl + MULTIPLAYER_CONFIG.binaryWsPath;
+            
+            console.log('[MULTIPLAYER] Connecting to binary WebSocket:', wsUrl);
+            
+            this.binarySocket = new BinarySocket({
+                url: wsUrl,
+                maxReconnectAttempts: MULTIPLAYER_CONFIG.reconnectAttempts,
+                reconnectDelay: MULTIPLAYER_CONFIG.reconnectDelay,
+                autoReconnect: true
+            });
+            
+            // Setup event handlers
+            this._setupBinaryEventHandlers();
+            
+            // Connect
+            this.binarySocket.connect()
+                .then(() => {
+                    console.log('[MULTIPLAYER] Binary WebSocket connected');
+                    // Wait for session to be established
+                })
+                .catch(reject);
+            
+            // Resolve when session is established
+            this.binarySocket.on('connected', (data) => {
+                console.log('[MULTIPLAYER] Binary session established:', data.sessionId);
+                this.connected = true;
+                this.playerId = data.sessionId;
+                this._startTimeSync();
+                if (this.onConnected) this.onConnected();
+                resolve();
+            });
+            
+        } catch (error) {
+            reject(error);
+        }
+    }
+    
+    /**
+     * Setup BinarySocket event handlers
+     */
+    _setupBinaryEventHandlers() {
+        // Connection events
+        this.binarySocket.on('disconnect', (data) => {
+            console.log('[MULTIPLAYER] Binary disconnected:', data.code, data.reason);
+            this.connected = false;
+            
+            if (this.roomCode) {
+                this.lastRoomCode = this.roomCode;
+                this.lastPlayerId = this.playerId;
+            }
+            
+            if (this.onDisconnected) this.onDisconnected(data.reason);
+        });
+        
+        this.binarySocket.on('error', (error) => {
+            console.error('[MULTIPLAYER] Binary error:', error);
+            if (this.onError) this.onError(error.message || 'Connection error');
+        });
+        
+        // Room events
+        this.binarySocket.on('roomState', (data) => {
+            console.log('[MULTIPLAYER] Room state:', data);
+            this.roomCode = data.roomCode;
+            if (data.playerId) this.playerId = data.playerId;
+            if (data.slotIndex !== undefined) this.slotIndex = data.slotIndex;
+            if (data.isHost !== undefined) this.isHost = data.isHost;
+            if (this.onRoomState) this.onRoomState(data);
+        });
+        
+        this.binarySocket.on('playerJoin', (data) => {
+            console.log('[MULTIPLAYER] Player joined:', data);
+            this.serverPlayers.set(data.playerId, data);
+        });
+        
+        this.binarySocket.on('playerLeave', (data) => {
+            console.log('[MULTIPLAYER] Player left:', data);
+            this.serverPlayers.delete(data.playerId);
+        });
+        
+        this.binarySocket.on('gameStart', (data) => {
+            console.log('[MULTIPLAYER] Game started!');
+            if (this.onGameStarted) this.onGameStarted(data);
+        });
+        
+        // Game state events
+        this.binarySocket.on('roomSnapshot', (data) => {
+            this._handleGameState(data);
+        });
+        
+        this.binarySocket.on('fishSpawn', (data) => {
+            // Add fish to server state
+            if (data.fish) {
+                for (const fish of data.fish) {
+                    this.serverFish.set(fish.id, fish);
+                }
+            }
+        });
+        
+        this.binarySocket.on('fishDeath', (data) => {
+            this._handleFishKilled(data);
+        });
+        
+        this.binarySocket.on('fishUpdate', (data) => {
+            // Update fish positions
+            if (data.fish) {
+                for (const fish of data.fish) {
+                    this.serverFish.set(fish.id, fish);
+                }
+            }
+            if (this.onGameState) this.onGameState({ fish: Array.from(this.serverFish.values()) });
+        });
+        
+        this.binarySocket.on('balanceUpdate', (data) => {
+            console.log('[MULTIPLAYER] Balance update:', data);
+            if (this.onBalanceUpdate) this.onBalanceUpdate(data);
+        });
+        
+        // Boss events
+        this.binarySocket.on('bossSpawn', (data) => {
+            console.log('[MULTIPLAYER] Boss spawned!');
+            if (this.onBossWave) this.onBossWave({ active: true, ...data });
+        });
+        
+        this.binarySocket.on('bossDeath', (data) => {
+            console.log('[MULTIPLAYER] Boss defeated!');
+            if (this.onBossWave) this.onBossWave({ active: false, ...data });
+        });
+        
+        this.binarySocket.on('bossDamage', (data) => {
+            console.log('[MULTIPLAYER] Boss damage:', data);
+        });
+        
+        // Time sync
+        this.binarySocket.on('timeSync', (data) => {
+            this._handleTimeSync(data);
+        });
+        
+        // Server errors
+        this.binarySocket.on('serverError', (data) => {
+            console.error('[MULTIPLAYER] Server error:', data);
+            if (this.onError) this.onError(data.message || 'Server error');
         });
     }
     
@@ -326,10 +489,14 @@ class MultiplayerManager {
         this.timeSyncSamples = [];
         for (let i = 0; i < 5; i++) {
             setTimeout(() => {
-                this.socket.emit('timeSyncPing', {
-                    seq: i,
-                    clientSendTime: Date.now()
-                });
+                if (this.useBinaryProtocol && this.binarySocket) {
+                    this.binarySocket.sendTimeSyncPing(i);
+                } else if (this.socket) {
+                    this.socket.emit('timeSyncPing', {
+                        seq: i,
+                        clientSendTime: Date.now()
+                    });
+                }
             }, i * 200);
         }
     }
@@ -554,10 +721,14 @@ class MultiplayerManager {
             return;
         }
         
-        this.socket.emit('createRoom', {
-            playerName,
-            isPublic
-        });
+        if (this.useBinaryProtocol && this.binarySocket) {
+            this.binarySocket.createRoom(playerName, isPublic);
+        } else if (this.socket) {
+            this.socket.emit('createRoom', {
+                playerName,
+                isPublic
+            });
+        }
     }
     
     /**
@@ -569,10 +740,14 @@ class MultiplayerManager {
             return;
         }
         
-        this.socket.emit('joinRoom', {
-            roomCode,
-            playerName
-        });
+        if (this.useBinaryProtocol && this.binarySocket) {
+            this.binarySocket.joinRoom(roomCode, playerName);
+        } else if (this.socket) {
+            this.socket.emit('joinRoom', {
+                roomCode,
+                playerName
+            });
+        }
     }
     
     /**
@@ -581,7 +756,11 @@ class MultiplayerManager {
     leaveRoom() {
         if (!this.connected || !this.roomCode) return;
         
-        this.socket.emit('leaveRoom');
+        if (this.useBinaryProtocol && this.binarySocket) {
+            this.binarySocket.leaveRoom();
+        } else if (this.socket) {
+            this.socket.emit('leaveRoom');
+        }
         this.roomCode = null;
         this.playerId = null;
         this.slotIndex = null;
@@ -594,7 +773,13 @@ class MultiplayerManager {
     setReady(ready) {
         if (!this.connected || !this.roomCode) return;
         
-        this.socket.emit('playerReady', { ready });
+        if (this.useBinaryProtocol && this.binarySocket) {
+            // Binary protocol doesn't have a separate ready packet
+            // Room state is managed differently
+            console.log('[MULTIPLAYER] Ready status via binary protocol');
+        } else if (this.socket) {
+            this.socket.emit('playerReady', { ready });
+        }
     }
     
     /**
@@ -606,7 +791,12 @@ class MultiplayerManager {
             return;
         }
         
-        this.socket.emit('startGame');
+        if (this.useBinaryProtocol && this.binarySocket) {
+            // Binary protocol game start is handled via room state
+            console.log('[MULTIPLAYER] Start game via binary protocol');
+        } else if (this.socket) {
+            this.socket.emit('startGame');
+        }
     }
     
     /**
@@ -618,7 +808,13 @@ class MultiplayerManager {
             return;
         }
         
-        this.socket.emit('startSinglePlayer', { playerName });
+        if (this.useBinaryProtocol && this.binarySocket) {
+            // For binary protocol, create a single-player room
+            this.isSinglePlayer = true;
+            this.binarySocket.createRoom(playerName, false);
+        } else if (this.socket) {
+            this.socket.emit('startSinglePlayer', { playerName });
+        }
     }
     
     // ============ GAME ACTIONS ============
@@ -631,10 +827,19 @@ class MultiplayerManager {
     shoot(targetX, targetZ) {
         if (!this.connected || !this.roomCode) return;
         
-        this.socket.emit('shoot', {
-            targetX,
-            targetZ
-        });
+        if (this.useBinaryProtocol && this.binarySocket) {
+            this.binarySocket.shoot({
+                targetX,
+                targetZ,
+                playerId: this.playerId,
+                weapon: this.currentWeapon || '1x'
+            });
+        } else if (this.socket) {
+            this.socket.emit('shoot', {
+                targetX,
+                targetZ
+            });
+        }
     }
     
     /**
@@ -644,7 +849,13 @@ class MultiplayerManager {
     changeWeapon(weapon) {
         if (!this.connected || !this.roomCode) return;
         
-        this.socket.emit('changeWeapon', { weapon });
+        this.currentWeapon = weapon;
+        
+        if (this.useBinaryProtocol && this.binarySocket) {
+            this.binarySocket.switchWeapon(this.playerId, weapon);
+        } else if (this.socket) {
+            this.socket.emit('changeWeapon', { weapon });
+        }
     }
     
     /**
@@ -653,7 +864,15 @@ class MultiplayerManager {
     updateCannon(yaw, pitch) {
         if (!this.connected || !this.roomCode) return;
         
-        this.socket.emit('updateCannon', { yaw, pitch });
+        if (this.useBinaryProtocol && this.binarySocket) {
+            this.binarySocket.sendMovement({
+                playerId: this.playerId,
+                yaw,
+                pitch
+            });
+        } else if (this.socket) {
+            this.socket.emit('updateCannon', { yaw, pitch });
+        }
     }
     
     /**
@@ -662,7 +881,12 @@ class MultiplayerManager {
     toggleView(viewMode) {
         if (!this.connected || !this.roomCode) return;
         
-        this.socket.emit('toggleView', { viewMode });
+        if (this.useBinaryProtocol && this.binarySocket) {
+            // View mode is client-side only, no need to send to server
+            console.log('[MULTIPLAYER] View mode toggled:', viewMode);
+        } else if (this.socket) {
+            this.socket.emit('toggleView', { viewMode });
+        }
     }
     
     /**
@@ -671,7 +895,12 @@ class MultiplayerManager {
     requestState() {
         if (!this.connected || !this.roomCode) return;
         
-        this.socket.emit('requestState');
+        if (this.useBinaryProtocol && this.binarySocket) {
+            // Binary protocol sends state automatically via roomSnapshot
+            console.log('[MULTIPLAYER] State request via binary protocol');
+        } else if (this.socket) {
+            this.socket.emit('requestState');
+        }
     }
     
     // ============ UTILITY ============
@@ -812,6 +1041,10 @@ class MultiplayerManager {
      * Disconnect from server
      */
     disconnect() {
+        if (this.useBinaryProtocol && this.binarySocket) {
+            this.binarySocket.disconnect();
+            this.binarySocket = null;
+        }
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
