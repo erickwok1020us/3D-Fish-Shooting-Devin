@@ -217,28 +217,36 @@ class BinarySocket {
      * Handle incoming message
      */
     async _handleMessage(data) {
-        // Check if this is a handshake response (JSON)
-        if (typeof data === 'string' || (data instanceof ArrayBuffer && data.byteLength < 100)) {
+        // Try JSON handshake first (server sends pure JSON for handshake_response)
+        if (typeof data === 'string' || data instanceof ArrayBuffer) {
             try {
-                let jsonStr;
-                if (data instanceof ArrayBuffer) {
-                    jsonStr = new TextDecoder().decode(data);
-                } else {
-                    jsonStr = data;
+                let tryJson = false;
+                if (typeof data === 'string') {
+                    tryJson = true;
+                } else if (data instanceof ArrayBuffer) {
+                    const firstByte = new Uint8Array(data, 0, 1)[0];
+                    // '{' = 0x7B, quick check to avoid decoding binary packets
+                    if (firstByte === 0x7B) tryJson = true;
                 }
-                
-                const message = JSON.parse(jsonStr);
-                if (message.type === 'handshake_response') {
-                    await this._handleHandshakeResponse(message);
-                    return;
+                if (tryJson) {
+                    const jsonStr = typeof data === 'string' ? data : new TextDecoder().decode(data);
+                    const message = JSON.parse(jsonStr);
+                    if (message && message.type === 'handshake_response') {
+                        await this._handleHandshakeResponse(message);
+                        return;
+                    }
                 }
             } catch (e) {
-                // Not JSON, continue with binary processing
+                // Not JSON or not a handshake, continue with binary processing
             }
         }
         
-        // Process binary packet
+        // Process binary packet (only if keys are ready)
         if (data instanceof ArrayBuffer) {
+            if (!this.encryptionKey || !this.hmacKey) {
+                console.warn('[BinarySocket] Binary packet received before session is ready; dropping');
+                return;
+            }
             await this._processBinaryPacket(data);
         }
     }
