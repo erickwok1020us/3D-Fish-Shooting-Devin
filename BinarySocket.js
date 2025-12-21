@@ -1,18 +1,20 @@
 /**
- * BinarySocket - Frontend Binary Protocol Client
+ * BinarySocket - Frontend Binary Protocol Client (Protocol V2)
  * 
  * Implements the binary WebSocket protocol as specified in PDF Section 4.3 & 6.
  * Uses AES-256-GCM encryption and HMAC-SHA256 for secure communication.
+ * Uses ECDH (P-256) + HKDF-SHA256 for key derivation.
  * 
  * Packet Structure:
- * [Header (16 bytes)] + [Encrypted Payload] + [GCM Tag (16 bytes)] + [HMAC (32 bytes)]
+ * [Header (20 bytes)] + [Encrypted Payload] + [GCM Tag (16 bytes)] + [HMAC (32 bytes)]
  * 
- * Header Structure (16 bytes):
+ * Header Structure (20 bytes):
  * - protocolVersion: uint8 (1 byte)
- * - packetId: uint8 (1 byte)
+ * - reserved: uint8 (1 byte)
+ * - packetId: uint16 (2 bytes, big-endian)
  * - payloadLength: uint32 (4 bytes, big-endian)
  * - checksum: uint32 (4 bytes, CRC32)
- * - nonce: uint48 (6 bytes, monotonically increasing)
+ * - nonce: uint64 (8 bytes, big-endian, monotonically increasing)
  */
 
 class BinarySocket {
@@ -22,13 +24,17 @@ class BinarySocket {
         this.connected = false;
         this.sessionId = null;
         
-        // Encryption keys (received from handshake)
+        // Encryption keys (derived from ECDH + HKDF)
         this.encryptionKey = null;
         this.hmacKey = null;
         
-        // Nonce tracking
-        this.clientNonce = 0;
-        this.lastServerNonce = 0;
+        // ECDH keypair for handshake
+        this.ecdhKeyPair = null;
+        this.clientNonce32 = null;
+        
+        // Nonce tracking (using BigInt for uint64)
+        this.clientNonce = BigInt(0);
+        this.lastServerNonce = BigInt(0);
         
         // Event handlers
         this.handlers = new Map();
@@ -39,49 +45,71 @@ class BinarySocket {
         this.reconnectDelay = options.reconnectDelay || 1000;
         this.autoReconnect = options.autoReconnect !== false;
         
-        // Protocol constants
-        this.PROTOCOL_VERSION = 1;
-        this.HEADER_SIZE = 16;
+        // Protocol constants (V2)
+        this.PROTOCOL_VERSION = 2;
+        this.HEADER_SIZE = 20;
         this.GCM_TAG_SIZE = 16;
         this.HMAC_SIZE = 32;
         this.NONCE_SIZE = 12;
         
-        // Packet IDs (must match backend)
+        // Packet IDs (uint16, must match backend Protocol V2)
         this.PacketId = {
-            HANDSHAKE_REQUEST: 0x01,
-            HANDSHAKE_RESPONSE: 0x02,
-            SESSION_INIT: 0x03,
-            SESSION_ACK: 0x04,
+            // Handshake & Session (0x0001 - 0x000F)
+            HANDSHAKE_REQUEST: 0x0001,
+            HANDSHAKE_RESPONSE: 0x0002,
+            SESSION_INIT: 0x0003,
+            SESSION_ACK: 0x0004,
             
-            SHOT_FIRED: 0x10,
-            HIT_RESULT: 0x11,
-            BALANCE_UPDATE: 0x12,
-            WEAPON_SWITCH: 0x13,
+            // Game Actions (0x0010 - 0x001F)
+            SHOT_FIRED: 0x0010,
+            HIT_RESULT: 0x0011,
+            BALANCE_UPDATE: 0x0012,
+            WEAPON_SWITCH: 0x0013,
             
-            ROOM_SNAPSHOT: 0x20,
-            FISH_SPAWN: 0x21,
-            FISH_DEATH: 0x22,
-            FISH_UPDATE: 0x23,
+            // Fish State (0x0020 - 0x002F)
+            ROOM_SNAPSHOT: 0x0020,
+            FISH_SPAWN: 0x0021,
+            FISH_DEATH: 0x0022,
+            FISH_UPDATE: 0x0023,
             
-            BOSS_SPAWN: 0x30,
-            BOSS_DEATH: 0x31,
-            BOSS_DAMAGE: 0x32,
+            // Boss Events (0x0030 - 0x003F)
+            BOSS_SPAWN: 0x0030,
+            BOSS_DEATH: 0x0031,
+            BOSS_DAMAGE: 0x0032,
             
-            PLAYER_JOIN: 0x40,
-            PLAYER_LEAVE: 0x41,
-            PLAYER_MOVEMENT: 0x42,
+            // Player Events (0x0040 - 0x004F)
+            PLAYER_JOIN: 0x0040,
+            PLAYER_LEAVE: 0x0041,
+            PLAYER_MOVEMENT: 0x0042,
             
-            ROOM_CREATE: 0x50,
-            ROOM_JOIN: 0x51,
-            ROOM_LEAVE: 0x52,
-            ROOM_STATE: 0x53,
-            GAME_START: 0x54,
+            // Room Management (0x0050 - 0x005F)
+            ROOM_CREATE: 0x0050,
+            ROOM_JOIN: 0x0051,
+            ROOM_LEAVE: 0x0052,
+            ROOM_STATE: 0x0053,
+            GAME_START: 0x0054,
             
-            TIME_SYNC_PING: 0x60,
-            TIME_SYNC_PONG: 0x61,
+            // Time Sync (0x0060 - 0x006F)
+            TIME_SYNC_PING: 0x0060,
+            TIME_SYNC_PONG: 0x0061,
             
-            ERROR: 0xF0,
-            DISCONNECT: 0xFF
+            // System (0x00F0 - 0x00FF)
+            ERROR: 0x00F0,
+            DISCONNECT: 0x00FF
+        };
+        
+        // Binary field sizes for payload encoding
+        this.BinaryFieldSizes = {
+            PLAYER_ID: 32,
+            FISH_ID: 16,
+            ROOM_CODE: 8,
+            PLAYER_NAME: 32,
+            SESSION_ID: 36,
+            REASON: 16,
+            MESSAGE: 128,
+            PUBLIC_KEY: 65,
+            NONCE_32: 32,
+            SALT: 32
         };
         
         // CRC32 table (pre-computed for performance)
@@ -194,117 +222,267 @@ class BinarySocket {
     }
     
     /**
-     * Send handshake request to server
+     * Send ECDH handshake request to server (Protocol V2)
      */
-    _sendHandshake() {
-        const handshakeData = {
-            clientVersion: '1.0.0',
-            timestamp: Date.now(),
-            capabilities: ['aes-256-gcm', 'hmac-sha256']
-        };
-        
-        // Handshake is sent as plain JSON (before encryption is established)
-        const message = JSON.stringify({
-            type: 'handshake',
-            data: handshakeData
-        });
-        
-        this.ws.send(message);
-        console.log('[BinarySocket] Handshake request sent');
+    async _sendHandshake() {
+        try {
+            // Generate ECDH keypair using P-256 curve
+            this.ecdhKeyPair = await crypto.subtle.generateKey(
+                { name: 'ECDH', namedCurve: 'P-256' },
+                true,
+                ['deriveBits']
+            );
+            
+            // Export public key in uncompressed format
+            const publicKeyRaw = await crypto.subtle.exportKey('raw', this.ecdhKeyPair.publicKey);
+            const publicKeyBytes = new Uint8Array(publicKeyRaw);
+            
+            // Generate 32-byte client nonce
+            this.clientNonce32 = crypto.getRandomValues(new Uint8Array(32));
+            
+            // Build binary handshake request payload
+            // Format: [publicKey (65 bytes)] + [clientNonce (32 bytes)] + [protocolVersion (1 byte)]
+            const payloadSize = this.BinaryFieldSizes.PUBLIC_KEY + this.BinaryFieldSizes.NONCE_32 + 1;
+            const payload = new Uint8Array(payloadSize);
+            let offset = 0;
+            
+            // Write public key (65 bytes for uncompressed P-256)
+            payload.set(publicKeyBytes, offset);
+            offset += this.BinaryFieldSizes.PUBLIC_KEY;
+            
+            // Write client nonce (32 bytes)
+            payload.set(this.clientNonce32, offset);
+            offset += this.BinaryFieldSizes.NONCE_32;
+            
+            // Write protocol version (1 byte)
+            payload[offset] = this.PROTOCOL_VERSION;
+            
+            // Create unencrypted handshake header
+            // Format: [version (1)] + [reserved (1)] + [payloadLength (2)]
+            const header = new Uint8Array(4);
+            header[0] = this.PROTOCOL_VERSION;
+            header[1] = 0; // reserved
+            const headerView = new DataView(header.buffer);
+            headerView.setUint16(2, payload.length, false); // big-endian
+            
+            // Send handshake request
+            const packet = this._concatBuffers(header, payload);
+            this.ws.send(packet);
+            
+            console.log('[BinarySocket] ECDH handshake request sent');
+        } catch (error) {
+            console.error('[BinarySocket] Failed to generate ECDH keypair:', error);
+            this._emit('error', { type: 'handshake_error', message: error.message });
+        }
     }
     
     /**
-     * Handle incoming message
+     * Handle incoming message (Protocol V2)
      */
     async _handleMessage(data) {
-        // Check if this is a handshake response (JSON)
-        if (typeof data === 'string' || (data instanceof ArrayBuffer && data.byteLength < 100)) {
-            try {
-                let jsonStr;
-                if (data instanceof ArrayBuffer) {
-                    jsonStr = new TextDecoder().decode(data);
-                } else {
-                    jsonStr = data;
-                }
-                
-                const message = JSON.parse(jsonStr);
-                if (message.type === 'handshake_response') {
-                    await this._handleHandshakeResponse(message);
-                    return;
-                }
-            } catch (e) {
-                // Not JSON, continue with binary processing
+        if (!(data instanceof ArrayBuffer)) {
+            console.warn('[BinarySocket] Received non-binary message, ignoring');
+            return;
+        }
+        
+        // Check if this is a handshake response (before encryption is established)
+        // Handshake response header: [version (1)] + [reserved (1)] + [payloadLength (2)]
+        if (!this.encryptionKey && data.byteLength >= 4) {
+            const view = new DataView(data);
+            const version = view.getUint8(0);
+            const payloadLength = view.getUint16(2, false);
+            
+            // Verify this looks like a handshake response
+            if (version === this.PROTOCOL_VERSION && data.byteLength === 4 + payloadLength) {
+                const payload = data.slice(4);
+                await this._handleHandshakeResponse(payload);
+                return;
             }
         }
         
-        // Process binary packet
-        if (data instanceof ArrayBuffer) {
-            await this._processBinaryPacket(data);
+        // Process encrypted binary packet
+        await this._processBinaryPacket(data);
+    }
+    
+    /**
+     * Handle ECDH handshake response from server (Protocol V2)
+     * Derives session keys using ECDH shared secret + HKDF
+     */
+    async _handleHandshakeResponse(buffer) {
+        console.log('[BinarySocket] Processing ECDH handshake response');
+        
+        try {
+            // Parse handshake response payload
+            // Format: [serverPublicKey (65)] + [serverNonce (32)] + [salt (32)] + [sessionId (36)]
+            const view = new Uint8Array(buffer);
+            let offset = 0;
+            
+            // Read server public key (65 bytes)
+            const serverPublicKeyBytes = view.slice(offset, offset + this.BinaryFieldSizes.PUBLIC_KEY);
+            offset += this.BinaryFieldSizes.PUBLIC_KEY;
+            
+            // Read server nonce (32 bytes)
+            const serverNonce = view.slice(offset, offset + this.BinaryFieldSizes.NONCE_32);
+            offset += this.BinaryFieldSizes.NONCE_32;
+            
+            // Read salt (32 bytes)
+            const salt = view.slice(offset, offset + this.BinaryFieldSizes.SALT);
+            offset += this.BinaryFieldSizes.SALT;
+            
+            // Read session ID (36 bytes, null-terminated string)
+            const sessionIdBytes = view.slice(offset, offset + this.BinaryFieldSizes.SESSION_ID);
+            this.sessionId = new TextDecoder().decode(sessionIdBytes).replace(/\0+$/, '');
+            
+            // Import server's public key
+            const serverPublicKey = await crypto.subtle.importKey(
+                'raw',
+                serverPublicKeyBytes,
+                { name: 'ECDH', namedCurve: 'P-256' },
+                false,
+                []
+            );
+            
+            // Compute ECDH shared secret
+            const sharedSecretBits = await crypto.subtle.deriveBits(
+                { name: 'ECDH', public: serverPublicKey },
+                this.ecdhKeyPair.privateKey,
+                256
+            );
+            const sharedSecret = new Uint8Array(sharedSecretBits);
+            
+            // Compute transcript hash for key binding
+            const transcriptHash = await this._computeTranscriptHash(
+                await crypto.subtle.exportKey('raw', this.ecdhKeyPair.publicKey),
+                serverPublicKeyBytes,
+                this.clientNonce32,
+                serverNonce,
+                this.PROTOCOL_VERSION
+            );
+            
+            // Derive session keys using HKDF
+            const sessionKeys = await this._deriveSessionKeys(sharedSecret, salt, transcriptHash);
+            
+            // Import derived keys for Web Crypto API
+            this.encryptionKey = await crypto.subtle.importKey(
+                'raw',
+                sessionKeys.encryptionKey,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+            
+            this.hmacKey = await crypto.subtle.importKey(
+                'raw',
+                sessionKeys.hmacKey,
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign', 'verify']
+            );
+            
+            console.log('[BinarySocket] ECDH session established:', this.sessionId);
+            this._emit('connected', { sessionId: this.sessionId });
+            
+        } catch (error) {
+            console.error('[BinarySocket] Failed to process handshake response:', error);
+            this._emit('error', { type: 'handshake_error', message: error.message });
         }
     }
     
     /**
-     * Handle handshake response from server
+     * Compute transcript hash for key binding
      */
-    async _handleHandshakeResponse(message) {
-        console.log('[BinarySocket] Received handshake response');
+    async _computeTranscriptHash(clientPublicKey, serverPublicKey, clientNonce, serverNonce, protocolVersion) {
+        const clientPubBytes = new Uint8Array(clientPublicKey);
+        const serverPubBytes = new Uint8Array(serverPublicKey);
         
-        this.sessionId = message.sessionId;
+        // Concatenate: clientPubKey + serverPubKey + clientNonce + serverNonce + version
+        const totalLength = clientPubBytes.length + serverPubBytes.length + 
+                           clientNonce.length + serverNonce.length + 1;
+        const data = new Uint8Array(totalLength);
+        let offset = 0;
         
-        // Import encryption keys from base64
-        const encKeyBytes = this._base64ToArrayBuffer(message.encryptionKey);
-        const hmacKeyBytes = this._base64ToArrayBuffer(message.hmacKey);
+        data.set(clientPubBytes, offset);
+        offset += clientPubBytes.length;
+        data.set(serverPubBytes, offset);
+        offset += serverPubBytes.length;
+        data.set(clientNonce, offset);
+        offset += clientNonce.length;
+        data.set(serverNonce, offset);
+        offset += serverNonce.length;
+        data[offset] = protocolVersion;
         
-        // Import keys for Web Crypto API
-        this.encryptionKey = await crypto.subtle.importKey(
-            'raw',
-            encKeyBytes,
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['encrypt', 'decrypt']
-        );
-        
-        this.hmacKey = await crypto.subtle.importKey(
-            'raw',
-            hmacKeyBytes,
-            { name: 'HMAC', hash: 'SHA-256' },
-            false,
-            ['sign', 'verify']
-        );
-        
-        console.log('[BinarySocket] Session established:', this.sessionId);
-        this._emit('connected', { sessionId: this.sessionId });
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        return new Uint8Array(hashBuffer);
     }
     
     /**
-     * Process binary packet with full security pipeline
+     * Derive session keys using HKDF-SHA256
+     */
+    async _deriveSessionKeys(sharedSecret, salt, transcriptHash) {
+        // HKDF info string
+        const info = this._concatBuffers(
+            transcriptHash,
+            new TextEncoder().encode('fishshoot-v2 session keys')
+        );
+        
+        // Import shared secret as HKDF key material
+        const hkdfKey = await crypto.subtle.importKey(
+            'raw',
+            sharedSecret,
+            'HKDF',
+            false,
+            ['deriveBits']
+        );
+        
+        // Derive 64 bytes (32 for AES, 32 for HMAC)
+        const derivedBits = await crypto.subtle.deriveBits(
+            {
+                name: 'HKDF',
+                hash: 'SHA-256',
+                salt: salt,
+                info: info
+            },
+            hkdfKey,
+            512 // 64 bytes * 8 bits
+        );
+        
+        const derivedBytes = new Uint8Array(derivedBits);
+        
+        return {
+            encryptionKey: derivedBytes.slice(0, 32),
+            hmacKey: derivedBytes.slice(32, 64)
+        };
+    }
+    
+    /**
+     * Process binary packet with full security pipeline (Protocol V2)
+     * Header: [version (1)] + [reserved (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
      */
     async _processBinaryPacket(buffer) {
         try {
             const view = new DataView(buffer);
             
-            // Step 1: Read Header
+            // Step 1: Read Header (20 bytes)
             if (buffer.byteLength < this.HEADER_SIZE) {
                 throw new Error('Packet too small for header');
             }
             
             const protocolVersion = view.getUint8(0);
-            const packetId = view.getUint8(1);
-            const payloadLength = view.getUint32(2, false); // big-endian
-            const checksum = view.getUint32(6, false);
-            const nonceHigh = view.getUint16(10, false);
-            const nonceLow = view.getUint32(12, false);
-            const nonce = nonceHigh * 0x100000000 + nonceLow;
+            const reserved = view.getUint8(1);
+            const packetId = view.getUint16(2, false); // uint16 big-endian
+            const payloadLength = view.getUint32(4, false); // big-endian
+            const checksum = view.getUint32(8, false);
+            const nonce = view.getBigUint64(12, false); // uint64 big-endian
             
             // Step 2: Validate protocol version
             if (protocolVersion !== this.PROTOCOL_VERSION) {
-                throw new Error('Invalid protocol version');
+                throw new Error(`Invalid protocol version: ${protocolVersion}, expected ${this.PROTOCOL_VERSION}`);
             }
             
-            // Step 3: Verify checksum
-            const headerWithoutChecksum = new Uint8Array(buffer, 0, 6);
+            // Step 3: Verify checksum (over first 8 bytes of header + encrypted payload + tag)
+            const headerForChecksum = new Uint8Array(buffer, 0, 8);
             const encryptedPayloadWithTag = new Uint8Array(buffer, this.HEADER_SIZE, payloadLength + this.GCM_TAG_SIZE);
-            const dataForChecksum = this._concatBuffers(headerWithoutChecksum, encryptedPayloadWithTag);
+            const dataForChecksum = this._concatBuffers(headerForChecksum, encryptedPayloadWithTag);
             const calculatedChecksum = this._calculateCRC32(dataForChecksum);
             
             if (calculatedChecksum !== checksum) {
@@ -327,14 +505,14 @@ class BinarySocket {
             
             const decrypted = await this._decryptPayload(encrypted, authTag, nonce);
             
-            // Step 6: Validate nonce (monotonic)
+            // Step 6: Validate nonce (monotonic) using BigInt comparison
             if (nonce <= this.lastServerNonce) {
                 throw new Error('Invalid nonce (replay attack detected)');
             }
             this.lastServerNonce = nonce;
             
-            // Step 7: Parse payload and dispatch
-            const payload = JSON.parse(new TextDecoder().decode(decrypted));
+            // Step 7: Parse binary payload and dispatch
+            const payload = this._decodeBinaryPayload(packetId, decrypted);
             this._dispatchPacket(packetId, payload);
             
         } catch (error) {
@@ -344,19 +522,164 @@ class BinarySocket {
     }
     
     /**
-     * Decrypt payload using AES-256-GCM
+     * Decode binary payload based on packet type
+     */
+    _decodeBinaryPayload(packetId, buffer) {
+        const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+        
+        switch (packetId) {
+            case this.PacketId.HIT_RESULT:
+                return this._decodeHitResult(view, buffer);
+            case this.PacketId.BALANCE_UPDATE:
+                return this._decodeBalanceUpdate(view, buffer);
+            case this.PacketId.FISH_SPAWN:
+                return this._decodeFishSpawn(view, buffer);
+            case this.PacketId.FISH_DEATH:
+                return this._decodeFishDeath(view, buffer);
+            case this.PacketId.PLAYER_JOIN:
+                return this._decodePlayerJoin(view, buffer);
+            case this.PacketId.PLAYER_LEAVE:
+                return this._decodePlayerLeave(view, buffer);
+            case this.PacketId.ROOM_STATE:
+                return this._decodeRoomState(view, buffer);
+            case this.PacketId.TIME_SYNC_PONG:
+                return this._decodeTimeSyncPong(view, buffer);
+            case this.PacketId.ERROR:
+                return this._decodeError(view, buffer);
+            default:
+                // Fallback to JSON for unknown packet types
+                try {
+                    return JSON.parse(new TextDecoder().decode(buffer));
+                } catch (e) {
+                    console.warn(`[BinarySocket] Unknown packet type 0x${packetId.toString(16)}, raw decode failed`);
+                    return { raw: buffer };
+                }
+        }
+    }
+    
+    _decodeHitResult(view, buffer) {
+        let offset = 0;
+        const shotSequenceId = view.getUint32(offset, false); offset += 4;
+        const hitCount = view.getUint8(offset); offset += 1;
+        const hits = [];
+        for (let i = 0; i < hitCount; i++) {
+            const fishIdBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 16);
+            const fishId = new TextDecoder().decode(fishIdBytes).replace(/\0+$/, '');
+            offset += 16;
+            const damage = view.getUint16(offset, false); offset += 2;
+            const newHealth = view.getUint16(offset, false); offset += 2;
+            hits.push({ fishId, damage, newHealth });
+        }
+        const totalDamage = view.getUint16(offset, false); offset += 2;
+        const totalReward = view.getUint32(offset, false); offset += 4;
+        const newBalance = view.getFloat64(offset, false); offset += 8;
+        return { shotSequenceId, hits, totalDamage, totalReward, newBalance };
+    }
+    
+    _decodeBalanceUpdate(view, buffer) {
+        let offset = 0;
+        const playerIdBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 32);
+        const playerId = new TextDecoder().decode(playerIdBytes).replace(/\0+$/, '');
+        offset += 32;
+        const balance = view.getFloat64(offset, false); offset += 8;
+        const change = view.getInt32(offset, false); offset += 4;
+        const reasonCode = view.getUint8(offset); offset += 1;
+        return { playerId, balance, change, reasonCode };
+    }
+    
+    _decodeFishSpawn(view, buffer) {
+        let offset = 0;
+        const fishIdBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 16);
+        const fishId = new TextDecoder().decode(fishIdBytes).replace(/\0+$/, '');
+        offset += 16;
+        const type = view.getUint8(offset); offset += 1;
+        const x = view.getFloat32(offset, false); offset += 4;
+        const y = view.getFloat32(offset, false); offset += 4;
+        const z = view.getFloat32(offset, false); offset += 4;
+        const hp = view.getUint16(offset, false); offset += 2;
+        const maxHp = view.getUint16(offset, false); offset += 2;
+        const reward = view.getUint16(offset, false); offset += 2;
+        const velocityX = view.getFloat32(offset, false); offset += 4;
+        const velocityY = view.getFloat32(offset, false); offset += 4;
+        const velocityZ = view.getFloat32(offset, false); offset += 4;
+        const isBoss = view.getUint8(offset) === 1; offset += 1;
+        return { fishId, type, x, y, z, hp, maxHp, reward, velocityX, velocityY, velocityZ, isBoss };
+    }
+    
+    _decodeFishDeath(view, buffer) {
+        let offset = 0;
+        const fishIdBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 16);
+        const fishId = new TextDecoder().decode(fishIdBytes).replace(/\0+$/, '');
+        offset += 16;
+        const killedByBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 32);
+        const killedBy = new TextDecoder().decode(killedByBytes).replace(/\0+$/, '');
+        offset += 32;
+        const reward = view.getUint32(offset, false); offset += 4;
+        return { fishId, killedBy, reward };
+    }
+    
+    _decodePlayerJoin(view, buffer) {
+        let offset = 0;
+        const playerIdBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 32);
+        const playerId = new TextDecoder().decode(playerIdBytes).replace(/\0+$/, '');
+        offset += 32;
+        const playerNameBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 32);
+        const playerName = new TextDecoder().decode(playerNameBytes).replace(/\0+$/, '');
+        offset += 32;
+        const position = view.getUint8(offset); offset += 1;
+        const balance = view.getFloat64(offset, false); offset += 8;
+        const weapon = view.getUint8(offset); offset += 1;
+        return { playerId, playerName, position, balance, weapon };
+    }
+    
+    _decodePlayerLeave(view, buffer) {
+        let offset = 0;
+        const playerIdBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 32);
+        const playerId = new TextDecoder().decode(playerIdBytes).replace(/\0+$/, '');
+        offset += 32;
+        const reasonBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 16);
+        const reason = new TextDecoder().decode(reasonBytes).replace(/\0+$/, '');
+        offset += 16;
+        return { playerId, reason };
+    }
+    
+    _decodeRoomState(view, buffer) {
+        let offset = 0;
+        const roomCodeBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 8);
+        const roomCode = new TextDecoder().decode(roomCodeBytes).replace(/\0+$/, '');
+        offset += 8;
+        const playerCount = view.getUint8(offset); offset += 1;
+        const gameStarted = view.getUint8(offset) === 1; offset += 1;
+        return { roomCode, playerCount, gameStarted };
+    }
+    
+    _decodeTimeSyncPong(view, buffer) {
+        let offset = 0;
+        const seq = view.getUint32(offset, false); offset += 4;
+        const serverTime = Number(view.getBigUint64(offset, false)); offset += 8;
+        const clientSendTime = Number(view.getBigUint64(offset, false)); offset += 8;
+        return { seq, serverTime, clientSendTime };
+    }
+    
+    _decodeError(view, buffer) {
+        let offset = 0;
+        const code = view.getUint8(offset); offset += 1;
+        const messageBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 128);
+        const message = new TextDecoder().decode(messageBytes).replace(/\0+$/, '');
+        return { code, message };
+    }
+    
+    /**
+     * Decrypt payload using AES-256-GCM (Protocol V2 with uint64 nonce)
      */
     async _decryptPayload(encrypted, authTag, nonce) {
-        // Create IV from nonce
+        // Create IV from uint64 nonce (BigInt)
+        // IV format: [4 bytes padding] + [8 bytes nonce big-endian]
         const iv = new Uint8Array(this.NONCE_SIZE);
-        const nonceHigh = Math.floor(nonce / 0x100000000);
-        const nonceLow = nonce % 0x100000000;
-        
         const ivView = new DataView(iv.buffer);
-        ivView.setUint32(0, 0, false);
-        ivView.setUint16(4, nonceHigh & 0xFFFF, false);
-        ivView.setUint32(6, nonceLow, false);
-        ivView.setUint16(10, 0, false);
+        
+        // Write uint64 nonce as big-endian starting at offset 4
+        ivView.setBigUint64(4, nonce, false);
         
         // Combine encrypted data and auth tag for Web Crypto API
         const ciphertext = this._concatBuffers(encrypted, authTag);
@@ -371,19 +694,16 @@ class BinarySocket {
     }
     
     /**
-     * Encrypt payload using AES-256-GCM
+     * Encrypt payload using AES-256-GCM (Protocol V2 with uint64 nonce)
      */
     async _encryptPayload(plaintext, nonce) {
-        // Create IV from nonce
+        // Create IV from uint64 nonce (BigInt)
+        // IV format: [4 bytes padding] + [8 bytes nonce big-endian]
         const iv = new Uint8Array(this.NONCE_SIZE);
-        const nonceHigh = Math.floor(nonce / 0x100000000);
-        const nonceLow = nonce % 0x100000000;
-        
         const ivView = new DataView(iv.buffer);
-        ivView.setUint32(0, 0, false);
-        ivView.setUint16(4, nonceHigh & 0xFFFF, false);
-        ivView.setUint32(6, nonceLow, false);
-        ivView.setUint16(10, 0, false);
+        
+        // Write uint64 nonce as big-endian starting at offset 4
+        ivView.setBigUint64(4, nonce, false);
         
         const encrypted = await crypto.subtle.encrypt(
             { name: 'AES-GCM', iv: iv, tagLength: 128 },
@@ -430,38 +750,36 @@ class BinarySocket {
     }
     
     /**
-     * Create packet header
+     * Create packet header (Protocol V2 - 20 bytes)
+     * Format: [version (1)] + [reserved (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
      */
     _createHeader(packetId, payloadLength, nonce) {
         const header = new ArrayBuffer(this.HEADER_SIZE);
         const view = new DataView(header);
         
         view.setUint8(0, this.PROTOCOL_VERSION);
-        view.setUint8(1, packetId);
-        view.setUint32(2, payloadLength, false); // big-endian
-        view.setUint32(6, 0, false); // checksum placeholder
-        
-        const nonceHigh = Math.floor(nonce / 0x100000000);
-        const nonceLow = nonce % 0x100000000;
-        view.setUint16(10, nonceHigh & 0xFFFF, false);
-        view.setUint32(12, nonceLow, false);
+        view.setUint8(1, 0); // reserved
+        view.setUint16(2, packetId, false); // uint16 big-endian
+        view.setUint32(4, payloadLength, false); // big-endian
+        view.setUint32(8, 0, false); // checksum placeholder
+        view.setBigUint64(12, nonce, false); // uint64 big-endian
         
         return new Uint8Array(header);
     }
     
     /**
-     * Serialize and send a packet
+     * Serialize and send a packet (Protocol V2)
      */
     async sendPacket(packetId, payload) {
         if (!this.connected || !this.encryptionKey || !this.hmacKey) {
             throw new Error('Not connected or session not established');
         }
         
-        // Increment nonce
-        this.clientNonce++;
+        // Increment nonce (BigInt for uint64)
+        this.clientNonce = this.clientNonce + BigInt(1);
         const nonce = this.clientNonce;
         
-        // Serialize payload to JSON
+        // Serialize payload to JSON (TODO: implement binary encoders for full compliance)
         const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
         
         // Encrypt payload
@@ -470,14 +788,14 @@ class BinarySocket {
         // Create header
         const header = this._createHeader(packetId, ciphertext.length, nonce);
         
-        // Calculate checksum
-        const headerWithoutChecksum = header.slice(0, 6);
-        const dataForChecksum = this._concatBuffers(headerWithoutChecksum, this._concatBuffers(ciphertext, authTag));
+        // Calculate checksum (over first 8 bytes of header + encrypted payload + tag)
+        const headerForChecksum = header.slice(0, 8);
+        const dataForChecksum = this._concatBuffers(headerForChecksum, this._concatBuffers(ciphertext, authTag));
         const checksum = this._calculateCRC32(dataForChecksum);
         
-        // Write checksum to header
+        // Write checksum to header at offset 8
         const headerView = new DataView(header.buffer);
-        headerView.setUint32(6, checksum, false);
+        headerView.setUint32(8, checksum, false);
         
         // Compute HMAC
         const dataForHMAC = this._concatBuffers(header, this._concatBuffers(ciphertext, authTag));
