@@ -6,11 +6,10 @@
  * Uses ECDH (P-256) + HKDF-SHA256 for key derivation.
  * 
  * Packet Structure:
- * [Header (20 bytes)] + [Encrypted Payload] + [GCM Tag (16 bytes)] + [HMAC (32 bytes)]
+ * [Header (19 bytes)] + [Encrypted Payload] + [GCM Tag (16 bytes)] + [HMAC (32 bytes)]
  * 
- * Header Structure (20 bytes):
+ * Header Structure (19 bytes) - Exact PDF Specification:
  * - protocolVersion: uint8 (1 byte)
- * - reserved: uint8 (1 byte)
  * - packetId: uint16 (2 bytes, big-endian)
  * - payloadLength: uint32 (4 bytes, big-endian)
  * - checksum: uint32 (4 bytes, CRC32)
@@ -45,9 +44,9 @@ class BinarySocket {
         this.reconnectDelay = options.reconnectDelay || 1000;
         this.autoReconnect = options.autoReconnect !== false;
         
-        // Protocol constants (V2)
+        // Protocol constants (V2) - Exact PDF Specification
         this.PROTOCOL_VERSION = 2;
-        this.HEADER_SIZE = 20;
+        this.HEADER_SIZE = 19;
         this.GCM_TAG_SIZE = 16;
         this.HMAC_SIZE = 32;
         this.NONCE_SIZE = 12;
@@ -456,31 +455,31 @@ class BinarySocket {
     
     /**
      * Process binary packet with full security pipeline (Protocol V2)
-     * Header: [version (1)] + [reserved (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
+     * Header (19 bytes): [version (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
      */
     async _processBinaryPacket(buffer) {
         try {
             const view = new DataView(buffer);
             
-            // Step 1: Read Header (20 bytes)
+            // Step 1: Read Header (19 bytes)
             if (buffer.byteLength < this.HEADER_SIZE) {
                 throw new Error('Packet too small for header');
             }
             
+            // Parse 19-byte header (exact PDF specification)
             const protocolVersion = view.getUint8(0);
-            const reserved = view.getUint8(1);
-            const packetId = view.getUint16(2, false); // uint16 big-endian
-            const payloadLength = view.getUint32(4, false); // big-endian
-            const checksum = view.getUint32(8, false);
-            const nonce = view.getBigUint64(12, false); // uint64 big-endian
+            const packetId = view.getUint16(1, false); // uint16 big-endian at offset 1
+            const payloadLength = view.getUint32(3, false); // big-endian at offset 3
+            const checksum = view.getUint32(7, false); // at offset 7
+            const nonce = view.getBigUint64(11, false); // uint64 big-endian at offset 11
             
             // Step 2: Validate protocol version
             if (protocolVersion !== this.PROTOCOL_VERSION) {
                 throw new Error(`Invalid protocol version: ${protocolVersion}, expected ${this.PROTOCOL_VERSION}`);
             }
             
-            // Step 3: Verify checksum (over first 8 bytes of header + encrypted payload + tag)
-            const headerForChecksum = new Uint8Array(buffer, 0, 8);
+            // Step 3: Verify checksum (over first 7 bytes of header + encrypted payload + tag)
+            const headerForChecksum = new Uint8Array(buffer, 0, 7);
             const encryptedPayloadWithTag = new Uint8Array(buffer, this.HEADER_SIZE, payloadLength + this.GCM_TAG_SIZE);
             const dataForChecksum = this._concatBuffers(headerForChecksum, encryptedPayloadWithTag);
             const calculatedChecksum = this._calculateCRC32(dataForChecksum);
@@ -669,6 +668,193 @@ class BinarySocket {
         return { code, message };
     }
     
+    // ==================== Binary Encoders (Client-to-Server) ====================
+    
+    /**
+     * Write a fixed-length string to buffer (null-padded)
+     */
+    _writeString(view, offset, str, maxLength) {
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(str || '');
+        const dataView = new Uint8Array(view.buffer, view.byteOffset + offset, maxLength);
+        dataView.fill(0);
+        dataView.set(bytes.slice(0, maxLength));
+        return offset + maxLength;
+    }
+    
+    /**
+     * Write a player ID (32 bytes fixed)
+     */
+    _writePlayerId(view, offset, playerId) {
+        return this._writeString(view, offset, playerId, this.BinaryFieldSizes.PLAYER_ID);
+    }
+    
+    /**
+     * Write a float32 value (big-endian)
+     */
+    _writeFloat32(dataView, offset, value) {
+        dataView.setFloat32(offset, value || 0, false);
+        return offset + 4;
+    }
+    
+    /**
+     * Write a uint64 value (big-endian)
+     */
+    _writeUint64(dataView, offset, value) {
+        dataView.setBigUint64(offset, BigInt(value || 0), false);
+        return offset + 8;
+    }
+    
+    /**
+     * Encode SHOT_FIRED packet (53 bytes)
+     * Format: playerId(32) + weaponId(1) + targetX(4) + targetY(4) + targetZ(4) + 
+     *         directionX(4) + directionY(4) + directionZ(4) + shotSequenceId(4) + timestamp(8)
+     */
+    _encodeShotFired(data) {
+        const buffer = new ArrayBuffer(61);
+        const view = new DataView(buffer);
+        const uint8View = new Uint8Array(buffer);
+        let offset = 0;
+        
+        offset = this._writePlayerId(uint8View, offset, data.playerId);
+        view.setUint8(offset, data.weaponId || 1); offset += 1;
+        offset = this._writeFloat32(view, offset, data.targetX);
+        offset = this._writeFloat32(view, offset, data.targetY);
+        offset = this._writeFloat32(view, offset, data.targetZ);
+        offset = this._writeFloat32(view, offset, data.directionX);
+        offset = this._writeFloat32(view, offset, data.directionY);
+        offset = this._writeFloat32(view, offset, data.directionZ);
+        view.setUint32(offset, data.shotSequenceId || 0, false); offset += 4;
+        this._writeUint64(view, offset, data.timestamp || Date.now());
+        
+        return new Uint8Array(buffer);
+    }
+    
+    /**
+     * Encode WEAPON_SWITCH packet (41 bytes)
+     * Format: playerId(32) + weaponId(1) + timestamp(8)
+     */
+    _encodeWeaponSwitch(data) {
+        const buffer = new ArrayBuffer(41);
+        const view = new DataView(buffer);
+        const uint8View = new Uint8Array(buffer);
+        let offset = 0;
+        
+        offset = this._writePlayerId(uint8View, offset, data.playerId);
+        view.setUint8(offset, data.weaponId || 1); offset += 1;
+        this._writeUint64(view, offset, data.timestamp || Date.now());
+        
+        return new Uint8Array(buffer);
+    }
+    
+    /**
+     * Encode ROOM_CREATE packet (41 bytes)
+     * Format: playerName(32) + isPublic(1) + timestamp(8)
+     */
+    _encodeRoomCreate(data) {
+        const buffer = new ArrayBuffer(41);
+        const view = new DataView(buffer);
+        const uint8View = new Uint8Array(buffer);
+        let offset = 0;
+        
+        offset = this._writeString(uint8View, offset, data.playerName, this.BinaryFieldSizes.PLAYER_NAME);
+        view.setUint8(offset, data.isPublic ? 1 : 0); offset += 1;
+        this._writeUint64(view, offset, data.timestamp || Date.now());
+        
+        return new Uint8Array(buffer);
+    }
+    
+    /**
+     * Encode ROOM_JOIN packet (48 bytes)
+     * Format: roomCode(8) + playerName(32) + timestamp(8)
+     */
+    _encodeRoomJoin(data) {
+        const buffer = new ArrayBuffer(48);
+        const view = new DataView(buffer);
+        const uint8View = new Uint8Array(buffer);
+        let offset = 0;
+        
+        offset = this._writeString(uint8View, offset, data.roomCode, this.BinaryFieldSizes.ROOM_CODE);
+        offset = this._writeString(uint8View, offset, data.playerName, this.BinaryFieldSizes.PLAYER_NAME);
+        this._writeUint64(view, offset, data.timestamp || Date.now());
+        
+        return new Uint8Array(buffer);
+    }
+    
+    /**
+     * Encode ROOM_LEAVE packet (8 bytes)
+     * Format: timestamp(8)
+     */
+    _encodeRoomLeave(data) {
+        const buffer = new ArrayBuffer(8);
+        const view = new DataView(buffer);
+        
+        this._writeUint64(view, 0, data.timestamp || Date.now());
+        
+        return new Uint8Array(buffer);
+    }
+    
+    /**
+     * Encode PLAYER_MOVEMENT packet (60 bytes)
+     * Format: playerId(32) + x(4) + y(4) + z(4) + yaw(4) + pitch(4) + timestamp(8)
+     */
+    _encodePlayerMovement(data) {
+        const buffer = new ArrayBuffer(60);
+        const view = new DataView(buffer);
+        const uint8View = new Uint8Array(buffer);
+        let offset = 0;
+        
+        offset = this._writePlayerId(uint8View, offset, data.playerId);
+        offset = this._writeFloat32(view, offset, data.x);
+        offset = this._writeFloat32(view, offset, data.y);
+        offset = this._writeFloat32(view, offset, data.z);
+        offset = this._writeFloat32(view, offset, data.yaw);
+        offset = this._writeFloat32(view, offset, data.pitch);
+        this._writeUint64(view, offset, data.timestamp || Date.now());
+        
+        return new Uint8Array(buffer);
+    }
+    
+    /**
+     * Encode TIME_SYNC_PING packet (12 bytes)
+     * Format: seq(4) + clientSendTime(8)
+     */
+    _encodeTimeSyncPing(data) {
+        const buffer = new ArrayBuffer(12);
+        const view = new DataView(buffer);
+        
+        view.setUint32(0, data.seq || 0, false);
+        this._writeUint64(view, 4, data.clientSendTime || Date.now());
+        
+        return new Uint8Array(buffer);
+    }
+    
+    /**
+     * Encode payload based on packet type (binary encoding)
+     */
+    _encodeBinaryPayload(packetId, payload) {
+        switch (packetId) {
+            case this.PacketId.SHOT_FIRED:
+                return this._encodeShotFired(payload);
+            case this.PacketId.WEAPON_SWITCH:
+                return this._encodeWeaponSwitch(payload);
+            case this.PacketId.ROOM_CREATE:
+                return this._encodeRoomCreate(payload);
+            case this.PacketId.ROOM_JOIN:
+                return this._encodeRoomJoin(payload);
+            case this.PacketId.ROOM_LEAVE:
+                return this._encodeRoomLeave(payload);
+            case this.PacketId.PLAYER_MOVEMENT:
+                return this._encodePlayerMovement(payload);
+            case this.PacketId.TIME_SYNC_PING:
+                return this._encodeTimeSyncPing(payload);
+            default:
+                // Fallback to JSON for unknown packet types (should not happen in production)
+                console.warn(`[BinarySocket] No binary encoder for packet ID 0x${packetId.toString(16)}, using JSON fallback`);
+                return new TextEncoder().encode(JSON.stringify(payload));
+        }
+    }
+    
     /**
      * Decrypt payload using AES-256-GCM (Protocol V2 with uint64 nonce)
      */
@@ -750,19 +936,23 @@ class BinarySocket {
     }
     
     /**
-     * Create packet header (Protocol V2 - 20 bytes)
-     * Format: [version (1)] + [reserved (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
+     * Create packet header (Protocol V2 - 19 bytes, Exact PDF Specification)
+     * Format: [version (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
      */
     _createHeader(packetId, payloadLength, nonce) {
         const header = new ArrayBuffer(this.HEADER_SIZE);
         const view = new DataView(header);
         
+        // uint8 protocolVersion (offset 0)
         view.setUint8(0, this.PROTOCOL_VERSION);
-        view.setUint8(1, 0); // reserved
-        view.setUint16(2, packetId, false); // uint16 big-endian
-        view.setUint32(4, payloadLength, false); // big-endian
-        view.setUint32(8, 0, false); // checksum placeholder
-        view.setBigUint64(12, nonce, false); // uint64 big-endian
+        // uint16 packetId (offset 1, big-endian)
+        view.setUint16(1, packetId, false);
+        // uint32 payloadLength (offset 3, big-endian)
+        view.setUint32(3, payloadLength, false);
+        // uint32 checksum placeholder (offset 7)
+        view.setUint32(7, 0, false);
+        // uint64 nonce (offset 11, big-endian)
+        view.setBigUint64(11, nonce, false);
         
         return new Uint8Array(header);
     }
@@ -779,8 +969,8 @@ class BinarySocket {
         this.clientNonce = this.clientNonce + BigInt(1);
         const nonce = this.clientNonce;
         
-        // Serialize payload to JSON (TODO: implement binary encoders for full compliance)
-        const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
+        // Serialize payload using binary encoder (100% PDF compliance - no JSON)
+        const payloadBytes = this._encodeBinaryPayload(packetId, payload);
         
         // Encrypt payload
         const { ciphertext, authTag } = await this._encryptPayload(payloadBytes, nonce);
@@ -788,14 +978,14 @@ class BinarySocket {
         // Create header
         const header = this._createHeader(packetId, ciphertext.length, nonce);
         
-        // Calculate checksum (over first 8 bytes of header + encrypted payload + tag)
-        const headerForChecksum = header.slice(0, 8);
+        // Calculate checksum (over first 7 bytes of header + encrypted payload + tag)
+        const headerForChecksum = header.slice(0, 7);
         const dataForChecksum = this._concatBuffers(headerForChecksum, this._concatBuffers(ciphertext, authTag));
         const checksum = this._calculateCRC32(dataForChecksum);
         
-        // Write checksum to header at offset 8
+        // Write checksum to header at offset 7 (19-byte header)
         const headerView = new DataView(header.buffer);
-        headerView.setUint32(8, checksum, false);
+        headerView.setUint32(7, checksum, false);
         
         // Compute HMAC
         const dataForHMAC = this._concatBuffers(header, this._concatBuffers(ciphertext, authTag));
