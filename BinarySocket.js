@@ -6,11 +6,10 @@
  * Uses ECDH (P-256) + HKDF-SHA256 for key derivation.
  * 
  * Packet Structure:
- * [Header (20 bytes)] + [Encrypted Payload] + [GCM Tag (16 bytes)] + [HMAC (32 bytes)]
+ * [Header (19 bytes)] + [Encrypted Payload] + [GCM Tag (16 bytes)] + [HMAC (32 bytes)]
  * 
- * Header Structure (20 bytes):
+ * Header Structure (19 bytes) - Exact PDF Specification:
  * - protocolVersion: uint8 (1 byte)
- * - reserved: uint8 (1 byte)
  * - packetId: uint16 (2 bytes, big-endian)
  * - payloadLength: uint32 (4 bytes, big-endian)
  * - checksum: uint32 (4 bytes, CRC32)
@@ -45,9 +44,9 @@ class BinarySocket {
         this.reconnectDelay = options.reconnectDelay || 1000;
         this.autoReconnect = options.autoReconnect !== false;
         
-        // Protocol constants (V2)
+        // Protocol constants (V2) - Exact PDF Specification
         this.PROTOCOL_VERSION = 2;
-        this.HEADER_SIZE = 20;
+        this.HEADER_SIZE = 19;
         this.GCM_TAG_SIZE = 16;
         this.HMAC_SIZE = 32;
         this.NONCE_SIZE = 12;
@@ -456,31 +455,31 @@ class BinarySocket {
     
     /**
      * Process binary packet with full security pipeline (Protocol V2)
-     * Header: [version (1)] + [reserved (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
+     * Header (19 bytes): [version (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
      */
     async _processBinaryPacket(buffer) {
         try {
             const view = new DataView(buffer);
             
-            // Step 1: Read Header (20 bytes)
+            // Step 1: Read Header (19 bytes)
             if (buffer.byteLength < this.HEADER_SIZE) {
                 throw new Error('Packet too small for header');
             }
             
+            // Parse 19-byte header (exact PDF specification)
             const protocolVersion = view.getUint8(0);
-            const reserved = view.getUint8(1);
-            const packetId = view.getUint16(2, false); // uint16 big-endian
-            const payloadLength = view.getUint32(4, false); // big-endian
-            const checksum = view.getUint32(8, false);
-            const nonce = view.getBigUint64(12, false); // uint64 big-endian
+            const packetId = view.getUint16(1, false); // uint16 big-endian at offset 1
+            const payloadLength = view.getUint32(3, false); // big-endian at offset 3
+            const checksum = view.getUint32(7, false); // at offset 7
+            const nonce = view.getBigUint64(11, false); // uint64 big-endian at offset 11
             
             // Step 2: Validate protocol version
             if (protocolVersion !== this.PROTOCOL_VERSION) {
                 throw new Error(`Invalid protocol version: ${protocolVersion}, expected ${this.PROTOCOL_VERSION}`);
             }
             
-            // Step 3: Verify checksum (over first 8 bytes of header + encrypted payload + tag)
-            const headerForChecksum = new Uint8Array(buffer, 0, 8);
+            // Step 3: Verify checksum (over first 7 bytes of header + encrypted payload + tag)
+            const headerForChecksum = new Uint8Array(buffer, 0, 7);
             const encryptedPayloadWithTag = new Uint8Array(buffer, this.HEADER_SIZE, payloadLength + this.GCM_TAG_SIZE);
             const dataForChecksum = this._concatBuffers(headerForChecksum, encryptedPayloadWithTag);
             const calculatedChecksum = this._calculateCRC32(dataForChecksum);
@@ -750,19 +749,23 @@ class BinarySocket {
     }
     
     /**
-     * Create packet header (Protocol V2 - 20 bytes)
-     * Format: [version (1)] + [reserved (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
+     * Create packet header (Protocol V2 - 19 bytes, Exact PDF Specification)
+     * Format: [version (1)] + [packetId (2)] + [payloadLength (4)] + [checksum (4)] + [nonce (8)]
      */
     _createHeader(packetId, payloadLength, nonce) {
         const header = new ArrayBuffer(this.HEADER_SIZE);
         const view = new DataView(header);
         
+        // uint8 protocolVersion (offset 0)
         view.setUint8(0, this.PROTOCOL_VERSION);
-        view.setUint8(1, 0); // reserved
-        view.setUint16(2, packetId, false); // uint16 big-endian
-        view.setUint32(4, payloadLength, false); // big-endian
-        view.setUint32(8, 0, false); // checksum placeholder
-        view.setBigUint64(12, nonce, false); // uint64 big-endian
+        // uint16 packetId (offset 1, big-endian)
+        view.setUint16(1, packetId, false);
+        // uint32 payloadLength (offset 3, big-endian)
+        view.setUint32(3, payloadLength, false);
+        // uint32 checksum placeholder (offset 7)
+        view.setUint32(7, 0, false);
+        // uint64 nonce (offset 11, big-endian)
+        view.setBigUint64(11, nonce, false);
         
         return new Uint8Array(header);
     }
@@ -788,14 +791,14 @@ class BinarySocket {
         // Create header
         const header = this._createHeader(packetId, ciphertext.length, nonce);
         
-        // Calculate checksum (over first 8 bytes of header + encrypted payload + tag)
-        const headerForChecksum = header.slice(0, 8);
+        // Calculate checksum (over first 7 bytes of header + encrypted payload + tag)
+        const headerForChecksum = header.slice(0, 7);
         const dataForChecksum = this._concatBuffers(headerForChecksum, this._concatBuffers(ciphertext, authTag));
         const checksum = this._calculateCRC32(dataForChecksum);
         
-        // Write checksum to header at offset 8
+        // Write checksum to header at offset 7 (19-byte header)
         const headerView = new DataView(header.buffer);
-        headerView.setUint32(8, checksum, false);
+        headerView.setUint32(7, checksum, false);
         
         // Compute HMAC
         const dataForHMAC = this._concatBuffers(header, this._concatBuffers(ciphertext, authTag));
