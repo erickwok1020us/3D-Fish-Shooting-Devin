@@ -175,6 +175,11 @@ class BinarySocket {
                 this.ws.onclose = (event) => {
                     console.log('[BinarySocket] Connection closed:', event.code, event.reason);
                     this.connected = false;
+                    // Clear session state on close to allow fresh handshake on reconnect
+                    this.encryptionKey = null;
+                    this.hmacKey = null;
+                    this.sessionId = null;
+                    this.lastServerNonce = BigInt(0);
                     this._emit('disconnect', { code: event.code, reason: event.reason });
                     
                     if (this.autoReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
