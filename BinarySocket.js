@@ -97,15 +97,20 @@ class BinarySocket {
             DISCONNECT: 0x00FF
         };
         
-        // Binary field sizes for payload encoding
+        // Binary field sizes for payload encoding (must match backend packets.js)
         this.BinaryFieldSizes = {
-            PLAYER_ID: 32,
-            FISH_ID: 16,
-            ROOM_CODE: 8,
-            PLAYER_NAME: 32,
-            SESSION_ID: 36,
-            REASON: 16,
-            MESSAGE: 128,
+            PLAYER_ID: 16,      // Backend: 16 bytes
+            FISH_ID: 8,         // Backend: 8 bytes
+            ROOM_CODE: 6,       // Backend: 6 bytes
+            PLAYER_NAME: 32,    // Backend: 32 bytes
+            SESSION_ID: 16,     // 16 bytes hex string
+            WEAPON_ID: 1,
+            FLOAT32: 4,
+            UINT8: 1,
+            UINT16: 2,
+            UINT32: 4,
+            UINT64: 8,
+            TIMESTAMP: 8,
             PUBLIC_KEY: 65,
             NONCE_32: 32,
             SALT: 32
@@ -683,7 +688,7 @@ class BinarySocket {
     }
     
     /**
-     * Write a player ID (32 bytes fixed)
+     * Write a player ID (16 bytes fixed, matches backend)
      */
     _writePlayerId(view, offset, playerId) {
         return this._writeString(view, offset, playerId, this.BinaryFieldSizes.PLAYER_ID);
@@ -706,12 +711,12 @@ class BinarySocket {
     }
     
     /**
-     * Encode SHOT_FIRED packet (53 bytes)
-     * Format: playerId(32) + weaponId(1) + targetX(4) + targetY(4) + targetZ(4) + 
+     * Encode SHOT_FIRED packet (53 bytes, matches backend PayloadSizeLimits)
+     * Format: playerId(16) + weaponId(1) + targetX(4) + targetY(4) + targetZ(4) + 
      *         directionX(4) + directionY(4) + directionZ(4) + shotSequenceId(4) + timestamp(8)
      */
     _encodeShotFired(data) {
-        const buffer = new ArrayBuffer(61);
+        const buffer = new ArrayBuffer(53); // 16 + 1 + 24 + 4 + 8 = 53
         const view = new DataView(buffer);
         const uint8View = new Uint8Array(buffer);
         let offset = 0;
@@ -731,11 +736,11 @@ class BinarySocket {
     }
     
     /**
-     * Encode WEAPON_SWITCH packet (41 bytes)
-     * Format: playerId(32) + weaponId(1) + timestamp(8)
+     * Encode WEAPON_SWITCH packet (25 bytes, matches backend PayloadSizeLimits)
+     * Format: playerId(16) + weaponId(1) + timestamp(8)
      */
     _encodeWeaponSwitch(data) {
-        const buffer = new ArrayBuffer(41);
+        const buffer = new ArrayBuffer(25); // 16 + 1 + 8 = 25
         const view = new DataView(buffer);
         const uint8View = new Uint8Array(buffer);
         let offset = 0;
@@ -765,11 +770,11 @@ class BinarySocket {
     }
     
     /**
-     * Encode ROOM_JOIN packet (48 bytes)
-     * Format: roomCode(8) + playerName(32) + timestamp(8)
+     * Encode ROOM_JOIN packet (46 bytes, matches backend PayloadSizeLimits)
+     * Format: roomCode(6) + playerName(32) + timestamp(8)
      */
     _encodeRoomJoin(data) {
-        const buffer = new ArrayBuffer(48);
+        const buffer = new ArrayBuffer(46); // 6 + 32 + 8 = 46
         const view = new DataView(buffer);
         const uint8View = new Uint8Array(buffer);
         let offset = 0;
@@ -795,11 +800,12 @@ class BinarySocket {
     }
     
     /**
-     * Encode PLAYER_MOVEMENT packet (60 bytes)
-     * Format: playerId(32) + x(4) + y(4) + z(4) + yaw(4) + pitch(4) + timestamp(8)
+     * Encode PLAYER_MOVEMENT packet (32 bytes, matches backend PayloadSizeLimits)
+     * Format: playerId(16) + x(4) + y(4) + z(4) + timestamp(4) - simplified for 32 bytes
+     * Note: Backend expects 32 bytes, so we use uint32 timestamp instead of uint64
      */
     _encodePlayerMovement(data) {
-        const buffer = new ArrayBuffer(60);
+        const buffer = new ArrayBuffer(32); // 16 + 4 + 4 + 4 + 4 = 32
         const view = new DataView(buffer);
         const uint8View = new Uint8Array(buffer);
         let offset = 0;
@@ -808,9 +814,8 @@ class BinarySocket {
         offset = this._writeFloat32(view, offset, data.x);
         offset = this._writeFloat32(view, offset, data.y);
         offset = this._writeFloat32(view, offset, data.z);
-        offset = this._writeFloat32(view, offset, data.yaw);
-        offset = this._writeFloat32(view, offset, data.pitch);
-        this._writeUint64(view, offset, data.timestamp || Date.now());
+        // Use uint32 timestamp to fit 32 bytes (low 32 bits of timestamp)
+        view.setUint32(offset, (data.timestamp || Date.now()) & 0xFFFFFFFF, false);
         
         return new Uint8Array(buffer);
     }
