@@ -279,10 +279,11 @@ const CONFIG = {
         }
     },
     
-    // RTP settings - PDF Specification values
+    // RTP settings - Updated weapon configuration
+    // 1x: 91%, 3x: 93%, 5x: 94%, 8x: 95%
     rtp: {
-        entertainment: { '1x': 0.915, '3x': 0.945, '5x': 0.975, '8x': 0.995 },
-        real: { '1x': 0.88, '3x': 0.90, '5x': 0.92, '8x': 0.93 }
+        entertainment: { '1x': 0.91, '3x': 0.93, '5x': 0.94, '8x': 0.95 },
+        real: { '1x': 0.91, '3x': 0.93, '5x': 0.94, '8x': 0.95 }
     },
     
     // Game settings - Issue #10: Adjusted fish count for 1.5x tank
