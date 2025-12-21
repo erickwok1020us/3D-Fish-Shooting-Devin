@@ -870,12 +870,14 @@ class BinarySocket {
      */
     async _decryptPayload(encrypted, authTag, nonce) {
         // Create IV from uint64 nonce (BigInt)
-        // IV format: [4 bytes padding] + [8 bytes nonce big-endian]
+        // IV format: [8 bytes nonce big-endian] + [4 bytes zero padding]
+        // Must match backend serializer.js encryptPayload()
         const iv = new Uint8Array(this.NONCE_SIZE);
         const ivView = new DataView(iv.buffer);
         
-        // Write uint64 nonce as big-endian starting at offset 4
-        ivView.setBigUint64(4, nonce, false);
+        // Write uint64 nonce as big-endian at offset 0, then 4 bytes of zeros at offset 8
+        ivView.setBigUint64(0, nonce, false);
+        ivView.setUint32(8, 0, false);
         
         // Combine encrypted data and auth tag for Web Crypto API
         const ciphertext = this._concatBuffers(encrypted, authTag);
@@ -894,12 +896,14 @@ class BinarySocket {
      */
     async _encryptPayload(plaintext, nonce) {
         // Create IV from uint64 nonce (BigInt)
-        // IV format: [4 bytes padding] + [8 bytes nonce big-endian]
+        // IV format: [8 bytes nonce big-endian] + [4 bytes zero padding]
+        // Must match backend serializer.js encryptPayload()
         const iv = new Uint8Array(this.NONCE_SIZE);
         const ivView = new DataView(iv.buffer);
         
-        // Write uint64 nonce as big-endian starting at offset 4
-        ivView.setBigUint64(4, nonce, false);
+        // Write uint64 nonce as big-endian at offset 0, then 4 bytes of zeros at offset 8
+        ivView.setBigUint64(0, nonce, false);
+        ivView.setUint32(8, 0, false);
         
         const encrypted = await crypto.subtle.encrypt(
             { name: 'AES-GCM', iv: iv, tagLength: 128 },
