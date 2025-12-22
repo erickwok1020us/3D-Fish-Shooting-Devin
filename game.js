@@ -513,6 +513,7 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.5,
             hitEffectScale: 1.0,
             muzzleOffset: new THREE.Vector3(0, 0, 60),
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, 0, 0),
             hitEffectPlanar: true
         },
@@ -524,6 +525,7 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.6,
             hitEffectScale: 1.2,
             muzzleOffset: new THREE.Vector3(0, 0, 65),
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, 0, 0),
             hitEffectPlanar: true
         },
@@ -535,6 +537,7 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.7,
             hitEffectScale: 1.5,
             muzzleOffset: new THREE.Vector3(0, 0, 70),
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, 0, 0),
             hitEffectPlanar: false
         },
@@ -546,6 +549,7 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.9,
             hitEffectScale: 2.0,
             muzzleOffset: new THREE.Vector3(0, 0, 80),
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, 0, 0),
             hitEffectPlanar: false
         }
@@ -691,6 +695,18 @@ async function loadWeaponGLB(weaponKey, type) {
                 model.position.y += center.y; // Keep model on ground plane
                 
                 wrapper.add(model);
+                
+                // Apply rotation fix from config (corrects GLB model orientation to match game coordinate system)
+                // This is applied AFTER centering so it doesn't affect bounding box calculations
+                const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+                if (glbConfig) {
+                    if (type === 'cannon' && glbConfig.cannonRotationFix) {
+                        wrapper.rotation.copy(glbConfig.cannonRotationFix);
+                        console.log(`[WEAPON-GLB] Applied cannon rotation fix for ${weaponKey}: y=${(glbConfig.cannonRotationFix.y * 180 / Math.PI).toFixed(1)}°`);
+                    } else if (type === 'bullet' && glbConfig.bulletRotationFix) {
+                        wrapper.rotation.copy(glbConfig.bulletRotationFix);
+                    }
+                }
                 
                 cache.set(cacheKey, wrapper);
                 // Log with flat string values for easy debugging (no need to expand Array(3))
