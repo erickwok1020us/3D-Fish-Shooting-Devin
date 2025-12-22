@@ -1402,21 +1402,24 @@
             const btnStartGame = document.getElementById('btn-start-game');
             const btnLeaveRoom = document.getElementById('btn-leave-room');
             
-            // Initialize lobby after game loads
+            // Initialize lobby after game loads (including resource preloading)
             window.addEventListener('load', function() {
-                // Wait for game to finish loading
+                // Wait for game to finish loading (including weapon preloading)
                 const checkLoaded = setInterval(function() {
                     if (typeof window.gameLoaded !== 'undefined' && window.gameLoaded) {
                         clearInterval(checkLoaded);
+                        clearTimeout(fallbackTimeout);
                         initLobby();
                     }
                 }, 100);
                 
-                // Fallback: show lobby after 3 seconds
-                setTimeout(function() {
+                // Fallback: show lobby after 30 seconds (increased to allow for slow networks)
+                // This should rarely trigger since preloading typically completes in 5-15 seconds
+                const fallbackTimeout = setTimeout(function() {
+                    console.warn('[LOBBY] Fallback timeout triggered - preloading may have failed');
                     clearInterval(checkLoaded);
                     initLobby();
-                }, 3000);
+                }, 30000);
             });
             
             function initLobby() {
