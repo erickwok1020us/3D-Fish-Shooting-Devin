@@ -617,11 +617,33 @@ async function loadWeaponGLB(weaponKey, type) {
             url,
             (gltf) => {
                 const model = gltf.scene;
+                
+                // Count meshes and collect debug info
+                let meshCount = 0;
+                let hasSkinnedMesh = false;
                 model.traverse((child) => {
                     if (child.isMesh) {
+                        meshCount++;
                         child.castShadow = true;
                         child.receiveShadow = true;
+                        child.frustumCulled = false; // Prevent culling issues
+                        
+                        // Force materials to be visible for debugging
+                        if (child.material) {
+                            // Make materials visible regardless of original settings
+                            child.material.transparent = false;
+                            child.material.opacity = 1;
+                            child.material.visible = true;
+                            child.material.side = THREE.DoubleSide;
+                            
+                            // Add emissive to ensure visibility in dark scenes
+                            if (child.material.emissive) {
+                                child.material.emissive.setHex(0x222222);
+                                child.material.emissiveIntensity = 0.3;
+                            }
+                        }
                     }
+                    if (child.isSkinnedMesh) hasSkinnedMesh = true;
                 });
                 
                 // Calculate bounding box and center
@@ -630,6 +652,37 @@ async function loadWeaponGLB(weaponKey, type) {
                 const size = new THREE.Vector3();
                 box.getCenter(center);
                 box.getSize(size);
+                
+                // Target sizes for different types (in game units)
+                const targetSizes = {
+                    cannon: 60,  // Barrel length ~60 units
+                    bullet: 15,  // Bullet size ~15 units
+                    hitEffect: 40 // Hit effect size ~40 units
+                };
+                
+                // Auto-scale model to match expected size
+                const maxDimension = Math.max(size.x, size.y, size.z);
+                const targetSize = targetSizes[type] || 60;
+                let autoScale = 1;
+                
+                if (maxDimension > 0 && maxDimension < 1) {
+                    // Model is very small (likely in meters or millimeters)
+                    autoScale = targetSize / maxDimension;
+                    console.log(`[WEAPON-GLB] Auto-scaling ${type} for ${weaponKey}: model is tiny (${maxDimension.toFixed(4)}), scaling by ${autoScale.toFixed(2)}`);
+                } else if (maxDimension > 1000) {
+                    // Model is very large
+                    autoScale = targetSize / maxDimension;
+                    console.log(`[WEAPON-GLB] Auto-scaling ${type} for ${weaponKey}: model is huge (${maxDimension.toFixed(2)}), scaling by ${autoScale.toFixed(4)}`);
+                }
+                
+                // Apply auto-scale to model
+                if (autoScale !== 1) {
+                    model.scale.multiplyScalar(autoScale);
+                    // Recalculate bounding box after scaling
+                    box.setFromObject(model);
+                    box.getCenter(center);
+                    box.getSize(size);
+                }
                 
                 // Create a wrapper group to preserve centering when external code sets position
                 const wrapper = new THREE.Group();
@@ -642,7 +695,13 @@ async function loadWeaponGLB(weaponKey, type) {
                 wrapper.add(model);
                 
                 cache.set(cacheKey, wrapper);
-                console.log(`[WEAPON-GLB] Loaded ${type} for ${weaponKey}, size:`, size.toArray(), 'center:', center.toArray());
+                console.log(`[WEAPON-GLB] Loaded ${type} for ${weaponKey}:`, {
+                    size: size.toArray().map(v => v.toFixed(2)),
+                    center: center.toArray().map(v => v.toFixed(2)),
+                    meshCount,
+                    hasSkinnedMesh,
+                    autoScale: autoScale.toFixed(4)
+                });
                 resolve(wrapper);
             },
             (xhr) => {
