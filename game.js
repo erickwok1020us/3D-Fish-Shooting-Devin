@@ -624,15 +624,26 @@ async function loadWeaponGLB(weaponKey, type) {
                     }
                 });
                 
+                // Calculate bounding box and center
                 const box = new THREE.Box3().setFromObject(model);
                 const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
                 box.getCenter(center);
-                model.position.sub(center);
-                model.position.y += center.y;
+                box.getSize(size);
                 
-                cache.set(cacheKey, model);
-                console.log(`[WEAPON-GLB] Loaded ${type} for ${weaponKey}, size:`, box.getSize(new THREE.Vector3()));
-                resolve(model);
+                // Create a wrapper group to preserve centering when external code sets position
+                const wrapper = new THREE.Group();
+                wrapper.name = `${weaponKey}_${type}_wrapper`;
+                
+                // Center the model within the wrapper
+                model.position.sub(center);
+                model.position.y += center.y; // Keep model on ground plane
+                
+                wrapper.add(model);
+                
+                cache.set(cacheKey, wrapper);
+                console.log(`[WEAPON-GLB] Loaded ${type} for ${weaponKey}, size:`, size.toArray(), 'center:', center.toArray());
+                resolve(wrapper);
             },
             (xhr) => {
                 if (xhr.total) {
@@ -3979,18 +3990,26 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         try {
             const cannonModel = await loadWeaponGLB(weaponKey, 'cannon');
             if (cannonModel) {
-                console.log(`[WEAPON-GLB] Using GLB cannon for ${weaponKey}`);
-                
                 // Apply scale from config
                 const scale = glbConfig.scale;
                 cannonModel.scale.set(scale, scale, scale);
                 
-                // Position the model
+                // Position the wrapper group (internal model centering is preserved)
                 cannonModel.position.set(0, 20, 0);
                 
                 // Store reference for recoil animation
                 cannonBarrel = cannonModel;
                 cannonBodyGroup.add(cannonModel);
+                
+                // Debug: Log the cannon model details
+                const worldPos = new THREE.Vector3();
+                cannonModel.getWorldPosition(worldPos);
+                console.log(`[WEAPON-GLB] Using GLB cannon for ${weaponKey}:`, {
+                    scale: cannonModel.scale.toArray(),
+                    position: cannonModel.position.toArray(),
+                    worldPosition: worldPos.toArray(),
+                    children: cannonModel.children.length
+                });
                 
                 // Update muzzle position based on GLB config
                 if (cannonMuzzle && glbConfig.muzzleOffset) {
