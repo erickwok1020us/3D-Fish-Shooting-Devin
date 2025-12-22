@@ -515,8 +515,8 @@ const WEAPON_GLB_CONFIG = {
             muzzleOffset: new THREE.Vector3(0, 25, 60),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            // X-axis rotation to make water splash stand upright - spray direction aligns with +Z after this
-            hitEffectRotationFix: new THREE.Euler(Math.PI / 2, 0, 0),
+            // X-axis rotation to show water splash crown front face (not bottom)
+            hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 120,
             fpsCameraUpOffset: 40
@@ -531,8 +531,8 @@ const WEAPON_GLB_CONFIG = {
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            // X-axis rotation to make water splash stand upright - spray direction aligns with +Z after this
-            hitEffectRotationFix: new THREE.Euler(Math.PI / 2, 0, 0),
+            // X-axis rotation to show water splash crown front face (not bottom)
+            hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 130,
             fpsCameraUpOffset: 45
