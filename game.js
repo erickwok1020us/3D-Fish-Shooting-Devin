@@ -514,12 +514,8 @@ const WEAPON_GLB_CONFIG = {
             hitEffectScale: 1.0,
             muzzleOffset: new THREE.Vector3(0, 25, 60),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            // Bullet rotation: lookAt() makes -Z point toward target, GLB model has +X as forward
-            // So we need +90° Y rotation to align +X to -Z
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: true,
-            // Hit effect rotation: align GLB model's forward axis with bullet direction
-            hitEffectRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             fpsCameraBackDist: 120,
             fpsCameraUpOffset: 40
         },
@@ -532,10 +528,8 @@ const WEAPON_GLB_CONFIG = {
             hitEffectScale: 1.2,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            // Bullet rotation: +90° Y to convert +X forward to -Z (lookAt direction)
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: true,
-            hitEffectRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             fpsCameraBackDist: 130,
             fpsCameraUpOffset: 45
         },
@@ -550,8 +544,6 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            hitEffectRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            // Increased camera offsets to prevent camera from being inside barrel
             fpsCameraBackDist: 200,
             fpsCameraUpOffset: 70
         },
@@ -566,7 +558,6 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            hitEffectRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             fpsCameraBackDist: 180,
             fpsCameraUpOffset: 60
         }
@@ -2545,29 +2536,26 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
         // Position at hit location
         hitEffectModel.position.copy(hitPos);
         
-        // Orient the hit effect to face away from gun barrel (along bullet direction)
+        // Orient the hit effect based on bullet direction for physically correct appearance
         if (bulletDirection) {
             const dir = bulletDirection.clone().normalize();
             
             if (glbConfig.hitEffectPlanar) {
-                // For planar effects (1x/3x), orient perpendicular to bullet direction
-                // The effect's normal should align with the bullet direction (facing away from gun)
-                // GLB model's default forward is +X, we need to align it with bullet direction
-                const defaultForward = new THREE.Vector3(1, 0, 0); // GLB model forward axis
+                // For planar effects (1x/3x), the effect should face TOWARD the camera/gun
+                // This makes the impact splash visible from the shooter's perspective
+                // Use -dir (opposite of bullet direction) so the effect's front faces the gun
+                const negDir = dir.clone().negate();
+                
+                // Assume GLB model's front/normal is along +Z axis (common export convention)
+                // Align +Z to -dir (toward gun) so the effect is visible from shooter's view
+                const defaultNormal = new THREE.Vector3(0, 0, 1);
                 const quaternion = new THREE.Quaternion();
-                quaternion.setFromUnitVectors(defaultForward, dir);
+                quaternion.setFromUnitVectors(defaultNormal, negDir);
                 hitEffectModel.quaternion.copy(quaternion);
             } else {
-                // For 3D effects (5x/8x), just orient toward bullet direction
+                // For 3D effects (5x/8x), orient along bullet direction
                 const targetPos = hitPos.clone().add(dir);
                 hitEffectModel.lookAt(targetPos);
-            }
-            
-            // Apply additional rotation fix from config if specified
-            if (glbConfig.hitEffectRotationFix) {
-                const fixQuat = new THREE.Quaternion();
-                fixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
-                hitEffectModel.quaternion.multiply(fixQuat);
             }
             
             // Offset slightly along bullet direction to prevent z-fighting
