@@ -2541,17 +2541,19 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
             const dir = bulletDirection.clone().normalize();
             
             if (glbConfig.hitEffectPlanar) {
-                // For planar effects (1x/3x), the effect should face TOWARD the camera/gun
-                // This makes the impact splash visible from the shooter's perspective
-                // Use -dir (opposite of bullet direction) so the effect's front faces the gun
-                const negDir = dir.clone().negate();
-                
-                // Assume GLB model's front/normal is along +Z axis (common export convention)
-                // Align +Z to -dir (toward gun) so the effect is visible from shooter's view
-                const defaultNormal = new THREE.Vector3(0, 0, 1);
+                // For planar effects (1x/3x), the effect should "explode forward" along bullet direction
+                // User expects: bullet -> ) where ) is the hit effect expanding in bullet's travel direction
+                // GLB models in this project use +X as forward axis (same as cannon/bullet models)
+                // Align +X to bullet direction so the effect expands forward
+                const defaultForward = new THREE.Vector3(1, 0, 0);
                 const quaternion = new THREE.Quaternion();
-                quaternion.setFromUnitVectors(defaultNormal, negDir);
+                quaternion.setFromUnitVectors(defaultForward, dir);
                 hitEffectModel.quaternion.copy(quaternion);
+                
+                // Ensure materials are DoubleSide for visibility from any angle
+                clonedMaterials.forEach((mat) => {
+                    mat.side = THREE.DoubleSide;
+                });
             } else {
                 // For 3D effects (5x/8x), orient along bullet direction
                 const targetPos = hitPos.clone().add(dir);
@@ -6804,9 +6806,23 @@ class Bullet {
             const distance = this.group.position.distanceTo(fish.group.position);
             // Very large collision radius for reliable hit detection (100 units + fish size)
             if (distance < fish.boundingRadius + 100) {
-                const hitPos = this.group.position.clone();
                 // Get bullet direction for hit effect orientation
                 const bulletDirection = this.velocity.clone().normalize();
+                
+                // Calculate hit position on fish's surface for accurate hit effect placement
+                // For 1x/3x planar effects, use fish surface position (fish center + offset toward bullet)
+                // For 5x/8x 3D effects, use bullet position (more forgiving visually)
+                let hitPos;
+                if (weapon.type === 'projectile' || weapon.type === 'spread') {
+                    // 1x/3x: Calculate impact point on fish's surface
+                    // Direction from fish to bullet
+                    const fishToBullet = this.group.position.clone().sub(fish.group.position).normalize();
+                    // Hit position is on fish's surface, facing the bullet
+                    hitPos = fish.group.position.clone().add(fishToBullet.multiplyScalar(fish.boundingRadius * 0.8));
+                } else {
+                    // 5x/8x: Use bullet position (explosion effects are more forgiving)
+                    hitPos = this.group.position.clone();
+                }
                 
                 // Handle different weapon types
                 if (weapon.type === 'chain') {
