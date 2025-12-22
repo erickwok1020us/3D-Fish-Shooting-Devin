@@ -2541,17 +2541,19 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
             const dir = bulletDirection.clone().normalize();
             
             if (glbConfig.hitEffectPlanar) {
-                // For planar effects (1x/3x), the effect should face TOWARD the camera/gun
-                // This makes the impact splash visible from the shooter's perspective
-                // Use -dir (opposite of bullet direction) so the effect's front faces the gun
-                const negDir = dir.clone().negate();
-                
-                // Assume GLB model's front/normal is along +Z axis (common export convention)
-                // Align +Z to -dir (toward gun) so the effect is visible from shooter's view
-                const defaultNormal = new THREE.Vector3(0, 0, 1);
+                // For planar effects (1x/3x), the effect should "explode forward" along bullet direction
+                // User expects: bullet -> ) where ) is the hit effect expanding in bullet's travel direction
+                // GLB models in this project use +X as forward axis (same as cannon/bullet models)
+                // Align +X to bullet direction so the effect expands forward
+                const defaultForward = new THREE.Vector3(1, 0, 0);
                 const quaternion = new THREE.Quaternion();
-                quaternion.setFromUnitVectors(defaultNormal, negDir);
+                quaternion.setFromUnitVectors(defaultForward, dir);
                 hitEffectModel.quaternion.copy(quaternion);
+                
+                // Ensure materials are DoubleSide for visibility from any angle
+                clonedMaterials.forEach((mat) => {
+                    mat.side = THREE.DoubleSide;
+                });
             } else {
                 // For 3D effects (5x/8x), orient along bullet direction
                 const targetPos = hitPos.clone().add(dir);
