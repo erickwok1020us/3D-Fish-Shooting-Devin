@@ -515,8 +515,7 @@ const WEAPON_GLB_CONFIG = {
             muzzleOffset: new THREE.Vector3(0, 25, 60),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            // X-axis rotation to make water drop "stand up" - spray direction aligns with +Z after this
-            hitEffectRotationFix: new THREE.Euler(Math.PI / 2, 0, 0),
+            // Water splash points upward (+Y) by default, no rotation fix needed
             hitEffectPlanar: true,
             fpsCameraBackDist: 120,
             fpsCameraUpOffset: 40
@@ -531,8 +530,7 @@ const WEAPON_GLB_CONFIG = {
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            // X-axis rotation to make water drop "stand up" - spray direction aligns with +Z after this
-            hitEffectRotationFix: new THREE.Euler(Math.PI / 2, 0, 0),
+            // Water splash points upward (+Y) by default, no rotation fix needed
             hitEffectPlanar: true,
             fpsCameraBackDist: 130,
             fpsCameraUpOffset: 45
@@ -2540,34 +2538,20 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
         // Position at hit location
         hitEffectModel.position.copy(hitPos);
         
-        // Orient the hit effect based on bullet direction for physically correct appearance
-        // Use unified lookAt() approach for all weapons - cleaner and more consistent
-        if (bulletDirection) {
+        // Orient the hit effect based on weapon type
+        if (glbConfig.hitEffectPlanar) {
+            // For planar effects (1x/3x water splash), keep the effect pointing upward (+Y)
+            // This is more physically intuitive - water splashes upward when hit
+            // The GLB model's spray direction is +Y by default, so no rotation needed
+            // Just ensure materials are DoubleSide for visibility from any angle
+            clonedMaterials.forEach((mat) => {
+                mat.side = THREE.DoubleSide;
+            });
+        } else if (bulletDirection) {
+            // For 3D effects (5x/8x explosions), orient along bullet direction
             const dir = bulletDirection.clone().normalize();
-            
-            // Use lookAt() to align the model's +Z axis to bullet direction
-            // This works for all weapon types (1x/3x/5x/8x)
             const targetPos = hitPos.clone().add(dir);
             hitEffectModel.lookAt(targetPos);
-            
-            // If hitEffectRotationFix is defined, apply additional rotation to correct model's orientation
-            // This handles cases where the GLB model's "front face" is not aligned with +Z
-            if (glbConfig.hitEffectRotationFix) {
-                // Apply rotation fix on top of lookAt orientation
-                const rotationFixQuat = new THREE.Quaternion();
-                rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
-                hitEffectModel.quaternion.multiply(rotationFixQuat);
-            }
-            
-            // For planar effects (1x/3x), ensure materials are DoubleSide for visibility from any angle
-            if (glbConfig.hitEffectPlanar) {
-                clonedMaterials.forEach((mat) => {
-                    mat.side = THREE.DoubleSide;
-                });
-            }
-            
-            // Offset slightly along bullet direction to prevent z-fighting
-            hitEffectModel.position.add(dir.clone().multiplyScalar(5));
         }
         
         // Add to scene
