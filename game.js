@@ -542,12 +542,13 @@ const WEAPON_GLB_CONFIG = {
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
             scale: 1.2,
-            bulletScale: 0.7,
-            hitEffectScale: 1.5,
+            bulletScale: 1.0,  // Increased from 0.7 for larger visual impact
+            hitEffectScale: 2.5,  // Increased from 1.5 for larger explosion effect
             muzzleOffset: new THREE.Vector3(0, 25, 70),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            hitEffectPlanar: false,
+            hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),  // Same as 1x/3x for proper orientation
+            hitEffectPlanar: false,  // 5x uses 3D explosion effect, not planar water splash
             fpsCameraBackDist: 200,
             fpsCameraUpOffset: 70
         },
@@ -556,12 +557,13 @@ const WEAPON_GLB_CONFIG = {
             bullet: '8x 子彈模組',
             hitEffect: '8x 擊中特效',
             scale: 1.5,
-            bulletScale: 0.9,
-            hitEffectScale: 2.0,
+            bulletScale: 1.3,  // Increased from 0.9 for largest visual impact
+            hitEffectScale: 3.5,  // Increased from 2.0 for massive explosion effect
             muzzleOffset: new THREE.Vector3(0, 25, 80),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            hitEffectPlanar: false,
+            hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),  // Same as 1x/3x for proper orientation
+            hitEffectPlanar: false,  // 8x uses 3D explosion effect, not planar water splash
             fpsCameraBackDist: 180,
             fpsCameraUpOffset: 60
         }
@@ -765,11 +767,15 @@ async function preloadWeaponGLB(weaponKey) {
 async function preloadAllWeapons() {
     console.log('[WEAPON-GLB] Starting preload of all weapons...');
     
-    await preloadWeaponGLB('1x');
+    // Preload all weapons in parallel for faster startup
+    await Promise.all([
+        preloadWeaponGLB('1x'),
+        preloadWeaponGLB('3x'),
+        preloadWeaponGLB('5x'),
+        preloadWeaponGLB('8x')
+    ]);
     
-    setTimeout(() => preloadWeaponGLB('3x'), 1000);
-    setTimeout(() => preloadWeaponGLB('5x'), 3000);
-    setTimeout(() => preloadWeaponGLB('8x'), 6000);
+    console.log('[WEAPON-GLB] All weapons preloaded');
 }
 
 function getWeaponGLBStats() {
@@ -3311,10 +3317,26 @@ let autoShootTimer = 0;
 // Flag to track if game scene has been initialized
 let gameSceneInitialized = false;
 
-function init() {
-    // Lazy initialization: Only set gameLoaded flag, defer heavy Three.js initialization
-    // This prevents the game scene from flashing before the lobby is shown
-    console.log('Lobby initialized - game scene deferred until game start');
+async function init() {
+    // Preload all resources before showing lobby
+    console.log('[INIT] Starting resource preloading...');
+    
+    // Update loading text if available
+    const loadingText = document.getElementById('loading-text');
+    if (loadingText) {
+        loadingText.textContent = 'Loading weapon models...';
+    }
+    
+    // Preload all weapon GLB models
+    try {
+        await preloadAllWeapons();
+        console.log('[INIT] Weapon preloading complete');
+    } catch (error) {
+        console.error('[INIT] Weapon preloading failed:', error);
+    }
+    
+    // Signal that loading is complete
+    console.log('[INIT] All resources preloaded - ready to show lobby');
     window.gameLoaded = true;
 }
 
@@ -6843,7 +6865,10 @@ class Bullet {
                     
                 } else if (weapon.type === 'aoe' || weapon.type === 'superAoe') {
                     // AOE/SuperAOE explosion: damage all fish in radius
-                    triggerExplosion(hitPos, this.weaponKey);
+                    // Skip procedural visuals when GLB hit effects are enabled (avoid duplicate effects)
+                    const glbConfig = WEAPON_GLB_CONFIG.weapons[this.weaponKey];
+                    const useGLBVisuals = weaponGLBState.enabled && glbConfig && glbConfig.hitEffect;
+                    triggerExplosion(hitPos, this.weaponKey, useGLBVisuals);
                     
                     // Issue #14/16: Enhanced 8x/20x hit effect (mega explosion)
                     spawnWeaponHitEffect(this.weaponKey, hitPos, fish, bulletDirection);
@@ -7379,7 +7404,8 @@ function spawnLightningArc(startPos, endPos, color) {
 }
 
 // AOE Explosion Effect (8x weapon)
-function triggerExplosion(center, weaponKey) {
+// skipVisuals: if true, only apply damage and sound (GLB hit effect handles visuals)
+function triggerExplosion(center, weaponKey, skipVisuals = false) {
     // Issue #6: Play explosion sound
     playSound('explosion');
     
@@ -7388,8 +7414,10 @@ function triggerExplosion(center, weaponKey) {
     const damageCenter = weapon.damage || 250;
     const damageEdge = weapon.damageEdge || 100;
     
-    // Spawn explosion visual
-    spawnExplosionEffect(center, aoeRadius, weapon.color);
+    // Spawn explosion visual only if not skipped (GLB hit effect handles visuals when enabled)
+    if (!skipVisuals) {
+        spawnExplosionEffect(center, aoeRadius, weapon.color);
+    }
     
     // Damage all fish within radius
     for (const fish of activeFish) {
@@ -7402,7 +7430,10 @@ function triggerExplosion(center, weaponKey) {
             const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
             
             fish.takeDamage(damage, weaponKey);
-            createHitParticles(fish.group.position, weapon.color, 3);
+            // Skip per-fish particles when GLB visuals are used
+            if (!skipVisuals) {
+                createHitParticles(fish.group.position, weapon.color, 3);
+            }
         }
     }
 }
