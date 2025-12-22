@@ -6804,9 +6804,23 @@ class Bullet {
             const distance = this.group.position.distanceTo(fish.group.position);
             // Very large collision radius for reliable hit detection (100 units + fish size)
             if (distance < fish.boundingRadius + 100) {
-                const hitPos = this.group.position.clone();
                 // Get bullet direction for hit effect orientation
                 const bulletDirection = this.velocity.clone().normalize();
+                
+                // Calculate hit position on fish's surface for accurate hit effect placement
+                // For 1x/3x planar effects, use fish surface position (fish center + offset toward bullet)
+                // For 5x/8x 3D effects, use bullet position (more forgiving visually)
+                let hitPos;
+                if (weapon.type === 'projectile' || weapon.type === 'spread') {
+                    // 1x/3x: Calculate impact point on fish's surface
+                    // Direction from fish to bullet
+                    const fishToBullet = this.group.position.clone().sub(fish.group.position).normalize();
+                    // Hit position is on fish's surface, facing the bullet
+                    hitPos = fish.group.position.clone().add(fishToBullet.multiplyScalar(fish.boundingRadius * 0.8));
+                } else {
+                    // 5x/8x: Use bullet position (explosion effects are more forgiving)
+                    hitPos = this.group.position.clone();
+                }
                 
                 // Handle different weapon types
                 if (weapon.type === 'chain') {
