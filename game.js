@@ -512,10 +512,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 0.8,
             bulletScale: 0.5,
             hitEffectScale: 1.0,
-            muzzleOffset: new THREE.Vector3(0, 0, 60),
+            muzzleOffset: new THREE.Vector3(0, 25, 60),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, 0, 0),
-            hitEffectPlanar: true
+            hitEffectPlanar: true,
+            fpsCameraBackDist: 120,
+            fpsCameraUpOffset: 40
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -524,10 +526,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.0,
             bulletScale: 0.6,
             hitEffectScale: 1.2,
-            muzzleOffset: new THREE.Vector3(0, 0, 65),
+            muzzleOffset: new THREE.Vector3(0, 25, 65),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, 0, 0),
-            hitEffectPlanar: true
+            hitEffectPlanar: true,
+            fpsCameraBackDist: 130,
+            fpsCameraUpOffset: 45
         },
         '5x': {
             cannon: '5x 武器模組',
@@ -536,10 +540,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.2,
             bulletScale: 0.7,
             hitEffectScale: 1.5,
-            muzzleOffset: new THREE.Vector3(0, 0, 70),
+            muzzleOffset: new THREE.Vector3(0, 25, 70),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, 0, 0),
-            hitEffectPlanar: false
+            hitEffectPlanar: false,
+            fpsCameraBackDist: 150,
+            fpsCameraUpOffset: 50
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -548,10 +554,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.5,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 0, 80),
+            muzzleOffset: new THREE.Vector3(0, 25, 80),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, 0, 0),
-            hitEffectPlanar: false
+            hitEffectPlanar: false,
+            fpsCameraBackDist: 180,
+            fpsCameraUpOffset: 60
         }
     }
 };
@@ -8110,8 +8118,9 @@ const FPS_PITCH_MIN = -47.5 * (Math.PI / 180);  // -47.5° (look down)
 const FPS_PITCH_MAX = 47.5 * (Math.PI / 180);   // +47.5° (look up) - total 95° vertical
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
-const FPS_CAMERA_BACK_DIST = 70;     // Distance behind muzzle (was 100, reduced to show more barrel)
-const FPS_CAMERA_UP_OFFSET_Y = 25;   // Height above muzzle (was 45, reduced to lower camera)
+// These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
+const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
+const FPS_CAMERA_UP_OFFSET_DEFAULT = 40;    // Default height above muzzle (increased for GLB models)
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
@@ -8150,12 +8159,18 @@ function updateFPSCamera() {
     const muzzleWorldPos = new THREE.Vector3();
     cannonMuzzle.getWorldPosition(muzzleWorldPos);
     
+    // Get per-weapon camera offsets from config (or use defaults)
+    const weaponKey = gameState.currentWeapon || '1x';
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    const cameraBackDist = (glbConfig && glbConfig.fpsCameraBackDist) || FPS_CAMERA_BACK_DIST_DEFAULT;
+    const cameraUpOffset = (glbConfig && glbConfig.fpsCameraUpOffset) || FPS_CAMERA_UP_OFFSET_DEFAULT;
+    
     // Calculate camera offset in world space - CS:GO style FPS view
     // Camera positioned BEHIND the cannon body so barrel is visible in front
-    // Using tunable constants for easy adjustment of barrel visibility
+    // Using per-weapon offsets for proper framing with different GLB model sizes
     const backwardDir = forward.clone().negate();
-    const upOffset = new THREE.Vector3(0, FPS_CAMERA_UP_OFFSET_Y, 0);   // Height above muzzle
-    const backOffset = backwardDir.multiplyScalar(FPS_CAMERA_BACK_DIST);  // Distance behind muzzle
+    const upOffset = new THREE.Vector3(0, cameraUpOffset, 0);   // Height above muzzle
+    const backOffset = backwardDir.multiplyScalar(cameraBackDist);  // Distance behind muzzle
     
     camera.position.copy(muzzleWorldPos).add(backOffset).add(upOffset);
     
