@@ -506,9 +506,9 @@ const WEAPON_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     weapons: {
         '1x': {
-            cannon: '1x%20武器模組',
-            bullet: '1x%20子彈模組',
-            hitEffect: '1x%20擊中特效',
+            cannon: '1x 武器模組',
+            bullet: '1x 子彈模組',
+            hitEffect: '1x 擊中特效',
             scale: 0.8,
             bulletScale: 0.5,
             hitEffectScale: 1.0,
@@ -517,9 +517,9 @@ const WEAPON_GLB_CONFIG = {
             hitEffectPlanar: true
         },
         '3x': {
-            cannon: '3x%20武器模組',
-            bullet: '3X%20子彈模組',
-            hitEffect: '3X%20擊中特效',
+            cannon: '3x 武器模組',
+            bullet: '3X 子彈模組',
+            hitEffect: '3X 擊中特效',
             scale: 1.0,
             bulletScale: 0.6,
             hitEffectScale: 1.2,
@@ -528,9 +528,9 @@ const WEAPON_GLB_CONFIG = {
             hitEffectPlanar: true
         },
         '5x': {
-            cannon: '5x%20武器模組',
-            bullet: '5x%20子彈模組',
-            hitEffect: '5x%20擊中特效',
+            cannon: '5x 武器模組',
+            bullet: '5x 子彈模組',
+            hitEffect: '5x 擊中特效',
             scale: 1.2,
             bulletScale: 0.7,
             hitEffectScale: 1.5,
@@ -539,9 +539,9 @@ const WEAPON_GLB_CONFIG = {
             hitEffectPlanar: false
         },
         '8x': {
-            cannon: '8x%20武器模組',
-            bullet: '8x%20子彈模組',
-            hitEffect: '8x%20擊中特效',
+            cannon: '8x 武器模組',
+            bullet: '8x 子彈模組',
+            hitEffect: '8x 擊中特效',
             scale: 1.5,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
@@ -588,7 +588,9 @@ async function loadWeaponGLB(weaponKey, type) {
             return null;
     }
     
-    const url = WEAPON_GLB_CONFIG.baseUrl + filename;
+    // Properly encode the filename for URL (handles Chinese characters and spaces)
+    const encodedFilename = encodeURIComponent(filename);
+    const url = WEAPON_GLB_CONFIG.baseUrl + encodedFilename;
     const cacheKey = `${weaponKey}_${type}`;
     
     if (cache.has(cacheKey)) {
