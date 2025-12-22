@@ -501,6 +501,195 @@ function getGLBLoaderStats() {
     };
 }
 
+// ==================== WEAPON GLB MODEL LOADER ====================
+const WEAPON_GLB_CONFIG = {
+    baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
+    weapons: {
+        '1x': {
+            cannon: '1x%20武器模組',
+            bullet: '1x%20子彈模組',
+            hitEffect: '1x%20擊中特效',
+            scale: 0.8,
+            bulletScale: 0.5,
+            hitEffectScale: 1.0,
+            muzzleOffset: new THREE.Vector3(0, 0, 60),
+            bulletRotationFix: new THREE.Euler(0, 0, 0),
+            hitEffectPlanar: true
+        },
+        '3x': {
+            cannon: '3x%20武器模組',
+            bullet: '3X%20子彈模組',
+            hitEffect: '3X%20擊中特效',
+            scale: 1.0,
+            bulletScale: 0.6,
+            hitEffectScale: 1.2,
+            muzzleOffset: new THREE.Vector3(0, 0, 65),
+            bulletRotationFix: new THREE.Euler(0, 0, 0),
+            hitEffectPlanar: true
+        },
+        '5x': {
+            cannon: '5x%20武器模組',
+            bullet: '5x%20子彈模組',
+            hitEffect: '5x%20擊中特效',
+            scale: 1.2,
+            bulletScale: 0.7,
+            hitEffectScale: 1.5,
+            muzzleOffset: new THREE.Vector3(0, 0, 70),
+            bulletRotationFix: new THREE.Euler(0, 0, 0),
+            hitEffectPlanar: false
+        },
+        '8x': {
+            cannon: '8x%20武器模組',
+            bullet: '8x%20子彈模組',
+            hitEffect: '8x%20擊中特效',
+            scale: 1.5,
+            bulletScale: 0.9,
+            hitEffectScale: 2.0,
+            muzzleOffset: new THREE.Vector3(0, 0, 80),
+            bulletRotationFix: new THREE.Euler(0, 0, 0),
+            hitEffectPlanar: false
+        }
+    }
+};
+
+const weaponGLBState = {
+    cannonCache: new Map(),
+    bulletCache: new Map(),
+    hitEffectCache: new Map(),
+    loadingPromises: new Map(),
+    enabled: true,
+    currentWeaponModel: null,
+    preloadedWeapons: new Set()
+};
+
+async function loadWeaponGLB(weaponKey, type) {
+    const config = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    if (!config) {
+        console.warn('[WEAPON-GLB] Unknown weapon:', weaponKey);
+        return null;
+    }
+    
+    let filename, cache;
+    switch (type) {
+        case 'cannon':
+            filename = config.cannon;
+            cache = weaponGLBState.cannonCache;
+            break;
+        case 'bullet':
+            filename = config.bullet;
+            cache = weaponGLBState.bulletCache;
+            break;
+        case 'hitEffect':
+            filename = config.hitEffect;
+            cache = weaponGLBState.hitEffectCache;
+            break;
+        default:
+            console.warn('[WEAPON-GLB] Unknown type:', type);
+            return null;
+    }
+    
+    const url = WEAPON_GLB_CONFIG.baseUrl + filename;
+    const cacheKey = `${weaponKey}_${type}`;
+    
+    if (cache.has(cacheKey)) {
+        const cached = cache.get(cacheKey);
+        return cached.clone();
+    }
+    
+    if (weaponGLBState.loadingPromises.has(cacheKey)) {
+        const model = await weaponGLBState.loadingPromises.get(cacheKey);
+        return model ? model.clone() : null;
+    }
+    
+    console.log(`[WEAPON-GLB] Loading ${type} for ${weaponKey}:`, url);
+    
+    const loadPromise = new Promise((resolve) => {
+        if (typeof THREE.GLTFLoader === 'undefined') {
+            console.warn('[WEAPON-GLB] GLTFLoader not available');
+            resolve(null);
+            return;
+        }
+        
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            url,
+            (gltf) => {
+                const model = gltf.scene;
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+                
+                const box = new THREE.Box3().setFromObject(model);
+                const center = new THREE.Vector3();
+                box.getCenter(center);
+                model.position.sub(center);
+                model.position.y += center.y;
+                
+                cache.set(cacheKey, model);
+                console.log(`[WEAPON-GLB] Loaded ${type} for ${weaponKey}, size:`, box.getSize(new THREE.Vector3()));
+                resolve(model);
+            },
+            (xhr) => {
+                if (xhr.total) {
+                    const percent = (xhr.loaded / xhr.total * 100).toFixed(1);
+                    console.log(`[WEAPON-GLB] Loading ${weaponKey} ${type}: ${percent}%`);
+                }
+            },
+            (error) => {
+                console.warn(`[WEAPON-GLB] Failed to load ${type} for ${weaponKey}:`, error.message);
+                resolve(null);
+            }
+        );
+    });
+    
+    weaponGLBState.loadingPromises.set(cacheKey, loadPromise);
+    const model = await loadPromise;
+    weaponGLBState.loadingPromises.delete(cacheKey);
+    
+    return model ? model.clone() : null;
+}
+
+async function preloadWeaponGLB(weaponKey) {
+    if (weaponGLBState.preloadedWeapons.has(weaponKey)) {
+        return;
+    }
+    
+    console.log(`[WEAPON-GLB] Preloading weapon: ${weaponKey}`);
+    
+    await Promise.all([
+        loadWeaponGLB(weaponKey, 'cannon'),
+        loadWeaponGLB(weaponKey, 'bullet'),
+        loadWeaponGLB(weaponKey, 'hitEffect')
+    ]);
+    
+    weaponGLBState.preloadedWeapons.add(weaponKey);
+    console.log(`[WEAPON-GLB] Preloaded weapon: ${weaponKey}`);
+}
+
+async function preloadAllWeapons() {
+    console.log('[WEAPON-GLB] Starting preload of all weapons...');
+    
+    await preloadWeaponGLB('1x');
+    
+    setTimeout(() => preloadWeaponGLB('3x'), 1000);
+    setTimeout(() => preloadWeaponGLB('5x'), 3000);
+    setTimeout(() => preloadWeaponGLB('8x'), 6000);
+}
+
+function getWeaponGLBStats() {
+    return {
+        enabled: weaponGLBState.enabled,
+        cachedCannons: weaponGLBState.cannonCache.size,
+        cachedBullets: weaponGLBState.bulletCache.size,
+        cachedHitEffects: weaponGLBState.hitEffectCache.size,
+        preloadedWeapons: Array.from(weaponGLBState.preloadedWeapons),
+        pendingLoads: weaponGLBState.loadingPromises.size
+    };
+}
+
 // ==================== PERFORMANCE OPTIMIZATION CONFIG ====================
 const PERFORMANCE_CONFIG = {
     // Graphics quality presets (low/medium/high)
@@ -2166,10 +2355,24 @@ function spawnFireballMuzzleFlash(position, direction) {
 }
 
 // Enhanced hit effect based on weapon type
-function spawnWeaponHitEffect(weaponKey, hitPos, hitFish) {
+async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!config) return;
     
+    // Try to spawn GLB hit effect first
+    if (weaponGLBState.enabled && glbConfig) {
+        const glbSpawned = await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection);
+        if (glbSpawned) {
+            // GLB effect spawned, still add some procedural effects for extra visual impact
+            if (weaponKey === '5x' || weaponKey === '8x') {
+                triggerScreenShakeWithStrength(weaponKey === '8x' ? 3 : 1);
+            }
+            return;
+        }
+    }
+    
+    // Fallback to procedural effects
     if (weaponKey === '1x') {
         // Small water splash + white light ring explosion
         spawnWaterSplash(hitPos, 20);
@@ -2214,6 +2417,91 @@ function spawnWeaponHitEffect(weaponKey, hitPos, hitFish) {
         spawnWaterColumn(hitPos, 80);
         // Knockback nearby fish
         applyExplosionKnockback(hitPos, 200, 150);
+    }
+}
+
+// Spawn GLB hit effect model
+async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    if (!glbConfig) return false;
+    
+    try {
+        const hitEffectModel = await loadWeaponGLB(weaponKey, 'hitEffect');
+        if (!hitEffectModel) return false;
+        
+        // Apply scale from config
+        const scale = glbConfig.hitEffectScale;
+        hitEffectModel.scale.set(scale, scale, scale);
+        
+        // Position at hit location
+        hitEffectModel.position.copy(hitPos);
+        
+        // Orient the hit effect based on whether it's planar (1x/3x) or 3D (5x/8x)
+        if (glbConfig.hitEffectPlanar && bulletDirection) {
+            // For planar effects (1x/3x), orient perpendicular to bullet direction
+            // The effect's normal should align with the bullet direction
+            const dir = bulletDirection.clone().normalize();
+            
+            // Calculate quaternion to rotate from default forward (0,0,1) to bullet direction
+            const defaultNormal = new THREE.Vector3(0, 0, 1);
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromUnitVectors(defaultNormal, dir);
+            hitEffectModel.quaternion.copy(quaternion);
+            
+            // Offset slightly along bullet direction to prevent z-fighting
+            hitEffectModel.position.add(dir.clone().multiplyScalar(5));
+        }
+        
+        // Add to scene
+        scene.add(hitEffectModel);
+        
+        // Animate the hit effect (scale up then fade out)
+        const startTime = performance.now();
+        const duration = 800; // 800ms animation
+        const initialScale = scale * 0.5;
+        const maxScale = scale * 1.5;
+        
+        function animateHitEffect() {
+            const elapsed = performance.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            if (progress < 0.3) {
+                // Scale up phase (0-30%)
+                const scaleProgress = progress / 0.3;
+                const currentScale = initialScale + (maxScale - initialScale) * scaleProgress;
+                hitEffectModel.scale.set(currentScale, currentScale, currentScale);
+            } else {
+                // Fade out phase (30-100%)
+                const fadeProgress = (progress - 0.3) / 0.7;
+                hitEffectModel.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        if (!child.material.transparent) {
+                            child.material.transparent = true;
+                        }
+                        child.material.opacity = 1 - fadeProgress;
+                    }
+                });
+            }
+            
+            if (progress < 1) {
+                requestAnimationFrame(animateHitEffect);
+            } else {
+                // Remove from scene when animation complete
+                scene.remove(hitEffectModel);
+                hitEffectModel.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+        }
+        
+        animateHitEffect();
+        console.log(`[WEAPON-GLB] Spawned GLB hit effect for ${weaponKey}`);
+        return true;
+        
+    } catch (error) {
+        console.warn(`[WEAPON-GLB] Failed to spawn GLB hit effect for ${weaponKey}:`, error);
+        return false;
     }
 }
 
@@ -3643,8 +3931,11 @@ function createCannon() {
     cannonMuzzle.position.set(0, 25, 60);  // At end of barrel along +Z axis
     cannonPitchGroup.add(cannonMuzzle);
     
-    // Build initial cannon geometry
+    // Build initial cannon geometry (async - will load GLB if available)
     buildCannonGeometryForWeapon('1x');
+    
+    // Start preloading all weapon GLB models in background
+    preloadAllWeapons();
     
     // Position player cannon at 12 o'clock (Z negative) on platform EDGE
     // Uses CANNON_BASE_Y for water middle height, CANNON_RING_RADIUS_Z for front/back positioning
@@ -3669,7 +3960,7 @@ function createCannon() {
     scene.add(cannonSpotLight);
 }
 
-function buildCannonGeometryForWeapon(weaponKey) {
+async function buildCannonGeometryForWeapon(weaponKey) {
     // Clear existing cannon body
     while (cannonBodyGroup.children.length > 0) {
         const child = cannonBodyGroup.children[0];
@@ -3679,6 +3970,43 @@ function buildCannonGeometryForWeapon(weaponKey) {
     }
     
     const weapon = CONFIG.weapons[weaponKey];
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    
+    // Try to load GLB model first
+    if (weaponGLBState.enabled && glbConfig) {
+        try {
+            const cannonModel = await loadWeaponGLB(weaponKey, 'cannon');
+            if (cannonModel) {
+                console.log(`[WEAPON-GLB] Using GLB cannon for ${weaponKey}`);
+                
+                // Apply scale from config
+                const scale = glbConfig.scale;
+                cannonModel.scale.set(scale, scale, scale);
+                
+                // Position the model
+                cannonModel.position.set(0, 20, 0);
+                
+                // Store reference for recoil animation
+                cannonBarrel = cannonModel;
+                cannonBodyGroup.add(cannonModel);
+                
+                // Update muzzle position based on GLB config
+                if (cannonMuzzle && glbConfig.muzzleOffset) {
+                    cannonMuzzle.position.copy(glbConfig.muzzleOffset);
+                }
+                
+                // Store current weapon model reference
+                weaponGLBState.currentWeaponModel = cannonModel;
+                
+                return; // Successfully loaded GLB, skip procedural
+            }
+        } catch (error) {
+            console.warn(`[WEAPON-GLB] Failed to load GLB for ${weaponKey}, using procedural:`, error);
+        }
+    }
+    
+    // Fallback to procedural geometry
+    console.log(`[WEAPON-GLB] Using procedural cannon for ${weaponKey}`);
     
     if (weaponKey === '1x') {
         // Silver basic cannon - single barrel
@@ -6187,12 +6515,17 @@ class Bullet {
         this.weaponKey = '1x';
         this.velocity = new THREE.Vector3();
         this.lifetime = 0;
+        this.glbModel = null;
+        this.useGLB = false;
         
         this.createMesh();
     }
     
     createMesh() {
         this.group = new THREE.Group();
+        
+        // Procedural bullet container (will be hidden if GLB is used)
+        this.proceduralGroup = new THREE.Group();
         
         // Main bullet - smaller to match reduced cannon (Issue #3)
         const bulletGeometry = new THREE.SphereGeometry(5, 10, 6);
@@ -6204,7 +6537,7 @@ class Bullet {
             roughness: 0.2
         });
         this.bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
-        this.group.add(this.bullet);
+        this.proceduralGroup.add(this.bullet);
         
         // Trail - smaller
         const trailGeometry = new THREE.ConeGeometry(3, 12, 6);
@@ -6216,40 +6549,97 @@ class Bullet {
         this.trail = new THREE.Mesh(trailGeometry, trailMaterial);
         this.trail.rotation.x = Math.PI / 2;
         this.trail.position.z = -10;
-        this.group.add(this.trail);
+        this.proceduralGroup.add(this.trail);
         
+        this.group.add(this.proceduralGroup);
         this.group.visible = false;
         bulletGroup.add(this.group);
     }
     
-    fire(origin, direction, weaponKey) {
+    async loadGLBBullet(weaponKey) {
+        const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+        if (!weaponGLBState.enabled || !glbConfig) {
+            return false;
+        }
+        
+        try {
+            const bulletModel = await loadWeaponGLB(weaponKey, 'bullet');
+            if (bulletModel) {
+                // Remove old GLB model if exists
+                if (this.glbModel) {
+                    this.group.remove(this.glbModel);
+                }
+                
+                // Apply scale from config
+                const scale = glbConfig.bulletScale;
+                bulletModel.scale.set(scale, scale, scale);
+                
+                this.glbModel = bulletModel;
+                this.group.add(bulletModel);
+                this.useGLB = true;
+                this.proceduralGroup.visible = false;
+                
+                return true;
+            }
+        } catch (error) {
+            console.warn(`[BULLET-GLB] Failed to load GLB bullet for ${weaponKey}:`, error);
+        }
+        
+        return false;
+    }
+    
+    async fire(origin, direction, weaponKey) {
         this.weaponKey = weaponKey;
         const weapon = CONFIG.weapons[weaponKey];
-        this.isGrenade = (weapon.type === 'aoe' || weapon.type === 'superAoe');  // Issue #4: Track if this is a grenade (8x or 20x)
+        const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+        this.isGrenade = (weapon.type === 'aoe' || weapon.type === 'superAoe');
         
         this.group.position.copy(origin);
         this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
         // Issue #4: Add upward arc for grenades
         if (this.isGrenade) {
-            this.velocity.y += 200;  // Initial upward boost for arc trajectory
+            this.velocity.y += 200;
         }
         
         this.lifetime = 4;
         this.isActive = true;
         this.group.visible = true;
         
-        // Update visual based on weapon
-        this.bullet.material.color.setHex(weapon.color);
-        this.bullet.material.emissive.setHex(weapon.color);
-        this.trail.material.color.setHex(weapon.color);
+        // Try to use GLB bullet model
+        const glbLoaded = await this.loadGLBBullet(weaponKey);
         
-        const scale = weapon.size / 8;
-        this.bullet.scale.set(scale, scale, scale);
-        this.trail.scale.set(scale, scale, scale);
+        if (glbLoaded) {
+            // GLB bullet loaded successfully
+            this.proceduralGroup.visible = false;
+            if (this.glbModel) {
+                this.glbModel.visible = true;
+            }
+        } else {
+            // Fallback to procedural bullet
+            this.useGLB = false;
+            this.proceduralGroup.visible = true;
+            if (this.glbModel) {
+                this.glbModel.visible = false;
+            }
+            
+            // Update procedural visual based on weapon
+            this.bullet.material.color.setHex(weapon.color);
+            this.bullet.material.emissive.setHex(weapon.color);
+            this.trail.material.color.setHex(weapon.color);
+            
+            const scale = weapon.size / 8;
+            this.bullet.scale.set(scale, scale, scale);
+            this.trail.scale.set(scale, scale, scale);
+        }
         
         // Orient bullet in direction of travel
         this.group.lookAt(this.group.position.clone().add(direction));
+        
+        // Apply rotation fix for GLB models if needed
+        if (this.useGLB && glbConfig && glbConfig.bulletRotationFix) {
+            this.glbModel.rotation.copy(glbConfig.bulletRotationFix);
+        }
     }
     
     update(deltaTime) {
@@ -6297,6 +6687,8 @@ class Bullet {
             // Very large collision radius for reliable hit detection (100 units + fish size)
             if (distance < fish.boundingRadius + 100) {
                 const hitPos = this.group.position.clone();
+                // Get bullet direction for hit effect orientation
+                const bulletDirection = this.velocity.clone().normalize();
                 
                 // Handle different weapon types
                 if (weapon.type === 'chain') {
@@ -6307,15 +6699,15 @@ class Bullet {
                     // Trigger chain lightning effect
                     triggerChainLightning(fish, this.weaponKey, weapon.damage);
                     
-                    // Issue #14: Enhanced 5x hit effect
-                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish);
+                    // Issue #14: Enhanced 5x hit effect (pass bullet direction for orientation)
+                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish, bulletDirection);
                     
                 } else if (weapon.type === 'aoe' || weapon.type === 'superAoe') {
                     // AOE/SuperAOE explosion: damage all fish in radius
                     triggerExplosion(hitPos, this.weaponKey);
                     
                     // Issue #14/16: Enhanced 8x/20x hit effect (mega explosion)
-                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish);
+                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish, bulletDirection);
                     
                     // Issue #16: Extra screen shake for 20x super weapon
                     if (weapon.type === 'superAoe') {
@@ -6330,8 +6722,8 @@ class Bullet {
                         createHitParticles(hitPos, weapon.color, 5);
                     }
                     
-                    // Issue #14: Enhanced 1x/3x hit effect
-                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish);
+                    // Issue #14: Enhanced 1x/3x hit effect (pass bullet direction for planar orientation)
+                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish, bulletDirection);
                 }
                 
                 this.deactivate();
