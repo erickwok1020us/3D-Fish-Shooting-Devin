@@ -514,8 +514,12 @@ const WEAPON_GLB_CONFIG = {
             hitEffectScale: 1.0,
             muzzleOffset: new THREE.Vector3(0, 25, 60),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, 0, 0),
+            // Bullet rotation: lookAt() makes -Z point toward target, GLB model has +X as forward
+            // So we need +90° Y rotation to align +X to -Z
+            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: true,
+            // Hit effect rotation: align GLB model's forward axis with bullet direction
+            hitEffectRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             fpsCameraBackDist: 120,
             fpsCameraUpOffset: 40
         },
@@ -528,8 +532,10 @@ const WEAPON_GLB_CONFIG = {
             hitEffectScale: 1.2,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, 0, 0),
+            // Bullet rotation: +90° Y to convert +X forward to -Z (lookAt direction)
+            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: true,
+            hitEffectRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             fpsCameraBackDist: 130,
             fpsCameraUpOffset: 45
         },
@@ -542,10 +548,12 @@ const WEAPON_GLB_CONFIG = {
             hitEffectScale: 1.5,
             muzzleOffset: new THREE.Vector3(0, 25, 70),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, 0, 0),
+            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 150,
-            fpsCameraUpOffset: 50
+            hitEffectRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            // Increased camera offsets to prevent camera from being inside barrel
+            fpsCameraBackDist: 200,
+            fpsCameraUpOffset: 70
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -556,8 +564,9 @@ const WEAPON_GLB_CONFIG = {
             hitEffectScale: 2.0,
             muzzleOffset: new THREE.Vector3(0, 25, 80),
             cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, 0, 0),
+            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
+            hitEffectRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             fpsCameraBackDist: 180,
             fpsCameraUpOffset: 60
         }
@@ -2518,6 +2527,17 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
         const hitEffectModel = await loadWeaponGLB(weaponKey, 'hitEffect');
         if (!hitEffectModel) return false;
         
+        // CRITICAL: Clone materials to prevent dispose from breaking the cache
+        // The loadWeaponGLB returns a clone, but materials may still be shared
+        const clonedMaterials = [];
+        hitEffectModel.traverse((child) => {
+            if (child.isMesh && child.material) {
+                // Clone the material so we can safely modify and dispose it
+                child.material = child.material.clone();
+                clonedMaterials.push(child.material);
+            }
+        });
+        
         // Apply scale from config
         const scale = glbConfig.hitEffectScale;
         hitEffectModel.scale.set(scale, scale, scale);
@@ -2525,17 +2545,30 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
         // Position at hit location
         hitEffectModel.position.copy(hitPos);
         
-        // Orient the hit effect based on whether it's planar (1x/3x) or 3D (5x/8x)
-        if (glbConfig.hitEffectPlanar && bulletDirection) {
-            // For planar effects (1x/3x), orient perpendicular to bullet direction
-            // The effect's normal should align with the bullet direction
+        // Orient the hit effect to face away from gun barrel (along bullet direction)
+        if (bulletDirection) {
             const dir = bulletDirection.clone().normalize();
             
-            // Calculate quaternion to rotate from default forward (0,0,1) to bullet direction
-            const defaultNormal = new THREE.Vector3(0, 0, 1);
-            const quaternion = new THREE.Quaternion();
-            quaternion.setFromUnitVectors(defaultNormal, dir);
-            hitEffectModel.quaternion.copy(quaternion);
+            if (glbConfig.hitEffectPlanar) {
+                // For planar effects (1x/3x), orient perpendicular to bullet direction
+                // The effect's normal should align with the bullet direction (facing away from gun)
+                // GLB model's default forward is +X, we need to align it with bullet direction
+                const defaultForward = new THREE.Vector3(1, 0, 0); // GLB model forward axis
+                const quaternion = new THREE.Quaternion();
+                quaternion.setFromUnitVectors(defaultForward, dir);
+                hitEffectModel.quaternion.copy(quaternion);
+            } else {
+                // For 3D effects (5x/8x), just orient toward bullet direction
+                const targetPos = hitPos.clone().add(dir);
+                hitEffectModel.lookAt(targetPos);
+            }
+            
+            // Apply additional rotation fix from config if specified
+            if (glbConfig.hitEffectRotationFix) {
+                const fixQuat = new THREE.Quaternion();
+                fixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
+                hitEffectModel.quaternion.multiply(fixQuat);
+            }
             
             // Offset slightly along bullet direction to prevent z-fighting
             hitEffectModel.position.add(dir.clone().multiplyScalar(5));
@@ -2562,13 +2595,12 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
             } else {
                 // Fade out phase (30-100%)
                 const fadeProgress = (progress - 0.3) / 0.7;
-                hitEffectModel.traverse((child) => {
-                    if (child.isMesh && child.material) {
-                        if (!child.material.transparent) {
-                            child.material.transparent = true;
-                        }
-                        child.material.opacity = 1 - fadeProgress;
+                // Only modify cloned materials (safe to modify)
+                clonedMaterials.forEach((mat) => {
+                    if (!mat.transparent) {
+                        mat.transparent = true;
                     }
+                    mat.opacity = 1 - fadeProgress;
                 });
             }
             
@@ -2577,9 +2609,10 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
             } else {
                 // Remove from scene when animation complete
                 scene.remove(hitEffectModel);
+                // Only dispose cloned materials (safe to dispose)
+                clonedMaterials.forEach((mat) => mat.dispose());
                 hitEffectModel.traverse((child) => {
                     if (child.geometry) child.geometry.dispose();
-                    if (child.material) child.material.dispose();
                 });
             }
         }
