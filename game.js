@@ -655,34 +655,32 @@ async function loadWeaponGLB(weaponKey, type) {
                 
                 // Target sizes for different types (in game units)
                 const targetSizes = {
-                    cannon: 60,  // Barrel length ~60 units
-                    bullet: 15,  // Bullet size ~15 units
-                    hitEffect: 40 // Hit effect size ~40 units
+                    cannon: 80,  // Cannon size ~80 units (larger for visibility)
+                    bullet: 20,  // Bullet size ~20 units
+                    hitEffect: 50 // Hit effect size ~50 units
                 };
                 
-                // Auto-scale model to match expected size
+                // ALWAYS normalize model to target size (not just for extreme cases)
+                // This ensures models of any original size will be visible in the game
                 const maxDimension = Math.max(size.x, size.y, size.z);
-                const targetSize = targetSizes[type] || 60;
+                const targetSize = targetSizes[type] || 80;
                 let autoScale = 1;
                 
-                if (maxDimension > 0 && maxDimension < 1) {
-                    // Model is very small (likely in meters or millimeters)
+                if (maxDimension > 0.001) {
+                    // Always scale to target size
                     autoScale = targetSize / maxDimension;
-                    console.log(`[WEAPON-GLB] Auto-scaling ${type} for ${weaponKey}: model is tiny (${maxDimension.toFixed(4)}), scaling by ${autoScale.toFixed(2)}`);
-                } else if (maxDimension > 1000) {
-                    // Model is very large
-                    autoScale = targetSize / maxDimension;
-                    console.log(`[WEAPON-GLB] Auto-scaling ${type} for ${weaponKey}: model is huge (${maxDimension.toFixed(2)}), scaling by ${autoScale.toFixed(4)}`);
+                    // Clamp to reasonable range to avoid extreme values
+                    autoScale = Math.max(0.01, Math.min(autoScale, 10000));
                 }
                 
+                console.log(`[WEAPON-GLB] Normalizing ${type} for ${weaponKey}: original maxDim=${maxDimension.toFixed(4)}, target=${targetSize}, autoScale=${autoScale.toFixed(4)}`);
+                
                 // Apply auto-scale to model
-                if (autoScale !== 1) {
-                    model.scale.multiplyScalar(autoScale);
-                    // Recalculate bounding box after scaling
-                    box.setFromObject(model);
-                    box.getCenter(center);
-                    box.getSize(size);
-                }
+                model.scale.multiplyScalar(autoScale);
+                // Recalculate bounding box after scaling
+                box.setFromObject(model);
+                box.getCenter(center);
+                box.getSize(size);
                 
                 // Create a wrapper group to preserve centering when external code sets position
                 const wrapper = new THREE.Group();
@@ -695,13 +693,8 @@ async function loadWeaponGLB(weaponKey, type) {
                 wrapper.add(model);
                 
                 cache.set(cacheKey, wrapper);
-                console.log(`[WEAPON-GLB] Loaded ${type} for ${weaponKey}:`, {
-                    size: size.toArray().map(v => v.toFixed(2)),
-                    center: center.toArray().map(v => v.toFixed(2)),
-                    meshCount,
-                    hasSkinnedMesh,
-                    autoScale: autoScale.toFixed(4)
-                });
+                // Log with flat string values for easy debugging (no need to expand Array(3))
+                console.log(`[WEAPON-GLB] Loaded ${type} for ${weaponKey}: size=[${size.toArray().map(v => v.toFixed(2)).join(',')}], center=[${center.toArray().map(v => v.toFixed(2)).join(',')}], meshCount=${meshCount}, autoScale=${autoScale.toFixed(4)}`);
                 resolve(wrapper);
             },
             (xhr) => {
