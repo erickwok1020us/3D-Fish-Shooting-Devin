@@ -2971,13 +2971,14 @@ function spawnCoinBurst(position, count) {
     }
 }
 
-// Issue #16: Coin fly animation to cannon (bottom-center)
+// Issue #16: Coin fly animation to cannon muzzle (gun barrel tip)
 function spawnCoinFlyToScore(startPosition, coinCount, reward) {
-    if (!particleGroup || !cannon) return;
+    // FIX: Changed from undefined 'cannon' to 'cannonMuzzle' which is the actual gun barrel tip
+    if (!particleGroup || !cannonMuzzle) return;
     
-    // Get cannon position as target
+    // Get cannon muzzle position as target (where the gun barrel points)
     const cannonPos = new THREE.Vector3();
-    cannon.getWorldPosition(cannonPos);
+    cannonMuzzle.getWorldPosition(cannonPos);
     
     for (let i = 0; i < Math.min(coinCount, 15); i++) {
         setTimeout(() => {
@@ -3013,13 +3014,13 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
             const duration = 0.6 + Math.random() * 0.2;  // Slightly faster
             const startPos = coin.position.clone();
             
-            // Calculate arc trajectory toward cannon
+            // Calculate arc trajectory toward cannon muzzle
             const midPoint = startPos.clone().lerp(cannonPos, 0.5);
             midPoint.y += 100 + Math.random() * 50;  // Arc upward at midpoint
             
-            // Target position is the cannon
+            // Target position is the cannon muzzle (gun barrel tip)
             const targetPos = cannonPos.clone();
-            targetPos.y += 50;  // Slightly above cannon base
+            // No Y offset needed - cannonMuzzle is already at the correct position
             
             const animate = () => {
                 time += 0.016;
@@ -3320,10 +3321,65 @@ let autoShootTimer = 0;
 // Flag to track if game scene has been initialized
 let gameSceneInitialized = false;
 
-function init() {
-    // Lazy initialization: Only set gameLoaded flag, defer heavy Three.js initialization
-    // This prevents the game scene from flashing before the lobby is shown
-    console.log('Lobby initialized - game scene deferred until game start');
+async function init() {
+    // PRELOAD FIX: Preload all GLB models before showing the lobby
+    // This ensures instant game start when user clicks "Single Player"
+    console.log('[PRELOAD] Starting GLB preload before showing lobby...');
+    
+    // Show loading screen during preload
+    const loadingScreen = document.getElementById('loading-screen');
+    const loadingText = document.getElementById('loading-text');
+    const loadingProgress = document.getElementById('loading-progress');
+    
+    if (loadingScreen) {
+        loadingScreen.style.display = 'flex';
+    }
+    
+    // Update loading progress
+    const updateProgress = (percent, text) => {
+        if (loadingText) loadingText.textContent = text;
+        if (loadingProgress) loadingProgress.style.width = percent + '%';
+    };
+    
+    updateProgress(10, 'Loading weapon models...');
+    
+    // Preload all weapon GLB models (cannon, bullet, hitEffect for each weapon)
+    try {
+        // Load 1x weapon first (most commonly used)
+        updateProgress(20, 'Loading 1x weapon...');
+        await preloadWeaponGLB('1x');
+        
+        // Load 3x weapon
+        updateProgress(40, 'Loading 3x weapon...');
+        await preloadWeaponGLB('3x');
+        
+        // Load 5x weapon
+        updateProgress(60, 'Loading 5x weapon...');
+        await preloadWeaponGLB('5x');
+        
+        // Load 8x weapon
+        updateProgress(80, 'Loading 8x weapon...');
+        await preloadWeaponGLB('8x');
+        
+        updateProgress(100, 'Ready!');
+        console.log('[PRELOAD] All GLB models preloaded successfully');
+    } catch (error) {
+        console.warn('[PRELOAD] Some GLB models failed to load:', error);
+        updateProgress(100, 'Ready (some models may load later)');
+    }
+    
+    // Hide loading screen and show lobby
+    if (loadingScreen) {
+        loadingScreen.style.display = 'none';
+    }
+    
+    // Show the multiplayer lobby
+    const lobby = document.getElementById('multiplayer-lobby');
+    if (lobby) {
+        lobby.style.display = 'flex';
+    }
+    
+    console.log('Lobby initialized - GLB models preloaded');
     window.gameLoaded = true;
 }
 
@@ -8431,8 +8487,21 @@ function hideFPSDebugOverlay() {
 }
 
 // ==================== GAME LOOP ====================
+// PERFORMANCE FIX: Guard flag to prevent multiple main animate loops
+let gameLoopStarted = false;
+
 function animate() {
-    requestAnimationFrame(animate);
+    // PERFORMANCE FIX: Prevent multiple main loops from running simultaneously
+    // This can happen if animate() is called multiple times before the first frame
+    if (gameLoopStarted) {
+        // Already running - schedule next frame and continue
+        requestAnimationFrame(animate);
+    } else {
+        gameLoopStarted = true;
+        console.log('[PERF] Main game loop started');
+        requestAnimationFrame(animate);
+        return; // First call just starts the loop
+    }
     
     const currentTime = performance.now();
     deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
