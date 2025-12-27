@@ -2607,11 +2607,8 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
             } else {
                 // Remove from scene when animation complete
                 scene.remove(hitEffectModel);
-                // Only dispose cloned materials (safe to dispose)
-                clonedMaterials.forEach((mat) => mat.dispose());
-                hitEffectModel.traverse((child) => {
-                    if (child.geometry) child.geometry.dispose();
-                });
+                // PERFORMANCE FIX: Use proper recursive disposal to prevent GPU memory leaks
+                disposeObject3D(hitEffectModel);
             }
         }
         
@@ -4080,13 +4077,56 @@ function createCannon() {
     scene.add(cannonSpotLight);
 }
 
+// PERFORMANCE FIX: Properly dispose Three.js objects including nested meshes in GLB models
+// This prevents GPU memory leaks when switching weapons
+function disposeObject3D(object) {
+    if (!object) return;
+    
+    // Recursively dispose all children first
+    while (object.children.length > 0) {
+        disposeObject3D(object.children[0]);
+        object.remove(object.children[0]);
+    }
+    
+    // Dispose geometry
+    if (object.geometry) {
+        object.geometry.dispose();
+    }
+    
+    // Dispose material(s)
+    if (object.material) {
+        if (Array.isArray(object.material)) {
+            object.material.forEach(mat => {
+                disposeMaterial(mat);
+            });
+        } else {
+            disposeMaterial(object.material);
+        }
+    }
+}
+
+// Helper to dispose material and its textures
+function disposeMaterial(material) {
+    if (!material) return;
+    
+    // Dispose all texture maps
+    const textureProps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 
+                          'emissiveMap', 'bumpMap', 'displacementMap', 'alphaMap', 'envMap'];
+    textureProps.forEach(prop => {
+        if (material[prop]) {
+            material[prop].dispose();
+        }
+    });
+    
+    material.dispose();
+}
+
 async function buildCannonGeometryForWeapon(weaponKey) {
-    // Clear existing cannon body
+    // Clear existing cannon body - PERFORMANCE FIX: Use proper recursive disposal
     while (cannonBodyGroup.children.length > 0) {
         const child = cannonBodyGroup.children[0];
+        disposeObject3D(child);
         cannonBodyGroup.remove(child);
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
     }
     
     const weapon = CONFIG.weapons[weaponKey];
@@ -7837,6 +7877,20 @@ function setupEventListeners() {
             e.currentTarget.blur();
         });
     }
+    
+    // FIX: Prevent Space key from triggering button clicks on keyup
+    // Browser default behavior: Space activates focused button on keyup, not keydown
+    // This was causing Space to trigger CENTER VIEW button instead of toggling view mode
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            e.stopPropagation();
+            // Also blur any focused button to prevent future issues
+            if (document.activeElement && document.activeElement.tagName === 'BUTTON') {
+                document.activeElement.blur();
+            }
+        }
+    }, true); // Use capture phase to intercept before button handlers
     
     // Keyboard controls - Complete shortcut system for FPS mode
     // In FPS mode, mouse is locked for view control, so keyboard shortcuts are essential
