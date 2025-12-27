@@ -2523,7 +2523,8 @@ function spawnMuzzleParticles(position, direction, color, count) {
             direction.z * 200 + (Math.random() - 0.5) * 100 * spread
         );
         
-        particle.spawn(position.clone(), velocity, color, 0.5 + Math.random() * 0.5, 0.3 + Math.random() * 0.2);
+        // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
+        particle.spawn(position, velocity, color, 0.5 + Math.random() * 0.5, 0.3 + Math.random() * 0.2);
         activeParticles.push(particle);
     }
 }
@@ -2960,7 +2961,8 @@ function spawnWaterSplash(position, size) {
             (Math.random() - 0.5) * 50
         );
         
-        particle.spawn(splashPos.clone(), velocity, 0xaaddff, 0.8, 0.5);
+        // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
+        particle.spawn(splashPos, velocity, 0xaaddff, 0.8, 0.5);
         activeParticles.push(particle);
     }
 }
@@ -3212,7 +3214,8 @@ function spawnMegaExplosion(position) {
         const colors = [0xff4400, 0xff6600, 0xffaa00, 0xff2200];
         const color = colors[Math.floor(Math.random() * colors.length)];
         
-        particle.spawn(position.clone(), particleTempVectors.velocity.clone(), color, 1 + Math.random(), 1.5 + Math.random() * 0.5);
+        // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
+        particle.spawn(position, particleTempVectors.velocity, color, 1 + Math.random(), 1.5 + Math.random() * 0.5);
         activeParticles.push(particle);
     }
 }
@@ -3742,6 +3745,7 @@ const activeBullets = [];
 // PERFORMANCE: Free-lists for O(1) inactive object lookup (replaces O(n) .find() scans)
 const freeBullets = [];    // Stack of inactive bullets - pop() to get, push() to return
 const freeParticles = [];  // Stack of inactive particles - pop() to get, push() to return
+const freeFish = [];       // Stack of inactive fish - pop() to get, push() to return (Boss Mode optimization)
 const activeParticles = [];
 
 // Timing
@@ -6732,6 +6736,9 @@ class Fish {
         this.isActive = false;
         this.group.visible = false;
         
+        // PERFORMANCE: Return fish to free-list for O(1) reuse (Boss Mode optimization)
+        freeFish.push(this);
+        
         const deathPosition = this.group.position.clone();
         
         // Issue #16: Play impact sound
@@ -7044,8 +7051,8 @@ function updateDynamicFishSpawn(deltaTime) {
     }
     
     if (dynamicSpawnTimer <= 0) {
-        // Find an inactive fish from the pool to spawn
-        const inactiveFish = fishPool.find(f => !f.isActive);
+        // PERFORMANCE: Use free-list for O(1) fish retrieval instead of O(n) find()
+        const inactiveFish = freeFish.pop();
         if (inactiveFish) {
             const position = getRandomFishPositionIn3DSpace();
             inactiveFish.spawn(position);
@@ -7695,7 +7702,9 @@ class Particle {
         this.velocity.y -= 100 * deltaTime;
         this.velocity.multiplyScalar(0.98);
         
-        this.mesh.position.add(this.velocity.clone().multiplyScalar(deltaTime));
+        // PERFORMANCE: Use addScaledVector instead of clone().multiplyScalar()
+        // This eliminates Vector3 allocation per particle per frame
+        this.mesh.position.addScaledVector(this.velocity, deltaTime);
         this.mesh.material.opacity = this.lifetime / this.maxLifetime;
     }
     
@@ -7759,7 +7768,8 @@ function createHitParticles(position, color, count) {
                 (Math.random() - 0.5) * 150,
                 (Math.random() - 0.5) * 150
             );
-            particle.spawn(position.clone(), velocity, color, 2 + Math.random() * 3, 0.8);
+            // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
+            particle.spawn(position, velocity, color, 2 + Math.random() * 3, 0.8);
             activeParticles.push(particle);
         }
     }
@@ -9537,7 +9547,9 @@ function spawnBossFish() {
         const centerPos = getRandomFishPositionIn3DSpace();
         
         for (let i = 0; i < bossType.swarmCount; i++) {
-            const fish = fishPool.find(f => !f.isActive);
+            // PERFORMANCE: Use free-list for O(1) fish retrieval instead of O(n) find()
+            // This eliminates the O(n²) behavior during boss swarm spawn
+            const fish = freeFish.pop();
             if (fish) {
                 fish.config = bossConfig;
                 fish.createMesh();
@@ -9566,7 +9578,8 @@ function spawnBossFish() {
         }
     } else {
         // Spawn single boss fish
-        const fish = fishPool.find(f => !f.isActive);
+        // PERFORMANCE: Use free-list for O(1) fish retrieval instead of O(n) find()
+        const fish = freeFish.pop();
         if (fish) {
             fish.config = bossConfig;
             fish.createMesh();
