@@ -578,7 +578,18 @@ const weaponGLBState = {
     loadingPromises: new Map(),
     enabled: true,
     currentWeaponModel: null,
-    preloadedWeapons: new Set()
+    preloadedWeapons: new Set(),
+    // Pre-cloned bullet models ready for immediate use (no async needed)
+    bulletModelPool: new Map()  // Map<weaponKey, THREE.Group[]>
+};
+
+// Temp vectors for bullet calculations - reused to avoid per-frame allocations
+const bulletTempVectors = {
+    lookTarget: new THREE.Vector3(),
+    velocityScaled: new THREE.Vector3(),
+    fishToBullet: new THREE.Vector3(),
+    hitPos: new THREE.Vector3(),
+    bulletDir: new THREE.Vector3()
 };
 
 async function loadWeaponGLB(weaponKey, type) {
@@ -770,8 +781,53 @@ async function preloadWeaponGLB(weaponKey) {
         loadWeaponGLB(weaponKey, 'hitEffect')
     ]);
     
+    // Pre-clone bullet models for the pool (PERFORMANCE: avoids async clone during fire())
+    // Create 10 pre-cloned bullet models per weapon type for immediate use
+    const BULLET_POOL_SIZE = 10;
+    if (!weaponGLBState.bulletModelPool.has(weaponKey)) {
+        weaponGLBState.bulletModelPool.set(weaponKey, []);
+    }
+    const pool = weaponGLBState.bulletModelPool.get(weaponKey);
+    const cacheKey = `${weaponKey}_bullet`;
+    if (weaponGLBState.bulletCache.has(cacheKey)) {
+        const cachedModel = weaponGLBState.bulletCache.get(cacheKey);
+        for (let i = pool.length; i < BULLET_POOL_SIZE; i++) {
+            pool.push(cachedModel.clone());
+        }
+        console.log(`[WEAPON-GLB] Pre-cloned ${BULLET_POOL_SIZE} bullet models for ${weaponKey}`);
+    }
+    
     weaponGLBState.preloadedWeapons.add(weaponKey);
     console.log(`[WEAPON-GLB] Preloaded weapon: ${weaponKey}`);
+}
+
+// Get a pre-cloned bullet model from the pool (synchronous, no async needed)
+function getBulletModelFromPool(weaponKey) {
+    const pool = weaponGLBState.bulletModelPool.get(weaponKey);
+    if (pool && pool.length > 0) {
+        return pool.pop();
+    }
+    // Fallback: clone from cache if pool is empty
+    const cacheKey = `${weaponKey}_bullet`;
+    if (weaponGLBState.bulletCache.has(cacheKey)) {
+        return weaponGLBState.bulletCache.get(cacheKey).clone();
+    }
+    return null;
+}
+
+// Return a bullet model to the pool for reuse
+function returnBulletModelToPool(weaponKey, model) {
+    if (!model) return;
+    let pool = weaponGLBState.bulletModelPool.get(weaponKey);
+    if (!pool) {
+        pool = [];
+        weaponGLBState.bulletModelPool.set(weaponKey, pool);
+    }
+    // Limit pool size to prevent memory bloat
+    if (pool.length < 20) {
+        model.visible = false;
+        pool.push(model);
+    }
 }
 
 async function preloadAllWeapons() {
@@ -7015,6 +7071,7 @@ function getRTPStats() {
 }
 
 // ==================== BULLET SYSTEM ====================
+// PERFORMANCE OPTIMIZATION: Synchronous fire(), pre-cached GLB models, temp vector reuse
 class Bullet {
     constructor() {
         this.isActive = false;
@@ -7062,39 +7119,40 @@ class Bullet {
         bulletGroup.add(this.group);
     }
     
-    async loadGLBBullet(weaponKey) {
+    // PERFORMANCE: Synchronous GLB loading from pre-cached pool (no async/await)
+    loadGLBBulletSync(weaponKey) {
         const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
         if (!weaponGLBState.enabled || !glbConfig) {
             return false;
         }
         
-        try {
-            const bulletModel = await loadWeaponGLB(weaponKey, 'bullet');
-            if (bulletModel) {
-                // Remove old GLB model if exists
-                if (this.glbModel) {
-                    this.group.remove(this.glbModel);
-                }
-                
-                // Apply scale from config
-                const scale = glbConfig.bulletScale;
-                bulletModel.scale.set(scale, scale, scale);
-                
-                this.glbModel = bulletModel;
-                this.group.add(bulletModel);
-                this.useGLB = true;
-                this.proceduralGroup.visible = false;
-                
-                return true;
+        // Get pre-cloned model from pool (synchronous, no async needed)
+        const bulletModel = getBulletModelFromPool(weaponKey);
+        if (bulletModel) {
+            // Remove old GLB model if exists and return to pool
+            if (this.glbModel) {
+                this.group.remove(this.glbModel);
+                returnBulletModelToPool(this.weaponKey, this.glbModel);
             }
-        } catch (error) {
-            console.warn(`[BULLET-GLB] Failed to load GLB bullet for ${weaponKey}:`, error);
+            
+            // Apply scale from config
+            const scale = glbConfig.bulletScale;
+            bulletModel.scale.set(scale, scale, scale);
+            bulletModel.visible = true;
+            
+            this.glbModel = bulletModel;
+            this.group.add(bulletModel);
+            this.useGLB = true;
+            this.proceduralGroup.visible = false;
+            
+            return true;
         }
         
         return false;
     }
     
-    async fire(origin, direction, weaponKey) {
+    // PERFORMANCE: Synchronous fire() - no async/await, uses pre-cached models
+    fire(origin, direction, weaponKey) {
         this.weaponKey = weaponKey;
         const weapon = CONFIG.weapons[weaponKey];
         const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
@@ -7112,8 +7170,8 @@ class Bullet {
         this.isActive = true;
         this.group.visible = true;
         
-        // Try to use GLB bullet model
-        const glbLoaded = await this.loadGLBBullet(weaponKey);
+        // PERFORMANCE: Synchronous GLB loading from pre-cached pool
+        const glbLoaded = this.loadGLBBulletSync(weaponKey);
         
         if (glbLoaded) {
             // GLB bullet loaded successfully
@@ -7139,8 +7197,9 @@ class Bullet {
             this.trail.scale.set(scale, scale, scale);
         }
         
-        // Orient bullet in direction of travel
-        this.group.lookAt(this.group.position.clone().add(direction));
+        // PERFORMANCE: Use temp vector instead of clone() for lookAt
+        bulletTempVectors.lookTarget.copy(this.group.position).add(direction);
+        this.group.lookAt(bulletTempVectors.lookTarget);
         
         // Apply rotation fix for GLB models if needed
         if (this.useGLB && glbConfig && glbConfig.bulletRotationFix) {
@@ -7160,13 +7219,16 @@ class Bullet {
         // Issue #4: Apply gravity only for grenades (8x weapon) for arc trajectory
         if (this.isGrenade) {
             this.velocity.y -= 400 * deltaTime;  // Gravity pulls grenade down
-            // Re-orient grenade to face direction of travel
-            const lookTarget = this.group.position.clone().add(this.velocity.clone().normalize());
-            this.group.lookAt(lookTarget);
+            // PERFORMANCE: Use temp vector instead of clone() for lookAt
+            bulletTempVectors.lookTarget.copy(this.group.position);
+            bulletTempVectors.velocityScaled.copy(this.velocity).normalize();
+            bulletTempVectors.lookTarget.add(bulletTempVectors.velocityScaled);
+            this.group.lookAt(bulletTempVectors.lookTarget);
         }
         
-        // Update position
-        this.group.position.add(this.velocity.clone().multiplyScalar(deltaTime));
+        // PERFORMANCE: Use temp vector instead of clone() for position update
+        bulletTempVectors.velocityScaled.copy(this.velocity).multiplyScalar(deltaTime);
+        this.group.position.add(bulletTempVectors.velocityScaled);
         
         // Check boundaries - very lenient to allow bullets to reach fish
         const { width, height, depth, floorY } = CONFIG.aquarium;
@@ -7185,49 +7247,54 @@ class Bullet {
     
     checkFishCollision() {
         const weapon = CONFIG.weapons[this.weaponKey];
+        const bulletPos = this.group.position;
         
         for (const fish of activeFish) {
             if (!fish.isActive) continue;
             
-            const distance = this.group.position.distanceTo(fish.group.position);
-            // Very large collision radius for reliable hit detection (100 units + fish size)
-            if (distance < fish.boundingRadius + 100) {
-                // Get bullet direction for hit effect orientation
-                const bulletDirection = this.velocity.clone().normalize();
+            // PERFORMANCE: Use squared distance to avoid sqrt
+            const fishPos = fish.group.position;
+            const dx = bulletPos.x - fishPos.x;
+            const dy = bulletPos.y - fishPos.y;
+            const dz = bulletPos.z - fishPos.z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            const threshold = fish.boundingRadius + 100;
+            const thresholdSq = threshold * threshold;
+            
+            if (distSq < thresholdSq) {
+                // PERFORMANCE: Use temp vectors instead of clone() calls
+                bulletTempVectors.bulletDir.copy(this.velocity).normalize();
                 
                 // Calculate hit position on fish's surface for accurate hit effect placement
-                // For 1x/3x planar effects, use fish surface position (fish center + offset toward bullet)
-                // For 5x/8x 3D effects, use bullet position (more forgiving visually)
-                let hitPos;
                 if (weapon.type === 'projectile' || weapon.type === 'spread') {
                     // 1x/3x: Calculate impact point on fish's surface
-                    // Direction from fish to bullet
-                    const fishToBullet = this.group.position.clone().sub(fish.group.position).normalize();
-                    // Hit position is on fish's surface, facing the bullet
-                    hitPos = fish.group.position.clone().add(fishToBullet.multiplyScalar(fish.boundingRadius * 0.8));
+                    bulletTempVectors.fishToBullet.copy(bulletPos).sub(fishPos).normalize();
+                    bulletTempVectors.hitPos.copy(fishPos).add(
+                        bulletTempVectors.fishToBullet.multiplyScalar(fish.boundingRadius * 0.8)
+                    );
                 } else {
                     // 5x/8x: Use bullet position (explosion effects are more forgiving)
-                    hitPos = this.group.position.clone();
+                    bulletTempVectors.hitPos.copy(bulletPos);
                 }
                 
                 // Handle different weapon types
                 if (weapon.type === 'chain') {
                     // Chain lightning: hit first fish, then chain to nearby fish
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
-                    createHitParticles(hitPos, weapon.color, 8);
+                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
                     
                     // Trigger chain lightning effect
                     triggerChainLightning(fish, this.weaponKey, weapon.damage);
                     
                     // Issue #14: Enhanced 5x hit effect (pass bullet direction for orientation)
-                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish, bulletDirection);
+                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                     
                 } else if (weapon.type === 'aoe' || weapon.type === 'superAoe') {
                     // AOE/SuperAOE explosion: damage all fish in radius
-                    triggerExplosion(hitPos, this.weaponKey);
+                    triggerExplosion(bulletTempVectors.hitPos, this.weaponKey);
                     
                     // Issue #14/16: Enhanced 8x/20x hit effect (mega explosion)
-                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish, bulletDirection);
+                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                     
                     // Issue #16: Extra screen shake for 20x super weapon
                     if (weapon.type === 'superAoe') {
@@ -7239,11 +7306,11 @@ class Bullet {
                     // Standard projectile or spread: single target damage
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
                     if (!killed) {
-                        createHitParticles(hitPos, weapon.color, 5);
+                        createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
                     }
                     
                     // Issue #14: Enhanced 1x/3x hit effect (pass bullet direction for planar orientation)
-                    spawnWeaponHitEffect(this.weaponKey, hitPos, fish, bulletDirection);
+                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                 }
                 
                 this.deactivate();
@@ -7255,6 +7322,14 @@ class Bullet {
     deactivate() {
         this.isActive = false;
         this.group.visible = false;
+        
+        // PERFORMANCE: Return GLB model to pool for reuse
+        if (this.useGLB && this.glbModel) {
+            this.group.remove(this.glbModel);
+            returnBulletModelToPool(this.weaponKey, this.glbModel);
+            this.glbModel = null;
+            this.useGLB = false;
+        }
         
         // For AOE/SuperAOE weapons, trigger explosion when bullet expires or goes out of bounds
         const weapon = CONFIG.weapons[this.weaponKey];
