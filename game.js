@@ -1556,7 +1556,20 @@ const vfxGeometryCache = {
     shockwaveRing: null,  // RingGeometry for shockwaves
     coinCylinder: null,   // CylinderGeometry for coins
     coinSphere: null,     // SphereGeometry for flying coins
-    smokeCloud: null      // SphereGeometry for smoke
+    smokeCloud: null,     // SphereGeometry for smoke
+    // PERFORMANCE: Additional cached geometries for VFX effects
+    fireballSphere: null,     // SphereGeometry(25, 16, 16) for fireball muzzle flash
+    fireballCore: null,       // SphereGeometry(15, 12, 12) for fireball core
+    megaCore: null,           // SphereGeometry(20, 16, 16) for mega explosion core
+    megaFireball: null,       // SphereGeometry(30, 16, 16) for mega explosion fireball
+    megaInner: null           // SphereGeometry(20, 12, 12) for mega explosion inner
+};
+
+// PERFORMANCE: Temp vectors for particle velocity calculations (avoids per-particle allocations)
+const particleTempVectors = {
+    velocity: new THREE.Vector3(),
+    startPos: new THREE.Vector3(),
+    direction: new THREE.Vector3()
 };
 
 // Maximum active VFX effects to prevent performance collapse during Boss Mode
@@ -1574,7 +1587,13 @@ function initVfxGeometryCache() {
     vfxGeometryCache.coinCylinder = new THREE.CylinderGeometry(8, 8, 3, 8);
     vfxGeometryCache.coinSphere = new THREE.SphereGeometry(12, 8, 8);
     vfxGeometryCache.smokeCloud = new THREE.SphereGeometry(1, 8, 8);
-    console.log('[VFX] Geometry cache initialized');
+    // PERFORMANCE: Additional cached geometries for VFX effects
+    vfxGeometryCache.fireballSphere = new THREE.SphereGeometry(1, 16, 16);  // Scale to 25 for fireball
+    vfxGeometryCache.fireballCore = new THREE.SphereGeometry(1, 12, 12);    // Scale to 15 for core
+    vfxGeometryCache.megaCore = new THREE.SphereGeometry(1, 16, 16);        // Scale to 20 for mega core
+    vfxGeometryCache.megaFireball = new THREE.SphereGeometry(1, 16, 16);    // Scale to 30 for mega fireball
+    vfxGeometryCache.megaInner = new THREE.SphereGeometry(1, 12, 12);       // Scale to 20 for mega inner
+    console.log('[VFX] Geometry cache initialized with extended geometries');
 }
 
 // Update all active VFX effects from main animate() loop
@@ -2493,7 +2512,8 @@ function spawnExpandingRingOptimized(position, color, startRadius, endRadius, du
 // Spawn muzzle particles
 function spawnMuzzleParticles(position, direction, color, count) {
     for (let i = 0; i < count; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (!particle) continue;
         
         const spread = 0.5;
@@ -2638,30 +2658,34 @@ function showAbilityNotification(text, color) {
 }
 
 // Spawn fireball muzzle flash (for 8x weapon) - REFACTORED to use VFX manager
+// PERFORMANCE: Uses cached geometry with scaling instead of creating new geometry each time
 function spawnFireballMuzzleFlash(position, direction) {
     if (!scene) return;
     
-    // Create fireball sphere
-    const geometry = new THREE.SphereGeometry(25, 16, 16);
+    // Ensure geometry cache is initialized
+    if (!vfxGeometryCache.fireballSphere) initVfxGeometryCache();
+    
+    // PERFORMANCE: Use cached geometry and scale to target size (25)
     const material = new THREE.MeshBasicMaterial({
         color: 0xff4400,
         transparent: true,
         opacity: 0.9
     });
     
-    const fireball = new THREE.Mesh(geometry, material);
+    const fireball = new THREE.Mesh(vfxGeometryCache.fireballSphere, material);
     fireball.position.copy(position);
+    fireball.scale.set(25, 25, 25); // Scale unit sphere to size 25
     scene.add(fireball);
     
-    // Inner bright core
-    const coreGeometry = new THREE.SphereGeometry(15, 12, 12);
+    // Inner bright core - PERFORMANCE: Use cached geometry and scale to target size (15)
     const coreMaterial = new THREE.MeshBasicMaterial({
         color: 0xffff88,
         transparent: true,
         opacity: 1
     });
-    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    const core = new THREE.Mesh(vfxGeometryCache.fireballCore, coreMaterial);
     core.position.copy(position);
+    core.scale.set(15, 15, 15); // Scale unit sphere to size 15
     scene.add(core);
     
     // Register with VFX manager instead of using own RAF loop
@@ -2669,22 +2693,24 @@ function spawnFireballMuzzleFlash(position, direction) {
         type: 'fireballFlash',
         fireball: fireball,
         core: core,
-        geometry: geometry,
-        coreGeometry: coreGeometry,
+        // PERFORMANCE: No geometry references needed - using cached geometry
         material: material,
         coreMaterial: coreMaterial,
-        currentScale: 1,
+        baseFireballScale: 25,
+        baseCoreScale: 15,
+        currentScaleMultiplier: 1,
         currentOpacity: 0.9,
         scaleSpeed: 9, // was 0.15 per frame at 60fps = 9/s
         fadeSpeed: 4.8, // was 0.08 per frame at 60fps = 4.8/s
         
         update(dt, elapsed) {
-            this.currentScale += this.scaleSpeed * dt;
+            this.currentScaleMultiplier += this.scaleSpeed * dt;
             this.currentOpacity -= this.fadeSpeed * dt;
             
-            this.fireball.scale.set(this.currentScale, this.currentScale, this.currentScale);
+            const fireballScale = this.baseFireballScale * this.currentScaleMultiplier;
+            this.fireball.scale.set(fireballScale, fireballScale, fireballScale);
             this.material.opacity = Math.max(0, this.currentOpacity);
-            const coreScale = this.currentScale * 0.8;
+            const coreScale = this.baseCoreScale * this.currentScaleMultiplier * 0.8;
             this.core.scale.set(coreScale, coreScale, coreScale);
             this.coreMaterial.opacity = Math.max(0, this.currentOpacity * 1.2);
             
@@ -2694,9 +2720,8 @@ function spawnFireballMuzzleFlash(position, direction) {
         cleanup() {
             scene.remove(this.fireball);
             scene.remove(this.core);
-            this.geometry.dispose();
+            // PERFORMANCE: Only dispose materials, geometry is cached and reused
             this.material.dispose();
-            this.coreGeometry.dispose();
             this.coreMaterial.dispose();
         }
     });
@@ -2925,7 +2950,8 @@ function spawnWaterSplash(position, size) {
     
     // Spawn upward splash particles (these use the existing particle pool system)
     for (let i = 0; i < 8; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (!particle) continue;
         
         const velocity = new THREE.Vector3(
@@ -2982,58 +3008,68 @@ function spawnShockwave(position, color, radius) {
 }
 
 // Spawn mega explosion (three-stage for 8x weapon) - REFACTORED to use VFX manager
+// PERFORMANCE: Uses cached geometry with scaling instead of creating new geometry each time
 function spawnMegaExplosion(position) {
     if (!scene) return;
     
-    // Stage 1: Core white flash - register with VFX manager
-    const coreGeometry = new THREE.SphereGeometry(20, 16, 16);
+    // Ensure geometry cache is initialized
+    if (!vfxGeometryCache.megaCore) initVfxGeometryCache();
+    
+    // Stage 1: Core white flash - PERFORMANCE: Use cached geometry
     const coreMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 1
     });
-    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    const core = new THREE.Mesh(vfxGeometryCache.megaCore, coreMaterial);
     core.position.copy(position);
+    core.scale.set(20, 20, 20); // Scale unit sphere to size 20
     scene.add(core);
     
     addVfxEffect({
         type: 'megaExplosionCore',
         mesh: core,
-        geometry: coreGeometry,
         material: coreMaterial,
-        currentScale: 1,
+        baseScale: 20,
+        currentScaleMultiplier: 1,
         currentOpacity: 1,
         scaleSpeed: 18, // was 0.3 per frame at 60fps = 18/s
         fadeSpeed: 9, // was 0.15 per frame at 60fps = 9/s
         
         update(dt, elapsed) {
-            this.currentScale += this.scaleSpeed * dt;
+            this.currentScaleMultiplier += this.scaleSpeed * dt;
             this.currentOpacity -= this.fadeSpeed * dt;
-            this.mesh.scale.set(this.currentScale, this.currentScale, this.currentScale);
+            const scale = this.baseScale * this.currentScaleMultiplier;
+            this.mesh.scale.set(scale, scale, scale);
             this.material.opacity = Math.max(0, this.currentOpacity);
             return this.currentOpacity > 0;
         },
         
         cleanup() {
             scene.remove(this.mesh);
-            this.geometry.dispose();
+            // PERFORMANCE: Only dispose material, geometry is cached
             this.material.dispose();
         }
     });
     
-    // Stage 2: Orange-red fireball (delayed by 50ms) - use time-based logic
-    const positionCopy = position.clone();
+    // Stage 2: Orange-red fireball (delayed by 50ms) - PERFORMANCE: Use cached geometry
+    // PERFORMANCE: Use temp vector instead of clone()
+    const positionCopy = particleTempVectors.startPos.copy(position);
+    const posX = positionCopy.x, posY = positionCopy.y, posZ = positionCopy.z;
     addVfxEffect({
         type: 'megaExplosionFireball',
         delayMs: 50,
         started: false,
         fireball: null,
         inner: null,
-        fireballGeometry: null,
         fireballMaterial: null,
-        innerGeometry: null,
         innerMaterial: null,
-        currentScale: 1,
+        posX: posX,
+        posY: posY,
+        posZ: posZ,
+        baseFireballScale: 30,
+        baseInnerScale: 20,
+        currentScaleMultiplier: 1,
         currentOpacity: 0.8,
         scaleSpeed: 7.2, // was 0.12 per frame at 60fps = 7.2/s
         fadeSpeed: 1.8, // was 0.03 per frame at 60fps = 1.8/s
@@ -3043,37 +3079,38 @@ function spawnMegaExplosion(position) {
             if (!this.started) {
                 if (elapsed < this.delayMs) return true;
                 
-                // Initialize fireball meshes
-                this.fireballGeometry = new THREE.SphereGeometry(30, 16, 16);
+                // PERFORMANCE: Use cached geometry with scaling
                 this.fireballMaterial = new THREE.MeshBasicMaterial({
                     color: 0xff4400,
                     transparent: true,
                     opacity: 0.8
                 });
-                this.fireball = new THREE.Mesh(this.fireballGeometry, this.fireballMaterial);
-                this.fireball.position.copy(positionCopy);
+                this.fireball = new THREE.Mesh(vfxGeometryCache.megaFireball, this.fireballMaterial);
+                this.fireball.position.set(this.posX, this.posY, this.posZ);
+                this.fireball.scale.set(this.baseFireballScale, this.baseFireballScale, this.baseFireballScale);
                 scene.add(this.fireball);
                 
-                this.innerGeometry = new THREE.SphereGeometry(20, 12, 12);
                 this.innerMaterial = new THREE.MeshBasicMaterial({
                     color: 0xffaa00,
                     transparent: true,
                     opacity: 0.9
                 });
-                this.inner = new THREE.Mesh(this.innerGeometry, this.innerMaterial);
-                this.inner.position.copy(positionCopy);
+                this.inner = new THREE.Mesh(vfxGeometryCache.megaInner, this.innerMaterial);
+                this.inner.position.set(this.posX, this.posY, this.posZ);
+                this.inner.scale.set(this.baseInnerScale, this.baseInnerScale, this.baseInnerScale);
                 scene.add(this.inner);
                 
                 this.started = true;
             }
             
             // Animate fireball
-            this.currentScale += this.scaleSpeed * dt;
+            this.currentScaleMultiplier += this.scaleSpeed * dt;
             this.currentOpacity -= this.fadeSpeed * dt;
             
-            this.fireball.scale.set(this.currentScale, this.currentScale, this.currentScale);
+            const fireballScale = this.baseFireballScale * this.currentScaleMultiplier;
+            this.fireball.scale.set(fireballScale, fireballScale, fireballScale);
             this.fireballMaterial.opacity = Math.max(0, this.currentOpacity);
-            const innerScale = this.currentScale * 0.7;
+            const innerScale = this.baseInnerScale * this.currentScaleMultiplier * 0.7;
             this.inner.scale.set(innerScale, innerScale, innerScale);
             this.innerMaterial.opacity = Math.max(0, this.currentOpacity * 1.1);
             
@@ -3083,24 +3120,24 @@ function spawnMegaExplosion(position) {
         cleanup() {
             if (this.fireball) {
                 scene.remove(this.fireball);
-                this.fireballGeometry.dispose();
+                // PERFORMANCE: Only dispose material, geometry is cached
                 this.fireballMaterial.dispose();
             }
             if (this.inner) {
                 scene.remove(this.inner);
-                this.innerGeometry.dispose();
                 this.innerMaterial.dispose();
             }
         }
     });
     
     // Stage 3: Black smoke lingering (delayed by 200ms) - reduced count for performance
+    // PERFORMANCE: Use cached smokeCloud geometry with scaling
     const smokeCount = Math.min(15, Math.max(5, Math.floor(15 * (performanceState.currentFPS / 60))));
     for (let i = 0; i < smokeCount; i++) {
-        const smokePos = position.clone();
-        smokePos.x += (Math.random() - 0.5) * 40;
-        smokePos.y += Math.random() * 30;
-        smokePos.z += (Math.random() - 0.5) * 40;
+        // PERFORMANCE: Store position values instead of cloning
+        const smokePosX = position.x + (Math.random() - 0.5) * 40;
+        const smokePosY = position.y + Math.random() * 30;
+        const smokePosZ = position.z + (Math.random() - 0.5) * 40;
         const riseSpeed = 20 + Math.random() * 30;
         const duration = (1.5 + Math.random() * 0.5) * 1000; // Convert to ms
         const smokeSize = 15 + Math.random() * 10;
@@ -3110,9 +3147,10 @@ function spawnMegaExplosion(position) {
             delayMs: 200,
             started: false,
             mesh: null,
-            geometry: null,
             material: null,
-            smokePos: smokePos,
+            smokePosX: smokePosX,
+            smokePosY: smokePosY,
+            smokePosZ: smokePosZ,
             smokeSize: smokeSize,
             riseSpeed: riseSpeed,
             duration: duration,
@@ -3122,14 +3160,15 @@ function spawnMegaExplosion(position) {
                 if (!this.started) {
                     if (elapsed < this.delayMs) return true;
                     
-                    this.geometry = new THREE.SphereGeometry(this.smokeSize, 8, 8);
+                    // PERFORMANCE: Use cached geometry with scaling
                     this.material = new THREE.MeshBasicMaterial({
                         color: 0x333333,
                         transparent: true,
                         opacity: 0.4
                     });
-                    this.mesh = new THREE.Mesh(this.geometry, this.material);
-                    this.mesh.position.copy(this.smokePos);
+                    this.mesh = new THREE.Mesh(vfxGeometryCache.smokeCloud, this.material);
+                    this.mesh.position.set(this.smokePosX, this.smokePosY, this.smokePosZ);
+                    this.mesh.scale.setScalar(this.smokeSize); // Scale unit sphere to smokeSize
                     scene.add(this.mesh);
                     this.started = true;
                     this.smokeStartTime = elapsed;
@@ -3140,7 +3179,7 @@ function spawnMegaExplosion(position) {
                 const progress = Math.min(smokeElapsed / this.duration, 1);
                 
                 this.mesh.position.y += this.riseSpeed * dt;
-                this.mesh.scale.setScalar(1 + progress * 0.5);
+                this.mesh.scale.setScalar(this.smokeSize * (1 + progress * 0.5));
                 this.material.opacity = 0.4 * (1 - progress);
                 
                 return progress < 1;
@@ -3149,7 +3188,7 @@ function spawnMegaExplosion(position) {
             cleanup() {
                 if (this.mesh) {
                     scene.remove(this.mesh);
-                    this.geometry.dispose();
+                    // PERFORMANCE: Only dispose material, geometry is cached
                     this.material.dispose();
                 }
             }
@@ -3157,11 +3196,14 @@ function spawnMegaExplosion(position) {
     }
     
     // Spawn flame particles that remain at impact (uses existing particle pool)
+    // PERFORMANCE: Use temp vector for velocity instead of creating new Vector3 each time
     for (let i = 0; i < 30; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (!particle) continue;
         
-        const velocity = new THREE.Vector3(
+        // PERFORMANCE: Reuse temp vector for velocity
+        particleTempVectors.velocity.set(
             (Math.random() - 0.5) * 100,
             Math.random() * 80,
             (Math.random() - 0.5) * 100
@@ -3170,7 +3212,7 @@ function spawnMegaExplosion(position) {
         const colors = [0xff4400, 0xff6600, 0xffaa00, 0xff2200];
         const color = colors[Math.floor(Math.random() * colors.length)];
         
-        particle.spawn(position.clone(), velocity, color, 1 + Math.random(), 1.5 + Math.random() * 0.5);
+        particle.spawn(position.clone(), particleTempVectors.velocity.clone(), color, 1 + Math.random(), 1.5 + Math.random() * 0.5);
         activeParticles.push(particle);
     }
 }
@@ -3183,7 +3225,8 @@ function spawnWaterColumn(position, height) {
     
     // Create column of water particles rising up
     for (let i = 0; i < 20; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (!particle) continue;
         
         const startPos = columnPos.clone();
@@ -3626,7 +3669,8 @@ function startCannonChargeEffect(weaponKey) {
                 cannonMuzzle.getWorldPosition(muzzlePos);
                 
                 for (let i = 0; i < 10; i++) {
-                    const particle = particlePool.find(p => !p.isActive);
+                    // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+                    const particle = freeParticles.pop();
                     if (!particle) continue;
                     
                     // Start position around the muzzle
@@ -3694,6 +3738,10 @@ const bulletPool = [];
 const particlePool = [];
 const activeFish = [];
 const activeBullets = [];
+
+// PERFORMANCE: Free-lists for O(1) inactive object lookup (replaces O(n) .find() scans)
+const freeBullets = [];    // Stack of inactive bullets - pop() to get, push() to return
+const freeParticles = [];  // Stack of inactive particles - pop() to get, push() to return
 const activeParticles = [];
 
 // Timing
@@ -4979,11 +5027,12 @@ function autoFireAtFish(targetFish) {
         
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
         
-        const leftDir = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), spreadAngle);
-        spawnBulletFromDirection(muzzlePos, leftDir, weaponKey);
+        // PERFORMANCE: Reuse pre-allocated vectors instead of clone() + new Vector3()
+        fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
+        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
         
-        const rightDir = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -spreadAngle);
-        spawnBulletFromDirection(muzzlePos, rightDir, weaponKey);
+        fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
+        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
     } else {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
@@ -7393,6 +7442,9 @@ class Bullet {
             this.useGLB = false;
         }
         
+        // PERFORMANCE: Return bullet to free-list for O(1) reuse
+        freeBullets.push(this);
+        
         // For AOE/SuperAOE weapons, trigger explosion when bullet expires or goes out of bounds
         const weapon = CONFIG.weapons[this.weaponKey];
         if ((weapon.type === 'aoe' || weapon.type === 'superAoe') && this.lifetime <= 0) {
@@ -7403,14 +7455,17 @@ class Bullet {
 
 function createBulletPool() {
     for (let i = 0; i < 50; i++) {
-        bulletPool.push(new Bullet());
+        const bullet = new Bullet();
+        bulletPool.push(bullet);
+        freeBullets.push(bullet);  // PERFORMANCE: All bullets start in free-list
     }
 }
 
 // Helper function to spawn a bullet in a specific direction
-// PERFORMANCE: Removed clone() calls - Bullet.fire() already does copy()
+// PERFORMANCE: Uses free-list for O(1) lookup instead of O(n) .find() scan
 function spawnBulletFromDirection(origin, direction, weaponKey) {
-    const bullet = bulletPool.find(b => !b.isActive);
+    // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+    const bullet = freeBullets.pop();
     if (!bullet) return null;
     
     // No need to clone - Bullet.fire() uses copy() internally
@@ -7647,6 +7702,8 @@ class Particle {
     deactivate() {
         this.isActive = false;
         this.mesh.visible = false;
+        // PERFORMANCE: Return particle to free-list for O(1) reuse
+        freeParticles.push(this);
     }
 }
 
@@ -7654,7 +7711,9 @@ function createParticleSystems() {
     createBulletPool();
     
     for (let i = 0; i < 200; i++) {
-        particlePool.push(new Particle());
+        const particle = new Particle();
+        particlePool.push(particle);
+        freeParticles.push(particle);  // PERFORMANCE: All particles start in free-list
     }
     
     // Bubble system
@@ -7667,7 +7726,8 @@ function createBubbleSystem() {
         
         const { width, depth, floorY, height } = CONFIG.aquarium;
         
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (particle) {
             particle.spawn(
                 new THREE.Vector3(
@@ -7691,7 +7751,8 @@ function createBubbleSystem() {
 
 function createHitParticles(position, color, count) {
     for (let i = 0; i < count; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (particle) {
             const velocity = new THREE.Vector3(
                 (Math.random() - 0.5) * 150,
@@ -7707,6 +7768,8 @@ function createHitParticles(position, color, count) {
 // ==================== SPECIAL WEAPON EFFECTS ====================
 
 // Chain Lightning Effect (5x weapon)
+// PERFORMANCE: Refactored to use VFX manager instead of setTimeout chains
+// This prevents frame loop interleaving and reduces jitter
 function triggerChainLightning(initialFish, weaponKey, initialDamage) {
     // Issue #6: Play lightning sound
     playSound('lightning');
@@ -7719,50 +7782,70 @@ function triggerChainLightning(initialFish, weaponKey, initialDamage) {
     const visitedFish = new Set();
     visitedFish.add(initialFish);
     
-    let currentFish = initialFish;
-    let currentDamage = initialDamage;
-    let chainCount = 0;
-    
-    // Chain to nearby fish
-    const chainToNext = () => {
-        if (chainCount >= maxChains) return;
-        
-        // Find nearest unvisited fish within chain radius
-        let nearestFish = null;
-        let nearestDistance = chainRadius;
-        
-        for (const fish of activeFish) {
-            if (!fish.isActive || visitedFish.has(fish)) continue;
-            
-            const distance = currentFish.group.position.distanceTo(fish.group.position);
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearestFish = fish;
-            }
-        }
-        
-        if (nearestFish) {
-            // Apply decayed damage
-            currentDamage *= chainDecay;
-            const killed = nearestFish.takeDamage(Math.floor(currentDamage), weaponKey);
-            
-            // Spawn lightning arc visual
-            spawnLightningArc(currentFish.group.position, nearestFish.group.position, weapon.color);
-            
-            // Create particles at hit location
-            createHitParticles(nearestFish.group.position, weapon.color, 5);
-            
-            visitedFish.add(nearestFish);
-            currentFish = nearestFish;
-            chainCount++;
-            
-            // Issue #15: Increased delay between chain jumps for more visible effect (100ms instead of 50ms)
-            setTimeout(chainToNext, 100);
-        }
+    // PERFORMANCE: Use VFX manager for time-based chain progression instead of setTimeout
+    // This keeps all timing within the main animation loop for smoother frame pacing
+    const chainState = {
+        currentFish: initialFish,
+        currentDamage: initialDamage,
+        chainCount: 0,
+        nextChainTime: 50,  // First chain after 50ms
+        chainInterval: 100  // Subsequent chains every 100ms (Issue #15)
     };
     
-    // Start chaining after initial hit
-    setTimeout(chainToNext, 50);
+    addVfxEffect({
+        type: 'chainLightning',
+        update: (dt, elapsed) => {
+            // Check if it's time for the next chain
+            if (elapsed < chainState.nextChainTime) {
+                return true;  // Continue waiting
+            }
+            
+            // Check if we've reached max chains
+            if (chainState.chainCount >= maxChains) {
+                return false;  // Effect complete
+            }
+            
+            // Find nearest unvisited fish within chain radius
+            let nearestFish = null;
+            let nearestDistance = chainRadius;
+            
+            for (const fish of activeFish) {
+                if (!fish.isActive || visitedFish.has(fish)) continue;
+                
+                const distance = chainState.currentFish.group.position.distanceTo(fish.group.position);
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestFish = fish;
+                }
+            }
+            
+            if (nearestFish) {
+                // Apply decayed damage
+                chainState.currentDamage *= chainDecay;
+                const killed = nearestFish.takeDamage(Math.floor(chainState.currentDamage), weaponKey);
+                
+                // Spawn lightning arc visual
+                spawnLightningArc(chainState.currentFish.group.position, nearestFish.group.position, weapon.color);
+                
+                // Create particles at hit location
+                createHitParticles(nearestFish.group.position, weapon.color, 5);
+                
+                visitedFish.add(nearestFish);
+                chainState.currentFish = nearestFish;
+                chainState.chainCount++;
+                
+                // Schedule next chain
+                chainState.nextChainTime = elapsed + chainState.chainInterval;
+                
+                return true;  // Continue effect
+            }
+            
+            return false;  // No more fish to chain to
+        },
+        cleanup: () => {
+            // No cleanup needed for chain lightning
+        }
+    });
 }
 
 // Spawn lightning arc visual between two points - Issue #3 & #15: Enhanced visuals with golden chain lightning
