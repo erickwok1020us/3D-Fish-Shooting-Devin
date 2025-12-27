@@ -592,6 +592,28 @@ const bulletTempVectors = {
     bulletDir: new THREE.Vector3()
 };
 
+// PERFORMANCE: Temp vectors for fireBullet - reused to avoid per-shot allocations
+const fireBulletTempVectors = {
+    leftDir: new THREE.Vector3(),
+    rightDir: new THREE.Vector3(),
+    yAxis: new THREE.Vector3(0, 1, 0),  // Constant Y axis for rotation
+    muzzlePos: new THREE.Vector3()
+};
+
+// PERFORMANCE: Cached geometry for muzzle flash rings (avoids per-shot geometry creation)
+const muzzleFlashCache = {
+    ringGeometry: null,  // Shared TorusGeometry (radius=1, scaled per use)
+    ringMaterial: null,  // Reusable material template
+    initialized: false
+};
+
+function initMuzzleFlashCache() {
+    if (muzzleFlashCache.initialized) return;
+    // Create a unit torus that will be scaled for different ring sizes
+    muzzleFlashCache.ringGeometry = new THREE.TorusGeometry(1, 0.15, 8, 32);
+    muzzleFlashCache.initialized = true;
+}
+
 async function loadWeaponGLB(weaponKey, type) {
     const config = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!config) {
@@ -2342,41 +2364,31 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     
     if (weaponKey === '1x') {
         // Light blue energy ring expanding from barrel
-        spawnExpandingRing(muzzlePos, config.muzzleColor, 15, 40, 0.3);
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 40, 0.3);
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 5);
         
     } else if (weaponKey === '3x') {
-        // Three green energy waves from each barrel
-        const offsets = [-12, 0, 12];
-        offsets.forEach(offset => {
-            const pos = muzzlePos.clone();
-            pos.x += offset * 0.5;
-            spawnExpandingRing(pos, config.muzzleColor, 12, 35, 0.25);
-        });
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 10);
-        // Barrel recoil/vibration handled in fireBullet
+        // PERFORMANCE: Single muzzle flash instead of 3 rings
+        // This reduces per-shot allocations while maintaining visual feedback
+        // The 3 bullets themselves provide the "spread" visual
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 45, 0.3);
+        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 6);  // Reduced from 10
         
     } else if (weaponKey === '5x') {
-        // Explosive golden lightning chain burst
-        spawnExpandingRing(muzzlePos, config.muzzleColor, 20, 60, 0.4);
-        spawnLightningBurst(muzzlePos, config.muzzleColor, 6);
-        // Energy shield pulse around cannon base
-        if (cannonGroup) {
-            const basePos = cannonGroup.position.clone();
-            basePos.y += 20;
-            spawnExpandingRing(basePos, config.muzzleColor, 50, 100, 0.5);
-        }
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 15);
+        // PERFORMANCE: Simplified 5x muzzle flash - single ring + lightning
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 20, 60, 0.4);
+        spawnLightningBurst(muzzlePos, config.muzzleColor, 4);  // Reduced from 6
+        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 8);  // Reduced from 15
         
     } else if (weaponKey === '8x') {
         // Giant red/orange fireball launch
         spawnFireballMuzzleFlash(muzzlePos, direction);
-        // Shockwave rings around cannon
+        // Shockwave rings around cannon - keep for 8x since it fires slower
         if (cannonGroup) {
             const basePos = cannonGroup.position.clone();
             basePos.y += 30;
-            spawnExpandingRing(basePos, 0xff4400, 40, 120, 0.6);
-            spawnExpandingRing(basePos, 0xff8800, 30, 100, 0.5);
+            spawnExpandingRingOptimized(basePos, 0xff4400, 40, 120, 0.6);
+            spawnExpandingRingOptimized(basePos, 0xff8800, 30, 100, 0.5);
         }
         // Screen shake
         triggerScreenShakeWithStrength(config.screenShake);
@@ -2423,6 +2435,56 @@ function spawnExpandingRing(position, color, startRadius, endRadius, duration) {
         cleanup() {
             scene.remove(this.mesh);
             this.geometry.dispose();
+            this.material.dispose();
+        }
+    });
+}
+
+// PERFORMANCE: Optimized expanding ring using cached geometry
+// Uses a unit torus (radius=1) and scales it, avoiding per-shot geometry creation
+function spawnExpandingRingOptimized(position, color, startRadius, endRadius, duration) {
+    if (!scene) return;
+    
+    // Initialize cache if needed
+    initMuzzleFlashCache();
+    
+    // Use cached geometry, create only material (much cheaper than geometry)
+    const material = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    
+    // Create mesh with shared geometry
+    const ring = new THREE.Mesh(muzzleFlashCache.ringGeometry, material);
+    ring.position.copy(position);
+    ring.rotation.x = Math.PI / 2;
+    // Scale to startRadius (geometry is unit size)
+    ring.scale.set(startRadius, startRadius, startRadius);
+    scene.add(ring);
+    
+    // Register with VFX manager
+    addVfxEffect({
+        type: 'expandingRingOptimized',
+        mesh: ring,
+        material: material,
+        duration: duration * 1000,
+        startRadius: startRadius,
+        endRadius: endRadius,
+        
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            // Scale from startRadius to endRadius
+            const currentRadius = this.startRadius + (this.endRadius - this.startRadius) * progress;
+            this.mesh.scale.set(currentRadius, currentRadius, currentRadius);
+            this.material.opacity = 0.8 * (1 - progress);
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            // Only dispose material, geometry is shared/cached
             this.material.dispose();
         }
     });
@@ -7346,11 +7408,13 @@ function createBulletPool() {
 }
 
 // Helper function to spawn a bullet in a specific direction
+// PERFORMANCE: Removed clone() calls - Bullet.fire() already does copy()
 function spawnBulletFromDirection(origin, direction, weaponKey) {
     const bullet = bulletPool.find(b => !b.isActive);
     if (!bullet) return null;
     
-    bullet.fire(origin.clone(), direction.clone(), weaponKey);
+    // No need to clone - Bullet.fire() uses copy() internally
+    bullet.fire(origin, direction, weaponKey);
     activeBullets.push(bullet);
     return bullet;
 }
@@ -7470,9 +7534,9 @@ function fireBullet(targetX, targetY) {
     }
     const direction = getAimDirectionFromMouse(aimX, aimY);
     
-    // Get cannon muzzle position for bullet spawn
-    const muzzlePos = new THREE.Vector3();
-    cannonMuzzle.getWorldPosition(muzzlePos);
+    // PERFORMANCE: Use temp vector instead of creating new Vector3
+    cannonMuzzle.getWorldPosition(fireBulletTempVectors.muzzlePos);
+    const muzzlePos = fireBulletTempVectors.muzzlePos;
     
     // Fire based on weapon type
     if (weapon.type === 'spread') {
@@ -7482,13 +7546,14 @@ function fireBullet(targetX, targetY) {
         // Center bullet
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
         
+        // PERFORMANCE: Use temp vectors instead of clone() + new Vector3()
         // Left bullet (rotate around Y axis)
-        const leftDir = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), spreadAngle);
-        spawnBulletFromDirection(muzzlePos, leftDir, weaponKey);
+        fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
+        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
         
         // Right bullet (rotate around Y axis)
-        const rightDir = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -spreadAngle);
-        spawnBulletFromDirection(muzzlePos, rightDir, weaponKey);
+        fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
+        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
         
     } else {
         // Single bullet for projectile, chain, and aoe types
@@ -7496,7 +7561,8 @@ function fireBullet(targetX, targetY) {
     }
     
     // Issue #14: Enhanced muzzle flash VFX
-    spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction.clone());
+    // PERFORMANCE: spawnMuzzleFlash copies values internally, no need to clone
+    spawnMuzzleFlash(weaponKey, muzzlePos, direction);
     
     // Issue #14: Start charge effect for 5x and 8x weapons (visual only, doesn't delay shot)
     if (weaponKey === '5x' || weaponKey === '8x') {
@@ -7514,26 +7580,16 @@ function fireBullet(targetX, targetY) {
         const originalY = cannonBarrel.position.y;
         cannonBarrel.position.y -= recoilStrength;
         
-        // 3x weapon: Add barrel vibration/shake
-        if (weaponKey === '3x') {
-            const shakeIntensity = 2;
-            let shakeCount = 0;
-            const shake = () => {
-                if (shakeCount < 4) {
-                    cannonBarrel.position.x += (Math.random() - 0.5) * shakeIntensity;
-                    cannonBarrel.position.z += (Math.random() - 0.5) * shakeIntensity;
-                    shakeCount++;
-                    setTimeout(shake, 20);
-                } else {
-                    cannonBarrel.position.x = 0;
-                    cannonBarrel.position.z = 0;
-                }
-            };
-            shake();
-        }
+        // PERFORMANCE: Removed setTimeout-based barrel shake for 3x weapon
+        // setTimeout chains cause frame pacing issues even when FPS looks stable
+        // The recoil animation alone provides sufficient visual feedback
         
         setTimeout(() => {
-            if (cannonBarrel) cannonBarrel.position.y = originalY;
+            if (cannonBarrel) {
+                cannonBarrel.position.y = originalY;
+                cannonBarrel.position.x = 0;
+                cannonBarrel.position.z = 0;
+            }
         }, 50 + recoilStrength * 5);
     }
     
