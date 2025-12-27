@@ -647,7 +647,7 @@ async function loadWeaponGLB(weaponKey, type) {
                         child.receiveShadow = true;
                         child.frustumCulled = false; // Prevent culling issues
                         
-                        // Force materials to be visible for debugging
+                        // Force materials to be visible and adjust for cartoon style
                         if (child.material) {
                             // Make materials visible regardless of original settings
                             child.material.transparent = false;
@@ -655,10 +655,19 @@ async function loadWeaponGLB(weaponKey, type) {
                             child.material.visible = true;
                             child.material.side = THREE.DoubleSide;
                             
-                            // Add emissive to ensure visibility in dark scenes
+                            // CARTOON STYLE FIX: Reduce metalness and increase roughness
+                            // This removes the mirror-like specular highlights that don't fit low-poly cartoon style
+                            if (child.material.metalness !== undefined) {
+                                child.material.metalness = 0.1; // Low metalness for matte look
+                            }
+                            if (child.material.roughness !== undefined) {
+                                child.material.roughness = 0.8; // High roughness to reduce reflections
+                            }
+                            
+                            // Add subtle emissive to ensure visibility in dark scenes
                             if (child.material.emissive) {
-                                child.material.emissive.setHex(0x222222);
-                                child.material.emissiveIntensity = 0.3;
+                                child.material.emissive.setHex(0x111111); // Reduced from 0x222222
+                                child.material.emissiveIntensity = 0.2; // Reduced from 0.3
                             }
                         }
                     }
