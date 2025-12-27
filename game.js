@@ -8392,8 +8392,8 @@ function animate() {
     // This ensures camera follows when aiming (click) or auto-aim rotates the cannon
     if (gameState.viewMode === 'fps') {
         updateFPSCamera();
-        // DEBUG: Update rotation debug overlay (temporary for diagnosing cannon rotation issue)
-        updateFPSDebugOverlay();
+        // PERFORMANCE FIX: Removed updateFPSDebugOverlay() - DOM updates every frame cause severe FPS drop
+        // The debug overlay was for development only and should not run in production
     }
     
     // Auto-shoot with auto-aim (Issue #3 - fully automatic without mouse following)
@@ -8492,27 +8492,45 @@ function animate() {
         renderer.render(scene, camera);
 }
 
+// PERFORMANCE FIX: Cache seaweed and caustic light references to avoid iterating all children every frame
+let cachedSeaweedObjects = null;
+let cachedCausticLights = null;
+
 function animateSeaweed() {
     const time = performance.now() * 0.001;
     
-    tunnelGroup.children.forEach(child => {
-        if (child.userData.isSeaweed) {
+    // PERFORMANCE FIX: Cache seaweed objects on first call instead of filtering every frame
+    if (cachedSeaweedObjects === null && tunnelGroup) {
+        cachedSeaweedObjects = tunnelGroup.children.filter(child => child.userData.isSeaweed);
+    }
+    
+    if (cachedSeaweedObjects) {
+        for (let i = 0; i < cachedSeaweedObjects.length; i++) {
+            const child = cachedSeaweedObjects[i];
             const offset = child.userData.swayOffset || 0;
             child.rotation.x = Math.sin(time + offset) * 0.08;
             child.rotation.z = Math.cos(time * 0.7 + offset) * 0.04;
         }
-    });
+    }
 }
 
 function animateCausticLights() {
     const time = performance.now() * 0.001;
     
-    scene.children.forEach(child => {
-        if (child.isPointLight && child.userData.originalY !== undefined) {
+    // PERFORMANCE FIX: Cache caustic lights on first call instead of filtering every frame
+    if (cachedCausticLights === null && scene) {
+        cachedCausticLights = scene.children.filter(child => 
+            child.isPointLight && child.userData.originalY !== undefined
+        );
+    }
+    
+    if (cachedCausticLights) {
+        for (let i = 0; i < cachedCausticLights.length; i++) {
+            const child = cachedCausticLights[i];
             child.position.y = child.userData.originalY + Math.sin(time + child.userData.offset) * 15;
             child.intensity = 0.25 + Math.sin(time * 2 + child.userData.offset) * 0.1;
         }
-    });
+    }
 }
 
 // ==================== BOSS FISH EVENT SYSTEM (Issue #12) ====================
