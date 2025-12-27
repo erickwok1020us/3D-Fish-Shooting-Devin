@@ -563,9 +563,10 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            // FIXED: Camera was in barrel - increased fpsCameraBackDist from 180 to 250
-            fpsCameraBackDist: 250,
-            fpsCameraUpOffset: 80
+            // FIXED v2: Camera was still inside weapon - increased fpsCameraUpOffset from 80 to 150
+            // Also increased fpsCameraBackDist from 250 to 300 for better view
+            fpsCameraBackDist: 300,
+            fpsCameraUpOffset: 150
         }
     }
 };
@@ -7055,10 +7056,13 @@ function fireBullet(targetX, targetY) {
     }
     
     // Issue #14: Enhanced cannon recoil animation based on weapon
+    // FIX: Skip barrel recoil in FPS mode to prevent camera jump
+    // (camera position is based on cannonMuzzle world position, which moves with barrel)
     const config = WEAPON_VFX_CONFIG[weaponKey];
     const recoilStrength = config ? config.recoilStrength : 5;
     
-    if (cannonBarrel) {
+    // Only apply barrel recoil in third-person mode
+    if (cannonBarrel && gameState.viewMode !== 'fps') {
         const originalY = cannonBarrel.position.y;
         cannonBarrel.position.y -= recoilStrength;
         
