@@ -518,8 +518,9 @@ const WEAPON_GLB_CONFIG = {
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
+            // FIXED: Camera was too high - lowered fpsCameraUpOffset from 40 to 25
             fpsCameraBackDist: 120,
-            fpsCameraUpOffset: 40
+            fpsCameraUpOffset: 25
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -562,8 +563,9 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 180,
-            fpsCameraUpOffset: 60
+            // FIXED: Camera was in barrel - increased fpsCameraBackDist from 180 to 250
+            fpsCameraBackDist: 250,
+            fpsCameraUpOffset: 80
         }
     }
 };
@@ -6202,20 +6204,20 @@ class Fish {
         // COMBO SYSTEM: Update combo and get bonus
         const comboBonus = updateComboOnKill();
         
-        // NEW RTP SYSTEM: Casino-standard kill rate calculation
-        // Kill Rate = Target RTP / Effective Payout
-        // This ensures long-term RTP converges to target (30-40% based on weapon)
-        const weapon = CONFIG.weapons[weaponKey];
+        // FIXED RTP SYSTEM: Casino-standard kill rate calculation
+        // Kill Rate = Target RTP / Effective Multiplier (reward / cost-to-kill)
+        // This ensures long-term RTP converges to target (91-95% based on fish size)
         const fishReward = this.config.reward;
-        const effectivePayout = fishReward * weapon.multiplier;
+        const fishHP = this.config.hp;
         
-        // Calculate kill rate using new RTP system
-        const killRate = calculateKillRate(fishReward, weaponKey);
+        // Calculate kill rate using FIXED RTP system (now accounts for cost-to-kill)
+        const killRate = calculateKillRate(fishReward, weaponKey, fishHP);
         
         // Determine if this kill awards a payout based on kill rate
         const isKill = Math.random() < killRate;
         // Apply combo bonus to winnings
-        const baseWin = isKill ? effectivePayout : 0;
+        // NOTE: fishReward is already in coins (40-500), no need to multiply by weapon.multiplier
+        const baseWin = isKill ? fishReward : 0;
         const win = baseWin > 0 ? Math.floor(baseWin * (1 + comboBonus)) : 0;
         
         // Record the win for RTP tracking (bet was already recorded when shot was fired)
@@ -6517,36 +6519,32 @@ function updateDynamicFishSpawn(deltaTime) {
 
 // ==================== RTP (RETURN TO PLAYER) SYSTEM ====================
 // Casino-standard RTP calculation: RTP = (Total Wins / Total Bets) * 100%
-// Kill Rate = Target RTP / Fish Multiplier (based on fish reward, not weapon)
+// ==================== RTP SYSTEM (FIXED) ====================
 // 
-// Fish-based RTP system (higher multiplier fish = slightly higher RTP):
-// - 1x fish: 90% RTP (kill rate = 90%)
-// - 3x fish: 92% RTP (kill rate = 30.67%)
-// - 5x fish: 93% RTP (kill rate = 18.6%)
-// - 8x fish: 94% RTP (kill rate = 11.75%)
-// - 20x fish: 95% RTP (kill rate = 4.75%)
+// CORRECTED RTP CALCULATION:
+// The fish reward is in COINS (40-500), not a multiplier.
+// We calculate the effective multiplier as: reward / expectedCostToKill
+// 
+// Example: 100 HP fish with 150 coin reward, using 1x weapon (100 damage, 1 cost)
+// - Shots to kill: ceil(100/100) = 1 shot
+// - Cost to kill: 1 * 1 = 1 coin
+// - Effective multiplier: 150 / 1 = 150x
+// - Kill rate for 93% RTP: 0.93 / 150 = 0.62%
+//
+// This ensures RTP is calculated based on actual cost, not just reward amount.
 
 const RTP_CONFIG = {
-    // RTP targets by FISH REWARD MULTIPLIER (not weapon)
-    // Higher multiplier fish have slightly better RTP to encourage targeting them
-    fishRTP: {
-        1: 0.90,    // 1x fish: 90% RTP, killRate = 90%
-        2: 0.91,    // 2x fish: 91% RTP, killRate = 45.5%
-        3: 0.92,    // 3x fish: 92% RTP, killRate = 30.67%
-        5: 0.93,    // 5x fish: 93% RTP, killRate = 18.6%
-        8: 0.94,    // 8x fish: 94% RTP, killRate = 11.75%
-        10: 0.94,   // 10x fish: 94% RTP, killRate = 9.4%
-        15: 0.945,  // 15x fish: 94.5% RTP, killRate = 6.3%
-        20: 0.95,   // 20x fish: 95% RTP, killRate = 4.75%
-        30: 0.95,   // 30x fish: 95% RTP, killRate = 3.17%
-        50: 0.95,   // 50x fish: 95% RTP, killRate = 1.9%
-        100: 0.95,  // 100x fish: 95% RTP, killRate = 0.95%
-        200: 0.95,  // 200x fish: 95% RTP, killRate = 0.475%
-        500: 0.95   // 500x fish: 95% RTP, killRate = 0.19%
+    // Target RTP by effective multiplier (reward / cost-to-kill)
+    // Higher multiplier = slightly higher RTP to encourage targeting big fish
+    targetRTP: {
+        small: 0.91,    // Small fish (multiplier < 50): 91% RTP
+        medium: 0.93,   // Medium fish (multiplier 50-150): 93% RTP  
+        large: 0.94,    // Large fish (multiplier 150-300): 94% RTP
+        boss: 0.95      // Boss fish (multiplier > 300): 95% RTP
     },
-    // Dynamic RTP adjustment bounds (90-95% market standard)
+    // Dynamic RTP adjustment bounds (90-96% market standard)
     minRTP: 0.88,     // Minimum RTP (88%) - increase kill rate if below
-    maxRTP: 0.96,     // Maximum RTP (96%) - decrease kill rate if above
+    maxRTP: 0.97,     // Maximum RTP (97%) - decrease kill rate if above
     // Tracking
     sessionStats: {
         totalBets: 0,
@@ -6556,33 +6554,41 @@ const RTP_CONFIG = {
     }
 };
 
-// Get RTP target for a fish based on its reward multiplier
-function getFishRTP(fishReward) {
-    // Find the closest matching multiplier in our RTP table
-    const multipliers = Object.keys(RTP_CONFIG.fishRTP).map(Number).sort((a, b) => a - b);
-    
-    // Find the closest multiplier that's <= fishReward
-    let closestMultiplier = 1;
-    for (const mult of multipliers) {
-        if (mult <= fishReward) {
-            closestMultiplier = mult;
-        } else {
-            break;
-        }
+// Get RTP target based on effective multiplier (reward / cost-to-kill)
+function getTargetRTP(effectiveMultiplier) {
+    if (effectiveMultiplier > 300) {
+        return RTP_CONFIG.targetRTP.boss;      // 95% for boss fish
+    } else if (effectiveMultiplier > 150) {
+        return RTP_CONFIG.targetRTP.large;     // 94% for large fish
+    } else if (effectiveMultiplier >= 50) {
+        return RTP_CONFIG.targetRTP.medium;    // 93% for medium fish
+    } else {
+        return RTP_CONFIG.targetRTP.small;     // 91% for small fish
     }
-    
-    return RTP_CONFIG.fishRTP[closestMultiplier] || 0.90;
 }
 
-// Calculate kill rate based on fish reward multiplier
-// Formula: killRate = targetRTP / fishReward
-function calculateKillRate(fishReward, weaponKey) {
-    // Get RTP based on fish reward (not weapon)
-    const targetRTP = getFishRTP(fishReward);
+// Calculate kill rate based on fish reward and weapon used
+// FIXED: Now properly accounts for cost-to-kill the fish
+function calculateKillRate(fishReward, weaponKey, fishHP) {
+    const weapon = CONFIG.weapons[weaponKey];
     
-    // Kill rate formula: killRate = targetRTP / multiplier
-    // Example: 20x fish with 95% RTP → killRate = 0.95 / 20 = 4.75%
-    let killRate = targetRTP / fishReward;
+    // Calculate expected shots to kill this fish
+    // Use average damage for weapons with variable damage
+    const avgDamage = weapon.damage;
+    const shotsToKill = Math.max(1, Math.ceil((fishHP || 100) / avgDamage));
+    
+    // Calculate cost to kill
+    const costToKill = shotsToKill * weapon.cost;
+    
+    // Calculate effective multiplier (reward / cost)
+    const effectiveMultiplier = fishReward / costToKill;
+    
+    // Get target RTP based on effective multiplier
+    const targetRTP = getTargetRTP(effectiveMultiplier);
+    
+    // Kill rate formula: killRate = targetRTP / effectiveMultiplier
+    // This ensures: Expected Value = killRate * reward = targetRTP * costToKill
+    let killRate = targetRTP / effectiveMultiplier;
     
     // Dynamic adjustment based on current session RTP
     const currentRTP = getCurrentSessionRTP();
@@ -6596,8 +6602,9 @@ function calculateKillRate(fishReward, weaponKey) {
         }
     }
     
-    // Clamp kill rate to reasonable bounds (0.1% to 95%)
-    return Math.max(0.001, Math.min(0.95, killRate));
+    // Clamp kill rate to reasonable bounds (1% to 95%)
+    // Minimum 1% ensures players always have a chance to win
+    return Math.max(0.01, Math.min(0.95, killRate));
 }
 
 // Get current session RTP
