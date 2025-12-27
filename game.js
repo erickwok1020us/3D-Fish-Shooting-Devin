@@ -2493,7 +2493,8 @@ function spawnExpandingRingOptimized(position, color, startRadius, endRadius, du
 // Spawn muzzle particles
 function spawnMuzzleParticles(position, direction, color, count) {
     for (let i = 0; i < count; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (!particle) continue;
         
         const spread = 0.5;
@@ -2925,7 +2926,8 @@ function spawnWaterSplash(position, size) {
     
     // Spawn upward splash particles (these use the existing particle pool system)
     for (let i = 0; i < 8; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (!particle) continue;
         
         const velocity = new THREE.Vector3(
@@ -3158,7 +3160,8 @@ function spawnMegaExplosion(position) {
     
     // Spawn flame particles that remain at impact (uses existing particle pool)
     for (let i = 0; i < 30; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (!particle) continue;
         
         const velocity = new THREE.Vector3(
@@ -3183,7 +3186,8 @@ function spawnWaterColumn(position, height) {
     
     // Create column of water particles rising up
     for (let i = 0; i < 20; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (!particle) continue;
         
         const startPos = columnPos.clone();
@@ -3626,7 +3630,8 @@ function startCannonChargeEffect(weaponKey) {
                 cannonMuzzle.getWorldPosition(muzzlePos);
                 
                 for (let i = 0; i < 10; i++) {
-                    const particle = particlePool.find(p => !p.isActive);
+                    // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+                    const particle = freeParticles.pop();
                     if (!particle) continue;
                     
                     // Start position around the muzzle
@@ -3694,6 +3699,10 @@ const bulletPool = [];
 const particlePool = [];
 const activeFish = [];
 const activeBullets = [];
+
+// PERFORMANCE: Free-lists for O(1) inactive object lookup (replaces O(n) .find() scans)
+const freeBullets = [];    // Stack of inactive bullets - pop() to get, push() to return
+const freeParticles = [];  // Stack of inactive particles - pop() to get, push() to return
 const activeParticles = [];
 
 // Timing
@@ -4979,11 +4988,12 @@ function autoFireAtFish(targetFish) {
         
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
         
-        const leftDir = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), spreadAngle);
-        spawnBulletFromDirection(muzzlePos, leftDir, weaponKey);
+        // PERFORMANCE: Reuse pre-allocated vectors instead of clone() + new Vector3()
+        fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
+        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
         
-        const rightDir = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -spreadAngle);
-        spawnBulletFromDirection(muzzlePos, rightDir, weaponKey);
+        fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
+        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
     } else {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
@@ -7393,6 +7403,9 @@ class Bullet {
             this.useGLB = false;
         }
         
+        // PERFORMANCE: Return bullet to free-list for O(1) reuse
+        freeBullets.push(this);
+        
         // For AOE/SuperAOE weapons, trigger explosion when bullet expires or goes out of bounds
         const weapon = CONFIG.weapons[this.weaponKey];
         if ((weapon.type === 'aoe' || weapon.type === 'superAoe') && this.lifetime <= 0) {
@@ -7403,14 +7416,17 @@ class Bullet {
 
 function createBulletPool() {
     for (let i = 0; i < 50; i++) {
-        bulletPool.push(new Bullet());
+        const bullet = new Bullet();
+        bulletPool.push(bullet);
+        freeBullets.push(bullet);  // PERFORMANCE: All bullets start in free-list
     }
 }
 
 // Helper function to spawn a bullet in a specific direction
-// PERFORMANCE: Removed clone() calls - Bullet.fire() already does copy()
+// PERFORMANCE: Uses free-list for O(1) lookup instead of O(n) .find() scan
 function spawnBulletFromDirection(origin, direction, weaponKey) {
-    const bullet = bulletPool.find(b => !b.isActive);
+    // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+    const bullet = freeBullets.pop();
     if (!bullet) return null;
     
     // No need to clone - Bullet.fire() uses copy() internally
@@ -7647,6 +7663,8 @@ class Particle {
     deactivate() {
         this.isActive = false;
         this.mesh.visible = false;
+        // PERFORMANCE: Return particle to free-list for O(1) reuse
+        freeParticles.push(this);
     }
 }
 
@@ -7654,7 +7672,9 @@ function createParticleSystems() {
     createBulletPool();
     
     for (let i = 0; i < 200; i++) {
-        particlePool.push(new Particle());
+        const particle = new Particle();
+        particlePool.push(particle);
+        freeParticles.push(particle);  // PERFORMANCE: All particles start in free-list
     }
     
     // Bubble system
@@ -7667,7 +7687,8 @@ function createBubbleSystem() {
         
         const { width, depth, floorY, height } = CONFIG.aquarium;
         
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (particle) {
             particle.spawn(
                 new THREE.Vector3(
@@ -7691,7 +7712,8 @@ function createBubbleSystem() {
 
 function createHitParticles(position, color, count) {
     for (let i = 0; i < count; i++) {
-        const particle = particlePool.find(p => !p.isActive);
+        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+        const particle = freeParticles.pop();
         if (particle) {
             const velocity = new THREE.Vector3(
                 (Math.random() - 0.5) * 150,
@@ -7707,6 +7729,8 @@ function createHitParticles(position, color, count) {
 // ==================== SPECIAL WEAPON EFFECTS ====================
 
 // Chain Lightning Effect (5x weapon)
+// PERFORMANCE: Refactored to use VFX manager instead of setTimeout chains
+// This prevents frame loop interleaving and reduces jitter
 function triggerChainLightning(initialFish, weaponKey, initialDamage) {
     // Issue #6: Play lightning sound
     playSound('lightning');
@@ -7719,50 +7743,70 @@ function triggerChainLightning(initialFish, weaponKey, initialDamage) {
     const visitedFish = new Set();
     visitedFish.add(initialFish);
     
-    let currentFish = initialFish;
-    let currentDamage = initialDamage;
-    let chainCount = 0;
-    
-    // Chain to nearby fish
-    const chainToNext = () => {
-        if (chainCount >= maxChains) return;
-        
-        // Find nearest unvisited fish within chain radius
-        let nearestFish = null;
-        let nearestDistance = chainRadius;
-        
-        for (const fish of activeFish) {
-            if (!fish.isActive || visitedFish.has(fish)) continue;
-            
-            const distance = currentFish.group.position.distanceTo(fish.group.position);
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearestFish = fish;
-            }
-        }
-        
-        if (nearestFish) {
-            // Apply decayed damage
-            currentDamage *= chainDecay;
-            const killed = nearestFish.takeDamage(Math.floor(currentDamage), weaponKey);
-            
-            // Spawn lightning arc visual
-            spawnLightningArc(currentFish.group.position, nearestFish.group.position, weapon.color);
-            
-            // Create particles at hit location
-            createHitParticles(nearestFish.group.position, weapon.color, 5);
-            
-            visitedFish.add(nearestFish);
-            currentFish = nearestFish;
-            chainCount++;
-            
-            // Issue #15: Increased delay between chain jumps for more visible effect (100ms instead of 50ms)
-            setTimeout(chainToNext, 100);
-        }
+    // PERFORMANCE: Use VFX manager for time-based chain progression instead of setTimeout
+    // This keeps all timing within the main animation loop for smoother frame pacing
+    const chainState = {
+        currentFish: initialFish,
+        currentDamage: initialDamage,
+        chainCount: 0,
+        nextChainTime: 50,  // First chain after 50ms
+        chainInterval: 100  // Subsequent chains every 100ms (Issue #15)
     };
     
-    // Start chaining after initial hit
-    setTimeout(chainToNext, 50);
+    addVfxEffect({
+        type: 'chainLightning',
+        update: (dt, elapsed) => {
+            // Check if it's time for the next chain
+            if (elapsed < chainState.nextChainTime) {
+                return true;  // Continue waiting
+            }
+            
+            // Check if we've reached max chains
+            if (chainState.chainCount >= maxChains) {
+                return false;  // Effect complete
+            }
+            
+            // Find nearest unvisited fish within chain radius
+            let nearestFish = null;
+            let nearestDistance = chainRadius;
+            
+            for (const fish of activeFish) {
+                if (!fish.isActive || visitedFish.has(fish)) continue;
+                
+                const distance = chainState.currentFish.group.position.distanceTo(fish.group.position);
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestFish = fish;
+                }
+            }
+            
+            if (nearestFish) {
+                // Apply decayed damage
+                chainState.currentDamage *= chainDecay;
+                const killed = nearestFish.takeDamage(Math.floor(chainState.currentDamage), weaponKey);
+                
+                // Spawn lightning arc visual
+                spawnLightningArc(chainState.currentFish.group.position, nearestFish.group.position, weapon.color);
+                
+                // Create particles at hit location
+                createHitParticles(nearestFish.group.position, weapon.color, 5);
+                
+                visitedFish.add(nearestFish);
+                chainState.currentFish = nearestFish;
+                chainState.chainCount++;
+                
+                // Schedule next chain
+                chainState.nextChainTime = elapsed + chainState.chainInterval;
+                
+                return true;  // Continue effect
+            }
+            
+            return false;  // No more fish to chain to
+        },
+        cleanup: () => {
+            // No cleanup needed for chain lightning
+        }
+    });
 }
 
 // Spawn lightning arc visual between two points - Issue #3 & #15: Enhanced visuals with golden chain lightning
