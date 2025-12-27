@@ -1403,23 +1403,34 @@
             const btnLeaveRoom = document.getElementById('btn-leave-room');
             
             // Initialize lobby after game loads
+            // FIX: Track initialization state to prevent double-init (which causes Connected/Connecting flicker)
+            let lobbyInitialized = false;
+            
             window.addEventListener('load', function() {
                 // Wait for game to finish loading
                 const checkLoaded = setInterval(function() {
                     if (typeof window.gameLoaded !== 'undefined' && window.gameLoaded) {
                         clearInterval(checkLoaded);
+                        clearTimeout(fallbackTimeout);
                         initLobby();
                     }
                 }, 100);
                 
                 // Fallback: show lobby after 3 seconds
-                setTimeout(function() {
+                const fallbackTimeout = setTimeout(function() {
                     clearInterval(checkLoaded);
                     initLobby();
                 }, 3000);
             });
             
             function initLobby() {
+                // FIX: Prevent double initialization which causes connection status flicker
+                if (lobbyInitialized) {
+                    console.log('[LOBBY] Already initialized, skipping');
+                    return;
+                }
+                lobbyInitialized = true;
+                
                 // Hide loading, show lobby
                 loadingScreen.style.display = 'none';
                 lobbyScreen.style.display = 'flex';

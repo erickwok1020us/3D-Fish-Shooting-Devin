@@ -7814,6 +7814,8 @@ function setupEventListeners() {
         } else {
             updateCameraRotation();
         }
+        // FIX: Blur button after click to prevent Space key from re-activating it
+        e.currentTarget.blur();
     });
     
     // VIEW MODE toggle button handler
@@ -7822,12 +7824,30 @@ function setupEventListeners() {
         viewModeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleViewMode();
+            // FIX: Blur button after click to prevent Space key from re-activating it
+            e.currentTarget.blur();
+        });
+    }
+    
+    // AUTO SHOOT button handler - also blur after click
+    const autoShootBtn = document.getElementById('auto-shoot-btn');
+    if (autoShootBtn) {
+        autoShootBtn.addEventListener('click', (e) => {
+            // FIX: Blur button after click to prevent Space key from re-activating it
+            e.currentTarget.blur();
         });
     }
     
     // Keyboard controls - Complete shortcut system for FPS mode
     // In FPS mode, mouse is locked for view control, so keyboard shortcuts are essential
+    // FIX: Use capture phase to ensure shortcuts work even when buttons are focused
     window.addEventListener('keydown', (e) => {
+        // Skip shortcuts when typing in input fields
+        const target = e.target;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+            return;
+        }
+        
         // Weapon switching: 1-5 keys
         if (e.key === '1') {
             selectWeapon('1x');
@@ -7853,9 +7873,11 @@ function setupEventListeners() {
             toggleAutoShoot();
             highlightButton('#auto-shoot-btn');
             return;
-        } else if (e.key === ' ') {
+        } else if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
             // Space key: Toggle view mode (FPS <-> 3RD PERSON)
+            // FIX: Use e.code for reliable detection across keyboard layouts
             e.preventDefault(); // Prevent page scroll
+            e.stopPropagation(); // Prevent button activation when focused
             toggleViewMode();
             highlightButton('#view-mode-btn');
             return;
