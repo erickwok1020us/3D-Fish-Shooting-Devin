@@ -1462,6 +1462,95 @@ const vfxState = {
     weaponSwitchAnimation: null
 };
 
+// ==================== CENTRALIZED VFX MANAGER (Performance Fix) ====================
+// All visual effects are now updated from the main animate() loop instead of having
+// their own requestAnimationFrame loops. This eliminates the "N effects = N RAF callbacks"
+// problem that was causing severe FPS drops (10-27 FPS) during combat.
+
+// Array to track all active VFX effects
+const activeVfxEffects = [];
+
+// Cached geometries to avoid creating new ones per effect (reduces GC pressure)
+const vfxGeometryCache = {
+    ring: null,           // TorusGeometry for expanding rings
+    sphere: null,         // SphereGeometry for fireballs/cores
+    smallSphere: null,    // Smaller sphere for trails
+    shockwaveRing: null,  // RingGeometry for shockwaves
+    coinCylinder: null,   // CylinderGeometry for coins
+    coinSphere: null,     // SphereGeometry for flying coins
+    smokeCloud: null      // SphereGeometry for smoke
+};
+
+// Maximum active VFX effects to prevent performance collapse during Boss Mode
+const MAX_VFX_EFFECTS = 100;
+
+// Temp vectors to avoid per-frame allocations
+const vfxTempVec3 = new THREE.Vector3();
+
+// Initialize cached geometries (called once when scene is ready)
+function initVfxGeometryCache() {
+    vfxGeometryCache.ring = new THREE.TorusGeometry(1, 3, 8, 32);
+    vfxGeometryCache.sphere = new THREE.SphereGeometry(1, 16, 16);
+    vfxGeometryCache.smallSphere = new THREE.SphereGeometry(1, 8, 8);
+    vfxGeometryCache.shockwaveRing = new THREE.RingGeometry(1, 5, 32);
+    vfxGeometryCache.coinCylinder = new THREE.CylinderGeometry(8, 8, 3, 8);
+    vfxGeometryCache.coinSphere = new THREE.SphereGeometry(12, 8, 8);
+    vfxGeometryCache.smokeCloud = new THREE.SphereGeometry(1, 8, 8);
+    console.log('[VFX] Geometry cache initialized');
+}
+
+// Update all active VFX effects from main animate() loop
+// This is called once per frame with deltaTime
+function updateVfxEffects(dt, now) {
+    // Iterate backwards to safely remove finished effects
+    for (let i = activeVfxEffects.length - 1; i >= 0; i--) {
+        const effect = activeVfxEffects[i];
+        
+        // Calculate elapsed time for this effect
+        const elapsed = now - effect.startTime;
+        
+        // Call the effect's update function
+        // Returns true if effect should continue, false if done
+        const shouldContinue = effect.update(dt, elapsed);
+        
+        if (!shouldContinue) {
+            // Effect is done - clean up and remove
+            if (effect.cleanup) {
+                effect.cleanup();
+            }
+            activeVfxEffects.splice(i, 1);
+        }
+    }
+}
+
+// Helper to add a new VFX effect with overflow protection
+function addVfxEffect(effect) {
+    // Enforce maximum effect count to prevent performance collapse
+    if (activeVfxEffects.length >= MAX_VFX_EFFECTS) {
+        // Remove oldest effects to make room
+        const toRemove = activeVfxEffects.splice(0, 10);
+        toRemove.forEach(e => {
+            if (e.cleanup) e.cleanup();
+        });
+        console.warn('[VFX] Effect limit reached, removed 10 oldest effects');
+    }
+    
+    effect.startTime = performance.now();
+    activeVfxEffects.push(effect);
+}
+
+// Get VFX stats for debugging
+function getVfxStats() {
+    return {
+        activeEffects: activeVfxEffects.length,
+        maxEffects: MAX_VFX_EFFECTS,
+        effectTypes: activeVfxEffects.reduce((acc, e) => {
+            acc[e.type] = (acc[e.type] || 0) + 1;
+            return acc;
+        }, {})
+    };
+}
+
 // ==================== AUDIO SYSTEM (Issue #6) ====================
 // ==================== ENHANCED AUDIO SYSTEM (Issue #16) ====================
 let audioContext = null;
@@ -2239,8 +2328,11 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     }
 }
 
-// Spawn expanding ring effect
+// Spawn expanding ring effect - REFACTORED to use centralized VFX manager
 function spawnExpandingRing(position, color, startRadius, endRadius, duration) {
+    if (!scene) return;
+    
+    // Create geometry (not cached because startRadius varies)
     const geometry = new THREE.TorusGeometry(startRadius, 3, 8, 32);
     const material = new THREE.MeshBasicMaterial({
         color: color,
@@ -2254,24 +2346,30 @@ function spawnExpandingRing(position, color, startRadius, endRadius, duration) {
     ring.rotation.x = Math.PI / 2;
     scene.add(ring);
     
-    const startTime = performance.now();
-    const animate = () => {
-        const elapsed = (performance.now() - startTime) / 1000;
-        const progress = Math.min(elapsed / duration, 1);
+    // Register with VFX manager instead of using own RAF loop
+    addVfxEffect({
+        type: 'expandingRing',
+        mesh: ring,
+        geometry: geometry,
+        material: material,
+        duration: duration * 1000, // Convert to ms
+        startRadius: startRadius,
+        endRadius: endRadius,
         
-        const scale = 1 + (endRadius / startRadius - 1) * progress;
-        ring.scale.set(scale, scale, scale);
-        ring.material.opacity = 0.8 * (1 - progress);
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            const scale = 1 + (this.endRadius / this.startRadius - 1) * progress;
+            this.mesh.scale.set(scale, scale, scale);
+            this.material.opacity = 0.8 * (1 - progress);
+            return progress < 1; // Continue if not done
+        },
         
-        if (progress < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(ring);
-            geometry.dispose();
-            material.dispose();
+        cleanup() {
+            scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.material.dispose();
         }
-    };
-    animate();
+    });
 }
 
 // Spawn muzzle particles
@@ -2306,8 +2404,10 @@ function spawnLightningBurst(position, color, count) {
     }
 }
 
-// Phase 2: Spawn lightning bolt between two positions (for Electric Eel ability)
+// Phase 2: Spawn lightning bolt between two positions - REFACTORED to use VFX manager
 function spawnLightningBoltBetween(startPos, endPos, color) {
+    if (!scene) return;
+    
     const points = [];
     const segments = 8;
     
@@ -2336,33 +2436,43 @@ function spawnLightningBoltBetween(startPos, endPos, color) {
     scene.add(lightning);
     
     // Add glow effect
+    const glowGeometry = geometry.clone();
     const glowMaterial = new THREE.LineBasicMaterial({
         color: 0xffffff,
         linewidth: 5,
         transparent: true,
         opacity: 0.5
     });
-    const glow = new THREE.Line(geometry.clone(), glowMaterial);
+    const glow = new THREE.Line(glowGeometry, glowMaterial);
     scene.add(glow);
     
-    // Animate and remove
-    let opacity = 1.0;
-    const animate = () => {
-        opacity -= 0.1;
-        material.opacity = opacity;
-        glowMaterial.opacity = opacity * 0.5;
+    // Register with VFX manager instead of using own RAF loop
+    addVfxEffect({
+        type: 'lightning',
+        lightning: lightning,
+        glow: glow,
+        geometry: geometry,
+        glowGeometry: glowGeometry,
+        material: material,
+        glowMaterial: glowMaterial,
+        fadeSpeed: 6, // Opacity units per second (was 0.1 per frame at 60fps = 6/s)
         
-        if (opacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(lightning);
-            scene.remove(glow);
-            geometry.dispose();
-            material.dispose();
-            glowMaterial.dispose();
+        update(dt, elapsed) {
+            // Fade out over time
+            this.material.opacity -= this.fadeSpeed * dt;
+            this.glowMaterial.opacity = this.material.opacity * 0.5;
+            return this.material.opacity > 0;
+        },
+        
+        cleanup() {
+            scene.remove(this.lightning);
+            scene.remove(this.glow);
+            this.geometry.dispose();
+            this.glowGeometry.dispose();
+            this.material.dispose();
+            this.glowMaterial.dispose();
         }
-    };
-    animate();
+    });
 }
 
 // Phase 2: Show ability notification (for special fish abilities)
@@ -2409,8 +2519,10 @@ function showAbilityNotification(text, color) {
     }, 1500);
 }
 
-// Spawn fireball muzzle flash (for 8x weapon)
+// Spawn fireball muzzle flash (for 8x weapon) - REFACTORED to use VFX manager
 function spawnFireballMuzzleFlash(position, direction) {
+    if (!scene) return;
+    
     // Create fireball sphere
     const geometry = new THREE.SphereGeometry(25, 16, 16);
     const material = new THREE.MeshBasicMaterial({
@@ -2434,29 +2546,42 @@ function spawnFireballMuzzleFlash(position, direction) {
     core.position.copy(position);
     scene.add(core);
     
-    let scale = 1;
-    let opacity = 0.9;
-    const animate = () => {
-        scale += 0.15;
-        opacity -= 0.08;
+    // Register with VFX manager instead of using own RAF loop
+    addVfxEffect({
+        type: 'fireballFlash',
+        fireball: fireball,
+        core: core,
+        geometry: geometry,
+        coreGeometry: coreGeometry,
+        material: material,
+        coreMaterial: coreMaterial,
+        currentScale: 1,
+        currentOpacity: 0.9,
+        scaleSpeed: 9, // was 0.15 per frame at 60fps = 9/s
+        fadeSpeed: 4.8, // was 0.08 per frame at 60fps = 4.8/s
         
-        fireball.scale.set(scale, scale, scale);
-        fireball.material.opacity = Math.max(0, opacity);
-        core.scale.set(scale * 0.8, scale * 0.8, scale * 0.8);
-        core.material.opacity = Math.max(0, opacity * 1.2);
+        update(dt, elapsed) {
+            this.currentScale += this.scaleSpeed * dt;
+            this.currentOpacity -= this.fadeSpeed * dt;
+            
+            this.fireball.scale.set(this.currentScale, this.currentScale, this.currentScale);
+            this.material.opacity = Math.max(0, this.currentOpacity);
+            const coreScale = this.currentScale * 0.8;
+            this.core.scale.set(coreScale, coreScale, coreScale);
+            this.coreMaterial.opacity = Math.max(0, this.currentOpacity * 1.2);
+            
+            return this.currentOpacity > 0;
+        },
         
-        if (opacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(fireball);
-            scene.remove(core);
-            geometry.dispose();
-            material.dispose();
-            coreGeometry.dispose();
-            coreMaterial.dispose();
+        cleanup() {
+            scene.remove(this.fireball);
+            scene.remove(this.core);
+            this.geometry.dispose();
+            this.material.dispose();
+            this.coreGeometry.dispose();
+            this.coreMaterial.dispose();
         }
-    };
-    animate();
+    });
 }
 
 // Enhanced hit effect based on weapon type
@@ -2525,7 +2650,7 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     }
 }
 
-// Spawn GLB hit effect model
+// Spawn GLB hit effect model - REFACTORED to use VFX manager
 async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!glbConfig) return false;
@@ -2561,9 +2686,6 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
             hitEffectModel.lookAt(targetPos);
             
             // If hitEffectRotationFix is defined, apply additional rotation to correct model's orientation
-            // This handles cases where the GLB model's "spray direction" is not aligned with +Z
-            // The rotation is applied in local space after lookAt(), effectively rotating the model
-            // so its spray direction aligns with the bullet direction
             if (glbConfig.hitEffectRotationFix) {
                 const rotationFixQuat = new THREE.Quaternion();
                 rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
@@ -2584,45 +2706,47 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
         // Add to scene
         scene.add(hitEffectModel);
         
-        // Animate the hit effect (scale up then fade out)
-        const startTime = performance.now();
+        // Register with VFX manager instead of using own RAF loop
         const duration = 800; // 800ms animation
         const initialScale = scale * 0.5;
         const maxScale = scale * 1.5;
         
-        function animateHitEffect() {
-            const elapsed = performance.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
+        addVfxEffect({
+            type: 'glbHitEffect',
+            model: hitEffectModel,
+            materials: clonedMaterials,
+            duration: duration,
+            initialScale: initialScale,
+            maxScale: maxScale,
             
-            if (progress < 0.3) {
-                // Scale up phase (0-30%)
-                const scaleProgress = progress / 0.3;
-                const currentScale = initialScale + (maxScale - initialScale) * scaleProgress;
-                hitEffectModel.scale.set(currentScale, currentScale, currentScale);
-            } else {
-                // Fade out phase (30-100%)
-                const fadeProgress = (progress - 0.3) / 0.7;
-                // Only modify cloned materials (safe to modify)
-                clonedMaterials.forEach((mat) => {
-                    if (!mat.transparent) {
-                        mat.transparent = true;
-                    }
-                    mat.opacity = 1 - fadeProgress;
-                });
-            }
+            update(dt, elapsed) {
+                const progress = Math.min(elapsed / this.duration, 1);
+                
+                if (progress < 0.3) {
+                    // Scale up phase (0-30%)
+                    const scaleProgress = progress / 0.3;
+                    const currentScale = this.initialScale + (this.maxScale - this.initialScale) * scaleProgress;
+                    this.model.scale.set(currentScale, currentScale, currentScale);
+                } else {
+                    // Fade out phase (30-100%)
+                    const fadeProgress = (progress - 0.3) / 0.7;
+                    this.materials.forEach((mat) => {
+                        if (!mat.transparent) {
+                            mat.transparent = true;
+                        }
+                        mat.opacity = 1 - fadeProgress;
+                    });
+                }
+                
+                return progress < 1;
+            },
             
-            if (progress < 1) {
-                requestAnimationFrame(animateHitEffect);
-            } else {
-                // Remove from scene when animation complete
-                scene.remove(hitEffectModel);
-                // PERFORMANCE FIX: Use proper recursive disposal to prevent GPU memory leaks
-                disposeObject3D(hitEffectModel);
+            cleanup() {
+                scene.remove(this.model);
+                disposeObject3D(this.model);
             }
-        }
+        });
         
-        animateHitEffect();
-        console.log(`[WEAPON-GLB] Spawned GLB hit effect for ${weaponKey}`);
         return true;
         
     } catch (error) {
@@ -2631,8 +2755,10 @@ async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
     }
 }
 
-// Spawn water splash effect
+// Spawn water splash effect - REFACTORED to use VFX manager
 function spawnWaterSplash(position, size) {
+    if (!scene) return;
+    
     // Create splash ring on water surface
     const surfaceY = CONFIG.aquarium.height / 2 - 50;
     const splashPos = position.clone();
@@ -2651,26 +2777,35 @@ function spawnWaterSplash(position, size) {
     splash.rotation.x = -Math.PI / 2;
     scene.add(splash);
     
-    let scale = 1;
-    let opacity = 0.6;
-    const animate = () => {
-        scale += 0.1;
-        opacity -= 0.05;
+    // Register with VFX manager instead of using own RAF loop
+    addVfxEffect({
+        type: 'waterSplash',
+        mesh: splash,
+        geometry: geometry,
+        material: material,
+        currentScale: 1,
+        currentOpacity: 0.6,
+        scaleSpeed: 6, // was 0.1 per frame at 60fps = 6/s
+        fadeSpeed: 3, // was 0.05 per frame at 60fps = 3/s
         
-        splash.scale.set(scale, scale, scale);
-        splash.material.opacity = Math.max(0, opacity);
+        update(dt, elapsed) {
+            this.currentScale += this.scaleSpeed * dt;
+            this.currentOpacity -= this.fadeSpeed * dt;
+            
+            this.mesh.scale.set(this.currentScale, this.currentScale, this.currentScale);
+            this.material.opacity = Math.max(0, this.currentOpacity);
+            
+            return this.currentOpacity > 0;
+        },
         
-        if (opacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(splash);
-            geometry.dispose();
-            material.dispose();
+        cleanup() {
+            scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.material.dispose();
         }
-    };
-    animate();
+    });
     
-    // Spawn upward splash particles
+    // Spawn upward splash particles (these use the existing particle pool system)
     for (let i = 0; i < 8; i++) {
         const particle = particlePool.find(p => !p.isActive);
         if (!particle) continue;
@@ -2686,8 +2821,10 @@ function spawnWaterSplash(position, size) {
     }
 }
 
-// Spawn shockwave effect (for 5x weapon)
+// Spawn shockwave effect (for 5x weapon) - REFACTORED to use VFX manager
 function spawnShockwave(position, color, radius) {
+    if (!scene) return;
+    
     const geometry = new THREE.RingGeometry(1, 5, 32);
     const material = new THREE.MeshBasicMaterial({
         color: color,
@@ -2701,30 +2838,36 @@ function spawnShockwave(position, color, radius) {
     shockwave.rotation.x = -Math.PI / 2;
     scene.add(shockwave);
     
-    const startTime = performance.now();
-    const duration = 0.5;
-    const animate = () => {
-        const elapsed = (performance.now() - startTime) / 1000;
-        const progress = Math.min(elapsed / duration, 1);
+    // Register with VFX manager instead of using own RAF loop
+    addVfxEffect({
+        type: 'shockwave',
+        mesh: shockwave,
+        geometry: geometry,
+        material: material,
+        duration: 500, // 0.5s in ms
+        radius: radius,
         
-        const scale = 1 + (radius / 5) * progress;
-        shockwave.scale.set(scale, scale, scale);
-        shockwave.material.opacity = 0.7 * (1 - progress);
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            const scale = 1 + (this.radius / 5) * progress;
+            this.mesh.scale.set(scale, scale, scale);
+            this.material.opacity = 0.7 * (1 - progress);
+            return progress < 1;
+        },
         
-        if (progress < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(shockwave);
-            geometry.dispose();
-            material.dispose();
+        cleanup() {
+            scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.material.dispose();
         }
-    };
-    animate();
+    });
 }
 
-// Spawn mega explosion (three-stage for 8x weapon)
+// Spawn mega explosion (three-stage for 8x weapon) - REFACTORED to use VFX manager
 function spawnMegaExplosion(position) {
-    // Stage 1: Core white flash (0-0.1s)
+    if (!scene) return;
+    
+    // Stage 1: Core white flash - register with VFX manager
     const coreGeometry = new THREE.SphereGeometry(20, 16, 16);
     const coreMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
@@ -2735,115 +2878,167 @@ function spawnMegaExplosion(position) {
     core.position.copy(position);
     scene.add(core);
     
-    // Stage 2: Orange-red fireball (0.05-0.4s)
-    setTimeout(() => {
-        const fireballGeometry = new THREE.SphereGeometry(30, 16, 16);
-        const fireballMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff4400,
-            transparent: true,
-            opacity: 0.8
-        });
-        const fireball = new THREE.Mesh(fireballGeometry, fireballMaterial);
-        fireball.position.copy(position);
-        scene.add(fireball);
+    addVfxEffect({
+        type: 'megaExplosionCore',
+        mesh: core,
+        geometry: coreGeometry,
+        material: coreMaterial,
+        currentScale: 1,
+        currentOpacity: 1,
+        scaleSpeed: 18, // was 0.3 per frame at 60fps = 18/s
+        fadeSpeed: 9, // was 0.15 per frame at 60fps = 9/s
         
-        // Inner orange core
-        const innerGeometry = new THREE.SphereGeometry(20, 12, 12);
-        const innerMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffaa00,
-            transparent: true,
-            opacity: 0.9
-        });
-        const inner = new THREE.Mesh(innerGeometry, innerMaterial);
-        inner.position.copy(position);
-        scene.add(inner);
+        update(dt, elapsed) {
+            this.currentScale += this.scaleSpeed * dt;
+            this.currentOpacity -= this.fadeSpeed * dt;
+            this.mesh.scale.set(this.currentScale, this.currentScale, this.currentScale);
+            this.material.opacity = Math.max(0, this.currentOpacity);
+            return this.currentOpacity > 0;
+        },
         
-        let scale = 1;
-        let opacity = 0.8;
-        const animateFireball = () => {
-            scale += 0.12;
-            opacity -= 0.03;
-            
-            fireball.scale.set(scale, scale, scale);
-            fireball.material.opacity = Math.max(0, opacity);
-            inner.scale.set(scale * 0.7, scale * 0.7, scale * 0.7);
-            inner.material.opacity = Math.max(0, opacity * 1.1);
-            
-            if (opacity > 0) {
-                requestAnimationFrame(animateFireball);
-            } else {
-                scene.remove(fireball);
-                scene.remove(inner);
-                fireballGeometry.dispose();
-                fireballMaterial.dispose();
-                innerGeometry.dispose();
-                innerMaterial.dispose();
+        cleanup() {
+            scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.material.dispose();
+        }
+    });
+    
+    // Stage 2: Orange-red fireball (delayed by 50ms) - use time-based logic
+    const positionCopy = position.clone();
+    addVfxEffect({
+        type: 'megaExplosionFireball',
+        delayMs: 50,
+        started: false,
+        fireball: null,
+        inner: null,
+        fireballGeometry: null,
+        fireballMaterial: null,
+        innerGeometry: null,
+        innerMaterial: null,
+        currentScale: 1,
+        currentOpacity: 0.8,
+        scaleSpeed: 7.2, // was 0.12 per frame at 60fps = 7.2/s
+        fadeSpeed: 1.8, // was 0.03 per frame at 60fps = 1.8/s
+        
+        update(dt, elapsed) {
+            // Wait for delay before starting
+            if (!this.started) {
+                if (elapsed < this.delayMs) return true;
+                
+                // Initialize fireball meshes
+                this.fireballGeometry = new THREE.SphereGeometry(30, 16, 16);
+                this.fireballMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xff4400,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                this.fireball = new THREE.Mesh(this.fireballGeometry, this.fireballMaterial);
+                this.fireball.position.copy(positionCopy);
+                scene.add(this.fireball);
+                
+                this.innerGeometry = new THREE.SphereGeometry(20, 12, 12);
+                this.innerMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xffaa00,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                this.inner = new THREE.Mesh(this.innerGeometry, this.innerMaterial);
+                this.inner.position.copy(positionCopy);
+                scene.add(this.inner);
+                
+                this.started = true;
             }
-        };
-        animateFireball();
-    }, 50);
+            
+            // Animate fireball
+            this.currentScale += this.scaleSpeed * dt;
+            this.currentOpacity -= this.fadeSpeed * dt;
+            
+            this.fireball.scale.set(this.currentScale, this.currentScale, this.currentScale);
+            this.fireballMaterial.opacity = Math.max(0, this.currentOpacity);
+            const innerScale = this.currentScale * 0.7;
+            this.inner.scale.set(innerScale, innerScale, innerScale);
+            this.innerMaterial.opacity = Math.max(0, this.currentOpacity * 1.1);
+            
+            return this.currentOpacity > 0;
+        },
+        
+        cleanup() {
+            if (this.fireball) {
+                scene.remove(this.fireball);
+                this.fireballGeometry.dispose();
+                this.fireballMaterial.dispose();
+            }
+            if (this.inner) {
+                scene.remove(this.inner);
+                this.innerGeometry.dispose();
+                this.innerMaterial.dispose();
+            }
+        }
+    });
     
-    // Stage 3: Black smoke lingering (0.2-2s)
-    setTimeout(() => {
-        for (let i = 0; i < 15; i++) {
-            const smokeGeometry = new THREE.SphereGeometry(15 + Math.random() * 10, 8, 8);
-            const smokeMaterial = new THREE.MeshBasicMaterial({
-                color: 0x333333,
-                transparent: true,
-                opacity: 0.4
-            });
-            const smoke = new THREE.Mesh(smokeGeometry, smokeMaterial);
-            smoke.position.copy(position);
-            smoke.position.x += (Math.random() - 0.5) * 40;
-            smoke.position.y += Math.random() * 30;
-            smoke.position.z += (Math.random() - 0.5) * 40;
-            scene.add(smoke);
+    // Stage 3: Black smoke lingering (delayed by 200ms) - reduced count for performance
+    const smokeCount = Math.min(15, Math.max(5, Math.floor(15 * (performanceState.currentFPS / 60))));
+    for (let i = 0; i < smokeCount; i++) {
+        const smokePos = position.clone();
+        smokePos.x += (Math.random() - 0.5) * 40;
+        smokePos.y += Math.random() * 30;
+        smokePos.z += (Math.random() - 0.5) * 40;
+        const riseSpeed = 20 + Math.random() * 30;
+        const duration = (1.5 + Math.random() * 0.5) * 1000; // Convert to ms
+        const smokeSize = 15 + Math.random() * 10;
+        
+        addVfxEffect({
+            type: 'megaExplosionSmoke',
+            delayMs: 200,
+            started: false,
+            mesh: null,
+            geometry: null,
+            material: null,
+            smokePos: smokePos,
+            smokeSize: smokeSize,
+            riseSpeed: riseSpeed,
+            duration: duration,
             
-            const riseSpeed = 20 + Math.random() * 30;
-            const startTime = performance.now();
-            const duration = 1.5 + Math.random() * 0.5;
-            
-            const animateSmoke = () => {
-                const elapsed = (performance.now() - startTime) / 1000;
-                const progress = Math.min(elapsed / duration, 1);
-                
-                smoke.position.y += riseSpeed * 0.016;
-                smoke.scale.setScalar(1 + progress * 0.5);
-                smoke.material.opacity = 0.4 * (1 - progress);
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateSmoke);
-                } else {
-                    scene.remove(smoke);
-                    smokeGeometry.dispose();
-                    smokeMaterial.dispose();
+            update(dt, elapsed) {
+                // Wait for delay before starting
+                if (!this.started) {
+                    if (elapsed < this.delayMs) return true;
+                    
+                    this.geometry = new THREE.SphereGeometry(this.smokeSize, 8, 8);
+                    this.material = new THREE.MeshBasicMaterial({
+                        color: 0x333333,
+                        transparent: true,
+                        opacity: 0.4
+                    });
+                    this.mesh = new THREE.Mesh(this.geometry, this.material);
+                    this.mesh.position.copy(this.smokePos);
+                    scene.add(this.mesh);
+                    this.started = true;
+                    this.smokeStartTime = elapsed;
                 }
-            };
-            animateSmoke();
-        }
-    }, 200);
+                
+                // Animate smoke
+                const smokeElapsed = elapsed - this.smokeStartTime;
+                const progress = Math.min(smokeElapsed / this.duration, 1);
+                
+                this.mesh.position.y += this.riseSpeed * dt;
+                this.mesh.scale.setScalar(1 + progress * 0.5);
+                this.material.opacity = 0.4 * (1 - progress);
+                
+                return progress < 1;
+            },
+            
+            cleanup() {
+                if (this.mesh) {
+                    scene.remove(this.mesh);
+                    this.geometry.dispose();
+                    this.material.dispose();
+                }
+            }
+        });
+    }
     
-    // Animate core flash
-    let coreScale = 1;
-    let coreOpacity = 1;
-    const animateCore = () => {
-        coreScale += 0.3;
-        coreOpacity -= 0.15;
-        
-        core.scale.set(coreScale, coreScale, coreScale);
-        core.material.opacity = Math.max(0, coreOpacity);
-        
-        if (coreOpacity > 0) {
-            requestAnimationFrame(animateCore);
-        } else {
-            scene.remove(core);
-            coreGeometry.dispose();
-            coreMaterial.dispose();
-        }
-    };
-    animateCore();
-    
-    // Spawn flame particles that remain at impact
+    // Spawn flame particles that remain at impact (uses existing particle pool)
     for (let i = 0; i < 30; i++) {
         const particle = particlePool.find(p => !p.isActive);
         if (!particle) continue;
@@ -2925,7 +3120,7 @@ function spawnFishDeathEffect(position, fishSize, color) {
     }
 }
 
-// Issue #16: Spawn gold coins burst from fish death
+// Issue #16: Spawn gold coins burst from fish death - REFACTORED to use VFX manager
 function spawnCoinBurst(position, count) {
     if (!particleGroup) return;
     
@@ -2949,29 +3144,44 @@ function spawnCoinBurst(position, count) {
         
         particleGroup.add(coin);
         
-        // Animate coin flying and fading
-        let time = 0;
-        const animate = () => {
-            time += 0.016;
-            coin.position.add(velocity.clone().multiplyScalar(0.016));
-            velocity.y -= 300 * 0.016; // Gravity
-            coin.rotation.z += 0.2;
-            coin.material.opacity = Math.max(0, 1 - time * 1.5);
-            coin.scale.setScalar(Math.max(0.1, 1 - time));
+        // Register with VFX manager instead of using own RAF loop
+        addVfxEffect({
+            type: 'coinBurst',
+            mesh: coin,
+            geometry: coinGeometry,
+            material: coinMaterial,
+            velocity: velocity,
+            elapsedTime: 0,
+            gravity: 300,
+            spinSpeed: 12, // was 0.2 per frame at 60fps = 12/s
             
-            if (time < 1.0 && coin.material.opacity > 0) {
-                requestAnimationFrame(animate);
-            } else {
-                particleGroup.remove(coin);
-                coinGeometry.dispose();
-                coinMaterial.dispose();
+            update(dt, elapsed) {
+                this.elapsedTime += dt;
+                
+                // Apply velocity and gravity
+                this.mesh.position.x += this.velocity.x * dt;
+                this.mesh.position.y += this.velocity.y * dt;
+                this.mesh.position.z += this.velocity.z * dt;
+                this.velocity.y -= this.gravity * dt;
+                
+                // Spin and fade
+                this.mesh.rotation.z += this.spinSpeed * dt;
+                this.material.opacity = Math.max(0, 1 - this.elapsedTime * 1.5);
+                this.mesh.scale.setScalar(Math.max(0.1, 1 - this.elapsedTime));
+                
+                return this.elapsedTime < 1.0 && this.material.opacity > 0;
+            },
+            
+            cleanup() {
+                particleGroup.remove(this.mesh);
+                this.geometry.dispose();
+                this.material.dispose();
             }
-        };
-        animate();
+        });
     }
 }
 
-// Issue #16: Coin fly animation to cannon muzzle (gun barrel tip)
+// Issue #16: Coin fly animation to cannon muzzle - REFACTORED to use VFX manager
 function spawnCoinFlyToScore(startPosition, coinCount, reward) {
     // FIX: Changed from undefined 'cannon' to 'cannonMuzzle' which is the actual gun barrel tip
     if (!particleGroup || !cannonMuzzle) return;
@@ -2981,93 +3191,119 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
     cannonMuzzle.getWorldPosition(cannonPos);
     
     for (let i = 0; i < Math.min(coinCount, 15); i++) {
-        setTimeout(() => {
-            const coinGeometry = new THREE.SphereGeometry(12, 8, 8);
-            const coinMaterial = new THREE.MeshBasicMaterial({
-                color: 0xffd700,
-                transparent: true,
-                opacity: 1
-            });
-            const coin = new THREE.Mesh(coinGeometry, coinMaterial);
+        // Use time-based delay instead of setTimeout
+        const delayMs = i * 50;
+        const startPosCopy = startPosition.clone();
+        const targetPosCopy = cannonPos.clone();
+        
+        addVfxEffect({
+            type: 'coinFlyToScore',
+            delayMs: delayMs,
+            started: false,
+            coin: null,
+            trail: null,
+            coinGeometry: null,
+            coinMaterial: null,
+            trailGeometry: null,
+            trailMaterial: null,
+            startPos: null,
+            midPoint: null,
+            targetPos: targetPosCopy,
+            duration: (0.6 + Math.random() * 0.2) * 1000, // Convert to ms
+            elapsedSinceStart: 0,
+            spinSpeedX: 18, // was 0.3 per frame at 60fps = 18/s
+            spinSpeedY: 12, // was 0.2 per frame at 60fps = 12/s
             
-            // Start position with slight random offset
-            coin.position.copy(startPosition);
-            coin.position.x += (Math.random() - 0.5) * 50;
-            coin.position.y += (Math.random() - 0.5) * 50;
-            coin.position.z += (Math.random() - 0.5) * 50;
-            
-            particleGroup.add(coin);
-            
-            // Create glowing trail
-            const trailGeometry = new THREE.SphereGeometry(8, 6, 6);
-            const trailMaterial = new THREE.MeshBasicMaterial({
-                color: 0xffee88,
-                transparent: true,
-                opacity: 0.6
-            });
-            const trail = new THREE.Mesh(trailGeometry, trailMaterial);
-            trail.position.copy(coin.position);
-            particleGroup.add(trail);
-            
-            // Animation variables
-            let time = 0;
-            const duration = 0.6 + Math.random() * 0.2;  // Slightly faster
-            const startPos = coin.position.clone();
-            
-            // Calculate arc trajectory toward cannon muzzle
-            const midPoint = startPos.clone().lerp(cannonPos, 0.5);
-            midPoint.y += 100 + Math.random() * 50;  // Arc upward at midpoint
-            
-            // Target position is the cannon muzzle (gun barrel tip)
-            const targetPos = cannonPos.clone();
-            // No Y offset needed - cannonMuzzle is already at the correct position
-            
-            const animate = () => {
-                time += 0.016;
-                const t = Math.min(time / duration, 1);
+            update(dt, elapsed) {
+                // Wait for delay before starting
+                if (!this.started) {
+                    if (elapsed < this.delayMs) return true;
+                    
+                    // Initialize coin and trail
+                    this.coinGeometry = new THREE.SphereGeometry(12, 8, 8);
+                    this.coinMaterial = new THREE.MeshBasicMaterial({
+                        color: 0xffd700,
+                        transparent: true,
+                        opacity: 1
+                    });
+                    this.coin = new THREE.Mesh(this.coinGeometry, this.coinMaterial);
+                    
+                    // Start position with slight random offset
+                    this.coin.position.copy(startPosCopy);
+                    this.coin.position.x += (Math.random() - 0.5) * 50;
+                    this.coin.position.y += (Math.random() - 0.5) * 50;
+                    this.coin.position.z += (Math.random() - 0.5) * 50;
+                    
+                    particleGroup.add(this.coin);
+                    
+                    // Create glowing trail
+                    this.trailGeometry = new THREE.SphereGeometry(8, 6, 6);
+                    this.trailMaterial = new THREE.MeshBasicMaterial({
+                        color: 0xffee88,
+                        transparent: true,
+                        opacity: 0.6
+                    });
+                    this.trail = new THREE.Mesh(this.trailGeometry, this.trailMaterial);
+                    this.trail.position.copy(this.coin.position);
+                    particleGroup.add(this.trail);
+                    
+                    // Store start position and calculate midpoint
+                    this.startPos = this.coin.position.clone();
+                    this.midPoint = this.startPos.clone().lerp(this.targetPos, 0.5);
+                    this.midPoint.y += 100 + Math.random() * 50;
+                    
+                    this.started = true;
+                    this.elapsedSinceStart = 0;
+                }
                 
-                // Bezier curve for arc trajectory
-                const t2 = t * t;
-                const t3 = t2 * t;
+                // Animate coin
+                this.elapsedSinceStart += dt * 1000; // Convert to ms
+                const t = Math.min(this.elapsedSinceStart / this.duration, 1);
+                
+                // Quadratic bezier curve
                 const mt = 1 - t;
                 const mt2 = mt * mt;
+                const t2 = t * t;
                 
-                // Quadratic bezier
-                coin.position.x = mt2 * startPos.x + 2 * mt * t * midPoint.x + t2 * targetPos.x;
-                coin.position.y = mt2 * startPos.y + 2 * mt * t * midPoint.y + t2 * targetPos.y;
-                coin.position.z = mt2 * startPos.z + 2 * mt * t * midPoint.z + t2 * targetPos.z;
+                this.coin.position.x = mt2 * this.startPos.x + 2 * mt * t * this.midPoint.x + t2 * this.targetPos.x;
+                this.coin.position.y = mt2 * this.startPos.y + 2 * mt * t * this.midPoint.y + t2 * this.targetPos.y;
+                this.coin.position.z = mt2 * this.startPos.z + 2 * mt * t * this.midPoint.z + t2 * this.targetPos.z;
                 
                 // Trail follows with delay
-                trail.position.lerp(coin.position, 0.3);
+                this.trail.position.lerp(this.coin.position, 0.3);
                 
                 // Scale up as it gets closer (magnetic effect)
                 const scale = 1 + t * 0.5;
-                coin.scale.setScalar(scale);
+                this.coin.scale.setScalar(scale);
                 
                 // Spin the coin
-                coin.rotation.x += 0.3;
-                coin.rotation.y += 0.2;
+                this.coin.rotation.x += this.spinSpeedX * dt;
+                this.coin.rotation.y += this.spinSpeedY * dt;
                 
                 // Fade trail
-                trailMaterial.opacity = 0.6 * (1 - t);
+                this.trailMaterial.opacity = 0.6 * (1 - t);
                 
-                if (t < 1) {
-                    requestAnimationFrame(animate);
-                } else {
+                if (t >= 1) {
                     // Coin reached score - create pop effect
                     spawnScorePopEffect();
-                    
-                    // Clean up
-                    particleGroup.remove(coin);
-                    particleGroup.remove(trail);
-                    coinGeometry.dispose();
-                    coinMaterial.dispose();
-                    trailGeometry.dispose();
-                    trailMaterial.dispose();
+                    return false; // Done
                 }
-            };
-            animate();
-        }, i * 50);  // Stagger coin spawns
+                return true;
+            },
+            
+            cleanup() {
+                if (this.coin) {
+                    particleGroup.remove(this.coin);
+                    this.coinGeometry.dispose();
+                    this.coinMaterial.dispose();
+                }
+                if (this.trail) {
+                    particleGroup.remove(this.trail);
+                    this.trailGeometry.dispose();
+                    this.trailMaterial.dispose();
+                }
+            }
+        });
     }
 }
 
@@ -3109,12 +3345,14 @@ function spawnScorePopEffect() {
     }, 300);
 }
 
-// Issue #16: Boss death spectacular effect
+// Issue #16: Boss death spectacular effect - REFACTORED to use VFX manager
 function spawnBossDeathEffect(position, color) {
-    // Massive explosion
+    if (!scene) return;
+    
+    // Massive explosion (already refactored to use VFX manager)
     spawnMegaExplosion(position.clone(), 2.0);
     
-    // Light pillar shooting up
+    // Light pillar shooting up - register with VFX manager
     const pillarGeometry = new THREE.CylinderGeometry(30, 60, 800, 16);
     const pillarMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffaa,
@@ -3126,38 +3364,68 @@ function spawnBossDeathEffect(position, color) {
     pillar.position.y += 400;
     scene.add(pillar);
     
-    // Coin rain
+    addVfxEffect({
+        type: 'bossDeathPillar',
+        mesh: pillar,
+        geometry: pillarGeometry,
+        material: pillarMaterial,
+        currentOpacity: 0.8,
+        fadeSpeed: 1.2, // was 0.02 per frame at 60fps = 1.2/s
+        scaleGrowth: 1.2, // was 1.02 per frame at 60fps = ~1.2/s growth rate
+        riseSpeed: 600, // was 10 per frame at 60fps = 600/s
+        
+        update(dt, elapsed) {
+            this.currentOpacity -= this.fadeSpeed * dt;
+            this.material.opacity = Math.max(0, this.currentOpacity);
+            
+            // Scale expansion
+            const scaleMultiplier = 1 + this.scaleGrowth * dt;
+            this.mesh.scale.x *= scaleMultiplier;
+            this.mesh.scale.z *= scaleMultiplier;
+            this.mesh.position.y += this.riseSpeed * dt;
+            
+            return this.currentOpacity > 0;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.material.dispose();
+        }
+    });
+    
+    // Coin rain (already refactored to use VFX manager)
     spawnCoinBurst(position.clone(), 30);
     
-    // Multiple expanding rings
+    // Multiple expanding rings - use time-based delay instead of setTimeout
+    const positionCopy = position.clone();
     for (let i = 0; i < 3; i++) {
-        setTimeout(() => {
-            spawnExpandingRing(position.clone(), 0xffdd00, 80 + i * 30, 200 + i * 50);
-        }, i * 150);
+        addVfxEffect({
+            type: 'bossDeathRingDelay',
+            delayMs: i * 150,
+            triggered: false,
+            ringIndex: i,
+            position: positionCopy.clone(),
+            
+            update(dt, elapsed) {
+                if (!this.triggered && elapsed >= this.delayMs) {
+                    // Trigger the expanding ring (already refactored to use VFX manager)
+                    spawnExpandingRing(this.position, 0xffdd00, 80 + this.ringIndex * 30, 200 + this.ringIndex * 50);
+                    this.triggered = true;
+                    return false; // Done after triggering
+                }
+                return !this.triggered;
+            },
+            
+            cleanup() {
+                // No cleanup needed - just a delay trigger
+            }
+        });
     }
     
-    // Screen effects
+    // Screen effects (DOM-based, no RAF needed)
     triggerScreenFlash(0xffff88, 0.5, 300);
     triggerScreenShakeWithStrength(15, 500);
-    
-    // Animate pillar
-    let opacity = 0.8;
-    const animatePillar = () => {
-        opacity -= 0.02;
-        pillarMaterial.opacity = opacity;
-        pillar.scale.x *= 1.02;
-        pillar.scale.z *= 1.02;
-        pillar.position.y += 10;
-        
-        if (opacity > 0) {
-            requestAnimationFrame(animatePillar);
-        } else {
-            scene.remove(pillar);
-            pillarGeometry.dispose();
-            pillarMaterial.dispose();
-        }
-    };
-    animatePillar();
 }
 
 function applyExplosionKnockback(center, radius, strength) {
@@ -8598,6 +8866,10 @@ function animate() {
     
     // Issue #14: Update weapon VFX (transient effects, knockback, etc.)
     updateWeaponVFX(deltaTime);
+    
+    // VFX MANAGER: Update all centralized visual effects (PERFORMANCE FIX)
+    // This replaces individual requestAnimationFrame loops in each effect function
+    updateVfxEffects(deltaTime, performance.now());
     
     // COMBO SYSTEM: Update combo timer
     updateComboTimer(deltaTime);
