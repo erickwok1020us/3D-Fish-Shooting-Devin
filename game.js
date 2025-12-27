@@ -7814,6 +7814,8 @@ function setupEventListeners() {
         } else {
             updateCameraRotation();
         }
+        // FIX: Blur button after click to prevent Space key from re-activating it
+        e.currentTarget.blur();
     });
     
     // VIEW MODE toggle button handler
@@ -7822,12 +7824,30 @@ function setupEventListeners() {
         viewModeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleViewMode();
+            // FIX: Blur button after click to prevent Space key from re-activating it
+            e.currentTarget.blur();
+        });
+    }
+    
+    // AUTO SHOOT button handler - also blur after click
+    const autoShootBtn = document.getElementById('auto-shoot-btn');
+    if (autoShootBtn) {
+        autoShootBtn.addEventListener('click', (e) => {
+            // FIX: Blur button after click to prevent Space key from re-activating it
+            e.currentTarget.blur();
         });
     }
     
     // Keyboard controls - Complete shortcut system for FPS mode
     // In FPS mode, mouse is locked for view control, so keyboard shortcuts are essential
+    // FIX: Use capture phase to ensure shortcuts work even when buttons are focused
     window.addEventListener('keydown', (e) => {
+        // Skip shortcuts when typing in input fields
+        const target = e.target;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+            return;
+        }
+        
         // Weapon switching: 1-5 keys
         if (e.key === '1') {
             selectWeapon('1x');
@@ -7853,9 +7873,11 @@ function setupEventListeners() {
             toggleAutoShoot();
             highlightButton('#auto-shoot-btn');
             return;
-        } else if (e.key === ' ') {
+        } else if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
             // Space key: Toggle view mode (FPS <-> 3RD PERSON)
+            // FIX: Use e.code for reliable detection across keyboard layouts
             e.preventDefault(); // Prevent page scroll
+            e.stopPropagation(); // Prevent button activation when focused
             toggleViewMode();
             highlightButton('#view-mode-btn');
             return;
@@ -8370,8 +8392,8 @@ function animate() {
     // This ensures camera follows when aiming (click) or auto-aim rotates the cannon
     if (gameState.viewMode === 'fps') {
         updateFPSCamera();
-        // DEBUG: Update rotation debug overlay (temporary for diagnosing cannon rotation issue)
-        updateFPSDebugOverlay();
+        // PERFORMANCE FIX: Removed updateFPSDebugOverlay() - DOM updates every frame cause severe FPS drop
+        // The debug overlay was for development only and should not run in production
     }
     
     // Auto-shoot with auto-aim (Issue #3 - fully automatic without mouse following)
@@ -8470,27 +8492,45 @@ function animate() {
         renderer.render(scene, camera);
 }
 
+// PERFORMANCE FIX: Cache seaweed and caustic light references to avoid iterating all children every frame
+let cachedSeaweedObjects = null;
+let cachedCausticLights = null;
+
 function animateSeaweed() {
     const time = performance.now() * 0.001;
     
-    tunnelGroup.children.forEach(child => {
-        if (child.userData.isSeaweed) {
+    // PERFORMANCE FIX: Cache seaweed objects on first call instead of filtering every frame
+    if (cachedSeaweedObjects === null && tunnelGroup) {
+        cachedSeaweedObjects = tunnelGroup.children.filter(child => child.userData.isSeaweed);
+    }
+    
+    if (cachedSeaweedObjects) {
+        for (let i = 0; i < cachedSeaweedObjects.length; i++) {
+            const child = cachedSeaweedObjects[i];
             const offset = child.userData.swayOffset || 0;
             child.rotation.x = Math.sin(time + offset) * 0.08;
             child.rotation.z = Math.cos(time * 0.7 + offset) * 0.04;
         }
-    });
+    }
 }
 
 function animateCausticLights() {
     const time = performance.now() * 0.001;
     
-    scene.children.forEach(child => {
-        if (child.isPointLight && child.userData.originalY !== undefined) {
+    // PERFORMANCE FIX: Cache caustic lights on first call instead of filtering every frame
+    if (cachedCausticLights === null && scene) {
+        cachedCausticLights = scene.children.filter(child => 
+            child.isPointLight && child.userData.originalY !== undefined
+        );
+    }
+    
+    if (cachedCausticLights) {
+        for (let i = 0; i < cachedCausticLights.length; i++) {
+            const child = cachedCausticLights[i];
             child.position.y = child.userData.originalY + Math.sin(time + child.userData.offset) * 15;
             child.intensity = 0.25 + Math.sin(time * 2 + child.userData.offset) * 0.1;
         }
-    });
+    }
 }
 
 // ==================== BOSS FISH EVENT SYSTEM (Issue #12) ====================
