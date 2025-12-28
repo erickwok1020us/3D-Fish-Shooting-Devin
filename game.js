@@ -4120,10 +4120,61 @@ function updateLoadingProgress(percent, text) {
 const MAP_URL = 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/MAP.glb';
 let loadedMapScene = null;  // Cache loaded map to avoid reloading
 
+// PRELOAD FIX: Track combined loading progress for map + weapons
+const loadingProgress = {
+    mapLoaded: 0,      // 0-100 for map
+    mapTotal: 100,
+    weaponsLoaded: 0,  // 0-4 weapons loaded
+    weaponsTotal: 4,   // 4 weapons to load
+    allWeaponsPreloaded: false
+};
+
+// PRELOAD FIX: Preload all weapon GLBs synchronously (no setTimeout delays)
+async function preloadAllWeaponsSync() {
+    console.log('[PRELOAD] Starting synchronous weapon preload...');
+    const weapons = ['1x', '3x', '5x', '8x'];
+    
+    for (let i = 0; i < weapons.length; i++) {
+        const weaponKey = weapons[i];
+        try {
+            await preloadWeaponGLB(weaponKey);
+            loadingProgress.weaponsLoaded = i + 1;
+            console.log(`[PRELOAD] Weapon ${weaponKey} loaded (${i + 1}/${weapons.length})`);
+        } catch (error) {
+            console.warn(`[PRELOAD] Failed to load weapon ${weaponKey}:`, error);
+        }
+    }
+    
+    loadingProgress.allWeaponsPreloaded = true;
+    console.log('[PRELOAD] All weapons preloaded successfully');
+}
+
+// PRELOAD FIX: Update combined progress bar (map 80% weight, weapons 20% weight)
+function updateCombinedLoadingProgress(bar, percent, sizeInfo, mapProgress, mapLoaded, mapTotal) {
+    // Map contributes 80% of progress, weapons contribute 20%
+    const mapWeight = 0.8;
+    const weaponWeight = 0.2;
+    
+    const mapPercent = mapProgress;
+    const weaponPercent = (loadingProgress.weaponsLoaded / loadingProgress.weaponsTotal) * 100;
+    
+    const combinedPercent = (mapPercent * mapWeight) + (weaponPercent * weaponWeight);
+    
+    bar.style.width = combinedPercent.toFixed(1) + '%';
+    percent.textContent = combinedPercent.toFixed(0) + '%';
+    
+    // Update size info with map progress + weapon count
+    if (mapTotal > 0) {
+        const loadedMB = (mapLoaded / 1024 / 1024).toFixed(1);
+        const totalMB = (mapTotal / 1024 / 1024).toFixed(1);
+        sizeInfo.textContent = `${loadedMB} / ${totalMB} MB`;
+    }
+}
+
 function loadMap3D(onComplete) {
     // Check if map is already loaded
-    if (loadedMapScene) {
-        console.log('[MAP] Using cached map');
+    if (loadedMapScene && loadingProgress.allWeaponsPreloaded) {
+        console.log('[MAP] Using cached map and weapons');
         onComplete(loadedMapScene.clone());
         return;
     }
@@ -4136,12 +4187,24 @@ function loadMap3D(onComplete) {
     // Show loading overlay
     overlay.style.display = 'flex';
     
+    // PRELOAD FIX: Start weapon preloading in parallel with map loading
+    const weaponPreloadPromise = preloadAllWeaponsSync();
+    
+    // Update progress periodically while weapons are loading
+    const weaponProgressInterval = setInterval(() => {
+        if (loadingProgress.allWeaponsPreloaded) {
+            clearInterval(weaponProgressInterval);
+        }
+        // Trigger a progress update
+        updateCombinedLoadingProgress(bar, percent, sizeInfo, loadingProgress.mapLoaded, 0, 0);
+    }, 100);
+    
     const loader = new THREE.GLTFLoader();
     
     loader.load(
         MAP_URL,
         // onLoad callback
-        (gltf) => {
+        async (gltf) => {
             console.log('[MAP] Map loaded successfully');
             const mapScene = gltf.scene;
             
@@ -4162,6 +4225,17 @@ function loadMap3D(onComplete) {
             
             // Cache the optimized map
             loadedMapScene = mapScene;
+            loadingProgress.mapLoaded = 100;
+            
+            // PRELOAD FIX: Wait for all weapons to finish loading before proceeding
+            console.log('[PRELOAD] Map loaded, waiting for weapons to finish...');
+            await weaponPreloadPromise;
+            clearInterval(weaponProgressInterval);
+            
+            // Final progress update
+            updateCombinedLoadingProgress(bar, percent, sizeInfo, 100, 0, 0);
+            
+            console.log('[PRELOAD] All resources loaded, entering game');
             
             // Hide loading overlay
             overlay.style.display = 'none';
@@ -4171,22 +4245,24 @@ function loadMap3D(onComplete) {
         // onProgress callback
         (xhr) => {
             if (xhr.total) {
-                const percentValue = (xhr.loaded / xhr.total) * 100;
-                bar.style.width = percentValue.toFixed(1) + '%';
-                percent.textContent = percentValue.toFixed(0) + '%';
+                const mapPercent = (xhr.loaded / xhr.total) * 100;
+                loadingProgress.mapLoaded = mapPercent;
                 
-                // Update size info
-                const loadedMB = (xhr.loaded / 1024 / 1024).toFixed(1);
-                const totalMB = (xhr.total / 1024 / 1024).toFixed(1);
-                sizeInfo.textContent = loadedMB + ' / ' + totalMB + ' MB';
+                // Update combined progress
+                updateCombinedLoadingProgress(bar, percent, sizeInfo, mapPercent, xhr.loaded, xhr.total);
             } else {
                 // Indeterminate progress
                 percent.textContent = 'Loading...';
             }
         },
         // onError callback
-        (error) => {
+        async (error) => {
             console.error('[MAP] Failed to load map:', error);
+            
+            // Still wait for weapons even if map fails
+            await weaponPreloadPromise;
+            clearInterval(weaponProgressInterval);
+            
             overlay.style.display = 'none';
             // Fall back to procedural aquarium
             createProceduralAquarium();
