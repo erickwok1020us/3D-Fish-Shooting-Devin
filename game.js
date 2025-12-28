@@ -289,7 +289,7 @@ const CONFIG = {
     // Game settings - Issue #10: Adjusted fish count for 1.5x tank
     game: {
         initialBalance: 1000,
-        maxFish: 80,  // Reduced for 1.5x tank (proportional to tank volume)
+        maxFish: 200,  // Increased to 180-200 for impressive visual density
         targetFPS: 60,
         mode: 'entertainment'
     },
@@ -1011,6 +1011,31 @@ function rebuildSpatialHash(fishArray) {
 // Get nearby fish from spatial hash (checks current cell + 26 neighbors)
 function getNearbyFish(fish) {
     const pos = fish.group.position;
+    const cellX = Math.floor(pos.x / SPATIAL_HASH_CELL_SIZE);
+    const cellY = Math.floor(pos.y / SPATIAL_HASH_CELL_SIZE);
+    const cellZ = Math.floor(pos.z / SPATIAL_HASH_CELL_SIZE);
+    
+    const nearby = [];
+    // Check 3x3x3 cube of cells (current + 26 neighbors)
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${cellX + dx},${cellY + dy},${cellZ + dz}`;
+                const cell = spatialHashGrid.get(key);
+                if (cell) {
+                    for (let i = 0; i < cell.length; i++) {
+                        nearby.push(cell[i]);
+                    }
+                }
+            }
+        }
+    }
+    return nearby;
+}
+
+// PERFORMANCE: Get nearby fish for bullet collision using spatial hash
+// This reduces bullet collision from O(bullets * fish) to O(bullets * k) where k is nearby fish
+function getNearbyFishAtPosition(pos) {
     const cellX = Math.floor(pos.x / SPATIAL_HASH_CELL_SIZE);
     const cellY = Math.floor(pos.y / SPATIAL_HASH_CELL_SIZE);
     const cellZ = Math.floor(pos.z / SPATIAL_HASH_CELL_SIZE);
@@ -6638,13 +6663,24 @@ class Fish {
         this.applySwimmingPattern(pattern, deltaTime, allFish);
         
         // Apply boids behavior (stronger for schooling fish)
-        const category = this.config.category || 'standard';
-        if (category === 'smallSchool' || pattern === 'waveFormation' || pattern === 'baitBall' || pattern === 'groupCoordination') {
-            this.applyBoids(allFish, 2.0); // Stronger schooling
-        } else if (category === 'mediumLarge' || category === 'reefFish') {
-            this.applyBoids(allFish, 1.0); // Normal schooling
-        } else {
-            this.applyBoids(allFish, 0.3); // Weak schooling for solitary fish
+        // PERFORMANCE: Throttle boids update for distant fish (LOD 2/3)
+        // This saves significant CPU time with 180-200 fish
+        if (!this.boidsFrameCounter) this.boidsFrameCounter = 0;
+        this.boidsFrameCounter++;
+        
+        // LOD 0/1: Update every frame, LOD 2: Every 2 frames, LOD 3: Every 3 frames
+        const boidsUpdateInterval = this.currentLodLevel <= 1 ? 1 : (this.currentLodLevel === 2 ? 2 : 3);
+        const shouldUpdateBoids = this.boidsFrameCounter % boidsUpdateInterval === 0;
+        
+        if (shouldUpdateBoids) {
+            const category = this.config.category || 'standard';
+            if (category === 'smallSchool' || pattern === 'waveFormation' || pattern === 'baitBall' || pattern === 'groupCoordination') {
+                this.applyBoids(allFish, 2.0); // Stronger schooling
+            } else if (category === 'mediumLarge' || category === 'reefFish') {
+                this.applyBoids(allFish, 1.0); // Normal schooling
+            } else {
+                this.applyBoids(allFish, 0.3); // Weak schooling for solitary fish
+            }
         }
         
         // Apply boundary forces
@@ -7023,6 +7059,11 @@ class Fish {
     animateTail(deltaTime) {
         // Only animate tail if the fish has one (some special fish forms don't have tails)
         if (!this.tail) return;
+        
+        // PERFORMANCE: Skip tail animation for low LOD fish (distant fish)
+        // This saves significant CPU time with 180-200 fish
+        if (this.currentLodLevel === 2 || this.currentLodLevel === 3) return;
+        
         const time = performance.now() * 0.01;
         this.tail.rotation.y = Math.sin(time + this.group.position.x) * 0.3;
     }
@@ -7714,7 +7755,11 @@ class Bullet {
         const weapon = CONFIG.weapons[this.weaponKey];
         const bulletPos = this.group.position;
         
-        for (const fish of activeFish) {
+        // PERFORMANCE: Use spatial hash to only check nearby fish
+        // This reduces O(bullets * fish) to O(bullets * k) where k is nearby fish count
+        const nearbyFish = getNearbyFishAtPosition(bulletPos);
+        
+        for (const fish of nearbyFish) {
             if (!fish.isActive) continue;
             
             // PERFORMANCE: Use squared distance to avoid sqrt
