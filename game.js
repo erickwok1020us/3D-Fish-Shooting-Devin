@@ -580,7 +580,9 @@ const weaponGLBState = {
     currentWeaponModel: null,
     preloadedWeapons: new Set(),
     // Pre-cloned bullet models ready for immediate use (no async needed)
-    bulletModelPool: new Map()  // Map<weaponKey, THREE.Group[]>
+    bulletModelPool: new Map(),  // Map<weaponKey, THREE.Group[]>
+    // PERFORMANCE: Pre-cloned hit effect models for instant spawning (no clone on hit)
+    hitEffectPool: new Map()     // Map<weaponKey, {model, materials, inUse}[]>
 };
 
 // Temp vectors for bullet calculations - reused to avoid per-frame allocations
@@ -832,6 +834,9 @@ async function preloadWeaponGLB(weaponKey) {
         console.log(`[WEAPON-GLB] Pre-cloned ${BULLET_POOL_SIZE} bullet models for ${weaponKey}`);
     }
     
+    // PERFORMANCE: Pre-clone hit effect models (avoids clone on every hit)
+    await preloadHitEffectPool(weaponKey);
+    
     weaponGLBState.preloadedWeapons.add(weaponKey);
     console.log(`[WEAPON-GLB] Preloaded weapon: ${weaponKey}`);
 }
@@ -863,6 +868,107 @@ function returnBulletModelToPool(weaponKey, model) {
         model.visible = false;
         pool.push(model);
     }
+}
+
+// PERFORMANCE: Hit effect pool management - avoids clone() on every hit
+// Pool size: 8 per weapon (max concurrent hits: ~2 shots/sec * 4 sec lifetime = 8)
+const HIT_EFFECT_POOL_SIZE = 8;
+
+// Temp vectors for hit effect calculations - reused to avoid per-hit allocations
+const hitEffectTempVectors = {
+    dir: new THREE.Vector3(),
+    targetPos: new THREE.Vector3(),
+    rotationFixQuat: new THREE.Quaternion()
+};
+
+// Get a pre-cloned hit effect from pool (synchronous, no async/clone needed)
+function getHitEffectFromPool(weaponKey) {
+    const pool = weaponGLBState.hitEffectPool.get(weaponKey);
+    if (!pool) return null;
+    
+    // Find first available (not in use) hit effect
+    for (const item of pool) {
+        if (!item.inUse) {
+            item.inUse = true;
+            item.model.visible = true;
+            return item;
+        }
+    }
+    return null; // Pool exhausted
+}
+
+// Return hit effect to pool for reuse (no dispose!)
+function returnHitEffectToPool(weaponKey, item) {
+    if (!item) return;
+    
+    // Reset state for reuse
+    item.inUse = false;
+    item.model.visible = false;
+    
+    // Reset material opacity (was modified during fade animation)
+    item.materials.forEach((mat) => {
+        mat.opacity = 1;
+        mat.transparent = false;
+    });
+    
+    // Reset scale to initial
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    if (glbConfig) {
+        const scale = glbConfig.hitEffectScale;
+        item.model.scale.set(scale, scale, scale);
+    }
+}
+
+// Pre-clone hit effects during preload (called from preloadWeaponGLB)
+async function preloadHitEffectPool(weaponKey) {
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    if (!glbConfig) return;
+    
+    const cacheKey = `${weaponKey}_hitEffect`;
+    if (!weaponGLBState.hitEffectCache.has(cacheKey)) {
+        // Load the hit effect first
+        await loadWeaponGLB(weaponKey, 'hitEffect');
+    }
+    
+    const cachedModel = weaponGLBState.hitEffectCache.get(cacheKey);
+    if (!cachedModel) return;
+    
+    // Initialize pool for this weapon
+    if (!weaponGLBState.hitEffectPool.has(weaponKey)) {
+        weaponGLBState.hitEffectPool.set(weaponKey, []);
+    }
+    
+    const pool = weaponGLBState.hitEffectPool.get(weaponKey);
+    const scale = glbConfig.hitEffectScale;
+    
+    // Pre-clone hit effect models
+    for (let i = pool.length; i < HIT_EFFECT_POOL_SIZE; i++) {
+        const model = cachedModel.clone();
+        model.visible = false;
+        model.scale.set(scale, scale, scale);
+        
+        // Pre-clone materials and store references (avoid traverse on hit)
+        const materials = [];
+        model.traverse((child) => {
+            if (child.isMesh && child.material) {
+                child.material = child.material.clone();
+                materials.push(child.material);
+                // Pre-set DoubleSide for planar effects
+                if (glbConfig.hitEffectPlanar) {
+                    child.material.side = THREE.DoubleSide;
+                }
+            }
+        });
+        
+        pool.push({
+            model: model,
+            materials: materials,
+            inUse: false,
+            weaponKey: weaponKey
+        });
+    }
+    
+    console.log(`[WEAPON-GLB] Pre-cloned ${HIT_EFFECT_POOL_SIZE} hit effects for ${weaponKey}`);
 }
 
 async function preloadAllWeapons() {
@@ -3095,108 +3201,98 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
 }
 
 // Spawn GLB hit effect model - REFACTORED to use VFX manager
-async function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
+// PERFORMANCE: Synchronous hit effect spawning using pre-cloned pool
+// Eliminates: async/await, model.clone(), material.clone(), traverse(), disposeObject3D()
+function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!glbConfig) return false;
     
-    try {
-        const hitEffectModel = await loadWeaponGLB(weaponKey, 'hitEffect');
-        if (!hitEffectModel) return false;
+    // Get pre-cloned hit effect from pool (synchronous, no async needed)
+    const poolItem = getHitEffectFromPool(weaponKey);
+    if (!poolItem) {
+        // Pool exhausted - this should be rare if pool size is adequate
+        console.warn(`[WEAPON-GLB] Hit effect pool exhausted for ${weaponKey}`);
+        return false;
+    }
+    
+    const hitEffectModel = poolItem.model;
+    const materials = poolItem.materials;
+    
+    // Apply scale from config
+    const scale = glbConfig.hitEffectScale;
+    hitEffectModel.scale.set(scale, scale, scale);
+    
+    // Position at hit location
+    hitEffectModel.position.copy(hitPos);
+    
+    // Orient the hit effect based on bullet direction
+    if (bulletDirection) {
+        // PERFORMANCE: Use temp vectors instead of clone()
+        hitEffectTempVectors.dir.copy(bulletDirection).normalize();
         
-        // CRITICAL: Clone materials to prevent dispose from breaking the cache
-        // The loadWeaponGLB returns a clone, but materials may still be shared
-        const clonedMaterials = [];
-        hitEffectModel.traverse((child) => {
-            if (child.isMesh && child.material) {
-                // Clone the material so we can safely modify and dispose it
-                child.material = child.material.clone();
-                clonedMaterials.push(child.material);
-            }
-        });
+        // Use lookAt() to align the model's +Z axis to bullet direction
+        hitEffectTempVectors.targetPos.copy(hitPos).add(hitEffectTempVectors.dir);
+        hitEffectModel.lookAt(hitEffectTempVectors.targetPos);
         
-        // Apply scale from config
-        const scale = glbConfig.hitEffectScale;
-        hitEffectModel.scale.set(scale, scale, scale);
+        // If hitEffectRotationFix is defined, apply additional rotation to correct model's orientation
+        if (glbConfig.hitEffectRotationFix) {
+            hitEffectTempVectors.rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
+            hitEffectModel.quaternion.multiply(hitEffectTempVectors.rotationFixQuat);
+        }
         
-        // Position at hit location
-        hitEffectModel.position.copy(hitPos);
+        // Offset slightly along bullet direction to prevent z-fighting with fish geometry
+        // PERFORMANCE: Use addScaledVector instead of clone().multiplyScalar()
+        hitEffectModel.position.addScaledVector(hitEffectTempVectors.dir, 5);
+    }
+    
+    // Add to scene
+    scene.add(hitEffectModel);
+    
+    // Register with VFX manager instead of using own RAF loop
+    const duration = 800; // 800ms animation
+    const initialScale = scale * 0.5;
+    const maxScale = scale * 1.5;
+    
+    addVfxEffect({
+        type: 'glbHitEffect',
+        model: hitEffectModel,
+        materials: materials,
+        poolItem: poolItem,  // Store pool item for return
+        weaponKey: weaponKey,
+        duration: duration,
+        initialScale: initialScale,
+        maxScale: maxScale,
         
-        // Orient the hit effect based on bullet direction
-        if (bulletDirection) {
-            const dir = bulletDirection.clone().normalize();
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
             
-            // Use lookAt() to align the model's +Z axis to bullet direction
-            const targetPos = hitPos.clone().add(dir);
-            hitEffectModel.lookAt(targetPos);
-            
-            // If hitEffectRotationFix is defined, apply additional rotation to correct model's orientation
-            if (glbConfig.hitEffectRotationFix) {
-                const rotationFixQuat = new THREE.Quaternion();
-                rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
-                hitEffectModel.quaternion.multiply(rotationFixQuat);
-            }
-            
-            // For planar effects (1x/3x), ensure materials are DoubleSide for visibility from any angle
-            if (glbConfig.hitEffectPlanar) {
-                clonedMaterials.forEach((mat) => {
-                    mat.side = THREE.DoubleSide;
+            if (progress < 0.3) {
+                // Scale up phase (0-30%)
+                const scaleProgress = progress / 0.3;
+                const currentScale = this.initialScale + (this.maxScale - this.initialScale) * scaleProgress;
+                this.model.scale.set(currentScale, currentScale, currentScale);
+            } else {
+                // Fade out phase (30-100%)
+                const fadeProgress = (progress - 0.3) / 0.7;
+                this.materials.forEach((mat) => {
+                    if (!mat.transparent) {
+                        mat.transparent = true;
+                    }
+                    mat.opacity = 1 - fadeProgress;
                 });
             }
             
-            // Offset slightly along bullet direction to prevent z-fighting with fish geometry
-            hitEffectModel.position.add(dir.clone().multiplyScalar(5));
+            return progress < 1;
+        },
+        
+        cleanup() {
+            // PERFORMANCE: Return to pool instead of dispose (reuse model)
+            scene.remove(this.model);
+            returnHitEffectToPool(this.weaponKey, this.poolItem);
         }
-        
-        // Add to scene
-        scene.add(hitEffectModel);
-        
-        // Register with VFX manager instead of using own RAF loop
-        const duration = 800; // 800ms animation
-        const initialScale = scale * 0.5;
-        const maxScale = scale * 1.5;
-        
-        addVfxEffect({
-            type: 'glbHitEffect',
-            model: hitEffectModel,
-            materials: clonedMaterials,
-            duration: duration,
-            initialScale: initialScale,
-            maxScale: maxScale,
-            
-            update(dt, elapsed) {
-                const progress = Math.min(elapsed / this.duration, 1);
-                
-                if (progress < 0.3) {
-                    // Scale up phase (0-30%)
-                    const scaleProgress = progress / 0.3;
-                    const currentScale = this.initialScale + (this.maxScale - this.initialScale) * scaleProgress;
-                    this.model.scale.set(currentScale, currentScale, currentScale);
-                } else {
-                    // Fade out phase (30-100%)
-                    const fadeProgress = (progress - 0.3) / 0.7;
-                    this.materials.forEach((mat) => {
-                        if (!mat.transparent) {
-                            mat.transparent = true;
-                        }
-                        mat.opacity = 1 - fadeProgress;
-                    });
-                }
-                
-                return progress < 1;
-            },
-            
-            cleanup() {
-                scene.remove(this.model);
-                disposeObject3D(this.model);
-            }
-        });
-        
-        return true;
-        
-    } catch (error) {
-        console.warn(`[WEAPON-GLB] Failed to spawn GLB hit effect for ${weaponKey}:`, error);
-        return false;
-    }
+    });
+    
+    return true;
 }
 
 // Spawn water splash effect - REFACTORED to use VFX manager
