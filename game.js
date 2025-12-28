@@ -951,6 +951,62 @@ const performanceState = {
     graphicsQuality: 'medium'  // 'low', 'medium', or 'high'
 };
 
+// ==================== SPATIAL HASH FOR BOIDS OPTIMIZATION ====================
+// Cell size should be >= cohesionDistance (180) for correct neighbor lookup
+const SPATIAL_HASH_CELL_SIZE = 180;
+const spatialHashGrid = new Map();
+
+// Pre-allocated temporary vectors for Fish.update() to avoid allocations
+const fishTempVectors = {
+    acceleration: new THREE.Vector3(),
+    boundaryForce: new THREE.Vector3()
+};
+
+// Clear and rebuild spatial hash grid
+function rebuildSpatialHash(fishArray) {
+    spatialHashGrid.clear();
+    for (let i = 0; i < fishArray.length; i++) {
+        const fish = fishArray[i];
+        if (!fish.isActive) continue;
+        
+        const pos = fish.group.position;
+        const cellX = Math.floor(pos.x / SPATIAL_HASH_CELL_SIZE);
+        const cellY = Math.floor(pos.y / SPATIAL_HASH_CELL_SIZE);
+        const cellZ = Math.floor(pos.z / SPATIAL_HASH_CELL_SIZE);
+        const key = `${cellX},${cellY},${cellZ}`;
+        
+        if (!spatialHashGrid.has(key)) {
+            spatialHashGrid.set(key, []);
+        }
+        spatialHashGrid.get(key).push(fish);
+    }
+}
+
+// Get nearby fish from spatial hash (checks current cell + 26 neighbors)
+function getNearbyFish(fish) {
+    const pos = fish.group.position;
+    const cellX = Math.floor(pos.x / SPATIAL_HASH_CELL_SIZE);
+    const cellY = Math.floor(pos.y / SPATIAL_HASH_CELL_SIZE);
+    const cellZ = Math.floor(pos.z / SPATIAL_HASH_CELL_SIZE);
+    
+    const nearby = [];
+    // Check 3x3x3 cube of cells (current + 26 neighbors)
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const key = `${cellX + dx},${cellY + dy},${cellZ + dz}`;
+                const cell = spatialHashGrid.get(key);
+                if (cell) {
+                    for (let i = 0; i < cell.length; i++) {
+                        nearby.push(cell[i]);
+                    }
+                }
+            }
+        }
+    }
+    return nearby;
+}
+
 // ==================== COMBO BONUS SYSTEM ====================
 const COMBO_CONFIG = {
     // Combo tiers and their bonus percentages
@@ -4064,10 +4120,61 @@ function updateLoadingProgress(percent, text) {
 const MAP_URL = 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/MAP.glb';
 let loadedMapScene = null;  // Cache loaded map to avoid reloading
 
+// PRELOAD FIX: Track combined loading progress for map + weapons
+const loadingProgress = {
+    mapLoaded: 0,      // 0-100 for map
+    mapTotal: 100,
+    weaponsLoaded: 0,  // 0-4 weapons loaded
+    weaponsTotal: 4,   // 4 weapons to load
+    allWeaponsPreloaded: false
+};
+
+// PRELOAD FIX: Preload all weapon GLBs synchronously (no setTimeout delays)
+async function preloadAllWeaponsSync() {
+    console.log('[PRELOAD] Starting synchronous weapon preload...');
+    const weapons = ['1x', '3x', '5x', '8x'];
+    
+    for (let i = 0; i < weapons.length; i++) {
+        const weaponKey = weapons[i];
+        try {
+            await preloadWeaponGLB(weaponKey);
+            loadingProgress.weaponsLoaded = i + 1;
+            console.log(`[PRELOAD] Weapon ${weaponKey} loaded (${i + 1}/${weapons.length})`);
+        } catch (error) {
+            console.warn(`[PRELOAD] Failed to load weapon ${weaponKey}:`, error);
+        }
+    }
+    
+    loadingProgress.allWeaponsPreloaded = true;
+    console.log('[PRELOAD] All weapons preloaded successfully');
+}
+
+// PRELOAD FIX: Update combined progress bar (map 80% weight, weapons 20% weight)
+function updateCombinedLoadingProgress(bar, percent, sizeInfo, mapProgress, mapLoaded, mapTotal) {
+    // Map contributes 80% of progress, weapons contribute 20%
+    const mapWeight = 0.8;
+    const weaponWeight = 0.2;
+    
+    const mapPercent = mapProgress;
+    const weaponPercent = (loadingProgress.weaponsLoaded / loadingProgress.weaponsTotal) * 100;
+    
+    const combinedPercent = (mapPercent * mapWeight) + (weaponPercent * weaponWeight);
+    
+    bar.style.width = combinedPercent.toFixed(1) + '%';
+    percent.textContent = combinedPercent.toFixed(0) + '%';
+    
+    // Update size info with map progress + weapon count
+    if (mapTotal > 0) {
+        const loadedMB = (mapLoaded / 1024 / 1024).toFixed(1);
+        const totalMB = (mapTotal / 1024 / 1024).toFixed(1);
+        sizeInfo.textContent = `${loadedMB} / ${totalMB} MB`;
+    }
+}
+
 function loadMap3D(onComplete) {
     // Check if map is already loaded
-    if (loadedMapScene) {
-        console.log('[MAP] Using cached map');
+    if (loadedMapScene && loadingProgress.allWeaponsPreloaded) {
+        console.log('[MAP] Using cached map and weapons');
         onComplete(loadedMapScene.clone());
         return;
     }
@@ -4080,12 +4187,24 @@ function loadMap3D(onComplete) {
     // Show loading overlay
     overlay.style.display = 'flex';
     
+    // PRELOAD FIX: Start weapon preloading in parallel with map loading
+    const weaponPreloadPromise = preloadAllWeaponsSync();
+    
+    // Update progress periodically while weapons are loading
+    const weaponProgressInterval = setInterval(() => {
+        if (loadingProgress.allWeaponsPreloaded) {
+            clearInterval(weaponProgressInterval);
+        }
+        // Trigger a progress update
+        updateCombinedLoadingProgress(bar, percent, sizeInfo, loadingProgress.mapLoaded, 0, 0);
+    }, 100);
+    
     const loader = new THREE.GLTFLoader();
     
     loader.load(
         MAP_URL,
         // onLoad callback
-        (gltf) => {
+        async (gltf) => {
             console.log('[MAP] Map loaded successfully');
             const mapScene = gltf.scene;
             
@@ -4106,6 +4225,17 @@ function loadMap3D(onComplete) {
             
             // Cache the optimized map
             loadedMapScene = mapScene;
+            loadingProgress.mapLoaded = 100;
+            
+            // PRELOAD FIX: Wait for all weapons to finish loading before proceeding
+            console.log('[PRELOAD] Map loaded, waiting for weapons to finish...');
+            await weaponPreloadPromise;
+            clearInterval(weaponProgressInterval);
+            
+            // Final progress update
+            updateCombinedLoadingProgress(bar, percent, sizeInfo, 100, 0, 0);
+            
+            console.log('[PRELOAD] All resources loaded, entering game');
             
             // Hide loading overlay
             overlay.style.display = 'none';
@@ -4115,22 +4245,24 @@ function loadMap3D(onComplete) {
         // onProgress callback
         (xhr) => {
             if (xhr.total) {
-                const percentValue = (xhr.loaded / xhr.total) * 100;
-                bar.style.width = percentValue.toFixed(1) + '%';
-                percent.textContent = percentValue.toFixed(0) + '%';
+                const mapPercent = (xhr.loaded / xhr.total) * 100;
+                loadingProgress.mapLoaded = mapPercent;
                 
-                // Update size info
-                const loadedMB = (xhr.loaded / 1024 / 1024).toFixed(1);
-                const totalMB = (xhr.total / 1024 / 1024).toFixed(1);
-                sizeInfo.textContent = loadedMB + ' / ' + totalMB + ' MB';
+                // Update combined progress
+                updateCombinedLoadingProgress(bar, percent, sizeInfo, mapPercent, xhr.loaded, xhr.total);
             } else {
                 // Indeterminate progress
                 percent.textContent = 'Loading...';
             }
         },
         // onError callback
-        (error) => {
+        async (error) => {
             console.error('[MAP] Failed to load map:', error);
+            
+            // Still wait for weapons even if map fails
+            await weaponPreloadPromise;
+            clearInterval(weaponProgressInterval);
+            
             overlay.style.display = 'none';
             // Fall back to procedural aquarium
             createProceduralAquarium();
@@ -5176,6 +5308,13 @@ class Fish {
         
         // Bounding sphere for collision
         this.boundingRadius = size * 0.8;
+        
+        // PERFORMANCE: Only enable shadows for boss fish (tier 5+) to reduce GPU load
+        // Regular fish (tier 1-4) don't cast shadows - this significantly improves FPS
+        const isBossFish = this.tier >= 5 || BOSS_ONLY_SPECIES.includes(this.config.species);
+        if (this.body) {
+            this.body.castShadow = isBossFish;
+        }
         
         fishGroup.add(this.group);
     }
@@ -6308,8 +6447,8 @@ class Fish {
         // Apply boundary forces
         this.applyBoundaryForces();
         
-        // Update velocity
-        this.velocity.add(this.acceleration.clone().multiplyScalar(deltaTime));
+        // Update velocity (using addScaledVector to avoid clone() allocation)
+        this.velocity.addScaledVector(this.acceleration, deltaTime);
         
         // Limit speed based on pattern
         let maxSpeed = this.speed;
@@ -6324,8 +6463,8 @@ class Fish {
             this.velocity.multiplyScalar(maxSpeed / currentSpeed);
         }
         
-        // Update position
-        this.group.position.add(this.velocity.clone().multiplyScalar(deltaTime));
+        // Update position (using addScaledVector to avoid clone() allocation)
+        this.group.position.addScaledVector(this.velocity, deltaTime);
         
         // Update rotation to face movement direction
         this.updateRotation();
@@ -6576,8 +6715,11 @@ class Fish {
         
         const myPos = this.group.position;
         
-        for (let i = 0; i < allFish.length; i++) {
-            const other = allFish[i];
+        // Use spatial hash to only check nearby fish (O(n*k) instead of O(n²))
+        const nearbyFish = getNearbyFish(this);
+        
+        for (let i = 0; i < nearbyFish.length; i++) {
+            const other = nearbyFish[i];
             if (other === this || !other.isActive || other.tier !== this.tier) continue;
             
             const otherPos = other.group.position;
@@ -6623,7 +6765,9 @@ class Fish {
         const { width, height, depth, floorY } = CONFIG.aquarium;
         const { marginX, marginY, marginZ } = CONFIG.fishArena;
         const pos = this.group.position;
-        const force = new THREE.Vector3();
+        // Use pre-allocated vector to avoid new Vector3() allocation
+        const force = fishTempVectors.boundaryForce;
+        force.set(0, 0, 0);
         
         // Calculate bounds inside the tank with margins
         const minX = -width / 2 + marginX;
@@ -6660,7 +6804,7 @@ class Fish {
             force.z -= t * 4.0;
         }
         
-        this.acceleration.add(force.multiplyScalar(60));
+        this.acceleration.addScaledVector(force, 60);
     }
     
     updateRotation() {
@@ -9041,6 +9185,9 @@ function animate() {
     // Update fish with error handling to prevent freeze bugs
     // MULTIPLAYER: Skip local fish updates in multiplayer mode - fish come from server
     if (!multiplayerMode) {
+        // PERFORMANCE: Rebuild spatial hash before fish updates for O(n*k) boids instead of O(n²)
+        rebuildSpatialHash(activeFish);
+        
         let fishUpdateErrors = 0;
         for (let i = activeFish.length - 1; i >= 0; i--) {
             const fish = activeFish[i];
