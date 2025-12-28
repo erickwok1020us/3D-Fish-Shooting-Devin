@@ -1787,6 +1787,49 @@ const sharedMaterialsCache = {
     initialized: false
 };
 
+// PERFORMANCE: Geometry cache for fish (same form/size share geometry - reduces memory and draw call setup)
+// Key format: "form_size" (e.g., "whale_15", "shark_10")
+const fishGeometryCache = new Map();
+
+// PERFORMANCE: Material cache for fish (same color share materials - reduces GPU state changes)
+// Key format: "color_roughness_metalness" (e.g., "0x4169e1_0.3_0.2")
+const fishMaterialCache = new Map();
+
+// Get or create cached geometry for fish
+function getCachedFishGeometry(form, size, geometryCreator) {
+    const key = `${form}_${size}`;
+    if (!fishGeometryCache.has(key)) {
+        const geometry = geometryCreator();
+        fishGeometryCache.set(key, geometry);
+    }
+    return fishGeometryCache.get(key);
+}
+
+// Get or create cached material for fish
+function getCachedFishMaterial(color, roughness = 0.3, metalness = 0.2, emissive = null, emissiveIntensity = 0.1) {
+    const emissiveKey = emissive !== null ? emissive : color;
+    const key = `${color}_${roughness}_${metalness}_${emissiveKey}_${emissiveIntensity}`;
+    if (!fishMaterialCache.has(key)) {
+        const material = new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: roughness,
+            metalness: metalness,
+            emissive: emissiveKey,
+            emissiveIntensity: emissiveIntensity
+        });
+        fishMaterialCache.set(key, material);
+    }
+    return fishMaterialCache.get(key);
+}
+
+// Get fish geometry/material cache stats
+function getFishCacheStats() {
+    return {
+        geometries: fishGeometryCache.size,
+        materials: fishMaterialCache.size
+    };
+}
+
 // PERFORMANCE: Temp vectors for VFX functions (avoid per-call allocations)
 const vfxTempVectors = {
     position: new THREE.Vector3(),
@@ -4548,7 +4591,29 @@ function scaleAndPositionMap(mapScene) {
     
     console.log('[MAP] Final position:', mapScene.position);
     
+    // PERFORMANCE: Disable matrixAutoUpdate for all static map objects
+    // This prevents Three.js from recalculating world matrices every frame
+    // Safe because the map never moves after initial positioning
+    optimizeStaticObjects(mapScene);
+    
     return mapScene;
+}
+
+// PERFORMANCE: Disable matrixAutoUpdate for static objects (reduces CPU overhead)
+// Call updateMatrixWorld() once after positioning, then disable auto-updates
+function optimizeStaticObjects(object) {
+    let optimizedCount = 0;
+    
+    object.traverse((child) => {
+        // Disable automatic matrix updates for all objects in the static scene
+        child.matrixAutoUpdate = false;
+        optimizedCount++;
+    });
+    
+    // Force one final matrix update after positioning is complete
+    object.updateMatrixWorld(true);
+    
+    console.log(`[PERF] Optimized ${optimizedCount} static objects (matrixAutoUpdate=false)`);
 }
 
 // ==================== CLEAN AQUARIUM SCENE ====================
@@ -5443,19 +5508,9 @@ class Fish {
         const secondaryColor = this.config.secondaryColor || color;
         const form = this.config.form || 'standard';
         
-        // Create materials
-        const bodyMaterial = new THREE.MeshStandardMaterial({
-            color: color,
-            roughness: 0.3,
-            metalness: 0.2,
-            emissive: color,
-            emissiveIntensity: 0.1
-        });
-        const secondaryMaterial = new THREE.MeshStandardMaterial({
-            color: secondaryColor,
-            roughness: 0.3,
-            metalness: 0.2
-        });
+        // PERFORMANCE: Use cached materials (same color fish share materials - reduces GPU state changes)
+        const bodyMaterial = getCachedFishMaterial(color, 0.3, 0.2, color, 0.1);
+        const secondaryMaterial = getCachedFishMaterial(secondaryColor, 0.3, 0.2, null, 0);
         
         // Create mesh based on form type
         switch (form) {
