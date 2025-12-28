@@ -925,7 +925,9 @@ const PERFORMANCE_CONFIG = {
     lod: {
         highDetailDistance: 300,    // Full detail within 300 units
         mediumDetailDistance: 600,  // Medium detail 300-600 units
-        lowDetailDistance: 1000     // Low detail beyond 600 units
+        lowDetailDistance: 1200,    // Low detail 600-1200 units
+        maxRenderDistance: 2500     // Max render distance (beyond this = invisible)
+                                    // Aquarium is 1800x900x1200, so 2500 covers diagonal
     },
     // Frustum culling
     frustumCulling: {
@@ -1209,6 +1211,7 @@ function updatePerformanceOptimizations(deltaTime) {
         const highDistSq = lod.highDetailDistance * lod.highDetailDistance;
         const medDistSq = lod.mediumDetailDistance * lod.mediumDetailDistance;
         const lowDistSq = lod.lowDetailDistance * lod.lowDetailDistance;
+        const maxRenderDistSq = lod.maxRenderDistance * lod.maxRenderDistance;
         const frustumEnabled = PERFORMANCE_CONFIG.frustumCulling.enabled;
         const fishCount = activeFish.length;
         
@@ -1225,9 +1228,10 @@ function updatePerformanceOptimizations(deltaTime) {
             const dz = fishPos.z - camZ;
             const distanceSquared = dx * dx + dy * dy + dz * dz;
             
-            // PERFORMANCE: Aggressive frustum culling with distance-based early exit
-            // Fish beyond lowDetailDistance are culled regardless of frustum
-            if (distanceSquared > lowDistSq) {
+            // PERFORMANCE: Distance-based culling - hide fish beyond max render distance
+            // Fish beyond maxRenderDistance are invisible (saves GPU draw calls)
+            // Fish within maxRenderDistance but beyond lowDetailDistance use lowest LOD
+            if (distanceSquared > maxRenderDistSq) {
                 fish.group.visible = false;
                 fish.currentLodLevel = 3; // Mark as culled
                 culledCount++;
@@ -4600,18 +4604,22 @@ function scaleAndPositionMap(mapScene) {
 }
 
 // PERFORMANCE: Disable matrixAutoUpdate for static objects (reduces CPU overhead)
-// Call updateMatrixWorld() once after positioning, then disable auto-updates
+// IMPORTANT: Must bake transforms BEFORE disabling auto-updates to avoid position bugs
 function optimizeStaticObjects(object) {
     let optimizedCount = 0;
     
+    // Step 1: Force update all matrices FIRST while autoUpdate is still enabled
+    // This ensures position/rotation/scale changes are baked into the matrix
+    object.updateMatrixWorld(true);
+    
+    // Step 2: Now disable auto-updates after matrices are correctly computed
     object.traverse((child) => {
-        // Disable automatic matrix updates for all objects in the static scene
+        // Bake the local matrix from position/rotation/scale
+        child.updateMatrix();
+        // Then disable automatic updates
         child.matrixAutoUpdate = false;
         optimizedCount++;
     });
-    
-    // Force one final matrix update after positioning is complete
-    object.updateMatrixWorld(true);
     
     console.log(`[PERF] Optimized ${optimizedCount} static objects (matrixAutoUpdate=false)`);
 }
