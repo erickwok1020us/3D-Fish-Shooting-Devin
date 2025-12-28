@@ -961,7 +961,20 @@ const performanceState = {
     visibleFishCount: 0,
     culledFishCount: 0,
     activeParticleCount: 0,
-    graphicsQuality: 'medium'  // 'low', 'medium', or 'high'
+    graphicsQuality: 'medium',  // 'low', 'medium', or 'high'
+    // PERFORMANCE: Shadow update throttling
+    shadowUpdateTimer: 0,
+    shadowUpdateInterval: 0.1,  // Update shadows every 100ms instead of every frame
+    // PERFORMANCE: LOD state tracking
+    lodHighCount: 0,
+    lodMediumCount: 0,
+    lodLowCount: 0
+};
+
+// PERFORMANCE: Pre-allocated frustum and matrix for culling (avoid per-frame allocation)
+const frustumCullingCache = {
+    frustum: new THREE.Frustum(),
+    projScreenMatrix: new THREE.Matrix4()
 };
 
 // ==================== SPATIAL HASH FOR BOIDS OPTIMIZATION ====================
@@ -1150,21 +1163,41 @@ function updatePerformanceOptimizations(deltaTime) {
     if (performanceState.frustumCullTimer <= 0) {
         performanceState.frustumCullTimer = PERFORMANCE_CONFIG.frustumCulling.updateInterval;
         
-        // Create frustum from camera
-        const frustum = new THREE.Frustum();
-        const projScreenMatrix = new THREE.Matrix4();
-        projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-        frustum.setFromProjectionMatrix(projScreenMatrix);
+        // PERFORMANCE: Reuse pre-allocated frustum and matrix (avoid per-frame allocation)
+        frustumCullingCache.projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustumCullingCache.frustum.setFromProjectionMatrix(frustumCullingCache.projScreenMatrix);
         
         let visibleCount = 0;
         let culledCount = 0;
+        let lodHighCount = 0;
+        let lodMediumCount = 0;
+        let lodLowCount = 0;
+        
+        const cameraPos = camera.position;
+        const lod = PERFORMANCE_CONFIG.lod;
+        const frustum = frustumCullingCache.frustum;
         
         // Update fish visibility and LOD
-        for (const fish of activeFish) {
+        for (let i = 0; i < activeFish.length; i++) {
+            const fish = activeFish[i];
             if (!fish || !fish.group) continue;
             
             const fishPos = fish.group.position;
-            const distanceToCamera = fishPos.distanceTo(camera.position);
+            
+            // PERFORMANCE: Calculate distance squared to avoid sqrt (faster comparison)
+            const dx = fishPos.x - cameraPos.x;
+            const dy = fishPos.y - cameraPos.y;
+            const dz = fishPos.z - cameraPos.z;
+            const distanceSquared = dx * dx + dy * dy + dz * dz;
+            
+            // PERFORMANCE: Aggressive frustum culling with distance-based early exit
+            // Fish beyond lowDetailDistance are culled regardless of frustum
+            const lowDistSq = lod.lowDetailDistance * lod.lowDetailDistance;
+            if (distanceSquared > lowDistSq) {
+                fish.group.visible = false;
+                culledCount++;
+                continue;
+            }
             
             // Frustum culling - hide fish outside view
             if (PERFORMANCE_CONFIG.frustumCulling.enabled) {
@@ -1175,33 +1208,63 @@ function updatePerformanceOptimizations(deltaTime) {
                     visibleCount++;
                 } else {
                     culledCount++;
+                    continue;  // Skip LOD processing for culled fish
                 }
             }
             
-            // LOD - adjust detail based on distance
+            // LOD - adjust detail based on distance (using squared distances for speed)
             if (fish.group.visible && fish.body) {
-                const lod = PERFORMANCE_CONFIG.lod;
-                if (distanceToCamera < lod.highDetailDistance) {
-                    // High detail - full shadows
+                const highDistSq = lod.highDetailDistance * lod.highDetailDistance;
+                const medDistSq = lod.mediumDetailDistance * lod.mediumDetailDistance;
+                
+                if (distanceSquared < highDistSq) {
+                    // High detail - full shadows, smooth shading
                     fish.body.castShadow = true;
                     if (fish.body.material) {
                         fish.body.material.flatShading = false;
                     }
-                } else if (distanceToCamera < lod.mediumDetailDistance) {
-                    // Medium detail - no shadows
+                    // PERFORMANCE: Show all child meshes at high detail
+                    fish.group.children.forEach(child => {
+                        if (child.isMesh) child.visible = true;
+                    });
+                    lodHighCount++;
+                } else if (distanceSquared < medDistSq) {
+                    // Medium detail - no shadows, smooth shading
                     fish.body.castShadow = false;
+                    if (fish.body.material) {
+                        fish.body.material.flatShading = false;
+                    }
+                    // PERFORMANCE: Hide small detail meshes (eyes, fins, etc.) at medium distance
+                    fish.group.children.forEach(child => {
+                        if (child.isMesh && child !== fish.body && child !== fish.tail) {
+                            // Hide small decorative meshes at medium distance
+                            const childSize = child.geometry?.boundingSphere?.radius || 0;
+                            child.visible = childSize > 5;  // Only show larger parts
+                        }
+                    });
+                    lodMediumCount++;
                 } else {
-                    // Low detail - no shadows, simplified rendering
+                    // Low detail - no shadows, flat shading, minimal geometry
                     fish.body.castShadow = false;
                     if (fish.body.material) {
                         fish.body.material.flatShading = true;
                     }
+                    // PERFORMANCE: Only show body at low detail (hide all decorations)
+                    fish.group.children.forEach(child => {
+                        if (child.isMesh && child !== fish.body) {
+                            child.visible = false;
+                        }
+                    });
+                    lodLowCount++;
                 }
             }
         }
         
         performanceState.visibleFishCount = visibleCount;
         performanceState.culledFishCount = culledCount;
+        performanceState.lodHighCount = lodHighCount;
+        performanceState.lodMediumCount = lodMediumCount;
+        performanceState.lodLowCount = lodLowCount;
     }
 }
 
@@ -1260,6 +1323,29 @@ function setShadowMapQuality(quality) {
     
     performanceState.currentShadowQuality = quality;
     console.log(`Shadow quality set to ${quality} (${size}x${size})`);
+}
+
+// PERFORMANCE: Throttled shadow update - only update shadows every N frames
+// This significantly reduces GPU load since shadow map rendering is expensive
+let shadowUpdateFrameCounter = 0;
+const SHADOW_UPDATE_FRAME_INTERVAL = 3;  // Update shadows every 3 frames (20 FPS shadow updates at 60 FPS)
+
+function updateThrottledShadows(deltaTime) {
+    if (!renderer) return;
+    
+    shadowUpdateFrameCounter++;
+    
+    // Only update shadows every N frames
+    if (shadowUpdateFrameCounter >= SHADOW_UPDATE_FRAME_INTERVAL) {
+        shadowUpdateFrameCounter = 0;
+        
+        // Enable shadow map for this frame
+        renderer.shadowMap.autoUpdate = true;
+        renderer.shadowMap.needsUpdate = true;
+    } else {
+        // Skip shadow map update for this frame
+        renderer.shadowMap.autoUpdate = false;
+    }
 }
 
 // ==================== GRAPHICS QUALITY SYSTEM ====================
@@ -9275,6 +9361,9 @@ function animate() {
     
     // PERFORMANCE: Enforce particle limits
     enforceParticleLimits();
+    
+    // PERFORMANCE: Throttle shadow updates (only update every N frames)
+    updateThrottledShadows(deltaTime);
     
         // Animate seaweed
         animateSeaweed();
