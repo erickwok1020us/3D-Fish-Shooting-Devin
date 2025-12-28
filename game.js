@@ -597,8 +597,21 @@ const fireBulletTempVectors = {
     leftDir: new THREE.Vector3(),
     rightDir: new THREE.Vector3(),
     yAxis: new THREE.Vector3(0, 1, 0),  // Constant Y axis for rotation
-    muzzlePos: new THREE.Vector3()
+    muzzlePos: new THREE.Vector3(),
+    // PERFORMANCE: Additional temp vectors for multiplayer mode (avoids new Vector3() per shot)
+    multiplayerMuzzlePos: new THREE.Vector3(),
+    multiplayerDir: new THREE.Vector3()
 };
+
+// PERFORMANCE: Barrel recoil state for animation loop (replaces setTimeout)
+const barrelRecoilState = {
+    active: false,
+    originalY: 0,
+    recoilEndTime: 0
+};
+
+// Debug flag for shooting logs (set to false for production)
+const DEBUG_SHOOTING = false;
 
 // PERFORMANCE: Cached geometry for muzzle flash rings (avoids per-shot geometry creation)
 const muzzleFlashCache = {
@@ -1815,20 +1828,21 @@ function playWeaponShot(weaponKey) {
             
         case '3x':
             // Medium "boom" sound with multiple tones
+            // PERFORMANCE: Use WebAudio time scheduling instead of setTimeout
+            // This avoids main-thread timer callbacks that can cause frame pacing issues
             for (let i = 0; i < 3; i++) {
-                setTimeout(() => {
-                    const osc = audioContext.createOscillator();
-                    const gain = audioContext.createGain();
-                    osc.type = 'sawtooth';
-                    osc.frequency.setValueAtTime(300 - i * 50, audioContext.currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(80, audioContext.currentTime + 0.12);
-                    gain.gain.setValueAtTime(0.15, audioContext.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.12);
-                    osc.connect(gain);
-                    gain.connect(sfxGain);
-                    osc.start(audioContext.currentTime);
-                    osc.stop(audioContext.currentTime + 0.12);
-                }, i * 30);
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                const startTime = now + i * 0.03;  // 30ms delay in WebAudio time
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300 - i * 50, startTime);
+                osc.frequency.exponentialRampToValueAtTime(80, startTime + 0.12);
+                gain.gain.setValueAtTime(0.15, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.12);
+                osc.connect(gain);
+                gain.connect(sfxGain);
+                osc.start(startTime);
+                osc.stop(startTime + 0.12);
             }
             break;
             
@@ -1845,20 +1859,20 @@ function playWeaponShot(weaponKey) {
             gain5.connect(sfxGain);
             osc5.start(now);
             osc5.stop(now + 0.2);
-            // Add echo
-            setTimeout(() => {
-                const echo = audioContext.createOscillator();
-                const echoGain = audioContext.createGain();
-                echo.type = 'sine';
-                echo.frequency.setValueAtTime(800, audioContext.currentTime);
-                echo.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.15);
-                echoGain.gain.setValueAtTime(0.08, audioContext.currentTime);
-                echoGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-                echo.connect(echoGain);
-                echoGain.connect(sfxGain);
-                echo.start(audioContext.currentTime);
-                echo.stop(audioContext.currentTime + 0.15);
-            }, 100);
+            // PERFORMANCE: Add echo using WebAudio time scheduling instead of setTimeout
+            // This avoids main-thread timer callbacks that can cause frame pacing issues
+            const echoStartTime = now + 0.1;  // 100ms delay in WebAudio time
+            const echo5 = audioContext.createOscillator();
+            const echoGain5 = audioContext.createGain();
+            echo5.type = 'sine';
+            echo5.frequency.setValueAtTime(800, echoStartTime);
+            echo5.frequency.exponentialRampToValueAtTime(200, echoStartTime + 0.15);
+            echoGain5.gain.setValueAtTime(0.08, echoStartTime);
+            echoGain5.gain.exponentialRampToValueAtTime(0.01, echoStartTime + 0.15);
+            echo5.connect(echoGain5);
+            echoGain5.connect(sfxGain);
+            echo5.start(echoStartTime);
+            echo5.stop(echoStartTime + 0.15);
             break;
             
         case '8x':
@@ -7644,9 +7658,9 @@ function fireBullet(targetX, targetY) {
         }
         const direction3D = getAimDirectionFromMouse(aimX, aimY);
         
-        // Get cannon muzzle position for local effects
-        const muzzlePos = new THREE.Vector3();
-        cannonMuzzle.getWorldPosition(muzzlePos);
+        // PERFORMANCE: Use temp vector instead of new Vector3() per shot
+        cannonMuzzle.getWorldPosition(fireBulletTempVectors.multiplayerMuzzlePos);
+        const muzzlePos = fireBulletTempVectors.multiplayerMuzzlePos;
         
         // RAY-PLANE INTERSECTION: Find where aim ray hits the fish plane (Y=0)
         // This gives us a concrete 3D world point that we can convert to server coordinates
@@ -7659,10 +7673,11 @@ function fireBullet(targetX, targetY) {
         if (direction3D.y <= 0.001) {
             // Aiming downward or horizontal - can't hit fish plane
             // Still play local effects but don't send to server
-            console.log(`[GAME] Multiplayer shoot: aiming away from fish plane (dir.y=${direction3D.y.toFixed(3)}), skipping server shot`);
+            if (DEBUG_SHOOTING) console.log(`[GAME] Multiplayer shoot: aiming away from fish plane (dir.y=${direction3D.y.toFixed(3)}), skipping server shot`);
             gameState.cooldown = 1 / weapon.shotsPerSecond;
             playWeaponShot(weaponKey);
-            spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction3D.clone());
+            // PERFORMANCE: spawnMuzzleFlash copies values internally, no need to clone
+            spawnMuzzleFlash(weaponKey, muzzlePos, direction3D);
             return true;
         }
         
@@ -7671,10 +7686,11 @@ function fireBullet(targetX, targetY) {
         
         if (t <= 0) {
             // Intersection is behind the muzzle - shouldn't happen if direction.y > 0 and muzzle.y < 0
-            console.log(`[GAME] Multiplayer shoot: intersection behind muzzle (t=${t.toFixed(3)}), skipping server shot`);
+            if (DEBUG_SHOOTING) console.log(`[GAME] Multiplayer shoot: intersection behind muzzle (t=${t.toFixed(3)}), skipping server shot`);
             gameState.cooldown = 1 / weapon.shotsPerSecond;
             playWeaponShot(weaponKey);
-            spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction3D.clone());
+            // PERFORMANCE: spawnMuzzleFlash copies values internally, no need to clone
+            spawnMuzzleFlash(weaponKey, muzzlePos, direction3D);
             return true;
         }
         
@@ -7691,7 +7707,8 @@ function fireBullet(targetX, targetY) {
         const clampedX = Math.max(-90, Math.min(90, serverTargetX));
         const clampedZ = Math.max(-60, Math.min(60, serverTargetZ));
         
-        console.log(`[GAME] Multiplayer shoot: muzzle=(${muzzlePos.x.toFixed(1)},${muzzlePos.y.toFixed(1)},${muzzlePos.z.toFixed(1)}) dir=(${direction3D.x.toFixed(3)},${direction3D.y.toFixed(3)},${direction3D.z.toFixed(3)}) t=${t.toFixed(1)} intersection=(${intersectionX.toFixed(1)},${intersectionZ.toFixed(1)}) -> server=(${clampedX.toFixed(1)},${clampedZ.toFixed(1)})`);
+        // PERFORMANCE: Guard debug logging behind flag to avoid string formatting per shot
+        if (DEBUG_SHOOTING) console.log(`[GAME] Multiplayer shoot: muzzle=(${muzzlePos.x.toFixed(1)},${muzzlePos.y.toFixed(1)},${muzzlePos.z.toFixed(1)}) dir=(${direction3D.x.toFixed(3)},${direction3D.y.toFixed(3)},${direction3D.z.toFixed(3)}) t=${t.toFixed(1)} intersection=(${intersectionX.toFixed(1)},${intersectionZ.toFixed(1)}) -> server=(${clampedX.toFixed(1)},${clampedZ.toFixed(1)})`);
         
         // Send target coordinates to server (not direction vector)
         // Server will calculate bullet trajectory from its cannon position to this target
@@ -7702,7 +7719,8 @@ function fireBullet(targetX, targetY) {
         
         // Play local effects immediately for responsiveness
         playWeaponShot(weaponKey);
-        spawnMuzzleFlash(weaponKey, muzzlePos.clone(), direction3D.clone());
+        // PERFORMANCE: spawnMuzzleFlash copies values internally, no need to clone
+        spawnMuzzleFlash(weaponKey, muzzlePos, direction3D);
         
         return true;
     }
@@ -7782,24 +7800,28 @@ function fireBullet(targetX, targetY) {
     const recoilStrength = config ? config.recoilStrength : 5;
     
     // Only apply barrel recoil in third-person mode
+    // PERFORMANCE: Use animation loop state instead of setTimeout for better frame pacing
     if (cannonBarrel && gameState.viewMode !== 'fps') {
-        const originalY = cannonBarrel.position.y;
+        // Store original position and set recoil end time
+        barrelRecoilState.originalY = cannonBarrel.position.y;
         cannonBarrel.position.y -= recoilStrength;
-        
-        // PERFORMANCE: Removed setTimeout-based barrel shake for 3x weapon
-        // setTimeout chains cause frame pacing issues even when FPS looks stable
-        // The recoil animation alone provides sufficient visual feedback
-        
-        setTimeout(() => {
-            if (cannonBarrel) {
-                cannonBarrel.position.y = originalY;
-                cannonBarrel.position.x = 0;
-                cannonBarrel.position.z = 0;
-            }
-        }, 50 + recoilStrength * 5);
+        barrelRecoilState.active = true;
+        barrelRecoilState.recoilEndTime = performance.now() + 50 + recoilStrength * 5;
     }
     
     return true;
+}
+
+// PERFORMANCE: Update barrel recoil in animation loop (called from animate())
+function updateBarrelRecoil() {
+    if (!barrelRecoilState.active || !cannonBarrel) return;
+    
+    if (performance.now() >= barrelRecoilState.recoilEndTime) {
+        cannonBarrel.position.y = barrelRecoilState.originalY;
+        cannonBarrel.position.x = 0;
+        cannonBarrel.position.z = 0;
+        barrelRecoilState.active = false;
+    }
 }
 
 // ==================== PARTICLE SYSTEM ====================
@@ -9149,6 +9171,9 @@ function animate() {
     if (gameState.cooldown > 0) {
         gameState.cooldown -= deltaTime;
     }
+    
+    // PERFORMANCE: Update barrel recoil in animation loop (replaces setTimeout)
+    updateBarrelRecoil();
     
     // Smooth camera transitions (for CENTER VIEW button and auto-panning)
     updateSmoothCameraTransition(deltaTime);
