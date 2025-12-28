@@ -871,8 +871,30 @@ function returnBulletModelToPool(weaponKey, model) {
 }
 
 // PERFORMANCE: Hit effect pool management - avoids clone() on every hit
-// Pool size: 8 per weapon (max concurrent hits: ~2 shots/sec * 4 sec lifetime = 8)
-const HIT_EFFECT_POOL_SIZE = 8;
+// Weapon-specific pool sizes based on fire rate and effect duration (800ms)
+// Formula: shots/sec * bullets/shot * duration + buffer for aoe/chain multi-hit
+const HIT_EFFECT_POOL_SIZES = {
+    '1x': 8,   // 2 shots/sec * 1 bullet * 0.8s = 1.6 concurrent, buffer for safety
+    '3x': 12,  // 1.5 shots/sec * 3 bullets * 0.8s = 3.6 concurrent, extra buffer
+    '5x': 10,  // 2 shots/sec * 1 bullet * 0.8s = 1.6, but chain can hit multiple fish
+    '8x': 12   // 2.5 shots/sec * 1 bullet * 0.8s = 2, but aoe can hit multiple fish
+};
+
+// Pool usage monitoring for debugging and optimization
+const hitEffectPoolStats = {
+    maxConcurrentByWeapon: { '1x': 0, '3x': 0, '5x': 0, '8x': 0 },
+    exhaustionCountByWeapon: { '1x': 0, '3x': 0, '5x': 0, '8x': 0 },
+    lastExhaustedAt: null
+};
+
+// Get pool stats for debugging
+function getHitEffectPoolStats() {
+    return {
+        ...hitEffectPoolStats,
+        poolSizes: HIT_EFFECT_POOL_SIZES,
+        currentUsage: {}
+    };
+}
 
 // Temp vectors for hit effect calculations - reused to avoid per-hit allocations
 const hitEffectTempVectors = {
@@ -886,15 +908,33 @@ function getHitEffectFromPool(weaponKey) {
     const pool = weaponGLBState.hitEffectPool.get(weaponKey);
     if (!pool) return null;
     
-    // Find first available (not in use) hit effect
+    // Count current usage for monitoring
+    let inUseCount = 0;
+    let availableItem = null;
+    
     for (const item of pool) {
-        if (!item.inUse) {
-            item.inUse = true;
-            item.model.visible = true;
-            return item;
+        if (item.inUse) {
+            inUseCount++;
+        } else if (!availableItem) {
+            availableItem = item;
         }
     }
-    return null; // Pool exhausted
+    
+    // Update max concurrent stats
+    if (inUseCount + 1 > hitEffectPoolStats.maxConcurrentByWeapon[weaponKey]) {
+        hitEffectPoolStats.maxConcurrentByWeapon[weaponKey] = inUseCount + 1;
+    }
+    
+    if (availableItem) {
+        availableItem.inUse = true;
+        availableItem.model.visible = true;
+        return availableItem;
+    }
+    
+    // Pool exhausted - track for monitoring
+    hitEffectPoolStats.exhaustionCountByWeapon[weaponKey]++;
+    hitEffectPoolStats.lastExhaustedAt = Date.now();
+    return null;
 }
 
 // Return hit effect to pool for reuse (no dispose!)
@@ -940,9 +980,10 @@ async function preloadHitEffectPool(weaponKey) {
     
     const pool = weaponGLBState.hitEffectPool.get(weaponKey);
     const scale = glbConfig.hitEffectScale;
+    const poolSize = HIT_EFFECT_POOL_SIZES[weaponKey] || 8;
     
     // Pre-clone hit effect models
-    for (let i = pool.length; i < HIT_EFFECT_POOL_SIZE; i++) {
+    for (let i = pool.length; i < poolSize; i++) {
         const model = cachedModel.clone();
         model.visible = false;
         model.scale.set(scale, scale, scale);
@@ -968,7 +1009,7 @@ async function preloadHitEffectPool(weaponKey) {
         });
     }
     
-    console.log(`[WEAPON-GLB] Pre-cloned ${HIT_EFFECT_POOL_SIZE} hit effects for ${weaponKey}`);
+    console.log(`[WEAPON-GLB] Pre-cloned ${poolSize} hit effects for ${weaponKey}`);
 }
 
 async function preloadAllWeapons() {
