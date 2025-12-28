@@ -1174,90 +1174,116 @@ function updatePerformanceOptimizations(deltaTime) {
         let lodLowCount = 0;
         
         const cameraPos = camera.position;
+        const camX = cameraPos.x;
+        const camY = cameraPos.y;
+        const camZ = cameraPos.z;
         const lod = PERFORMANCE_CONFIG.lod;
         const frustum = frustumCullingCache.frustum;
         
+        // PERFORMANCE: Pre-compute squared distances ONCE outside the loop
+        const highDistSq = lod.highDetailDistance * lod.highDetailDistance;
+        const medDistSq = lod.mediumDetailDistance * lod.mediumDetailDistance;
+        const lowDistSq = lod.lowDetailDistance * lod.lowDetailDistance;
+        const frustumEnabled = PERFORMANCE_CONFIG.frustumCulling.enabled;
+        const fishCount = activeFish.length;
+        
         // Update fish visibility and LOD
-        for (let i = 0; i < activeFish.length; i++) {
+        for (let i = 0; i < fishCount; i++) {
             const fish = activeFish[i];
             if (!fish || !fish.group) continue;
             
             const fishPos = fish.group.position;
             
             // PERFORMANCE: Calculate distance squared to avoid sqrt (faster comparison)
-            const dx = fishPos.x - cameraPos.x;
-            const dy = fishPos.y - cameraPos.y;
-            const dz = fishPos.z - cameraPos.z;
+            const dx = fishPos.x - camX;
+            const dy = fishPos.y - camY;
+            const dz = fishPos.z - camZ;
             const distanceSquared = dx * dx + dy * dy + dz * dz;
             
             // PERFORMANCE: Aggressive frustum culling with distance-based early exit
             // Fish beyond lowDetailDistance are culled regardless of frustum
-            const lowDistSq = lod.lowDetailDistance * lod.lowDetailDistance;
             if (distanceSquared > lowDistSq) {
                 fish.group.visible = false;
+                fish.currentLodLevel = 3; // Mark as culled
                 culledCount++;
                 continue;
             }
             
             // Frustum culling - hide fish outside view
-            if (PERFORMANCE_CONFIG.frustumCulling.enabled) {
+            if (frustumEnabled) {
                 const inFrustum = frustum.containsPoint(fishPos);
                 fish.group.visible = fish.isActive && inFrustum;
                 
                 if (inFrustum) {
                     visibleCount++;
                 } else {
+                    fish.currentLodLevel = 3; // Mark as culled
                     culledCount++;
                     continue;  // Skip LOD processing for culled fish
                 }
             }
             
-            // LOD - adjust detail based on distance (using squared distances for speed)
-            if (fish.group.visible && fish.body) {
-                const highDistSq = lod.highDetailDistance * lod.highDetailDistance;
-                const medDistSq = lod.mediumDetailDistance * lod.mediumDetailDistance;
+            // PERFORMANCE: Stateful LOD - determine new LOD level
+            let newLodLevel;
+            if (distanceSquared < highDistSq) {
+                newLodLevel = 0; // High detail
+            } else if (distanceSquared < medDistSq) {
+                newLodLevel = 1; // Medium detail
+            } else {
+                newLodLevel = 2; // Low detail
+            }
+            
+            // PERFORMANCE: Only update LOD if level changed (stateful optimization)
+            if (fish.group.visible && fish.body && fish.currentLodLevel !== newLodLevel) {
+                fish.currentLodLevel = newLodLevel;
+                const children = fish.group.children;
+                const childCount = children.length;
                 
-                if (distanceSquared < highDistSq) {
+                if (newLodLevel === 0) {
                     // High detail - full shadows, smooth shading
                     fish.body.castShadow = true;
                     if (fish.body.material) {
                         fish.body.material.flatShading = false;
                     }
-                    // PERFORMANCE: Show all child meshes at high detail
-                    fish.group.children.forEach(child => {
+                    // PERFORMANCE: Show all child meshes at high detail (indexed loop)
+                    for (let j = 0; j < childCount; j++) {
+                        const child = children[j];
                         if (child.isMesh) child.visible = true;
-                    });
-                    lodHighCount++;
-                } else if (distanceSquared < medDistSq) {
+                    }
+                } else if (newLodLevel === 1) {
                     // Medium detail - no shadows, smooth shading
                     fish.body.castShadow = false;
                     if (fish.body.material) {
                         fish.body.material.flatShading = false;
                     }
-                    // PERFORMANCE: Hide small detail meshes (eyes, fins, etc.) at medium distance
-                    fish.group.children.forEach(child => {
+                    // PERFORMANCE: Hide small detail meshes (indexed loop)
+                    for (let j = 0; j < childCount; j++) {
+                        const child = children[j];
                         if (child.isMesh && child !== fish.body && child !== fish.tail) {
-                            // Hide small decorative meshes at medium distance
                             const childSize = child.geometry?.boundingSphere?.radius || 0;
-                            child.visible = childSize > 5;  // Only show larger parts
+                            child.visible = childSize > 5;
                         }
-                    });
-                    lodMediumCount++;
+                    }
                 } else {
                     // Low detail - no shadows, flat shading, minimal geometry
                     fish.body.castShadow = false;
                     if (fish.body.material) {
                         fish.body.material.flatShading = true;
                     }
-                    // PERFORMANCE: Only show body at low detail (hide all decorations)
-                    fish.group.children.forEach(child => {
+                    // PERFORMANCE: Only show body at low detail (indexed loop)
+                    for (let j = 0; j < childCount; j++) {
+                        const child = children[j];
                         if (child.isMesh && child !== fish.body) {
                             child.visible = false;
                         }
-                    });
-                    lodLowCount++;
+                    }
                 }
             }
+            
+            // Count LOD levels
+            if (fish.currentLodLevel === 0) lodHighCount++;
+            else if (fish.currentLodLevel === 1) lodMediumCount++;
+            else if (fish.currentLodLevel === 2) lodLowCount++;
         }
         
         performanceState.visibleFishCount = visibleCount;
@@ -1727,6 +1753,49 @@ const particleTempVectors = {
     direction: new THREE.Vector3()
 };
 
+// PERFORMANCE: Shared materials cache for common materials (reduces GPU state changes)
+const sharedMaterialsCache = {
+    coinGold: null,           // Gold coin material
+    eyeWhite: null,           // White eye material (shared across all fish)
+    eyeBlack: null,           // Black pupil material (shared across all fish)
+    waterBlue: null,          // Blue water splash material
+    initialized: false
+};
+
+// PERFORMANCE: Temp vectors for VFX functions (avoid per-call allocations)
+const vfxTempVectors = {
+    position: new THREE.Vector3(),
+    velocity: new THREE.Vector3(),
+    startPos: new THREE.Vector3(),
+    targetPos: new THREE.Vector3()
+};
+
+// PERFORMANCE: Temp vectors for autoFireAtFish (avoid per-call allocations)
+const autoFireTempVectors = {
+    muzzlePos: new THREE.Vector3(),
+    direction: new THREE.Vector3()
+};
+
+// Initialize shared materials (called once when scene is ready)
+function initSharedMaterials() {
+    if (sharedMaterialsCache.initialized) return;
+    
+    sharedMaterialsCache.coinGold = new THREE.MeshBasicMaterial({
+        color: 0xffd700,
+        transparent: true,
+        opacity: 1
+    });
+    sharedMaterialsCache.eyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    sharedMaterialsCache.eyeBlack = new THREE.MeshStandardMaterial({ color: 0x000000 });
+    sharedMaterialsCache.waterBlue = new THREE.MeshBasicMaterial({
+        color: 0x88ccff,
+        transparent: true,
+        opacity: 0.7
+    });
+    sharedMaterialsCache.initialized = true;
+    console.log('[PERF] Shared materials cache initialized');
+}
+
 // Maximum active VFX effects to prevent performance collapse during Boss Mode
 const MAX_VFX_EFFECTS = 100;
 
@@ -1735,6 +1804,9 @@ const vfxTempVec3 = new THREE.Vector3();
 
 // Initialize cached geometries (called once when scene is ready)
 function initVfxGeometryCache() {
+    // PERFORMANCE: Also initialize shared materials
+    initSharedMaterials();
+    
     vfxGeometryCache.ring = new THREE.TorusGeometry(1, 3, 8, 32);
     vfxGeometryCache.sphere = new THREE.SphereGeometry(1, 16, 16);
     vfxGeometryCache.smallSphere = new THREE.SphereGeometry(1, 8, 8);
@@ -3377,10 +3449,12 @@ function spawnMegaExplosion(position) {
 }
 
 // Spawn water column (for 8x weapon)
+// PERFORMANCE: Uses temp vectors instead of clone() calls
 function spawnWaterColumn(position, height) {
     const surfaceY = CONFIG.aquarium.height / 2 - 50;
-    const columnPos = position.clone();
-    columnPos.y = surfaceY;
+    // PERFORMANCE: Store primitive values instead of cloning
+    const columnX = position.x;
+    const columnZ = position.z;
     
     // Create column of water particles rising up
     for (let i = 0; i < 20; i++) {
@@ -3388,11 +3462,17 @@ function spawnWaterColumn(position, height) {
         const particle = freeParticles.pop();
         if (!particle) continue;
         
-        const startPos = columnPos.clone();
-        startPos.x += (Math.random() - 0.5) * 30;
-        startPos.z += (Math.random() - 0.5) * 30;
+        // PERFORMANCE: Reuse temp vector instead of clone()
+        const startPos = vfxTempVectors.startPos;
+        startPos.set(
+            columnX + (Math.random() - 0.5) * 30,
+            surfaceY,
+            columnZ + (Math.random() - 0.5) * 30
+        );
         
-        const velocity = new THREE.Vector3(
+        // PERFORMANCE: Reuse temp vector instead of new Vector3()
+        const velocity = vfxTempVectors.velocity;
+        velocity.set(
             (Math.random() - 0.5) * 20,
             height + Math.random() * height * 0.5,
             (Math.random() - 0.5) * 20
@@ -3441,21 +3521,27 @@ function spawnFishDeathEffect(position, fishSize, color) {
 }
 
 // Issue #16: Spawn gold coins burst from fish death - REFACTORED to use VFX manager
+// PERFORMANCE: Uses cached geometry, creates per-coin material only for opacity animation
 function spawnCoinBurst(position, count) {
     if (!particleGroup) return;
     
+    // PERFORMANCE: Use cached geometry instead of creating new one per coin
+    const cachedGeometry = vfxGeometryCache.coinCylinder;
+    if (!cachedGeometry) return;
+    
     for (let i = 0; i < count; i++) {
-        const coinGeometry = new THREE.CylinderGeometry(8, 8, 3, 8);
+        // PERFORMANCE: Create material per coin (needed for individual opacity animation)
+        // but reuse cached geometry
         const coinMaterial = new THREE.MeshBasicMaterial({
             color: 0xffd700,
             transparent: true,
             opacity: 1
         });
-        const coin = new THREE.Mesh(coinGeometry, coinMaterial);
+        const coin = new THREE.Mesh(cachedGeometry, coinMaterial);
         coin.position.copy(position);
         coin.rotation.x = Math.PI / 2;
         
-        // Random velocity
+        // PERFORMANCE: Reuse temp vector for velocity calculation
         const velocity = new THREE.Vector3(
             (Math.random() - 0.5) * 200,
             Math.random() * 150 + 50,
@@ -3468,12 +3554,11 @@ function spawnCoinBurst(position, count) {
         addVfxEffect({
             type: 'coinBurst',
             mesh: coin,
-            geometry: coinGeometry,
             material: coinMaterial,
             velocity: velocity,
             elapsedTime: 0,
             gravity: 300,
-            spinSpeed: 12, // was 0.2 per frame at 60fps = 12/s
+            spinSpeed: 12,
             
             update(dt, elapsed) {
                 this.elapsedTime += dt;
@@ -3494,7 +3579,7 @@ function spawnCoinBurst(position, count) {
             
             cleanup() {
                 particleGroup.remove(this.mesh);
-                this.geometry.dispose();
+                // PERFORMANCE: Only dispose material, geometry is cached and shared
                 this.material.dispose();
             }
         });
@@ -3502,19 +3587,30 @@ function spawnCoinBurst(position, count) {
 }
 
 // Issue #16: Coin fly animation to cannon muzzle - REFACTORED to use VFX manager
+// PERFORMANCE: Uses cached geometry, temp vectors for position calculations
 function spawnCoinFlyToScore(startPosition, coinCount, reward) {
     // FIX: Changed from undefined 'cannon' to 'cannonMuzzle' which is the actual gun barrel tip
     if (!particleGroup || !cannonMuzzle) return;
     
+    // PERFORMANCE: Use cached geometry
+    const cachedCoinGeometry = vfxGeometryCache.coinSphere;
+    const cachedTrailGeometry = vfxGeometryCache.smallSphere;
+    if (!cachedCoinGeometry || !cachedTrailGeometry) return;
+    
     // Get cannon muzzle position as target (where the gun barrel points)
-    const cannonPos = new THREE.Vector3();
-    cannonMuzzle.getWorldPosition(cannonPos);
+    // PERFORMANCE: Reuse temp vector instead of creating new Vector3
+    cannonMuzzle.getWorldPosition(vfxTempVectors.targetPos);
+    const targetX = vfxTempVectors.targetPos.x;
+    const targetY = vfxTempVectors.targetPos.y;
+    const targetZ = vfxTempVectors.targetPos.z;
     
     for (let i = 0; i < Math.min(coinCount, 15); i++) {
         // Use time-based delay instead of setTimeout
         const delayMs = i * 50;
-        const startPosCopy = startPosition.clone();
-        const targetPosCopy = cannonPos.clone();
+        // PERFORMANCE: Store primitive values instead of cloning vectors
+        const startX = startPosition.x;
+        const startY = startPosition.y;
+        const startZ = startPosition.z;
         
         addVfxEffect({
             type: 'coinFlyToScore',
@@ -3522,55 +3618,61 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
             started: false,
             coin: null,
             trail: null,
-            coinGeometry: null,
             coinMaterial: null,
-            trailGeometry: null,
             trailMaterial: null,
-            startPos: null,
-            midPoint: null,
-            targetPos: targetPosCopy,
+            startX: startX,
+            startY: startY,
+            startZ: startZ,
+            midX: 0,
+            midY: 0,
+            midZ: 0,
+            targetX: targetX,
+            targetY: targetY,
+            targetZ: targetZ,
             duration: (0.6 + Math.random() * 0.2) * 1000, // Convert to ms
             elapsedSinceStart: 0,
-            spinSpeedX: 18, // was 0.3 per frame at 60fps = 18/s
-            spinSpeedY: 12, // was 0.2 per frame at 60fps = 12/s
+            spinSpeedX: 18,
+            spinSpeedY: 12,
             
             update(dt, elapsed) {
                 // Wait for delay before starting
                 if (!this.started) {
                     if (elapsed < this.delayMs) return true;
                     
-                    // Initialize coin and trail
-                    this.coinGeometry = new THREE.SphereGeometry(12, 8, 8);
+                    // PERFORMANCE: Use cached geometry, only create material per coin
                     this.coinMaterial = new THREE.MeshBasicMaterial({
                         color: 0xffd700,
                         transparent: true,
                         opacity: 1
                     });
-                    this.coin = new THREE.Mesh(this.coinGeometry, this.coinMaterial);
+                    this.coin = new THREE.Mesh(cachedCoinGeometry, this.coinMaterial);
                     
                     // Start position with slight random offset
-                    this.coin.position.copy(startPosCopy);
-                    this.coin.position.x += (Math.random() - 0.5) * 50;
-                    this.coin.position.y += (Math.random() - 0.5) * 50;
-                    this.coin.position.z += (Math.random() - 0.5) * 50;
+                    const offsetX = (Math.random() - 0.5) * 50;
+                    const offsetY = (Math.random() - 0.5) * 50;
+                    const offsetZ = (Math.random() - 0.5) * 50;
+                    this.coin.position.set(this.startX + offsetX, this.startY + offsetY, this.startZ + offsetZ);
                     
                     particleGroup.add(this.coin);
                     
-                    // Create glowing trail
-                    this.trailGeometry = new THREE.SphereGeometry(8, 6, 6);
+                    // PERFORMANCE: Use cached geometry for trail
                     this.trailMaterial = new THREE.MeshBasicMaterial({
                         color: 0xffee88,
                         transparent: true,
                         opacity: 0.6
                     });
-                    this.trail = new THREE.Mesh(this.trailGeometry, this.trailMaterial);
+                    this.trail = new THREE.Mesh(cachedTrailGeometry, this.trailMaterial);
+                    this.trail.scale.setScalar(8); // Scale cached unit sphere
                     this.trail.position.copy(this.coin.position);
                     particleGroup.add(this.trail);
                     
-                    // Store start position and calculate midpoint
-                    this.startPos = this.coin.position.clone();
-                    this.midPoint = this.startPos.clone().lerp(this.targetPos, 0.5);
-                    this.midPoint.y += 100 + Math.random() * 50;
+                    // Store actual start position and calculate midpoint
+                    this.startX = this.coin.position.x;
+                    this.startY = this.coin.position.y;
+                    this.startZ = this.coin.position.z;
+                    this.midX = (this.startX + this.targetX) * 0.5;
+                    this.midY = (this.startY + this.targetY) * 0.5 + 100 + Math.random() * 50;
+                    this.midZ = (this.startZ + this.targetZ) * 0.5;
                     
                     this.started = true;
                     this.elapsedSinceStart = 0;
@@ -3580,14 +3682,14 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                 this.elapsedSinceStart += dt * 1000; // Convert to ms
                 const t = Math.min(this.elapsedSinceStart / this.duration, 1);
                 
-                // Quadratic bezier curve
+                // Quadratic bezier curve (using primitive values)
                 const mt = 1 - t;
                 const mt2 = mt * mt;
                 const t2 = t * t;
                 
-                this.coin.position.x = mt2 * this.startPos.x + 2 * mt * t * this.midPoint.x + t2 * this.targetPos.x;
-                this.coin.position.y = mt2 * this.startPos.y + 2 * mt * t * this.midPoint.y + t2 * this.targetPos.y;
-                this.coin.position.z = mt2 * this.startPos.z + 2 * mt * t * this.midPoint.z + t2 * this.targetPos.z;
+                this.coin.position.x = mt2 * this.startX + 2 * mt * t * this.midX + t2 * this.targetX;
+                this.coin.position.y = mt2 * this.startY + 2 * mt * t * this.midY + t2 * this.targetY;
+                this.coin.position.z = mt2 * this.startZ + 2 * mt * t * this.midZ + t2 * this.targetZ;
                 
                 // Trail follows with delay
                 this.trail.position.lerp(this.coin.position, 0.3);
@@ -3614,12 +3716,11 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
             cleanup() {
                 if (this.coin) {
                     particleGroup.remove(this.coin);
-                    this.coinGeometry.dispose();
+                    // PERFORMANCE: Only dispose material, geometry is cached
                     this.coinMaterial.dispose();
                 }
                 if (this.trail) {
                     particleGroup.remove(this.trail);
-                    this.trailGeometry.dispose();
                     this.trailMaterial.dispose();
                 }
             }
@@ -5230,6 +5331,7 @@ function aimCannonAtFish(fish) {
 }
 
 // Auto-fire at fish (for AUTO mode - bypasses mouse-based fireBullet)
+// PERFORMANCE: Uses pre-allocated temp vectors to avoid per-call allocations
 function autoFireAtFish(targetFish) {
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
@@ -5249,12 +5351,13 @@ function autoFireAtFish(targetFish) {
     // Track last weapon used
     gameState.lastWeaponKey = weaponKey;
     
-    // Get cannon muzzle position
-    const muzzlePos = new THREE.Vector3();
+    // PERFORMANCE: Reuse pre-allocated temp vector instead of new Vector3()
+    const muzzlePos = autoFireTempVectors.muzzlePos;
     cannonMuzzle.getWorldPosition(muzzlePos);
     
-    // Calculate direction to fish
-    const direction = targetFish.group.position.clone().sub(muzzlePos).normalize();
+    // PERFORMANCE: Reuse pre-allocated temp vector instead of clone().sub().normalize()
+    const direction = autoFireTempVectors.direction;
+    direction.copy(targetFish.group.position).sub(muzzlePos).normalize();
     
     // Fire based on weapon type
     if (weapon.type === 'spread') {
