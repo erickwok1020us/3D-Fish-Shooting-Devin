@@ -1850,6 +1850,12 @@ const BOSS_ONLY_SPECIES = BOSS_FISH_TYPES
     .map(boss => boss.baseSpecies);
 // Result: ['blueWhale', 'greatWhiteShark', 'mantaRay', 'marlin'] - sardine now spawns normally
 
+// RTP FIX: List of ability fish that should NOT spawn during normal gameplay
+// These fish have special abilities (bomb, lightning, bonus, shield) that can trigger
+// chain kills without corresponding bets, causing RTP to exceed 100%
+// TODO: Re-enable these fish once ability reward mechanics are properly designed
+const ABILITY_FISH_EXCLUDED = ['bombCrab', 'electricEel', 'goldFish', 'shieldTurtle'];
+
 // ==================== WEAPON VFX SYSTEM (Issue #14) ====================
 // Visual effects configuration and state for each weapon type
 const WEAPON_VFX_CONFIG = {
@@ -7561,12 +7567,18 @@ function createFishPool() {
     particleGroup = new THREE.Group();
     scene.add(particleGroup);
     
-    // Issue #15: Create fish for each tier, EXCLUDING boss-only species
-    // Boss fish (blueWhale, greatWhiteShark, mantaRay, sardine, marlin) only spawn during Boss Mode
+    // Issue #15: Create fish for each tier, EXCLUDING boss-only species and ability fish
+    // Boss fish (blueWhale, greatWhiteShark, mantaRay, marlin) only spawn during Boss Mode
+    // Ability fish (bombCrab, electricEel, goldFish, shieldTurtle) excluded for RTP compliance
     Object.entries(CONFIG.fishTiers).forEach(([tier, config]) => {
         // Skip boss-only species during normal gameplay
         if (BOSS_ONLY_SPECIES.includes(tier)) {
             return; // Don't create these fish in the normal pool
+        }
+        
+        // RTP FIX: Skip ability fish that can cause chain kills without corresponding bets
+        if (ABILITY_FISH_EXCLUDED.includes(tier)) {
+            return; // Don't create ability fish until reward mechanics are redesigned
         }
         
         for (let i = 0; i < config.count; i++) {
