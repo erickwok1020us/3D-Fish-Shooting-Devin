@@ -7337,33 +7337,11 @@ class Fish {
             this.triggerAbility(deathPosition, weaponKey);
         }
         
-        // COMBO SYSTEM: Update combo and get bonus
-        const comboBonus = updateComboOnKill();
-        
-        // FIXED RTP SYSTEM: Casino-standard kill rate calculation
-        // Kill Rate = Target RTP / Effective Multiplier (reward / cost-to-kill)
-        // This ensures long-term RTP converges to target (91-95% based on fish size)
-        const fishReward = this.config.reward;
-        const fishHP = this.config.hp;
-        
-        // Calculate kill rate using FIXED RTP system (now accounts for cost-to-kill)
-        const killRate = calculateKillRate(fishReward, weaponKey, fishHP);
-        
-        // Determine if this kill awards a payout based on kill rate
-        const isKill = Math.random() < killRate;
-        // Apply combo bonus to winnings
-        // NOTE: fishReward is already in coins (40-500), no need to multiply by weapon.multiplier
-        const baseWin = isKill ? fishReward : 0;
-        const win = baseWin > 0 ? Math.floor(baseWin * (1 + comboBonus)) : 0;
-        
-        // Record the win for RTP tracking (bet was already recorded when shot was fired)
-        if (win > 0) {
-            recordWin(win);
-            gameState.balance += win;
-            gameState.score += Math.floor(win);
-            
-            // Issue #16: Play size-based coin sound
-            // Determine fish size from tier
+        // MULTIPLAYER MODE: Skip local RTP calculation - server handles rewards
+        // In multiplayer, the server sends balanceUpdate events with authoritative rewards
+        // Client should NOT calculate or award rewards locally to ensure casino-grade RTP compliance
+        if (multiplayerMode) {
+            // In multiplayer, just show visual effects - server will send reward via balanceUpdate
             let fishSize = 'small';
             if (this.tier === 'tier4' || this.isBoss) {
                 fishSize = 'boss';
@@ -7372,21 +7350,62 @@ class Fish {
             } else if (this.tier === 'tier2') {
                 fishSize = 'medium';
             }
-            playCoinSound(fishSize);
-            
-            // Show reward popup
-            showRewardPopup(deathPosition, win);
-            
-            // Issue #16: Enhanced death explosion effects based on fish size
+            // Visual feedback only - actual reward comes from server
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
-            
-            // Issue #16: Coin fly animation to score counter
-            const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
-            spawnCoinFlyToScore(deathPosition, coinCount, win);
+            createHitParticles(deathPosition, this.config.color || 0xffffff, 10);
         } else {
-            createHitParticles(deathPosition, 0x666666, 5);
-            // Issue #16: Play miss sound when no reward
-            playImpactSound('miss');
+            // SINGLE PLAYER MODE: Use local RTP calculation
+            // COMBO SYSTEM: Update combo and get bonus
+            const comboBonus = updateComboOnKill();
+            
+            // FIXED RTP SYSTEM: Casino-standard kill rate calculation
+            // Kill Rate = Target RTP / Effective Multiplier (reward / cost-to-kill)
+            // This ensures long-term RTP converges to target (91-95% based on fish size)
+            const fishReward = this.config.reward;
+            const fishHP = this.config.hp;
+            
+            // Calculate kill rate using FIXED RTP system (now accounts for cost-to-kill)
+            const killRate = calculateKillRate(fishReward, weaponKey, fishHP);
+            
+            // Determine if this kill awards a payout based on kill rate
+            const isKill = Math.random() < killRate;
+            // Apply combo bonus to winnings
+            // NOTE: fishReward is already in coins (40-500), no need to multiply by weapon.multiplier
+            const baseWin = isKill ? fishReward : 0;
+            const win = baseWin > 0 ? Math.floor(baseWin * (1 + comboBonus)) : 0;
+            
+            // Record the win for RTP tracking (bet was already recorded when shot was fired)
+            if (win > 0) {
+                recordWin(win);
+                gameState.balance += win;
+                gameState.score += Math.floor(win);
+                
+                // Issue #16: Play size-based coin sound
+                // Determine fish size from tier
+                let fishSize = 'small';
+                if (this.tier === 'tier4' || this.isBoss) {
+                    fishSize = 'boss';
+                } else if (this.tier === 'tier3') {
+                    fishSize = 'large';
+                } else if (this.tier === 'tier2') {
+                    fishSize = 'medium';
+                }
+                playCoinSound(fishSize);
+                
+                // Show reward popup
+                showRewardPopup(deathPosition, win);
+                
+                // Issue #16: Enhanced death explosion effects based on fish size
+                spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
+                
+                // Issue #16: Coin fly animation to score counter
+                const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
+                spawnCoinFlyToScore(deathPosition, coinCount, win);
+            } else {
+                createHitParticles(deathPosition, 0x666666, 5);
+                // Issue #16: Play miss sound when no reward
+                playImpactSound('miss');
+            }
         }
         
         // Respawn after delay
