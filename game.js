@@ -1235,19 +1235,22 @@ function getComboBonus(killCount) {
 }
 
 // Update combo state after a kill
+// NOTE: COMBO is now visual-only - no monetary bonus to ensure RTP compliance
 function updateComboOnKill() {
     gameState.comboCount++;
     gameState.comboTimer = COMBO_CONFIG.timeWindow;
     
     const { bonus, tierName } = getComboBonus(gameState.comboCount);
     
-    // Show combo notification if we hit a new tier
+    // Show combo notification if we hit a new tier (visual feedback only)
     if (bonus > gameState.lastComboBonus && tierName) {
         showComboNotification(tierName, bonus);
         gameState.lastComboBonus = bonus;
     }
     
-    return bonus;
+    // Return 0 instead of bonus - COMBO no longer affects rewards for RTP compliance
+    // Visual effects (notifications) still work, but no monetary multiplier
+    return 0;
 }
 
 // Reset combo when timer expires
