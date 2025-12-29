@@ -49,155 +49,227 @@ const CONFIG = {
     },
     
     // Issue #11: 20 Fish Species System with diverse behaviors and forms
+    // ECOLOGY UPDATE: Adjusted for realistic marine behavior + RTP balance + casino feel
+    // Design principles:
+    // - HP breakpoints: 1x kills in 1 shot (HP<100), 3x advantage (HP 100-200), 5x/8x for big fish (HP>300)
+    // - School sizes: Based on real marine biology
+    // - Spawn counts: Baitfish dominant, reef fish common, predators rare
+    // - Patterns: Match real swimming behaviors
+    // - boidsStrength: 0 = strictly solitary, 0.3 = weak grouping, 1.0 = normal, 2.0 = tight schooling, 3.0 = bait ball
     fishTiers: {
         // ==================== LARGE SOLITARY PREDATORS (4 species) ====================
-        // 1. Blue Whale - Largest, slow gentle filter feeder, solitary/pairs
+        // Boss Mode only - rare apex predators
+        // 1. Blue Whale - Largest marine mammal, slow gentle filter feeder
+        // ECOLOGY: Solitary or mother-calf pairs, cruise at 5-20 km/h
+        // SWIMMING: Slow, steady, majestic cruise with minimal direction changes
         blueWhale: { 
-            hp: 800, speedMin: 20, speedMax: 35, reward: 500, size: 140, 
+            hp: 800, speedMin: 12, speedMax: 25, reward: 500, size: 140, 
             color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, 
             pattern: 'cruise', schoolSize: [1, 2], form: 'whale',
-            category: 'largePredator'
+            category: 'largePredator',
+            boidsStrength: 0.1  // Almost no schooling, mother-calf only
         },
-        // 2. Great White Shark - Torpedo-shaped apex predator, solitary
+        // 2. Great White Shark - Apex predator, torpedo-shaped
+        // ECOLOGY: Strictly solitary hunters, burst speeds up to 56 km/h
+        // SWIMMING: Slow patrol + explosive burst attacks
         greatWhiteShark: { 
-            hp: 600, speedMin: 60, speedMax: 120, reward: 400, size: 100, 
-            color: 0x667788, secondaryColor: 0xcccccc, count: 2, 
+            hp: 600, speedMin: 40, speedMax: 120, reward: 400, size: 100, 
+            color: 0x667788, secondaryColor: 0xcccccc, count: 1, 
             pattern: 'burstAttack', schoolSize: [1, 1], form: 'shark',
-            category: 'largePredator'
+            category: 'largePredator',
+            boidsStrength: 0  // Strictly solitary
         },
-        // 3. Marlin - Long bill blue fish, solo/small groups(2-3)
+        // 3. Marlin - Fastest fish, long bill for slashing prey
+        // ECOLOGY: Solitary hunters, burst speeds up to 130 km/h
+        // SWIMMING: High-speed sprints, fastest fish in the ocean
         marlin: { 
-            hp: 400, speedMin: 100, speedMax: 200, reward: 300, size: 80, 
-            color: 0x2266aa, secondaryColor: 0x44aaff, count: 3, 
-            pattern: 'burstSprint', schoolSize: [1, 3], form: 'marlin',
-            category: 'largePredator'
+            hp: 400, speedMin: 70, speedMax: 200, reward: 300, size: 80, 
+            color: 0x2266aa, secondaryColor: 0x44aaff, count: 2, 
+            pattern: 'burstSprint', schoolSize: [1, 2], form: 'marlin',
+            category: 'largePredator',
+            boidsStrength: 0  // Strictly solitary
         },
-        // 4. Hammerhead Shark - T-shaped head, groups by day/solo hunts
+        // 4. Hammerhead Shark - T-shaped head for enhanced electroreception
+        // ECOLOGY: School by day (up to 100+), hunt solo at night
+        // SWIMMING: S-shaped head sweeping motion for prey detection
         hammerheadShark: { 
-            hp: 450, speedMin: 50, speedMax: 90, reward: 300, size: 85, 
+            hp: 450, speedMin: 35, speedMax: 70, reward: 300, size: 85, 
             color: 0x556677, secondaryColor: 0x889999, count: 3, 
-            pattern: 'sShape', schoolSize: [1, 4], form: 'hammerhead',
-            category: 'largePredator'
+            pattern: 'sShape', schoolSize: [3, 8], form: 'hammerhead',
+            category: 'largePredator',
+            boidsStrength: 1.5  // School by day (unique among sharks)
         },
         
-        // ==================== MEDIUM-LARGE SCHOOLING FISH (4 species) ====================
-        // 5. Yellowfin Tuna - Muscular torpedo, medium schools(10-30)
+        // ==================== MEDIUM-LARGE PELAGIC FISH (4 species) ====================
+        // Open water swimmers, good targets for 3x/5x weapons
+        // 5. Yellowfin Tuna - Powerful torpedo body, warm-blooded
+        // ECOLOGY: Schools of 10-100, cruise at 50-80 km/h, synchronized swimming
+        // SWIMMING: Fast, powerful, highly synchronized with school
         yellowfinTuna: { 
-            hp: 200, speedMin: 80, speedMax: 140, reward: 250, size: 50, 
-            color: 0x3355aa, secondaryColor: 0xffdd00, count: 8, 
-            pattern: 'synchronizedFast', schoolSize: [5, 12], form: 'tuna',
-            category: 'mediumLarge'
+            hp: 200, speedMin: 60, speedMax: 110, reward: 220, size: 50, 
+            color: 0x3355aa, secondaryColor: 0xffdd00, count: 6, 
+            pattern: 'synchronizedFast', schoolSize: [6, 15], form: 'tuna',
+            category: 'mediumLarge',
+            boidsStrength: 2.0  // Tight synchronized schooling
         },
-        // 6. Mahi-Mahi/Dolphinfish - Blunt head gold-green, small schools(5-10)
+        // 6. Mahi-Mahi/Dolphinfish - Blunt head, brilliant gold-green
+        // ECOLOGY: Small schools of 3-10, surface dwellers, erratic movements
+        // SWIMMING: Fast, erratic, unpredictable direction changes
         mahiMahi: { 
-            hp: 150, speedMin: 70, speedMax: 130, reward: 200, size: 45, 
-            color: 0x44aa44, secondaryColor: 0xffcc00, count: 6, 
+            hp: 160, speedMin: 55, speedMax: 100, reward: 180, size: 45, 
+            color: 0x44aa44, secondaryColor: 0xffcc00, count: 5, 
             pattern: 'irregularTurns', schoolSize: [3, 8], form: 'dolphinfish',
-            category: 'mediumLarge'
+            category: 'mediumLarge',
+            boidsStrength: 1.0  // Loose schooling
         },
         // 7. Barracuda - Long silver ambush predator
+        // ECOLOGY: Adults mostly solitary, juveniles in small groups, ambush hunters
+        // SWIMMING: Motionless waiting + lightning-fast strikes
         barracuda: { 
-            hp: 180, speedMin: 30, speedMax: 180, reward: 200, size: 55, 
-            color: 0xaabbcc, secondaryColor: 0x667788, count: 5, 
-            pattern: 'ambush', schoolSize: [1, 6], form: 'barracuda',
-            category: 'mediumLarge'
+            hp: 180, speedMin: 15, speedMax: 180, reward: 180, size: 55, 
+            color: 0xaabbcc, secondaryColor: 0x667788, count: 4, 
+            pattern: 'ambush', schoolSize: [1, 3], form: 'barracuda',
+            category: 'mediumLarge',
+            boidsStrength: 0.2  // Mostly solitary adults
         },
-        // 8. Grouper - Wide thick body brown spots, solitary/pairs
+        // 8. Grouper - Wide thick body, bottom dweller
+        // ECOLOGY: Strictly solitary and territorial, ambush from reef holes
+        // SWIMMING: Slow bottom patrol + sudden short bursts
         grouper: { 
-            hp: 250, speedMin: 25, speedMax: 60, reward: 180, size: 60, 
-            color: 0x886644, secondaryColor: 0x553322, count: 4, 
-            pattern: 'bottomBurst', schoolSize: [1, 2], form: 'grouper',
-            category: 'mediumLarge'
+            hp: 250, speedMin: 15, speedMax: 45, reward: 200, size: 60, 
+            color: 0x886644, secondaryColor: 0x553322, count: 3, 
+            pattern: 'bottomBurst', schoolSize: [1, 1], form: 'grouper',
+            category: 'mediumLarge',
+            boidsStrength: 0  // Strictly solitary and territorial
         },
         
         // ==================== MEDIUM COLORFUL REEF FISH (4 species) ====================
-        // 9. Parrotfish - Parrot beak rainbow colors, small groups(3-8)
+        // Coral reef dwellers, good targets for 1x/3x weapons
+        // 9. Parrotfish - Parrot-like beak for scraping coral
+        // ECOLOGY: Small harems of 3-8, stop-and-go grazing behavior
+        // SWIMMING: Stop to graze, swim to next spot, repeat
         parrotfish: { 
-            hp: 100, speedMin: 40, speedMax: 70, reward: 150, size: 35, 
+            hp: 120, speedMin: 30, speedMax: 55, reward: 140, size: 35, 
             color: 0x44ddaa, secondaryColor: 0xff66aa, count: 6, 
-            pattern: 'stopAndGo', schoolSize: [3, 8], form: 'parrotfish',
-            category: 'reefFish'
+            pattern: 'stopAndGo', schoolSize: [3, 6], form: 'parrotfish',
+            category: 'reefFish',
+            boidsStrength: 1.2  // Loose harem grouping
         },
-        // 10. Angelfish - Flat disc yellow-blue stripes, pairs/small groups(3-5)
+        // 10. Angelfish - Flat disc body, elegant swimmers
+        // ECOLOGY: Monogamous pairs or small groups of 3-5, graceful gliding
+        // SWIMMING: Slow, elegant, vertical undulation
         angelfish: { 
-            hp: 80, speedMin: 35, speedMax: 60, reward: 120, size: 30, 
+            hp: 90, speedMin: 25, speedMax: 50, reward: 110, size: 30, 
             color: 0xffdd44, secondaryColor: 0x4488ff, count: 8, 
-            pattern: 'elegantGlide', schoolSize: [2, 5], form: 'angelfish',
-            category: 'reefFish'
+            pattern: 'elegantGlide', schoolSize: [2, 4], form: 'angelfish',
+            category: 'reefFish',
+            boidsStrength: 0.8  // Paired/small group
         },
-        // 11. Butterflyfish - Flat small white-black-yellow, paired
+        // 11. Butterflyfish - Small flat body, paired swimmers
+        // ECOLOGY: Strictly monogamous pairs, agile reef navigation
+        // SWIMMING: Quick, agile weaving through coral
         butterflyfish: { 
-            hp: 60, speedMin: 45, speedMax: 80, reward: 100, size: 22, 
+            hp: 70, speedMin: 35, speedMax: 65, reward: 90, size: 22, 
             color: 0xffffaa, secondaryColor: 0x222222, count: 10, 
-            pattern: 'agileWeave', schoolSize: [2, 4], form: 'butterflyfish',
-            category: 'reefFish'
+            pattern: 'agileWeave', schoolSize: [2, 2], form: 'butterflyfish',
+            category: 'reefFish',
+            boidsStrength: 1.5  // Tight pair bonding
         },
-        // 12. Blue Tang - Oval flat bright blue, small schools(5-15)
+        // 12. Blue Tang - Oval flat body, schooling herbivore
+        // ECOLOGY: Schools of 5-20 for grazing, coordinated movements
+        // SWIMMING: Coordinated group movement, gentle up-down motion
         blueTang: { 
-            hp: 50, speedMin: 50, speedMax: 85, reward: 100, size: 20, 
+            hp: 60, speedMin: 40, speedMax: 70, reward: 80, size: 20, 
             color: 0x2288ff, secondaryColor: 0xffff00, count: 12, 
             pattern: 'groupCoordination', schoolSize: [5, 12], form: 'tang',
-            category: 'reefFish'
+            category: 'reefFish',
+            boidsStrength: 2.0  // Strong schooling for grazing
         },
         
         // ==================== SMALL SCHOOLING FISH (4 species) ====================
+        // Baitfish - abundant, fast, perfect for 1x weapon spray
         // 13. Sardine - Small streamlined silver, huge schools
+        // ECOLOGY: Massive schools of 100-1000+, wave-like synchronized movement
+        // SWIMMING: Tight synchronized waves, rapid direction changes
         sardine: { 
-            hp: 15, speedMin: 80, speedMax: 120, reward: 50, size: 10, 
-            color: 0xccddee, secondaryColor: 0x88aacc, count: 30, 
-            pattern: 'waveFormation', schoolSize: [15, 30], form: 'sardine',
-            category: 'smallSchool'
+            hp: 20, speedMin: 65, speedMax: 100, reward: 30, size: 10, 
+            color: 0xccddee, secondaryColor: 0x88aacc, count: 40, 
+            pattern: 'waveFormation', schoolSize: [20, 40], form: 'sardine',
+            category: 'smallSchool',
+            boidsStrength: 3.0  // Extremely tight schooling
         },
-        // 14. Anchovy - Thin silver semi-transparent, massive schools
+        // 14. Anchovy - Thin silver semi-transparent, bait balls
+        // ECOLOGY: Massive schools, form defensive bait balls when threatened
+        // SWIMMING: Swirling bait ball formation, very tight grouping
         anchovy: { 
-            hp: 10, speedMin: 90, speedMax: 140, reward: 40, size: 8, 
-            color: 0xaabbcc, secondaryColor: 0x778899, count: 35, 
-            pattern: 'baitBall', schoolSize: [20, 35], form: 'anchovy',
-            category: 'smallSchool'
+            hp: 15, speedMin: 70, speedMax: 120, reward: 25, size: 8, 
+            color: 0xaabbcc, secondaryColor: 0x778899, count: 45, 
+            pattern: 'baitBall', schoolSize: [25, 45], form: 'anchovy',
+            category: 'smallSchool',
+            boidsStrength: 3.5  // Tightest schooling (bait ball)
         },
-        // 15. Clownfish - Round small orange-white stripes, family groups(3-6)
+        // 15. Clownfish - Orange-white stripes, anemone dwellers
+        // ECOLOGY: Family groups of 2-4 around single anemone, territorial
+        // SWIMMING: Short darting movements within territory
         clownfish: { 
-            hp: 40, speedMin: 30, speedMax: 55, reward: 80, size: 15, 
-            color: 0xff6600, secondaryColor: 0xffffff, count: 8, 
-            pattern: 'territorial', schoolSize: [3, 6], form: 'clownfish',
-            category: 'smallSchool'
+            hp: 50, speedMin: 20, speedMax: 40, reward: 70, size: 15, 
+            color: 0xff6600, secondaryColor: 0xffffff, count: 6, 
+            pattern: 'territorial', schoolSize: [2, 3], form: 'clownfish',
+            category: 'smallSchool',
+            boidsStrength: 1.0  // Family group stays together
         },
-        // 16. Damselfish - Small oval blue-purple-yellow, loose groups(5-20)
+        // 16. Damselfish - Small oval, aggressive territory defenders
+        // ECOLOGY: Territorial, loose groups of 3-8 near reef patches
+        // SWIMMING: Quick defensive charges, aggressive darting
         damselfish: { 
-            hp: 30, speedMin: 55, speedMax: 90, reward: 60, size: 12, 
-            color: 0x6644ff, secondaryColor: 0xffdd00, count: 15, 
-            pattern: 'defensiveCharge', schoolSize: [5, 15], form: 'damselfish',
-            category: 'smallSchool'
+            hp: 40, speedMin: 45, speedMax: 75, reward: 55, size: 12, 
+            color: 0x6644ff, secondaryColor: 0xffdd00, count: 12, 
+            pattern: 'defensiveCharge', schoolSize: [3, 6], form: 'damselfish',
+            category: 'smallSchool',
+            boidsStrength: 0.8  // Loose territorial grouping
         },
         
         // ==================== SPECIAL FORM FISH (4 species) ====================
-        // 17. Manta Ray - Flat wing-shaped black top white belly, solo/2-3
+        // Unique body shapes and swimming styles
+        // 17. Manta Ray - Flat wing-shaped, graceful gliders
+        // ECOLOGY: Solitary or small groups of 2-3, slow wing-like flapping
+        // SWIMMING: Slow, majestic wing flapping, gentle banking turns
         mantaRay: { 
-            hp: 350, speedMin: 40, speedMax: 70, reward: 280, size: 90, 
+            hp: 350, speedMin: 30, speedMax: 55, reward: 280, size: 90, 
             color: 0x222233, secondaryColor: 0xeeeeee, count: 2, 
-            pattern: 'wingGlide', schoolSize: [1, 3], form: 'mantaRay',
-            category: 'specialForm'
+            pattern: 'wingGlide', schoolSize: [1, 2], form: 'mantaRay',
+            category: 'specialForm',
+            boidsStrength: 0.3  // Mostly solitary, occasional pairs
         },
-        // 18. Pufferfish - Round ball inflatable with spikes, solitary
+        // 18. Pufferfish - Round inflatable body, slow swimmers
+        // ECOLOGY: Strictly solitary, slow deliberate movements
+        // SWIMMING: Very slow, gentle rotation, fin-propelled
         pufferfish: { 
-            hp: 120, speedMin: 20, speedMax: 40, reward: 120, size: 25, 
-            color: 0xddcc88, secondaryColor: 0x886644, count: 5, 
+            hp: 100, speedMin: 10, speedMax: 30, reward: 120, size: 25, 
+            color: 0xddcc88, secondaryColor: 0x886644, count: 4, 
             pattern: 'slowRotation', schoolSize: [1, 1], form: 'pufferfish',
-            category: 'specialForm'
+            category: 'specialForm',
+            boidsStrength: 0  // Strictly solitary
         },
-        // 19. Seahorse - Vertical S-shape horse head curled tail, pairs/solo
+        // 19. Seahorse - Vertical posture, curled tail
+        // ECOLOGY: Monogamous pairs, vertical drifting, very slow
+        // SWIMMING: Vertical posture, dorsal fin vibration, drift with current
         seahorse: { 
-            hp: 80, speedMin: 15, speedMax: 30, reward: 150, size: 20, 
+            hp: 80, speedMin: 8, speedMax: 20, reward: 130, size: 20, 
             color: 0xffaa44, secondaryColor: 0xcc8833, count: 4, 
             pattern: 'verticalDrift', schoolSize: [1, 2], form: 'seahorse',
-            category: 'specialForm'
+            category: 'specialForm',
+            boidsStrength: 1.2  // Monogamous pair bonding
         },
-        // 20. Flying Fish - Streamlined large pectoral fins, medium schools(10-50)
+        // 20. Flying Fish - Large pectoral fins for gliding
+        // ECOLOGY: Schools of 10-50, surface swimmers, glide to escape predators
+        // SWIMMING: Fast swimming + spectacular gliding jumps
         flyingFish: { 
-            hp: 70, speedMin: 100, speedMax: 180, reward: 100, size: 18, 
+            hp: 60, speedMin: 80, speedMax: 150, reward: 80, size: 18, 
             color: 0x4488cc, secondaryColor: 0x88ccff, count: 10, 
-            pattern: 'glideJump', schoolSize: [5, 12], form: 'flyingFish',
-            category: 'specialForm'
+            pattern: 'glideJump', schoolSize: [8, 15], form: 'flyingFish',
+            category: 'specialForm',
+            boidsStrength: 2.0  // Strong schooling for predator evasion
         },
         
         // ==================== SPECIAL ABILITY FISH (Phase 2) ====================
@@ -6882,14 +6954,13 @@ class Fish {
         const shouldUpdateBoids = this.boidsFrameCounter % boidsUpdateInterval === 0;
         
         if (shouldUpdateBoids) {
-            const category = this.config.category || 'standard';
-            if (category === 'smallSchool' || pattern === 'waveFormation' || pattern === 'baitBall' || pattern === 'groupCoordination') {
-                this.applyBoids(allFish, 2.0); // Stronger schooling
-            } else if (category === 'mediumLarge' || category === 'reefFish') {
-                this.applyBoids(allFish, 1.0); // Normal schooling
-            } else {
-                this.applyBoids(allFish, 0.3); // Weak schooling for solitary fish
+            // Use per-species boidsStrength from config for precise control
+            // 0 = strictly solitary, 0.3 = weak, 1.0 = normal, 2.0 = tight, 3.0+ = bait ball
+            const boidsStrength = this.config.boidsStrength !== undefined ? this.config.boidsStrength : 1.0;
+            if (boidsStrength > 0) {
+                this.applyBoids(allFish, boidsStrength);
             }
+            // Skip boids entirely for strictly solitary fish (boidsStrength = 0)
         }
         
         // Apply boundary forces
