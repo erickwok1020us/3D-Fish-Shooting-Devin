@@ -4587,13 +4587,17 @@ async function init() {
         loadingScreen.style.display = 'none';
     }
     
-    // Show the multiplayer lobby
+    // Show the multiplayer lobby (only if user hasn't already started a game)
+    // FIX: Prevent race condition where preload finishes after user clicks "Single Player"
+    // which would incorrectly show the lobby and hide the game
     const lobby = document.getElementById('multiplayer-lobby');
-    if (lobby) {
+    if (lobby && !gameState.isInGameScene) {
         lobby.style.display = 'flex';
+        console.log('Lobby initialized - GLB models preloaded');
+    } else if (gameState.isInGameScene) {
+        console.log('[PRELOAD] Skipping lobby display - user already in game scene');
     }
     
-    console.log('Lobby initialized - GLB models preloaded');
     window.gameLoaded = true;
 }
 
