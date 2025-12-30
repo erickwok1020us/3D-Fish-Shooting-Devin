@@ -2186,6 +2186,195 @@ let currentMusicState = 'normal';
 let ambientLoopInterval = null;
 let musicLoopInterval = null;
 
+// MP3 Audio System - R2 bucket sound effects
+const AUDIO_CONFIG = {
+    baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
+    sounds: {
+        weapon1x: '1X 發射音效.mp3',
+        weapon3x: '3X 發射音效.mp3',
+        weapon5x: '5X 發射音效.mp3',
+        weapon8x: '8X 發射音效.mp3',
+        bossTime: 'Boss time.mp3',
+        coinReceive: 'Coin receive.mp3',
+        background: 'background.mp3'
+    },
+    volumes: {
+        weapon1x: 0.4,
+        weapon3x: 0.5,
+        weapon5x: 0.6,
+        weapon8x: 0.7,
+        bossTime: 0.5,
+        coinReceive: 0.6,
+        background: 0.3
+    }
+};
+
+// Audio buffer cache for MP3 files
+const audioBufferCache = new Map();
+let backgroundMusicSource = null;
+let bossMusicSource = null;
+let isBackgroundMusicPlaying = false;
+let isBossMusicPlaying = false;
+
+// Load MP3 audio file and cache it
+async function loadAudioBuffer(soundKey) {
+    if (audioBufferCache.has(soundKey)) {
+        return audioBufferCache.get(soundKey);
+    }
+    
+    const filename = AUDIO_CONFIG.sounds[soundKey];
+    if (!filename) {
+        console.warn('[AUDIO] Unknown sound key:', soundKey);
+        return null;
+    }
+    
+    const url = AUDIO_CONFIG.baseUrl + encodeURIComponent(filename);
+    
+    try {
+        console.log('[AUDIO] Loading:', soundKey, url);
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        audioBufferCache.set(soundKey, audioBuffer);
+        console.log('[AUDIO] Loaded:', soundKey);
+        return audioBuffer;
+    } catch (error) {
+        console.error('[AUDIO] Failed to load:', soundKey, error);
+        return null;
+    }
+}
+
+// Preload all audio files
+async function preloadAllAudio() {
+    if (!audioContext) return;
+    
+    console.log('[AUDIO] Preloading all sound effects...');
+    const loadPromises = Object.keys(AUDIO_CONFIG.sounds).map(key => loadAudioBuffer(key));
+    await Promise.all(loadPromises);
+    console.log('[AUDIO] All sound effects preloaded');
+}
+
+// Play MP3 sound effect (one-shot)
+function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
+    if (!audioContext || !sfxGain) return;
+    
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
+    const buffer = audioBufferCache.get(soundKey);
+    if (!buffer) {
+        console.warn('[AUDIO] Buffer not loaded:', soundKey);
+        return null;
+    }
+    
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    
+    const gainNode = audioContext.createGain();
+    const baseVolume = AUDIO_CONFIG.volumes[soundKey] || 0.5;
+    gainNode.gain.value = baseVolume * volumeMultiplier;
+    
+    source.connect(gainNode);
+    gainNode.connect(sfxGain);
+    source.start(0);
+    
+    return source;
+}
+
+// Start background music (looping)
+function startBackgroundMusicMP3() {
+    if (!audioContext || !musicGain) return;
+    if (isBackgroundMusicPlaying) return;
+    
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
+    const buffer = audioBufferCache.get('background');
+    if (!buffer) {
+        console.warn('[AUDIO] Background music not loaded');
+        return;
+    }
+    
+    backgroundMusicSource = audioContext.createBufferSource();
+    backgroundMusicSource.buffer = buffer;
+    backgroundMusicSource.loop = true;
+    
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = AUDIO_CONFIG.volumes.background;
+    
+    backgroundMusicSource.connect(gainNode);
+    gainNode.connect(musicGain);
+    backgroundMusicSource.start(0);
+    isBackgroundMusicPlaying = true;
+    
+    console.log('[AUDIO] Background music started (looping)');
+}
+
+// Stop background music
+function stopBackgroundMusicMP3() {
+    if (backgroundMusicSource) {
+        try {
+            backgroundMusicSource.stop();
+        } catch (e) {}
+        backgroundMusicSource = null;
+    }
+    isBackgroundMusicPlaying = false;
+}
+
+// Start boss time music
+function startBossMusicMP3() {
+    if (!audioContext || !musicGain) return;
+    if (isBossMusicPlaying) return;
+    
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
+    const buffer = audioBufferCache.get('bossTime');
+    if (!buffer) {
+        console.warn('[AUDIO] Boss time music not loaded');
+        return;
+    }
+    
+    // Lower background music volume during boss
+    if (backgroundMusicSource) {
+        try {
+            backgroundMusicSource.playbackRate.value = 1.0;
+        } catch (e) {}
+    }
+    
+    bossMusicSource = audioContext.createBufferSource();
+    bossMusicSource.buffer = buffer;
+    bossMusicSource.loop = true;
+    
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = AUDIO_CONFIG.volumes.bossTime;
+    
+    bossMusicSource.connect(gainNode);
+    gainNode.connect(musicGain);
+    bossMusicSource.start(0);
+    isBossMusicPlaying = true;
+    
+    console.log('[AUDIO] Boss time music started');
+}
+
+// Stop boss time music
+function stopBossMusicMP3() {
+    if (bossMusicSource) {
+        try {
+            bossMusicSource.stop();
+        } catch (e) {}
+        bossMusicSource = null;
+    }
+    isBossMusicPlaying = false;
+    console.log('[AUDIO] Boss time music stopped');
+}
+
 function initAudio() {
     try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -2207,11 +2396,14 @@ function initAudio() {
         ambientGain.gain.value = 0.3;
         ambientGain.connect(masterGain);
         
-        // Start ambient sounds after a short delay
-        setTimeout(() => {
-            startAmbientSounds();
-            startBackgroundMusic('normal');
-        }, 1000);
+        // Preload MP3 audio files and start background music
+        preloadAllAudio().then(() => {
+            // Start background music after preloading
+            setTimeout(() => {
+                startBackgroundMusicMP3();
+                startAmbientSounds();
+            }, 1000);
+        });
         
     } catch (e) {
         console.warn('Web Audio API not supported');
@@ -2266,11 +2458,36 @@ function playWeaponShot(weaponKey) {
         audioContext.resume();
     }
     
+    // Use MP3 sound effects from R2 bucket
+    const soundKeyMap = {
+        '1x': 'weapon1x',
+        '3x': 'weapon3x',
+        '5x': 'weapon5x',
+        '8x': 'weapon8x'
+    };
+    
+    const soundKey = soundKeyMap[weaponKey];
+    if (soundKey && audioBufferCache.has(soundKey)) {
+        playMP3Sound(soundKey);
+        
+        // 8x weapon still triggers screen shake
+        if (weaponKey === '8x') {
+            triggerScreenShakeWithStrength(10, 300);
+        }
+    } else {
+        // Fallback to synthesized sounds if MP3 not loaded
+        playWeaponShotSynthesized(weaponKey);
+    }
+}
+
+// Fallback synthesized weapon sounds (used if MP3 not loaded)
+function playWeaponShotSynthesized(weaponKey) {
+    if (!audioContext || !sfxGain) return;
+    
     const now = audioContext.currentTime;
     
     switch (weaponKey) {
         case '1x':
-            // Light "pew" sound
             const osc1 = audioContext.createOscillator();
             const gain1 = audioContext.createGain();
             osc1.type = 'square';
@@ -2285,13 +2502,10 @@ function playWeaponShot(weaponKey) {
             break;
             
         case '3x':
-            // Medium "boom" sound with multiple tones
-            // PERFORMANCE: Use WebAudio time scheduling instead of setTimeout
-            // This avoids main-thread timer callbacks that can cause frame pacing issues
             for (let i = 0; i < 3; i++) {
                 const osc = audioContext.createOscillator();
                 const gain = audioContext.createGain();
-                const startTime = now + i * 0.03;  // 30ms delay in WebAudio time
+                const startTime = now + i * 0.03;
                 osc.type = 'sawtooth';
                 osc.frequency.setValueAtTime(300 - i * 50, startTime);
                 osc.frequency.exponentialRampToValueAtTime(80, startTime + 0.12);
@@ -2305,7 +2519,6 @@ function playWeaponShot(weaponKey) {
             break;
             
         case '5x':
-            // Heavy "BOOM" with echo - electric zap
             const osc5 = audioContext.createOscillator();
             const gain5 = audioContext.createGain();
             osc5.type = 'sawtooth';
@@ -2317,9 +2530,7 @@ function playWeaponShot(weaponKey) {
             gain5.connect(sfxGain);
             osc5.start(now);
             osc5.stop(now + 0.2);
-            // PERFORMANCE: Add echo using WebAudio time scheduling instead of setTimeout
-            // This avoids main-thread timer callbacks that can cause frame pacing issues
-            const echoStartTime = now + 0.1;  // 100ms delay in WebAudio time
+            const echoStartTime = now + 0.1;
             const echo5 = audioContext.createOscillator();
             const echoGain5 = audioContext.createGain();
             echo5.type = 'sine';
@@ -2334,7 +2545,6 @@ function playWeaponShot(weaponKey) {
             break;
             
         case '8x':
-            // Explosive "KABOOM!" with noise
             playNoise(200, 1, 0.4, 0.3, 'lowpass');
             const osc8 = audioContext.createOscillator();
             const gain8 = audioContext.createGain();
@@ -2347,13 +2557,10 @@ function playWeaponShot(weaponKey) {
             gain8.connect(sfxGain);
             osc8.start(now);
             osc8.stop(now + 0.4);
-            // Trigger screen shake for 8x (highest tier)
             triggerScreenShakeWithStrength(10, 300);
             break;
-            // Note: 20x weapon removed per latest specification
             
         default:
-            // Fallback to basic shoot
             playSound('shoot');
     }
 }
@@ -2366,11 +2573,36 @@ function playCoinSound(fishSize) {
         audioContext.resume();
     }
     
+    // Use MP3 coin sound from R2 bucket
+    if (audioBufferCache.has('coinReceive')) {
+        // Adjust volume based on fish size
+        const volumeMultiplier = {
+            'small': 0.6,
+            'medium': 0.8,
+            'large': 1.0,
+            'boss': 1.2
+        }[fishSize] || 0.6;
+        
+        playMP3Sound('coinReceive', volumeMultiplier);
+        
+        // Boss still gets the fanfare in addition to coin sound
+        if (fishSize === 'boss') {
+            playBossFanfare();
+        }
+    } else {
+        // Fallback to synthesized sounds
+        playCoinSoundSynthesized(fishSize);
+    }
+}
+
+// Fallback synthesized coin sounds (used if MP3 not loaded)
+function playCoinSoundSynthesized(fishSize) {
+    if (!audioContext || !sfxGain) return;
+    
     const now = audioContext.currentTime;
     
     switch (fishSize) {
         case 'small':
-            // Single "ding"
             const oscS = audioContext.createOscillator();
             const gainS = audioContext.createGain();
             oscS.type = 'sine';
@@ -2385,7 +2617,6 @@ function playCoinSound(fishSize) {
             break;
             
         case 'medium':
-            // Multiple "ding ding ding"
             for (let i = 0; i < 3; i++) {
                 setTimeout(() => {
                     const osc = audioContext.createOscillator();
@@ -2404,7 +2635,6 @@ function playCoinSound(fishSize) {
             break;
             
         case 'large':
-            // "JACKPOT" chime - arpeggiated chord
             const notes = [800, 1000, 1200, 1500, 1800];
             notes.forEach((freq, i) => {
                 setTimeout(() => {
@@ -2423,12 +2653,11 @@ function playCoinSound(fishSize) {
             break;
             
         case 'boss':
-            // Epic reward fanfare (5 seconds)
             playBossFanfare();
             break;
             
         default:
-            playCoinSound('small');
+            playCoinSoundSynthesized('small');
     }
 }
 
@@ -10313,6 +10542,9 @@ function spawnBossFish() {
     // Start countdown
     gameState.bossCountdown = 15;
     gameState.bossActive = true;
+    
+    // Start boss time music
+    startBossMusicMP3();
 }
 
 function updateBossEvent(deltaTime) {
@@ -10389,6 +10621,9 @@ function endBossEvent() {
     gameState.bossActive = false;
     gameState.activeBoss = null;
     hideBossUI();
+    
+    // Stop boss time music when boss event ends
+    stopBossMusicMP3();
     
     // Remove any remaining boss fish
     activeFish.forEach(fish => {
