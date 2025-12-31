@@ -692,6 +692,18 @@ const barrelRecoilState = {
     tempVec: new THREE.Vector3()
 };
 
+// FPS Camera recoil state for visual feedback in FPS mode
+// Uses camera pitch offset (kick up + return) without moving camera position
+const fpsCameraRecoilState = {
+    active: false,
+    phase: 'idle',  // 'idle', 'kick', 'return'
+    pitchOffset: 0,  // Current pitch offset in radians
+    maxPitchOffset: 0,  // Target pitch offset for kick phase
+    kickStartTime: 0,
+    kickDuration: 40,   // Fast kick up (40ms)
+    returnDuration: 150  // Slower return (150ms)
+};
+
 // Debug flag for shooting logs (set to false for production)
 const DEBUG_SHOOTING = false;
 
@@ -3197,29 +3209,46 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
     });
 }
 
+// Temp vectors for muzzle flash barrel direction calculation (avoid per-shot allocations)
+const muzzleFlashTemp = {
+    barrelForward: new THREE.Vector3(),
+    worldQuat: new THREE.Quaternion(),
+    localForward: new THREE.Vector3(0, 0, 1)  // Barrel points along +Z in local space
+};
+
 // Spawn muzzle flash effect at cannon muzzle
-// IMPROVED: Pass direction to spawnExpandingRingOptimized for proper ring orientation
+// IMPROVED: Ring follows barrel direction (like collar around barrel), not bullet direction
 function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
     if (!config) return;
     
+    // Get barrel forward direction from cannonMuzzle's world orientation
+    // This ensures ring "wraps around" the barrel regardless of where bullets go
+    let barrelDirection = direction;  // Fallback to bullet direction
+    if (cannonMuzzle) {
+        cannonMuzzle.getWorldQuaternion(muzzleFlashTemp.worldQuat);
+        muzzleFlashTemp.barrelForward.copy(muzzleFlashTemp.localForward)
+            .applyQuaternion(muzzleFlashTemp.worldQuat);
+        barrelDirection = muzzleFlashTemp.barrelForward;
+    }
+    
     if (weaponKey === '1x') {
-        // Light blue energy ring expanding from barrel - now faces bullet direction
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 40, 0.3, direction);
+        // Light blue energy ring expanding from barrel - follows barrel direction
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 40, 0.3, barrelDirection);
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 5);
         
     } else if (weaponKey === '3x') {
         // PERFORMANCE: Single muzzle flash instead of 3 rings
-        // This reduces per-shot allocations while maintaining visual feedback
-        // The 3 bullets themselves provide the "spread" visual
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 45, 0.3, direction);
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 6);  // Reduced from 10
+        // REDUCED SIZE: 12->32 instead of 15->45 (user feedback: too big)
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 12, 32, 0.3, barrelDirection);
+        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 6);
         
     } else if (weaponKey === '5x') {
         // PERFORMANCE: Simplified 5x muzzle flash - single ring + lightning
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 20, 60, 0.4, direction);
-        spawnLightningBurst(muzzlePos, config.muzzleColor, 4);  // Reduced from 6
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 8);  // Reduced from 15
+        // REDUCED SIZE: 16->42 instead of 20->60 (user feedback: too big)
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 16, 42, 0.4, barrelDirection);
+        spawnLightningBurst(muzzlePos, config.muzzleColor, 4);
+        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 8);
         
     } else if (weaponKey === '8x') {
         // Giant red/orange fireball launch
@@ -8655,17 +8684,24 @@ function fireBullet(targetX, targetY) {
     
     // Issue #14: Enhanced cannon recoil animation based on weapon
     // IMPROVED: Two-phase recoil (kick + return) with backward movement for realistic feel
-    // FIX: Skip barrel recoil in FPS mode to prevent camera jump
     const config = WEAPON_VFX_CONFIG[weaponKey];
     const recoilStrength = config ? config.recoilStrength : 5;
     
-    // Only apply barrel recoil in third-person mode
-    if (cannonBarrel && gameState.viewMode !== 'fps') {
+    if (gameState.viewMode === 'fps') {
+        // FPS MODE: Camera pitch kick (visual feedback without moving camera position)
+        // This gives recoil feel without breaking the muzzle-based camera positioning
+        fpsCameraRecoilState.maxPitchOffset = recoilStrength * 0.003;  // Convert to radians (small kick)
+        fpsCameraRecoilState.active = true;
+        fpsCameraRecoilState.phase = 'kick';
+        fpsCameraRecoilState.kickStartTime = performance.now();
+        fpsCameraRecoilState.kickDuration = 30 + recoilStrength;
+        fpsCameraRecoilState.returnDuration = 100 + recoilStrength * 4;
+    } else if (cannonBarrel) {
+        // THIRD-PERSON MODE: Barrel position recoil
         // Store original position
         barrelRecoilState.originalPosition.copy(cannonBarrel.position);
         
         // Calculate recoil direction (opposite to firing direction)
-        // Use the direction parameter passed to this function
         barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
         barrelRecoilState.recoilDistance = recoilStrength * 2;  // Scale for visual impact
         
@@ -8673,8 +8709,8 @@ function fireBullet(targetX, targetY) {
         barrelRecoilState.active = true;
         barrelRecoilState.phase = 'kick';
         barrelRecoilState.kickStartTime = performance.now();
-        barrelRecoilState.kickDuration = 30 + recoilStrength;  // Faster kick for heavier weapons
-        barrelRecoilState.returnDuration = 80 + recoilStrength * 3;  // Slower return
+        barrelRecoilState.kickDuration = 30 + recoilStrength;
+        barrelRecoilState.returnDuration = 80 + recoilStrength * 3;
     }
     
     return true;
@@ -8725,6 +8761,41 @@ function updateBarrelRecoil() {
             cannonBarrel.position.copy(barrelRecoilState.originalPosition);
             barrelRecoilState.active = false;
             barrelRecoilState.phase = 'idle';
+        }
+    }
+}
+
+// FPS Camera recoil update (called from animate loop)
+// Updates the pitch offset for visual recoil feedback in FPS mode
+function updateFPSCameraRecoil() {
+    if (!fpsCameraRecoilState.active) return;
+    
+    const now = performance.now();
+    const elapsed = now - fpsCameraRecoilState.kickStartTime;
+    
+    if (fpsCameraRecoilState.phase === 'kick') {
+        // Kick phase: Fast pitch up (easeOut)
+        const kickProgress = Math.min(elapsed / fpsCameraRecoilState.kickDuration, 1);
+        const easedProgress = 1 - Math.pow(1 - kickProgress, 2);
+        fpsCameraRecoilState.pitchOffset = fpsCameraRecoilState.maxPitchOffset * easedProgress;
+        
+        if (kickProgress >= 1) {
+            fpsCameraRecoilState.phase = 'return';
+            fpsCameraRecoilState.kickStartTime = now;
+        }
+    } else if (fpsCameraRecoilState.phase === 'return') {
+        // Return phase: Slower return to zero (easeInOut)
+        const returnProgress = Math.min(elapsed / fpsCameraRecoilState.returnDuration, 1);
+        const easedProgress = returnProgress < 0.5 
+            ? 2 * returnProgress * returnProgress 
+            : 1 - Math.pow(-2 * returnProgress + 2, 2) / 2;
+        
+        fpsCameraRecoilState.pitchOffset = fpsCameraRecoilState.maxPitchOffset * (1 - easedProgress);
+        
+        if (returnProgress >= 1) {
+            fpsCameraRecoilState.pitchOffset = 0;
+            fpsCameraRecoilState.active = false;
+            fpsCameraRecoilState.phase = 'idle';
         }
     }
 }
@@ -9939,7 +10010,21 @@ function updateFPSCamera() {
     // IMPORTANT: Use the same pitch as cannon (no offset) to ensure "what you see is what you can shoot"
     // The +0.1 offset was causing the camera to look ~5.7° higher than the cannon,
     // making 80° pitch appear like ~86° visually (almost 90° top-down view)
-    const lookTarget = camera.position.clone().add(forward.clone().multiplyScalar(1000));
+    
+    // Apply FPS camera recoil offset (visual feedback only, doesn't affect aiming)
+    // This creates a "kick up" effect when firing without moving the actual aim point
+    let lookForward = forward.clone();
+    if (fpsCameraRecoilState.active && fpsCameraRecoilState.pitchOffset !== 0) {
+        // Apply pitch offset to the look direction (kick up = positive pitch offset)
+        const recoilPitch = pitch + fpsCameraRecoilState.pitchOffset;
+        lookForward.set(
+            Math.cos(recoilPitch) * Math.sin(yaw),
+            Math.sin(recoilPitch),
+            Math.cos(recoilPitch) * Math.cos(yaw)
+        );
+    }
+    
+    const lookTarget = camera.position.clone().add(lookForward.multiplyScalar(1000));
     camera.lookAt(lookTarget);
     
     // Re-enforce up vector after lookAt (belt and suspenders)
@@ -10079,6 +10164,9 @@ function animate() {
     
     // PERFORMANCE: Update barrel recoil in animation loop (replaces setTimeout)
     updateBarrelRecoil();
+    
+    // Update FPS camera recoil (visual pitch kick effect)
+    updateFPSCameraRecoil();
     
     // Smooth camera transitions (for CENTER VIEW button and auto-panning)
     updateSmoothCameraTransition(deltaTime);
