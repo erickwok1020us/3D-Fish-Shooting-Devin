@@ -678,27 +678,89 @@ const fireBulletTempVectors = {
 };
 
 // PERFORMANCE: Barrel recoil state for animation loop (replaces setTimeout)
+// IMPROVED: Two-phase recoil animation (kick + return) with easing for realistic feel
 const barrelRecoilState = {
     active: false,
-    originalY: 0,
-    recoilEndTime: 0
+    phase: 'idle',  // 'idle', 'kick', 'return'
+    originalPosition: new THREE.Vector3(),
+    recoilVector: new THREE.Vector3(),  // Direction of recoil (opposite to firing direction)
+    kickStartTime: 0,
+    kickDuration: 40,   // Fast kick back (40ms)
+    returnDuration: 120, // Slower return (120ms)
+    recoilDistance: 0,
+    // Temp vector for calculations (avoid allocations)
+    tempVec: new THREE.Vector3()
 };
 
 // Debug flag for shooting logs (set to false for production)
 const DEBUG_SHOOTING = false;
 
-// PERFORMANCE: Cached geometry for muzzle flash rings (avoids per-shot geometry creation)
+// PERFORMANCE: Cached geometry and pooled meshes for muzzle flash rings
+// IMPROVED: Object pool to avoid per-shot material creation (reduces GC stutter)
 const muzzleFlashCache = {
     ringGeometry: null,  // Shared TorusGeometry (radius=1, scaled per use)
-    ringMaterial: null,  // Reusable material template
-    initialized: false
+    initialized: false,
+    // Ring mesh pool - each has its own material to avoid opacity conflicts
+    ringPool: [],
+    ringPoolSize: 20,  // Pre-create 20 rings (enough for rapid fire)
+    freeRings: []  // Free-list for O(1) allocation
 };
 
 function initMuzzleFlashCache() {
     if (muzzleFlashCache.initialized) return;
     // Create a unit torus that will be scaled for different ring sizes
     muzzleFlashCache.ringGeometry = new THREE.TorusGeometry(1, 0.15, 8, 32);
+    
+    // Pre-create ring meshes with their own materials
+    for (let i = 0; i < muzzleFlashCache.ringPoolSize; i++) {
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xffffff,  // Will be set per use
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide
+        });
+        const mesh = new THREE.Mesh(muzzleFlashCache.ringGeometry, material);
+        mesh.visible = false;
+        muzzleFlashCache.ringPool.push({ mesh, material, inUse: false });
+        muzzleFlashCache.freeRings.push(i);
+    }
+    
     muzzleFlashCache.initialized = true;
+}
+
+// Get a ring from the pool (O(1) allocation)
+function getRingFromPool() {
+    initMuzzleFlashCache();
+    
+    if (muzzleFlashCache.freeRings.length > 0) {
+        const idx = muzzleFlashCache.freeRings.pop();
+        const poolItem = muzzleFlashCache.ringPool[idx];
+        poolItem.inUse = true;
+        poolItem.poolIndex = idx;
+        return poolItem;
+    }
+    
+    // Pool exhausted - create new (fallback, should rarely happen)
+    const material = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(muzzleFlashCache.ringGeometry, material);
+    return { mesh, material, inUse: true, poolIndex: -1 };
+}
+
+// Return a ring to the pool
+function returnRingToPool(poolItem) {
+    if (poolItem.poolIndex >= 0) {
+        poolItem.inUse = false;
+        poolItem.mesh.visible = false;
+        muzzleFlashCache.freeRings.push(poolItem.poolIndex);
+    } else {
+        // Fallback item - dispose it
+        poolItem.material.dispose();
+    }
 }
 
 async function loadWeaponGLB(weaponKey, type) {
@@ -3136,37 +3198,38 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
 }
 
 // Spawn muzzle flash effect at cannon muzzle
+// IMPROVED: Pass direction to spawnExpandingRingOptimized for proper ring orientation
 function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
     if (!config) return;
     
     if (weaponKey === '1x') {
-        // Light blue energy ring expanding from barrel
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 40, 0.3);
+        // Light blue energy ring expanding from barrel - now faces bullet direction
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 40, 0.3, direction);
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 5);
         
     } else if (weaponKey === '3x') {
         // PERFORMANCE: Single muzzle flash instead of 3 rings
         // This reduces per-shot allocations while maintaining visual feedback
         // The 3 bullets themselves provide the "spread" visual
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 45, 0.3);
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 45, 0.3, direction);
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 6);  // Reduced from 10
         
     } else if (weaponKey === '5x') {
         // PERFORMANCE: Simplified 5x muzzle flash - single ring + lightning
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 20, 60, 0.4);
+        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 20, 60, 0.4, direction);
         spawnLightningBurst(muzzlePos, config.muzzleColor, 4);  // Reduced from 6
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 8);  // Reduced from 15
         
     } else if (weaponKey === '8x') {
         // Giant red/orange fireball launch
         spawnFireballMuzzleFlash(muzzlePos, direction);
-        // Shockwave rings around cannon - keep for 8x since it fires slower
+        // Shockwave rings around cannon - keep horizontal for ground effect
         if (cannonGroup) {
             const basePos = cannonGroup.position.clone();
             basePos.y += 30;
-            spawnExpandingRingOptimized(basePos, 0xff4400, 40, 120, 0.6);
-            spawnExpandingRingOptimized(basePos, 0xff8800, 30, 100, 0.5);
+            spawnExpandingRingOptimized(basePos, 0xff4400, 40, 120, 0.6);  // No direction = horizontal
+            spawnExpandingRingOptimized(basePos, 0xff8800, 30, 100, 0.5);  // No direction = horizontal
         }
         // Screen shake
         triggerScreenShakeWithStrength(config.screenShake);
@@ -3220,26 +3283,46 @@ function spawnExpandingRing(position, color, startRadius, endRadius, duration) {
 
 // PERFORMANCE: Optimized expanding ring using cached geometry
 // Uses a unit torus (radius=1) and scales it, avoiding per-shot geometry creation
-function spawnExpandingRingOptimized(position, color, startRadius, endRadius, duration) {
+// IMPROVED: Optional direction parameter to orient ring toward bullet direction
+// Temp vectors for ring orientation (avoid per-shot allocations)
+const ringOrientationTemp = {
+    quaternion: new THREE.Quaternion(),
+    baseNormal: new THREE.Vector3(0, 1, 0),  // Torus default normal (up)
+    targetDir: new THREE.Vector3()
+};
+
+function spawnExpandingRingOptimized(position, color, startRadius, endRadius, duration, direction = null) {
     if (!scene) return;
     
-    // Initialize cache if needed
-    initMuzzleFlashCache();
+    // PERFORMANCE: Get ring from pool instead of creating new material per shot
+    // This eliminates GC stutter on rapid fire (3x/5x weapons)
+    const poolItem = getRingFromPool();
+    const ring = poolItem.mesh;
+    const material = poolItem.material;
     
-    // Use cached geometry, create only material (much cheaper than geometry)
-    const material = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide
-    });
-    
-    // Create mesh with shared geometry
-    const ring = new THREE.Mesh(muzzleFlashCache.ringGeometry, material);
+    // Configure the pooled ring
+    material.color.setHex(color);
+    material.opacity = 0.8;
     ring.position.copy(position);
-    ring.rotation.x = Math.PI / 2;
+    
+    // IMPROVED: Orient ring to face bullet direction if provided
+    if (direction) {
+        // Normalize direction and use quaternion to rotate from base normal to target direction
+        ringOrientationTemp.targetDir.copy(direction).normalize();
+        ringOrientationTemp.quaternion.setFromUnitVectors(
+            ringOrientationTemp.baseNormal,
+            ringOrientationTemp.targetDir
+        );
+        ring.quaternion.copy(ringOrientationTemp.quaternion);
+    } else {
+        // Default: horizontal ring (backward compatible)
+        ring.quaternion.set(0, 0, 0, 1);  // Reset quaternion
+        ring.rotation.x = Math.PI / 2;
+    }
+    
     // Scale to startRadius (geometry is unit size)
     ring.scale.set(startRadius, startRadius, startRadius);
+    ring.visible = true;
     scene.add(ring);
     
     // Register with VFX manager
@@ -3247,6 +3330,7 @@ function spawnExpandingRingOptimized(position, color, startRadius, endRadius, du
         type: 'expandingRingOptimized',
         mesh: ring,
         material: material,
+        poolItem: poolItem,  // Store pool reference for return
         duration: duration * 1000,
         startRadius: startRadius,
         endRadius: endRadius,
@@ -3262,8 +3346,8 @@ function spawnExpandingRingOptimized(position, color, startRadius, endRadius, du
         
         cleanup() {
             scene.remove(this.mesh);
-            // Only dispose material, geometry is shared/cached
-            this.material.dispose();
+            // Return to pool instead of disposing
+            returnRingToPool(this.poolItem);
         }
     });
 }
@@ -8570,33 +8654,78 @@ function fireBullet(targetX, targetY) {
     }
     
     // Issue #14: Enhanced cannon recoil animation based on weapon
+    // IMPROVED: Two-phase recoil (kick + return) with backward movement for realistic feel
     // FIX: Skip barrel recoil in FPS mode to prevent camera jump
-    // (camera position is based on cannonMuzzle world position, which moves with barrel)
     const config = WEAPON_VFX_CONFIG[weaponKey];
     const recoilStrength = config ? config.recoilStrength : 5;
     
     // Only apply barrel recoil in third-person mode
-    // PERFORMANCE: Use animation loop state instead of setTimeout for better frame pacing
     if (cannonBarrel && gameState.viewMode !== 'fps') {
-        // Store original position and set recoil end time
-        barrelRecoilState.originalY = cannonBarrel.position.y;
-        cannonBarrel.position.y -= recoilStrength;
+        // Store original position
+        barrelRecoilState.originalPosition.copy(cannonBarrel.position);
+        
+        // Calculate recoil direction (opposite to firing direction)
+        // Use the direction parameter passed to this function
+        barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
+        barrelRecoilState.recoilDistance = recoilStrength * 2;  // Scale for visual impact
+        
+        // Start kick phase
         barrelRecoilState.active = true;
-        barrelRecoilState.recoilEndTime = performance.now() + 50 + recoilStrength * 5;
+        barrelRecoilState.phase = 'kick';
+        barrelRecoilState.kickStartTime = performance.now();
+        barrelRecoilState.kickDuration = 30 + recoilStrength;  // Faster kick for heavier weapons
+        barrelRecoilState.returnDuration = 80 + recoilStrength * 3;  // Slower return
     }
     
     return true;
 }
 
 // PERFORMANCE: Update barrel recoil in animation loop (called from animate())
+// IMPROVED: Two-phase animation with easing for realistic recoil feel
 function updateBarrelRecoil() {
     if (!barrelRecoilState.active || !cannonBarrel) return;
     
-    if (performance.now() >= barrelRecoilState.recoilEndTime) {
-        cannonBarrel.position.y = barrelRecoilState.originalY;
-        cannonBarrel.position.x = 0;
-        cannonBarrel.position.z = 0;
-        barrelRecoilState.active = false;
+    const now = performance.now();
+    const elapsed = now - barrelRecoilState.kickStartTime;
+    
+    if (barrelRecoilState.phase === 'kick') {
+        // Kick phase: Fast movement backward (easeOut)
+        const kickProgress = Math.min(elapsed / barrelRecoilState.kickDuration, 1);
+        // EaseOut: 1 - (1 - t)^2
+        const easedProgress = 1 - Math.pow(1 - kickProgress, 2);
+        
+        // Apply recoil offset
+        barrelRecoilState.tempVec.copy(barrelRecoilState.recoilVector)
+            .multiplyScalar(barrelRecoilState.recoilDistance * easedProgress);
+        cannonBarrel.position.copy(barrelRecoilState.originalPosition)
+            .add(barrelRecoilState.tempVec);
+        
+        // Transition to return phase
+        if (kickProgress >= 1) {
+            barrelRecoilState.phase = 'return';
+            barrelRecoilState.kickStartTime = now;  // Reset timer for return phase
+        }
+    } else if (barrelRecoilState.phase === 'return') {
+        // Return phase: Slower movement back to original (easeInOut)
+        const returnProgress = Math.min(elapsed / barrelRecoilState.returnDuration, 1);
+        // EaseInOut: t < 0.5 ? 2t^2 : 1 - (-2t + 2)^2 / 2
+        const easedProgress = returnProgress < 0.5 
+            ? 2 * returnProgress * returnProgress 
+            : 1 - Math.pow(-2 * returnProgress + 2, 2) / 2;
+        
+        // Interpolate from max recoil back to original
+        const recoilAmount = 1 - easedProgress;
+        barrelRecoilState.tempVec.copy(barrelRecoilState.recoilVector)
+            .multiplyScalar(barrelRecoilState.recoilDistance * recoilAmount);
+        cannonBarrel.position.copy(barrelRecoilState.originalPosition)
+            .add(barrelRecoilState.tempVec);
+        
+        // Animation complete
+        if (returnProgress >= 1) {
+            cannonBarrel.position.copy(barrelRecoilState.originalPosition);
+            barrelRecoilState.active = false;
+            barrelRecoilState.phase = 'idle';
+        }
     }
 }
 
