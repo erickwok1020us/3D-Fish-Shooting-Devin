@@ -704,6 +704,100 @@ const fpsCameraRecoilState = {
     returnDuration: 150  // Slower return (150ms)
 };
 
+// Sci-fi base ring state for animation
+// Stores references to the dual-layer ring meshes for rotation/pulse animation
+let cannonBaseRingCore = null;
+let cannonBaseRingGlow = null;
+let cannonBaseRingSegmentTexture = null;
+
+// Create sci-fi segmented texture for base ring (called once at init)
+function createSciFiRingTexture() {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    // Clear with transparent background
+    ctx.clearRect(0, 0, size, size);
+    
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const outerRadius = size / 2 - 4;
+    const innerRadius = size / 2 - 40;
+    
+    // Draw segmented ring pattern (16 segments with gaps)
+    const segments = 16;
+    const gapAngle = Math.PI / 48;  // Small gap between segments
+    const segmentAngle = (Math.PI * 2 / segments) - gapAngle;
+    
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 28;
+    ctx.lineCap = 'butt';
+    
+    for (let i = 0; i < segments; i++) {
+        const startAngle = i * (Math.PI * 2 / segments);
+        const endAngle = startAngle + segmentAngle;
+        
+        // Main segment arc
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, (outerRadius + innerRadius) / 2, startAngle, endAngle);
+        ctx.stroke();
+        
+        // Add tick marks at segment centers
+        const tickAngle = startAngle + segmentAngle / 2;
+        const tickInner = innerRadius + 8;
+        const tickOuter = outerRadius - 8;
+        ctx.beginPath();
+        ctx.moveTo(
+            centerX + Math.cos(tickAngle) * tickInner,
+            centerY + Math.sin(tickAngle) * tickInner
+        );
+        ctx.lineTo(
+            centerX + Math.cos(tickAngle) * tickOuter,
+            centerY + Math.sin(tickAngle) * tickOuter
+        );
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.lineWidth = 28;
+    }
+    
+    // Add inner ring detail
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, innerRadius + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Add outer ring detail
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerRadius - 5, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+}
+
+// Update sci-fi base ring animation (rotation + pulse)
+// Called from animate loop - no allocations, just mutates existing meshes
+function updateSciFiBaseRing(time) {
+    if (!cannonBaseRingCore || !cannonBaseRingGlow) return;
+    
+    // Slow rotation for tech feel (core rotates one way, glow rotates opposite)
+    const rotationSpeed = 0.15;  // Radians per second
+    cannonBaseRingCore.rotation.z = time * rotationSpeed;
+    cannonBaseRingGlow.rotation.z = -time * rotationSpeed * 0.7;  // Slower, opposite direction
+    
+    // Gentle opacity pulse for "powered" energy effect
+    const pulseSpeed = 2.0;  // Cycles per second
+    const corePulse = 0.85 + 0.15 * Math.sin(time * pulseSpeed);
+    const glowPulse = 0.30 + 0.15 * Math.sin(time * pulseSpeed + Math.PI * 0.5);  // Phase offset
+    
+    cannonBaseRingCore.material.opacity = 0.9 * corePulse;
+    cannonBaseRingGlow.material.opacity = glowPulse;
+}
+
 // Debug flag for shooting logs (set to false for production)
 const DEBUG_SHOOTING = false;
 
@@ -4508,12 +4602,12 @@ function playWeaponSwitchAnimation(weaponKey) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
     if (!config || !cannonGroup) return;
     
-    // Animate base ring color change
-    const ring = cannonGroup.children.find(child => 
-        child.geometry && child.geometry.type === 'TorusGeometry'
-    );
-    if (ring && ring.material) {
-        ring.material.color.setHex(config.ringColor);
+    // Animate base ring color change - update BOTH core and glow layers
+    if (cannonBaseRingCore && cannonBaseRingCore.material) {
+        cannonBaseRingCore.material.color.setHex(config.ringColor);
+    }
+    if (cannonBaseRingGlow && cannonBaseRingGlow.material) {
+        cannonBaseRingGlow.material.color.setHex(config.ringColor);
     }
     
     // Cannon transformation animation (slight bounce)
@@ -5524,15 +5618,45 @@ function createCannon() {
     platform.position.y = 5;
     cannonGroup.add(platform);
     
-    // Add BRIGHT glowing ring around base for visibility (cyan/turquoise ring)
-    const ringGeometry = new THREE.TorusGeometry(75, 8, 8, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-        color: 0x44ddff  // Bright cyan - always visible
+    // SCI-FI DUAL-LAYER BASE RING - Futuristic energy ring with segments
+    // Layer 1: Core ring with segmented texture pattern
+    if (!cannonBaseRingSegmentTexture) {
+        cannonBaseRingSegmentTexture = createSciFiRingTexture();
+    }
+    
+    // Use RingGeometry for flat sci-fi look (better texture mapping than torus)
+    const coreRingGeometry = new THREE.RingGeometry(60, 85, 64);
+    const coreRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0x44ddff,  // Bright cyan - weapon color
+        map: cannonBaseRingSegmentTexture,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false
     });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 2;
-    cannonGroup.add(ring);
+    cannonBaseRingCore = new THREE.Mesh(coreRingGeometry, coreRingMaterial);
+    cannonBaseRingCore.name = 'cannonBaseRingCore';
+    cannonBaseRingCore.rotation.x = -Math.PI / 2;  // Lay flat
+    cannonBaseRingCore.position.y = 3;
+    cannonBaseRingCore.renderOrder = 1;
+    cannonGroup.add(cannonBaseRingCore);
+    
+    // Layer 2: Outer glow ring (larger, additive blending for energy effect)
+    const glowRingGeometry = new THREE.RingGeometry(55, 95, 64);
+    const glowRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0x44ddff,  // Same color, will glow
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    cannonBaseRingGlow = new THREE.Mesh(glowRingGeometry, glowRingMaterial);
+    cannonBaseRingGlow.name = 'cannonBaseRingGlow';
+    cannonBaseRingGlow.rotation.x = -Math.PI / 2;  // Lay flat
+    cannonBaseRingGlow.position.y = 2;
+    cannonBaseRingGlow.renderOrder = 0;
+    cannonGroup.add(cannonBaseRingGlow);
     
     // Issue #10: Create pitch group - this rotates for vertical aiming
     // Both barrel and muzzle are children of this group so they rotate together
@@ -10167,6 +10291,9 @@ function animate() {
     
     // Update FPS camera recoil (visual pitch kick effect)
     updateFPSCameraRecoil();
+    
+    // Update sci-fi base ring animation (rotation + pulse)
+    updateSciFiBaseRing(currentTime / 1000);  // Convert to seconds
     
     // Smooth camera transitions (for CENTER VIEW button and auto-panning)
     updateSmoothCameraTransition(deltaTime);
