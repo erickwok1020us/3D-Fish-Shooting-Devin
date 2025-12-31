@@ -2585,10 +2585,8 @@ function playCoinSound(fishSize) {
         
         playMP3Sound('coinReceive', volumeMultiplier);
         
-        // Boss still gets the fanfare in addition to coin sound
-        if (fishSize === 'boss') {
-            playBossFanfare();
-        }
+        // FIX: Removed playBossFanfare() call - it was causing duplicate audio
+        // The MP3 coin sound is sufficient for boss kills
     } else {
         // Fallback to synthesized sounds
         playCoinSoundSynthesized(fishSize);
@@ -2653,7 +2651,8 @@ function playCoinSoundSynthesized(fishSize) {
             break;
             
         case 'boss':
-            playBossFanfare();
+            // FIX: Removed playBossFanfare() - old synthesized audio system disabled
+            // Boss kills use the coin MP3 sound with higher volume instead
             break;
             
         default:
@@ -2842,10 +2841,12 @@ function playBattleMusic() {
 }
 
 // Issue #16: Set music state (called from game logic)
+// FIX: Disabled old synthesized music system - now using MP3 from R2 bucket
+// Background music is handled by startBackgroundMusicMP3() and boss music by startBossMusicMP3()
 function setMusicState(state) {
-    if (currentMusicState !== state) {
-        startBackgroundMusic(state);
-    }
+    // No-op: Old synthesized music system disabled to prevent duplicate audio
+    // The MP3 system (startBackgroundMusicMP3/startBossMusicMP3) handles all music now
+    currentMusicState = state;
 }
 
 // Issue #16: Ambient underwater sounds
@@ -3028,7 +3029,8 @@ function playSound(type) {
             
         case 'bossDefeated':
             // Boss defeated victory sound
-            playBossFanfare();
+            // FIX: Removed playBossFanfare() - it was causing duplicate audio with MP3 system
+            // The coin sound from playCoinSound() handles boss defeat audio now
             setMusicState('normal');
             break;
             
@@ -4823,7 +4825,9 @@ window.startMultiplayerGame = function(manager) {
         // Handle boss wave events
         multiplayerManager.onBossWave = function(data) {
             if (data.state === 'starting') {
-                playBossFanfare();
+                // FIX: Removed playBossFanfare() - old synthesized audio system disabled
+                // Boss music is handled by startBossMusicMP3() instead
+                startBossMusicMP3();
                 showRareFishNotification('BOSS WAVE INCOMING!');
             }
         };
