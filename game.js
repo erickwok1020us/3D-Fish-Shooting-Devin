@@ -1,6 +1,143 @@
 // Fish Shooter 3D - Clean Aquarium Version
 // Using Three.js for 3D rendering
 
+// ==================== SPHERICAL PANORAMA BACKGROUND SYSTEM ====================
+// Equirectangular panorama background with dynamic underwater effects
+// Performance: scene.background has zero geometry cost, main cost is texture memory
+const PANORAMA_CONFIG = {
+    enabled: true,
+    imageUrl: 'assets/underwater_panorama.jpg',
+    fogColor: 0x0a4d6c,
+    fogNear: 600,
+    fogFar: 3500,
+    dynamicEffects: {
+        floatingParticles: true,
+        particleCount: 80,
+        particleMinSize: 1,
+        particleMaxSize: 4,
+        particleSpeed: 0.15,
+        particleSpread: 1500
+    }
+};
+
+let panoramaTexture = null;
+let underwaterParticleSystem = null;
+let underwaterParticles = [];
+
+// Load and apply equirectangular panorama background
+function loadPanoramaBackground() {
+    if (!PANORAMA_CONFIG.enabled) return;
+    
+    const loader = new THREE.TextureLoader();
+    loader.load(
+        PANORAMA_CONFIG.imageUrl,
+        (texture) => {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            texture.colorSpace = THREE.SRGBColorSpace;
+            scene.background = texture;
+            panoramaTexture = texture;
+            console.log('[PANORAMA] Equirectangular background loaded successfully');
+            
+            // Update fog to match panorama colors
+            scene.fog = new THREE.Fog(
+                PANORAMA_CONFIG.fogColor,
+                PANORAMA_CONFIG.fogNear,
+                PANORAMA_CONFIG.fogFar
+            );
+        },
+        undefined,
+        (error) => {
+            console.warn('[PANORAMA] Failed to load panorama, using fallback color:', error);
+            scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+        }
+    );
+}
+
+// Create floating underwater particles for dynamic atmosphere
+function createUnderwaterParticles() {
+    if (!PANORAMA_CONFIG.dynamicEffects.floatingParticles) return;
+    
+    const config = PANORAMA_CONFIG.dynamicEffects;
+    const particleCount = config.particleCount;
+    const spread = config.particleSpread;
+    
+    // Create particle geometry using BufferGeometry for performance
+    const positions = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    const velocities = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+        // Random position within spread area
+        positions[i * 3] = (Math.random() - 0.5) * spread;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * spread;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+        
+        // Random size
+        sizes[i] = config.particleMinSize + Math.random() * (config.particleMaxSize - config.particleMinSize);
+        
+        // Store velocity for animation (mostly upward drift like bubbles)
+        velocities.push({
+            x: (Math.random() - 0.5) * 0.1,
+            y: config.particleSpeed * (0.5 + Math.random() * 0.5),
+            z: (Math.random() - 0.5) * 0.1
+        });
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    
+    // Create particle material with soft glow
+    const material = new THREE.PointsMaterial({
+        color: 0xaaddff,
+        size: 3,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true
+    });
+    
+    underwaterParticleSystem = new THREE.Points(geometry, material);
+    underwaterParticleSystem.userData.velocities = velocities;
+    underwaterParticleSystem.userData.spread = spread;
+    scene.add(underwaterParticleSystem);
+    
+    console.log(`[PANORAMA] Created ${particleCount} floating underwater particles`);
+}
+
+// Update floating particles animation (called from animate loop)
+function updateUnderwaterParticles(deltaTime) {
+    if (!underwaterParticleSystem) return;
+    
+    const positions = underwaterParticleSystem.geometry.attributes.position.array;
+    const velocities = underwaterParticleSystem.userData.velocities;
+    const spread = underwaterParticleSystem.userData.spread;
+    const halfSpread = spread / 2;
+    
+    for (let i = 0; i < velocities.length; i++) {
+        const idx = i * 3;
+        
+        // Update position
+        positions[idx] += velocities[i].x * deltaTime * 60;
+        positions[idx + 1] += velocities[i].y * deltaTime * 60;
+        positions[idx + 2] += velocities[i].z * deltaTime * 60;
+        
+        // Wrap around when particle goes out of bounds
+        if (positions[idx + 1] > halfSpread) {
+            positions[idx + 1] = -halfSpread;
+            positions[idx] = (Math.random() - 0.5) * spread;
+            positions[idx + 2] = (Math.random() - 0.5) * spread;
+        }
+        
+        // Add slight horizontal drift
+        positions[idx] += Math.sin(performance.now() * 0.001 + i) * 0.02;
+        positions[idx + 2] += Math.cos(performance.now() * 0.001 + i * 0.7) * 0.02;
+    }
+    
+    underwaterParticleSystem.geometry.attributes.position.needsUpdate = true;
+}
+
 // ==================== GAME CONFIGURATION ====================
 const CONFIG = {
     // Aquarium tank dimensions (rectangular glass tank) - Issue #10: 1.5X SIZE (of original)
@@ -4840,9 +4977,12 @@ function initGameScene() {
     
     // Create scene
     scene = new THREE.Scene();
-    // Issue #3: LIGHT BLUE background for clear aquarium feel (淺藍色)
-    scene.background = new THREE.Color(0x5599cc);  // Light blue aquarium background
-    scene.fog = new THREE.Fog(0x5599cc, 800, 6000);  // Subtle fog for depth
+    // Set initial background color (will be replaced by panorama if enabled)
+    scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+    scene.fog = new THREE.Fog(PANORAMA_CONFIG.fogColor, PANORAMA_CONFIG.fogNear, PANORAMA_CONFIG.fogFar);
+    
+    // Load equirectangular panorama background (async, replaces solid color when loaded)
+    loadPanoramaBackground();
     
     // Create camera (viewing from outside the tank)
     camera = new THREE.PerspectiveCamera(
@@ -4898,6 +5038,9 @@ function initGameScene() {
     
     updateLoadingProgress(85, 'Creating particle systems...');
     createParticleSystems();
+    
+    // Create floating underwater particles for dynamic atmosphere
+    createUnderwaterParticles();
     
     updateLoadingProgress(95, 'Setting up controls...');
     setupEventListeners();
@@ -10294,6 +10437,9 @@ function animate() {
     
     // Update sci-fi base ring animation (rotation + pulse)
     updateSciFiBaseRing(currentTime / 1000);  // Convert to seconds
+    
+    // Update floating underwater particles for dynamic atmosphere
+    updateUnderwaterParticles(deltaTime);
     
     // Smooth camera transitions (for CENTER VIEW button and auto-panning)
     updateSmoothCameraTransition(deltaTime);
