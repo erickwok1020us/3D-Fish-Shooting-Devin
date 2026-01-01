@@ -905,7 +905,9 @@ const fpsCameraRecoilState = {
 // Stores references to the dual-layer ring meshes for rotation/pulse animation
 let cannonBaseRingCore = null;
 let cannonBaseRingGlow = null;
+let cannonBaseRingInnerDisk = null;  // Black inner disk to cover gray platform area
 let cannonBaseRingSegmentTexture = null;
+let currentRingColor = 0x44ddff;  // Track current weapon ring color for defensive checks
 
 // Create sci-fi segmented texture for base ring (called once at init)
 function createSciFiRingTexture() {
@@ -978,8 +980,37 @@ function createSciFiRingTexture() {
 
 // Update sci-fi base ring animation (rotation + pulse)
 // Called from animate loop - no allocations, just mutates existing meshes
+// ENHANCED: Defensive visibility and color checks to prevent ring disappearing during boss mode
 function updateSciFiBaseRing(time) {
     if (!cannonBaseRingCore || !cannonBaseRingGlow) return;
+    
+    // DEFENSIVE CHECK 1: Ensure rings are visible (fixes boss mode ring disappearing)
+    if (!cannonBaseRingCore.visible) {
+        cannonBaseRingCore.visible = true;
+    }
+    if (!cannonBaseRingGlow.visible) {
+        cannonBaseRingGlow.visible = true;
+    }
+    if (cannonBaseRingInnerDisk && !cannonBaseRingInnerDisk.visible) {
+        cannonBaseRingInnerDisk.visible = true;
+    }
+    
+    // DEFENSIVE CHECK 2: Ensure ring color matches current weapon (fixes 3x/5x color disappearing)
+    // Only check periodically to avoid performance impact (every ~60 frames)
+    if (Math.floor(time * 60) % 60 === 0) {
+        if (cannonBaseRingCore.material && cannonBaseRingCore.material.color) {
+            const currentHex = cannonBaseRingCore.material.color.getHex();
+            if (currentHex !== currentRingColor) {
+                cannonBaseRingCore.material.color.setHex(currentRingColor);
+            }
+        }
+        if (cannonBaseRingGlow.material && cannonBaseRingGlow.material.color) {
+            const currentHex = cannonBaseRingGlow.material.color.getHex();
+            if (currentHex !== currentRingColor) {
+                cannonBaseRingGlow.material.color.setHex(currentRingColor);
+            }
+        }
+    }
     
     // Slow rotation for tech feel (core rotates one way, glow rotates opposite)
     const rotationSpeed = 0.15;  // Radians per second
@@ -4799,6 +4830,9 @@ function playWeaponSwitchAnimation(weaponKey) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
     if (!config || !cannonGroup) return;
     
+    // Store current weapon ring color for defensive checks in updateSciFiBaseRing()
+    currentRingColor = config.ringColor;
+    
     // Animate base ring color change - update BOTH core and glow layers
     if (cannonBaseRingCore && cannonBaseRingCore.material) {
         cannonBaseRingCore.material.color.setHex(config.ringColor);
@@ -5860,6 +5894,22 @@ function createCannon() {
     cannonBaseRingGlow.position.y = 2;
     cannonBaseRingGlow.renderOrder = 0;
     cannonGroup.add(cannonBaseRingGlow);
+    
+    // Layer 3: Black inner disk to cover gray platform area (radius 54.5 to avoid Z-fighting with glow ring inner radius 55)
+    // NOTE: Platform is at y=5 with height 18, so top is at y=14. Disk must be ABOVE platform to cover it
+    // IMPORTANT: depthWrite must be true so the disk properly occludes the platform behind it
+    const innerDiskGeometry = new THREE.CircleGeometry(54.5, 64);
+    const innerDiskMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,  // Pure black
+        side: THREE.DoubleSide,
+        depthWrite: true  // Must be true to occlude platform behind it
+    });
+    cannonBaseRingInnerDisk = new THREE.Mesh(innerDiskGeometry, innerDiskMaterial);
+    cannonBaseRingInnerDisk.name = 'cannonBaseRingInnerDisk';
+    cannonBaseRingInnerDisk.rotation.x = -Math.PI / 2;  // Lay flat
+    cannonBaseRingInnerDisk.position.y = 14.5;  // Above platform top (y=14) to cover gray area
+    cannonBaseRingInnerDisk.renderOrder = 2;  // Render after rings (core=1, glow=0) to ensure it's on top
+    cannonGroup.add(cannonBaseRingInnerDisk);
     
     // Issue #10: Create pitch group - this rotates for vertical aiming
     // Both barrel and muzzle are children of this group so they rotate together
