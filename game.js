@@ -980,37 +980,8 @@ function createSciFiRingTexture() {
 
 // Update sci-fi base ring animation (rotation + pulse)
 // Called from animate loop - no allocations, just mutates existing meshes
-// ENHANCED: Defensive visibility and color checks to prevent ring disappearing during boss mode
 function updateSciFiBaseRing(time) {
     if (!cannonBaseRingCore || !cannonBaseRingGlow) return;
-    
-    // DEFENSIVE CHECK 1: Ensure rings are visible (fixes boss mode ring disappearing)
-    if (!cannonBaseRingCore.visible) {
-        cannonBaseRingCore.visible = true;
-    }
-    if (!cannonBaseRingGlow.visible) {
-        cannonBaseRingGlow.visible = true;
-    }
-    if (cannonBaseRingInnerDisk && !cannonBaseRingInnerDisk.visible) {
-        cannonBaseRingInnerDisk.visible = true;
-    }
-    
-    // DEFENSIVE CHECK 2: Ensure ring color matches current weapon (fixes 3x/5x color disappearing)
-    // Only check periodically to avoid performance impact (every ~60 frames)
-    if (Math.floor(time * 60) % 60 === 0) {
-        if (cannonBaseRingCore.material && cannonBaseRingCore.material.color) {
-            const currentHex = cannonBaseRingCore.material.color.getHex();
-            if (currentHex !== currentRingColor) {
-                cannonBaseRingCore.material.color.setHex(currentRingColor);
-            }
-        }
-        if (cannonBaseRingGlow.material && cannonBaseRingGlow.material.color) {
-            const currentHex = cannonBaseRingGlow.material.color.getHex();
-            if (currentHex !== currentRingColor) {
-                cannonBaseRingGlow.material.color.setHex(currentRingColor);
-            }
-        }
-    }
     
     // Slow rotation for tech feel (core rotates one way, glow rotates opposite)
     const rotationSpeed = 0.15;  // Radians per second
