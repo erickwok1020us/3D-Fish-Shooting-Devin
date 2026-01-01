@@ -2,14 +2,24 @@
 // Using Three.js for 3D rendering
 
 // ==================== SPHERICAL PANORAMA BACKGROUND SYSTEM ====================
-// Equirectangular panorama background with dynamic underwater effects
-// Performance: scene.background has zero geometry cost, main cost is texture memory
+// Sky-sphere mesh approach for full control over panorama positioning and animation
+// Benefits: Can tilt to show seafloor, add dynamic rotation, wider effective view
 const PANORAMA_CONFIG = {
     enabled: true,
     imageUrl: 'assets/underwater_panorama.jpg',
     fogColor: 0x0a4d6c,
     fogNear: 600,
     fogFar: 3500,
+    // Sky-sphere settings
+    skySphere: {
+        radius: 4000,           // Large sphere to encompass entire scene
+        segments: 64,           // Sphere detail level
+        tiltX: -15 * (Math.PI / 180),  // Tilt panorama down so seafloor appears at bottom (-15°)
+        // Dynamic animation settings
+        rotationSpeedY: 0.0005,  // Very slow Y-axis rotation (rad/frame) for subtle movement
+        bobAmplitude: 0.003,     // Subtle X-axis bobbing amplitude
+        bobSpeed: 0.0003         // Bobbing speed
+    },
     dynamicEffects: {
         floatingParticles: true,
         particleCount: 80,
@@ -21,10 +31,12 @@ const PANORAMA_CONFIG = {
 };
 
 let panoramaTexture = null;
+let panoramaSkySphere = null;  // Sky-sphere mesh for panorama
 let underwaterParticleSystem = null;
 let underwaterParticles = [];
 
-// Load and apply equirectangular panorama background
+// Load and create sky-sphere panorama background
+// Uses inverted sphere mesh for full control over positioning and animation
 function loadPanoramaBackground() {
     if (!PANORAMA_CONFIG.enabled) return;
     
@@ -32,11 +44,35 @@ function loadPanoramaBackground() {
     loader.load(
         PANORAMA_CONFIG.imageUrl,
         (texture) => {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
             texture.colorSpace = THREE.SRGBColorSpace;
-            scene.background = texture;
             panoramaTexture = texture;
-            console.log('[PANORAMA] Equirectangular background loaded successfully');
+            
+            // Create sky-sphere geometry (inverted sphere)
+            const config = PANORAMA_CONFIG.skySphere;
+            const geometry = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
+            // Invert the sphere by scaling X by -1 (shows texture on inside, avoids left-right mirror)
+            geometry.scale(-1, 1, 1);
+            
+            // Create material with no fog, no depth write (always renders behind everything)
+            const material = new THREE.MeshBasicMaterial({
+                map: texture,
+                fog: false,
+                depthWrite: false,
+                side: THREE.FrontSide
+            });
+            
+            // Create sky-sphere mesh
+            panoramaSkySphere = new THREE.Mesh(geometry, material);
+            panoramaSkySphere.name = 'panoramaSkySphere';
+            
+            // Apply initial tilt to position seafloor at bottom of view
+            panoramaSkySphere.rotation.x = config.tiltX;
+            
+            // Render order: -1000 ensures it renders first (behind everything)
+            panoramaSkySphere.renderOrder = -1000;
+            
+            scene.add(panoramaSkySphere);
+            console.log('[PANORAMA] Sky-sphere panorama created with tilt:', config.tiltX * (180/Math.PI), 'degrees');
             
             // Update fog to match panorama colors
             scene.fog = new THREE.Fog(
@@ -44,6 +80,9 @@ function loadPanoramaBackground() {
                 PANORAMA_CONFIG.fogNear,
                 PANORAMA_CONFIG.fogFar
             );
+            
+            // Clear any solid background color
+            scene.background = null;
         },
         undefined,
         (error) => {
@@ -51,6 +90,27 @@ function loadPanoramaBackground() {
             scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
         }
     );
+}
+
+// Update sky-sphere animation (called from animate loop)
+// Adds subtle dynamic movement: slow Y rotation + gentle X bobbing
+function updatePanoramaAnimation(deltaTime) {
+    if (!panoramaSkySphere) return;
+    
+    const config = PANORAMA_CONFIG.skySphere;
+    const time = performance.now();
+    
+    // Slow Y-axis rotation for subtle movement
+    panoramaSkySphere.rotation.y += config.rotationSpeedY * deltaTime * 60;
+    
+    // Gentle X-axis bobbing (simulates underwater current)
+    const bobOffset = Math.sin(time * config.bobSpeed) * config.bobAmplitude;
+    panoramaSkySphere.rotation.x = config.tiltX + bobOffset;
+    
+    // Keep sky-sphere centered on camera position (so it always surrounds the viewer)
+    if (camera) {
+        panoramaSkySphere.position.copy(camera.position);
+    }
 }
 
 // Create floating underwater particles for dynamic atmosphere
@@ -10440,6 +10500,9 @@ function animate() {
     
     // Update floating underwater particles for dynamic atmosphere
     updateUnderwaterParticles(deltaTime);
+    
+    // Update panorama sky-sphere animation (slow rotation + bobbing)
+    updatePanoramaAnimation(deltaTime);
     
     // Smooth camera transitions (for CENTER VIEW button and auto-panning)
     updateSmoothCameraTransition(deltaTime);
