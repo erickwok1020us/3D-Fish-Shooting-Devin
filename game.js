@@ -708,6 +708,7 @@ const fpsCameraRecoilState = {
 // Stores references to the dual-layer ring meshes for rotation/pulse animation
 let cannonBaseRingCore = null;
 let cannonBaseRingGlow = null;
+let cannonBaseRingInnerDisk = null;  // Black disk to cover the gray area inside rings
 let cannonBaseRingSegmentTexture = null;
 
 // Create sci-fi segmented texture for base ring (called once at init)
@@ -783,6 +784,12 @@ function createSciFiRingTexture() {
 // Called from animate loop - no allocations, just mutates existing meshes
 function updateSciFiBaseRing(time) {
     if (!cannonBaseRingCore || !cannonBaseRingGlow) return;
+    
+    // FIX: Ensure base rings stay visible (defensive check against any cleanup logic)
+    // This prevents boss mode or rapid fire from accidentally hiding the rings
+    if (!cannonBaseRingCore.visible) cannonBaseRingCore.visible = true;
+    if (!cannonBaseRingGlow.visible) cannonBaseRingGlow.visible = true;
+    if (cannonBaseRingInnerDisk && !cannonBaseRingInnerDisk.visible) cannonBaseRingInnerDisk.visible = true;
     
     // Slow rotation for tech feel (core rotates one way, glow rotates opposite)
     const rotationSpeed = 0.15;  // Radians per second
@@ -5624,6 +5631,22 @@ function createCannon() {
         cannonBaseRingSegmentTexture = createSciFiRingTexture();
     }
     
+    // FIX: Add black inner disk to cover the gray area inside the rings
+    // This covers the platform below and creates a pure black center
+    const innerDiskGeometry = new THREE.CircleGeometry(55, 64);  // Matches glow ring inner radius
+    const innerDiskMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,  // Pure black
+        side: THREE.DoubleSide,
+        depthWrite: false
+    });
+    cannonBaseRingInnerDisk = new THREE.Mesh(innerDiskGeometry, innerDiskMaterial);
+    cannonBaseRingInnerDisk.name = 'cannonBaseRingInnerDisk';
+    cannonBaseRingInnerDisk.userData.isBaseRing = true;  // Mark as base ring to prevent cleanup
+    cannonBaseRingInnerDisk.rotation.x = -Math.PI / 2;  // Lay flat
+    cannonBaseRingInnerDisk.position.y = 2.5;  // Between glow (y=2) and core (y=3) to avoid z-fighting
+    cannonBaseRingInnerDisk.renderOrder = -1;  // Render behind the rings
+    cannonGroup.add(cannonBaseRingInnerDisk);
+    
     // Use RingGeometry for flat sci-fi look (better texture mapping than torus)
     const coreRingGeometry = new THREE.RingGeometry(60, 85, 64);
     const coreRingMaterial = new THREE.MeshBasicMaterial({
@@ -5636,6 +5659,7 @@ function createCannon() {
     });
     cannonBaseRingCore = new THREE.Mesh(coreRingGeometry, coreRingMaterial);
     cannonBaseRingCore.name = 'cannonBaseRingCore';
+    cannonBaseRingCore.userData.isBaseRing = true;  // Mark as base ring to prevent cleanup
     cannonBaseRingCore.rotation.x = -Math.PI / 2;  // Lay flat
     cannonBaseRingCore.position.y = 3;
     cannonBaseRingCore.renderOrder = 1;
@@ -5653,6 +5677,7 @@ function createCannon() {
     });
     cannonBaseRingGlow = new THREE.Mesh(glowRingGeometry, glowRingMaterial);
     cannonBaseRingGlow.name = 'cannonBaseRingGlow';
+    cannonBaseRingGlow.userData.isBaseRing = true;  // Mark as base ring to prevent cleanup
     cannonBaseRingGlow.rotation.x = -Math.PI / 2;  // Lay flat
     cannonBaseRingGlow.position.y = 2;
     cannonBaseRingGlow.renderOrder = 0;
