@@ -110,9 +110,32 @@ function loadPanoramaBackground() {
         
         scene.add(panoramaSkySphere);
         
-        // Log texture resolution for debugging
+        // DIAGNOSTIC: Comprehensive logging to identify texture quality issues
         if (texture.image) {
-            console.log('[PANORAMA] 8K HD panorama loaded:', texture.image.width + 'x' + texture.image.height, 'from', imageUrl);
+            const imgWidth = texture.image.width;
+            const imgHeight = texture.image.height;
+            console.log('[PANORAMA] === TEXTURE DIAGNOSTIC ===');
+            console.log('[PANORAMA] Image loaded:', imgWidth + 'x' + imgHeight, 'from', imageUrl);
+            
+            // Check GPU texture size limit
+            if (renderer && renderer.capabilities) {
+                const maxTexSize = renderer.capabilities.maxTextureSize;
+                console.log('[PANORAMA] GPU maxTextureSize:', maxTexSize);
+                if (imgWidth > maxTexSize || imgHeight > maxTexSize) {
+                    console.warn('[PANORAMA] WARNING: Image exceeds GPU limit! Will be downscaled to', 
+                        Math.min(imgWidth, maxTexSize) + 'x' + Math.min(imgHeight, maxTexSize));
+                }
+            }
+            
+            // Check renderer pixel ratio
+            if (renderer) {
+                console.log('[PANORAMA] Renderer pixelRatio:', renderer.getPixelRatio());
+                console.log('[PANORAMA] Canvas size:', renderer.domElement.width + 'x' + renderer.domElement.height);
+            }
+            
+            // Check graphics quality setting
+            console.log('[PANORAMA] Graphics quality:', performanceState.graphicsQuality);
+            console.log('[PANORAMA] === END DIAGNOSTIC ===');
         }
         console.log('[PANORAMA] Sky-sphere created with tilt:', config.tiltX * (180/Math.PI), 'degrees, segments:', config.segments);
         
@@ -127,9 +150,13 @@ function loadPanoramaBackground() {
         scene.background = null;
     }
     
-    // Load primary 8K image from R2
+    // Load primary 8K image from R2 (with cache-bust to ensure fresh load)
+    const cacheBust = '?v=' + Date.now();
+    const imageUrlWithCacheBust = PANORAMA_CONFIG.imageUrl + cacheBust;
+    console.log('[PANORAMA] Loading from:', imageUrlWithCacheBust);
+    
     loader.load(
-        PANORAMA_CONFIG.imageUrl,
+        imageUrlWithCacheBust,
         (texture) => {
             createSkySphereWithTexture(texture, PANORAMA_CONFIG.imageUrl);
         },
