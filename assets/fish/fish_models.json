@@ -11,13 +11,13 @@
     "tier1": {
       "name": "Common Fish",
       "variants": [
-        {
-          "id": "sardine_01",
-          "form": "sardine",
-          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish%20model/Sardine%20fish.glb",
-          "scale": 0.08,
-          "fallbackColor": "#87CEEB"
-        },
+                {
+                  "id": "sardine_01",
+                  "form": "sardine",
+                  "url": "Sardine fish.glb",
+                  "scale": 0.08,
+                  "fallbackColor": "#87CEEB"
+                },
         {
           "id": "anchovy_01",
           "form": "anchovy",
@@ -77,13 +77,13 @@
           "scale": 1.0,
           "fallbackColor": "#1E90FF"
         },
-        {
-          "id": "grouper_01",
-          "form": "grouper",
-          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish%20model/Grouper%20fish.glb",
-          "scale": 0.15,
-          "fallbackColor": "#8B4513"
-        }
+                {
+                  "id": "grouper_01",
+                  "form": "grouper",
+                  "url": "Grouper fish.glb",
+                  "scale": 0.15,
+                  "fallbackColor": "#8B4513"
+                }
       ]
     },
     "tier4": {
@@ -96,13 +96,13 @@
           "scale": 1.0,
           "fallbackColor": "#C0C0C0"
         },
-        {
-          "id": "tuna_01",
-          "form": "tuna",
-          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish%20model/Yellowfin%20Tuna.glb",
-          "scale": 0.12,
-          "fallbackColor": "#4682B4"
-        },
+                {
+                  "id": "tuna_01",
+                  "form": "tuna",
+                  "url": "Yellowfin Tuna.glb",
+                  "scale": 0.12,
+                  "fallbackColor": "#4682B4"
+                },
         {
           "id": "dolphinfish_01",
           "form": "dolphinfish",
@@ -115,27 +115,27 @@
     "tier5": {
       "name": "Legendary Fish",
       "variants": [
-        {
-          "id": "marlin_01",
-          "form": "marlin",
-          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish%20model/Marlin%20fish.glb",
-          "scale": 0.18,
-          "fallbackColor": "#000080"
-        },
-        {
-          "id": "shark_01",
-          "form": "shark",
-          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish%20model/Great%20White%20Shark.glb",
-          "scale": 0.22,
-          "fallbackColor": "#708090"
-        },
-        {
-          "id": "hammerhead_01",
-          "form": "hammerhead",
-          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish%20model/Hammerhead%20Shark.glb",
-          "scale": 0.20,
-          "fallbackColor": "#696969"
-        }
+                {
+                  "id": "marlin_01",
+                  "form": "marlin",
+                  "url": "Marlin fish.glb",
+                  "scale": 0.18,
+                  "fallbackColor": "#000080"
+                },
+                {
+                  "id": "shark_01",
+                  "form": "shark",
+                  "url": "Great White Shark.glb",
+                  "scale": 0.22,
+                  "fallbackColor": "#708090"
+                },
+                {
+                  "id": "hammerhead_01",
+                  "form": "hammerhead",
+                  "url": "Hammerhead Shark.glb",
+                  "scale": 0.20,
+                  "fallbackColor": "#696969"
+                }
       ]
     },
     "tier6": {
