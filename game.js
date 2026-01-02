@@ -84,23 +84,33 @@ function loadPanoramaBackground() {
         
         panoramaTexture = texture;
         
-        // Create sky-sphere geometry (inverted sphere)
+        // FIX: Set scene.background as RELIABLE FALLBACK using EquirectangularReflectionMapping
+        // This ensures the panorama is ALWAYS visible even if sky-sphere fails to render
+        const bgTexture = texture.clone();
+        bgTexture.mapping = THREE.EquirectangularReflectionMapping;
+        bgTexture.needsUpdate = true;
+        scene.background = bgTexture;
+        console.log('[PANORAMA] Set scene.background with EquirectangularReflectionMapping as fallback');
+        
+        // Create sky-sphere geometry - FIX: Use BackSide instead of scale(-1,1,1) for better compatibility
+        // Some GPU drivers have issues with negative scale + FrontSide face culling
         const config = PANORAMA_CONFIG.skySphere;
         const geometry = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
-        // Invert the sphere by scaling X by -1 (shows texture on inside, avoids left-right mirror)
-        geometry.scale(-1, 1, 1);
+        // Don't use geometry.scale(-1, 1, 1) - use BackSide instead for cross-device compatibility
         
-        // Create material with no fog, no depth write (always renders behind everything)
+        // FIX: Create material with robust settings for cross-device compatibility
         const material = new THREE.MeshBasicMaterial({
             map: texture,
             fog: false,
             depthWrite: false,
-            side: THREE.FrontSide
+            depthTest: false,      // FIX: Disable depth test for background mesh
+            side: THREE.BackSide   // FIX: Use BackSide instead of scale(-1,1,1) + FrontSide
         });
         
         // Create sky-sphere mesh
         panoramaSkySphere = new THREE.Mesh(geometry, material);
         panoramaSkySphere.name = 'panoramaSkySphere';
+        panoramaSkySphere.frustumCulled = false;  // FIX: Prevent frustum culling issues
         
         // Apply initial tilt to position seafloor at bottom of view
         panoramaSkySphere.rotation.x = config.tiltX;
