@@ -4,21 +4,32 @@
 // ==================== SPHERICAL PANORAMA BACKGROUND SYSTEM ====================
 // Sky-sphere mesh approach for full control over panorama positioning and animation
 // Benefits: Can tilt to show seafloor, add dynamic rotation, wider effective view
+// 8K HD Quality: Uses R2 cloud image with anisotropic filtering and mipmaps
 const PANORAMA_CONFIG = {
     enabled: true,
-    imageUrl: 'assets/underwater_panorama.jpg',
+    // 8K HD panorama from R2 bucket
+    imageUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/background.jpg',
+    // Fallback to local image if R2 fails
+    fallbackUrl: 'assets/underwater_panorama.jpg',
     fogColor: 0x0a4d6c,
     fogNear: 600,
     fogFar: 3500,
     // Sky-sphere settings
     skySphere: {
         radius: 4000,           // Large sphere to encompass entire scene
-        segments: 64,           // Sphere detail level
+        segments: 128,          // Increased sphere detail for 8K quality
         tiltX: -15 * (Math.PI / 180),  // Tilt panorama down so seafloor appears at bottom (-15°)
         // Dynamic animation settings
         rotationSpeedY: 0.0005,  // Very slow Y-axis rotation (rad/frame) for subtle movement
         bobAmplitude: 0.003,     // Subtle X-axis bobbing amplitude
         bobSpeed: 0.0003         // Bobbing speed
+    },
+    // 8K HD texture quality settings
+    textureQuality: {
+        anisotropy: 16,         // Max anisotropic filtering (will be clamped to GPU max)
+        generateMipmaps: true,  // Enable mipmaps for better quality at distance
+        minFilter: 'LinearMipmapLinearFilter',  // Trilinear filtering
+        magFilter: 'LinearFilter'               // Linear magnification
     },
     dynamicEffects: {
         floatingParticles: true,
@@ -37,57 +48,112 @@ let underwaterParticles = [];
 
 // Load and create sky-sphere panorama background
 // Uses inverted sphere mesh for full control over positioning and animation
+// 8K HD Quality: Applies anisotropic filtering and mipmaps for maximum sharpness
 function loadPanoramaBackground() {
     if (!PANORAMA_CONFIG.enabled) return;
     
     const loader = new THREE.TextureLoader();
+    // Enable cross-origin for R2 bucket images
+    loader.setCrossOrigin('anonymous');
+    
+    // Helper function to create sky-sphere with loaded texture
+    function createSkySphereWithTexture(texture, imageUrl) {
+        // Apply 8K HD quality settings
+        texture.colorSpace = THREE.SRGBColorSpace;
+        
+        // Apply texture quality settings for maximum sharpness
+        const qualityConfig = PANORAMA_CONFIG.textureQuality;
+        if (qualityConfig) {
+            // Anisotropic filtering - clamp to GPU maximum
+            if (renderer && renderer.capabilities) {
+                const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+                texture.anisotropy = Math.min(qualityConfig.anisotropy || 16, maxAnisotropy);
+                console.log('[PANORAMA] Anisotropic filtering:', texture.anisotropy, '(GPU max:', maxAnisotropy + ')');
+            }
+            
+            // Mipmaps for better quality at distance
+            texture.generateMipmaps = qualityConfig.generateMipmaps !== false;
+            
+            // Texture filtering
+            texture.minFilter = THREE.LinearMipmapLinearFilter;  // Trilinear filtering
+            texture.magFilter = THREE.LinearFilter;
+        }
+        
+        // Force texture update
+        texture.needsUpdate = true;
+        
+        panoramaTexture = texture;
+        
+        // Create sky-sphere geometry (inverted sphere)
+        const config = PANORAMA_CONFIG.skySphere;
+        const geometry = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
+        // Invert the sphere by scaling X by -1 (shows texture on inside, avoids left-right mirror)
+        geometry.scale(-1, 1, 1);
+        
+        // Create material with no fog, no depth write (always renders behind everything)
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            fog: false,
+            depthWrite: false,
+            side: THREE.FrontSide
+        });
+        
+        // Create sky-sphere mesh
+        panoramaSkySphere = new THREE.Mesh(geometry, material);
+        panoramaSkySphere.name = 'panoramaSkySphere';
+        
+        // Apply initial tilt to position seafloor at bottom of view
+        panoramaSkySphere.rotation.x = config.tiltX;
+        
+        // Render order: -1000 ensures it renders first (behind everything)
+        panoramaSkySphere.renderOrder = -1000;
+        
+        scene.add(panoramaSkySphere);
+        
+        // Log texture resolution for debugging
+        if (texture.image) {
+            console.log('[PANORAMA] 8K HD panorama loaded:', texture.image.width + 'x' + texture.image.height, 'from', imageUrl);
+        }
+        console.log('[PANORAMA] Sky-sphere created with tilt:', config.tiltX * (180/Math.PI), 'degrees, segments:', config.segments);
+        
+        // Update fog to match panorama colors
+        scene.fog = new THREE.Fog(
+            PANORAMA_CONFIG.fogColor,
+            PANORAMA_CONFIG.fogNear,
+            PANORAMA_CONFIG.fogFar
+        );
+        
+        // Clear any solid background color
+        scene.background = null;
+    }
+    
+    // Load primary 8K image from R2
     loader.load(
         PANORAMA_CONFIG.imageUrl,
         (texture) => {
-            texture.colorSpace = THREE.SRGBColorSpace;
-            panoramaTexture = texture;
-            
-            // Create sky-sphere geometry (inverted sphere)
-            const config = PANORAMA_CONFIG.skySphere;
-            const geometry = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
-            // Invert the sphere by scaling X by -1 (shows texture on inside, avoids left-right mirror)
-            geometry.scale(-1, 1, 1);
-            
-            // Create material with no fog, no depth write (always renders behind everything)
-            const material = new THREE.MeshBasicMaterial({
-                map: texture,
-                fog: false,
-                depthWrite: false,
-                side: THREE.FrontSide
-            });
-            
-            // Create sky-sphere mesh
-            panoramaSkySphere = new THREE.Mesh(geometry, material);
-            panoramaSkySphere.name = 'panoramaSkySphere';
-            
-            // Apply initial tilt to position seafloor at bottom of view
-            panoramaSkySphere.rotation.x = config.tiltX;
-            
-            // Render order: -1000 ensures it renders first (behind everything)
-            panoramaSkySphere.renderOrder = -1000;
-            
-            scene.add(panoramaSkySphere);
-            console.log('[PANORAMA] Sky-sphere panorama created with tilt:', config.tiltX * (180/Math.PI), 'degrees');
-            
-            // Update fog to match panorama colors
-            scene.fog = new THREE.Fog(
-                PANORAMA_CONFIG.fogColor,
-                PANORAMA_CONFIG.fogNear,
-                PANORAMA_CONFIG.fogFar
-            );
-            
-            // Clear any solid background color
-            scene.background = null;
+            createSkySphereWithTexture(texture, PANORAMA_CONFIG.imageUrl);
         },
         undefined,
         (error) => {
-            console.warn('[PANORAMA] Failed to load panorama, using fallback color:', error);
-            scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+            console.warn('[PANORAMA] Failed to load 8K panorama from R2:', error.message || error);
+            
+            // Try fallback URL if available
+            if (PANORAMA_CONFIG.fallbackUrl) {
+                console.log('[PANORAMA] Trying fallback image:', PANORAMA_CONFIG.fallbackUrl);
+                loader.load(
+                    PANORAMA_CONFIG.fallbackUrl,
+                    (texture) => {
+                        createSkySphereWithTexture(texture, PANORAMA_CONFIG.fallbackUrl);
+                    },
+                    undefined,
+                    (fallbackError) => {
+                        console.warn('[PANORAMA] Fallback also failed, using solid color:', fallbackError);
+                        scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+                    }
+                );
+            } else {
+                scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+            }
         }
     );
 }
