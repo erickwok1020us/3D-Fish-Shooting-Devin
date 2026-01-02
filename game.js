@@ -156,8 +156,9 @@ function loadPanoramaBackground() {
             PANORAMA_CONFIG.fogFar
         );
         
-        // Clear any solid background color
-        scene.background = null;
+        // FIX: Keep scene.background as fallback - don't set to null
+        // The sky-sphere renders on top, but scene.background provides a safety net
+        // for devices where the sky-sphere might not render correctly
     }
     
     // Load primary 8K image from R2 (with cache-bust to ensure fresh load)
@@ -816,10 +817,32 @@ async function loadGLBModel(url) {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
+                        // FIX: Ensure materials are visible
+                        if (child.material) {
+                            child.material.visible = true;
+                            child.material.needsUpdate = true;
+                        }
                     }
                 });
+                
+                // FIX: Normalize fish GLB model like weapons - compute bounding box and center
+                const box = new THREE.Box3().setFromObject(model);
+                const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
+                box.getCenter(center);
+                box.getSize(size);
+                const maxDimension = Math.max(size.x, size.y, size.z);
+                
+                // FIX: Store bounding info as plain arrays (NOT Vector3 objects!)
+                // Object3D.clone() serializes userData via JSON, which loses Vector3 prototype methods
+                // Storing as arrays ensures the data survives cloning
+                model.userData.originalMaxDim = maxDimension;
+                model.userData.originalCenter = center.toArray(); // [x, y, z] array
+                model.userData.originalSize = size.toArray(); // [x, y, z] array
+                
+                console.log(`[GLB-LOADER] Loaded model: ${url}, maxDim=${maxDimension.toFixed(2)}, center=[${center.toArray().map(v => v.toFixed(2)).join(',')}]`);
+                
                 glbLoaderState.modelCache.set(url, model);
-                console.log('[GLB-LOADER] Loaded model:', url);
                 resolve(model);
             },
             undefined,
@@ -852,9 +875,32 @@ async function tryLoadGLBForFish(tierConfig, form) {
     try {
         const model = await loadGLBModel(variant.url);
         if (model) {
-            const scale = variant.scale || 1.0;
-            const size = tierConfig.size || 1.0;
-            model.scale.setScalar(size * scale * 0.5);
+            // FIX: Use bounding box normalization like weapons instead of magic scale numbers
+            // This ensures fish GLB models are always visible regardless of their original size
+            const targetSize = tierConfig.size || 20; // Target fish size in game units
+            const originalMaxDim = model.userData.originalMaxDim || 1;
+            const originalCenterArray = model.userData.originalCenter; // [x, y, z] array
+            
+            // Calculate auto-scale to normalize to target size
+            let autoScale = 1;
+            if (originalMaxDim > 0.001) {
+                autoScale = targetSize / originalMaxDim;
+                // Clamp to reasonable range
+                autoScale = Math.max(0.01, Math.min(autoScale, 1000));
+            }
+            
+            // Apply normalization scale
+            model.scale.setScalar(autoScale);
+            
+            // Center the model (offset by original center)
+            // FIX: Reconstruct Vector3 from array since clone() serializes userData via JSON
+            if (originalCenterArray && Array.isArray(originalCenterArray)) {
+                const centerVec = new THREE.Vector3().fromArray(originalCenterArray);
+                model.position.sub(centerVec.multiplyScalar(autoScale));
+            }
+            
+            console.log(`[FISH-GLB] Normalized ${form}: targetSize=${targetSize}, originalMaxDim=${originalMaxDim.toFixed(2)}, autoScale=${autoScale.toFixed(2)}`);
+            
             return model;
         }
     } catch (error) {
@@ -871,6 +917,38 @@ function getGLBLoaderStats() {
         cachedModels: glbLoaderState.modelCache.size,
         pendingLoads: glbLoaderState.loadingPromises.size
     };
+}
+
+// FIX: Preload fish GLB models at startup to prevent lag during gameplay
+async function preloadFishGLBModels() {
+    if (!glbLoaderState.enabled || !glbLoaderState.manifest) {
+        console.log('[FISH-GLB] Skipping preload - manifest not loaded');
+        return;
+    }
+    
+    console.log('[FISH-GLB] Starting fish GLB preload...');
+    const tiers = glbLoaderState.manifest.tiers;
+    let loadedCount = 0;
+    
+    for (const tierName of Object.keys(tiers)) {
+        const tier = tiers[tierName];
+        if (!tier.variants) continue;
+        
+        for (const variant of tier.variants) {
+            // Only preload R2 URLs (skip local paths that don't exist)
+            if (variant.url && variant.url.startsWith('https://')) {
+                try {
+                    await loadGLBModel(variant.url);
+                    loadedCount++;
+                    console.log(`[FISH-GLB] Preloaded: ${variant.form} (${loadedCount})`);
+                } catch (error) {
+                    console.warn(`[FISH-GLB] Failed to preload ${variant.form}:`, error.message);
+                }
+            }
+        }
+    }
+    
+    console.log(`[FISH-GLB] Preload complete: ${loadedCount} fish models cached`);
 }
 
 // ==================== WEAPON GLB MODEL LOADER ====================
@@ -5069,17 +5147,22 @@ async function init() {
         if (loadingProgress) loadingProgress.style.width = percent + '%';
     };
     
-    updateProgress(5, 'Loading fish models manifest...');
+        updateProgress(5, 'Loading fish models manifest...');
     
-    // FIX: Load fish GLB manifest first so fish can use GLB models
-    try {
-        await loadFishManifest();
-        console.log('[PRELOAD] Fish manifest loaded');
-    } catch (error) {
-        console.warn('[PRELOAD] Fish manifest failed to load:', error);
-    }
+        // FIX: Load fish GLB manifest first so fish can use GLB models
+        try {
+            await loadFishManifest();
+            console.log('[PRELOAD] Fish manifest loaded');
+        
+            // FIX: Preload fish GLB models to prevent lag during gameplay
+            updateProgress(8, 'Loading fish 3D models...');
+            await preloadFishGLBModels();
+            console.log('[PRELOAD] Fish GLB models preloaded');
+        } catch (error) {
+            console.warn('[PRELOAD] Fish manifest/models failed to load:', error);
+        }
     
-    updateProgress(10, 'Loading weapon models...');
+        updateProgress(10, 'Loading weapon models...');
     
     // Preload all weapon GLB models (cannon, bullet, hitEffect for each weapon)
     try {
