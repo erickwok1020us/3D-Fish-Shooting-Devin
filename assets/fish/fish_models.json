@@ -1,10 +1,11 @@
 {
-  "version": "1.0.0",
-  "description": "Fish GLB model manifest for 3D Fish Shooting game (PDF Spec compliant)",
+  "version": "2.0.0",
+  "description": "Fish GLB model manifest for 3D Fish Shooting game - R2 Cloud Models",
+  "r2BaseUrl": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/",
   "constraints": {
-    "maxFileSizeMB": 2,
-    "triangleRange": [2000, 5000],
-    "textureSize": [512, 1024]
+    "maxFileSizeMB": 15,
+    "triangleRange": [2000, 50000],
+    "textureSize": [512, 2048]
   },
   "tiers": {
     "tier1": {
@@ -13,8 +14,8 @@
         {
           "id": "sardine_01",
           "form": "sardine",
-          "url": "/assets/fish/tier1/sardine_01.glb",
-          "scale": 1.0,
+          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Sardine%20fish.glb",
+          "scale": 0.08,
           "fallbackColor": "#87CEEB"
         },
         {
@@ -79,8 +80,8 @@
         {
           "id": "grouper_01",
           "form": "grouper",
-          "url": "/assets/fish/tier3/grouper_01.glb",
-          "scale": 1.2,
+          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Grouper%20fish.glb",
+          "scale": 0.15,
           "fallbackColor": "#8B4513"
         }
       ]
@@ -98,8 +99,8 @@
         {
           "id": "tuna_01",
           "form": "tuna",
-          "url": "/assets/fish/tier4/tuna_01.glb",
-          "scale": 1.0,
+          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Yellowfin%20Tuna.glb",
+          "scale": 0.12,
           "fallbackColor": "#4682B4"
         },
         {
@@ -117,22 +118,22 @@
         {
           "id": "marlin_01",
           "form": "marlin",
-          "url": "/assets/fish/tier5/marlin_01.glb",
-          "scale": 1.0,
+          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Marlin%20fish.glb",
+          "scale": 0.18,
           "fallbackColor": "#000080"
         },
         {
           "id": "shark_01",
           "form": "shark",
-          "url": "/assets/fish/tier5/shark_01.glb",
-          "scale": 1.0,
+          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Great%20White%20Shark.glb",
+          "scale": 0.22,
           "fallbackColor": "#708090"
         },
         {
           "id": "hammerhead_01",
           "form": "hammerhead",
-          "url": "/assets/fish/tier5/hammerhead_01.glb",
-          "scale": 1.0,
+          "url": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Hammerhead%20Shark.glb",
+          "scale": 0.20,
           "fallbackColor": "#696969"
         }
       ]
