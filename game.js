@@ -833,10 +833,12 @@ async function loadGLBModel(url) {
                 box.getSize(size);
                 const maxDimension = Math.max(size.x, size.y, size.z);
                 
-                // Store original bounding info for later normalization
+                // FIX: Store bounding info as plain arrays (NOT Vector3 objects!)
+                // Object3D.clone() serializes userData via JSON, which loses Vector3 prototype methods
+                // Storing as arrays ensures the data survives cloning
                 model.userData.originalMaxDim = maxDimension;
-                model.userData.originalCenter = center.clone();
-                model.userData.originalSize = size.clone();
+                model.userData.originalCenter = center.toArray(); // [x, y, z] array
+                model.userData.originalSize = size.toArray(); // [x, y, z] array
                 
                 console.log(`[GLB-LOADER] Loaded model: ${url}, maxDim=${maxDimension.toFixed(2)}, center=[${center.toArray().map(v => v.toFixed(2)).join(',')}]`);
                 
@@ -877,7 +879,7 @@ async function tryLoadGLBForFish(tierConfig, form) {
             // This ensures fish GLB models are always visible regardless of their original size
             const targetSize = tierConfig.size || 20; // Target fish size in game units
             const originalMaxDim = model.userData.originalMaxDim || 1;
-            const originalCenter = model.userData.originalCenter;
+            const originalCenterArray = model.userData.originalCenter; // [x, y, z] array
             
             // Calculate auto-scale to normalize to target size
             let autoScale = 1;
@@ -891,8 +893,10 @@ async function tryLoadGLBForFish(tierConfig, form) {
             model.scale.setScalar(autoScale);
             
             // Center the model (offset by original center)
-            if (originalCenter) {
-                model.position.sub(originalCenter.clone().multiplyScalar(autoScale));
+            // FIX: Reconstruct Vector3 from array since clone() serializes userData via JSON
+            if (originalCenterArray && Array.isArray(originalCenterArray)) {
+                const centerVec = new THREE.Vector3().fromArray(originalCenterArray);
+                model.position.sub(centerVec.multiplyScalar(autoScale));
             }
             
             console.log(`[FISH-GLB] Normalized ${form}: targetSize=${targetSize}, originalMaxDim=${originalMaxDim.toFixed(2)}, autoScale=${autoScale.toFixed(2)}`);
