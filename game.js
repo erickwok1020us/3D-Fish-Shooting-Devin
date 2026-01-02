@@ -110,9 +110,32 @@ function loadPanoramaBackground() {
         
         scene.add(panoramaSkySphere);
         
-        // Log texture resolution for debugging
+        // DIAGNOSTIC: Comprehensive logging to identify texture quality issues
         if (texture.image) {
-            console.log('[PANORAMA] 8K HD panorama loaded:', texture.image.width + 'x' + texture.image.height, 'from', imageUrl);
+            const imgWidth = texture.image.width;
+            const imgHeight = texture.image.height;
+            console.log('[PANORAMA] === TEXTURE DIAGNOSTIC ===');
+            console.log('[PANORAMA] Image loaded:', imgWidth + 'x' + imgHeight, 'from', imageUrl);
+            
+            // Check GPU texture size limit
+            if (renderer && renderer.capabilities) {
+                const maxTexSize = renderer.capabilities.maxTextureSize;
+                console.log('[PANORAMA] GPU maxTextureSize:', maxTexSize);
+                if (imgWidth > maxTexSize || imgHeight > maxTexSize) {
+                    console.warn('[PANORAMA] WARNING: Image exceeds GPU limit! Will be downscaled to', 
+                        Math.min(imgWidth, maxTexSize) + 'x' + Math.min(imgHeight, maxTexSize));
+                }
+            }
+            
+            // Check renderer pixel ratio
+            if (renderer) {
+                console.log('[PANORAMA] Renderer pixelRatio:', renderer.getPixelRatio());
+                console.log('[PANORAMA] Canvas size:', renderer.domElement.width + 'x' + renderer.domElement.height);
+            }
+            
+            // Check graphics quality setting
+            console.log('[PANORAMA] Graphics quality:', performanceState.graphicsQuality);
+            console.log('[PANORAMA] === END DIAGNOSTIC ===');
         }
         console.log('[PANORAMA] Sky-sphere created with tilt:', config.tiltX * (180/Math.PI), 'degrees, segments:', config.segments);
         
@@ -127,9 +150,13 @@ function loadPanoramaBackground() {
         scene.background = null;
     }
     
-    // Load primary 8K image from R2
+    // Load primary 8K image from R2 (with cache-bust to ensure fresh load)
+    const cacheBust = '?v=' + Date.now();
+    const imageUrlWithCacheBust = PANORAMA_CONFIG.imageUrl + cacheBust;
+    console.log('[PANORAMA] Loading from:', imageUrlWithCacheBust);
+    
     loader.load(
-        PANORAMA_CONFIG.imageUrl,
+        imageUrlWithCacheBust,
         (texture) => {
             createSkySphereWithTexture(texture, PANORAMA_CONFIG.imageUrl);
         },
@@ -5032,6 +5059,16 @@ async function init() {
         if (loadingProgress) loadingProgress.style.width = percent + '%';
     };
     
+    updateProgress(5, 'Loading fish models manifest...');
+    
+    // FIX: Load fish GLB manifest first so fish can use GLB models
+    try {
+        await loadFishManifest();
+        console.log('[PRELOAD] Fish manifest loaded');
+    } catch (error) {
+        console.warn('[PRELOAD] Fish manifest failed to load:', error);
+    }
+    
     updateProgress(10, 'Loading weapon models...');
     
     // Preload all weapon GLB models (cannon, bullet, hitEffect for each weapon)
@@ -6048,8 +6085,32 @@ async function buildCannonGeometryForWeapon(weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     
-    // Try to load GLB model first
+    // FIX: Check cache synchronously first to avoid stutter on weapon switch
+    // The await causes microtask delay even when model is cached
     if (weaponGLBState.enabled && glbConfig) {
+        const cacheKey = `${weaponKey}_cannon`;
+        const cache = weaponGLBState.cannonCache;
+        
+        // SYNCHRONOUS path: If model is already cached, use it immediately without await
+        if (cache.has(cacheKey)) {
+            const cannonModel = cache.get(cacheKey).clone();
+            if (cannonModel) {
+                const scale = glbConfig.scale;
+                cannonModel.scale.set(scale, scale, scale);
+                cannonModel.position.set(0, 20, 0);
+                cannonBarrel = cannonModel;
+                cannonBodyGroup.add(cannonModel);
+                
+                if (cannonMuzzle && glbConfig.muzzleOffset) {
+                    cannonMuzzle.position.copy(glbConfig.muzzleOffset);
+                }
+                weaponGLBState.currentWeaponModel = cannonModel;
+                console.log(`[WEAPON-GLB] Using cached GLB cannon for ${weaponKey} (sync)`);
+                return; // Successfully used cached GLB, skip procedural
+            }
+        }
+        
+        // ASYNC path: Model not cached yet, load it (only happens on first switch)
         try {
             const cannonModel = await loadWeaponGLB(weaponKey, 'cannon');
             if (cannonModel) {
@@ -6502,7 +6563,11 @@ class Fish {
         const bodyMaterial = getCachedFishMaterial(color, 0.3, 0.2, color, 0.1);
         const secondaryMaterial = getCachedFishMaterial(secondaryColor, 0.3, 0.2, null, 0);
         
-        // Create mesh based on form type
+        // FIX: Try to load GLB model asynchronously while showing procedural mesh immediately
+        // This ensures fish are visible immediately, then upgraded to GLB when loaded
+        this.tryLoadGLBModel(form, size);
+        
+        // Create mesh based on form type (procedural fallback, shown immediately)
         switch (form) {
             case 'whale':
                 this.createWhaleMesh(size, bodyMaterial, secondaryMaterial);
@@ -6590,6 +6655,52 @@ class Fish {
         }
         
         fishGroup.add(this.group);
+    }
+    
+    // FIX: Try to load GLB model asynchronously and replace procedural mesh when loaded
+    async tryLoadGLBModel(form, size) {
+        // Skip if GLB loader is disabled or manifest not loaded
+        if (!glbLoaderState.enabled || !glbLoaderState.manifest) {
+            return;
+        }
+        
+        // Get tier name from config (e.g., 'tier1', 'tier3', etc.)
+        const tierConfig = { tier: this.tier, size: size };
+        
+        try {
+            const glbModel = await tryLoadGLBForFish(tierConfig, form);
+            
+            if (glbModel && this.group) {
+                // Store reference to procedural mesh children for removal
+                const proceduralChildren = [...this.group.children];
+                
+                // Add GLB model to group
+                this.group.add(glbModel);
+                
+                // Remove procedural mesh children (keep GLB only)
+                proceduralChildren.forEach(child => {
+                    this.group.remove(child);
+                    // Dispose geometry and materials to free memory
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(m => m.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                });
+                
+                // Update body reference to GLB model for animations
+                this.body = glbModel;
+                this.glbLoaded = true;
+                
+                console.log(`[FISH-GLB] Loaded GLB for ${form} (${this.tier})`);
+            }
+        } catch (error) {
+            // Silently fail - procedural mesh is already showing
+            console.warn(`[FISH-GLB] Failed to load GLB for ${form}:`, error.message);
+        }
     }
     
     // Standard fish mesh (default)
