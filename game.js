@@ -1031,6 +1031,7 @@ async function loadGLBModel(urlOrKey) {
                 model.userData.originalSize = size.toArray(); // [x, y, z] array
                 model.userData.hasSkinned = hasSkinned;
                 model.userData.hasAnimations = hasAnimations;
+                model.userData.glbUrl = url; // Store URL for animation lookup
                 
                 console.log(`[GLB-LOADER] Loaded model: ${url}, maxDim=${maxDimension.toFixed(2)}, center=[${center.toArray().map(v => v.toFixed(2)).join(',')}], skinned=${hasSkinned}, animations=${hasAnimations}`);
                 
@@ -7092,7 +7093,9 @@ class Fish {
                 console.log(`[FISH-GLB] Successfully swapped to GLB for ${form} (tier ${this.tier}), meshes=${this.glbMeshes.length}, children: [${childTypes}]`);
                 
                 // Setup animation playback for GLB models with animations
-                const animations = getGLBAnimations(glbKey);
+                // FIX: Use glbUrl stored in userData instead of undefined glbKey
+                const glbUrl = glbModel.userData?.glbUrl;
+                const animations = glbUrl ? getGLBAnimations(glbUrl) : null;
                 if (animations && animations.length > 0) {
                     // Create AnimationMixer for this fish's GLB model
                     this.glbMixer = new THREE.AnimationMixer(this.glbModelRoot);
