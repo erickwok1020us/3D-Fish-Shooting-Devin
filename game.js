@@ -8704,6 +8704,10 @@ class Fish {
                 // After this Y rotation, we need to pitch around the wrapper's local Z axis
                 // to tilt the fish nose up/down in the direction it's facing
                 this.glbAxisWrapper.rotation.z = pitch;
+                // FIX: Reset group.rotation.z for GLB fish to prevent roll from procedural state
+                // Before GLB loads, procedural fish use group.rotation.z for pitch
+                // After GLB swap, this leftover value becomes unwanted roll (sideways tilt)
+                this.group.rotation.z = 0;
             } else {
                 // Procedural fish: pitch via group's Z rotation (tilt nose up/down)
                 this.group.rotation.z = -pitch;
@@ -8712,6 +8716,7 @@ class Fish {
             // When nearly stationary, smoothly return to level orientation
             if (this.glbAxisWrapper) {
                 this.glbAxisWrapper.rotation.z *= 0.9;
+                this.group.rotation.z = 0; // Keep group level for GLB fish
             } else {
                 this.group.rotation.z *= 0.9;
             }
