@@ -848,7 +848,10 @@ async function loadGLBModel(urlOrKey) {
     
     if (glbLoaderState.modelCache.has(url)) {
         // FIX: Use cloneGLBModel helper for proper skinned mesh cloning
-        return cloneGLBModel(glbLoaderState.modelCache.get(url), url);
+        console.log(`[GLB-LOADER] Cache hit for: ${url}`);
+        const clone = cloneGLBModel(glbLoaderState.modelCache.get(url), url);
+        console.log(`[GLB-LOADER] Cloned model from cache: ${clone ? 'success' : 'null'}`);
+        return clone;
     }
     
     if (glbLoaderState.loadingPromises.has(url)) {
