@@ -755,8 +755,10 @@ const glbSwapStats = {
     fishInactive: 0,           // Blocked because fish became inactive
     groupMissing: 0,           // Blocked because group or parent missing
     glbModelNull: 0,           // GLB model returned null (no model for this form)
+    glbModelNullByForm: {},    // Track which forms returned null (for diagnosing missing models)
     swapSuccess: 0,            // Successfully swapped to GLB
-    swapSuccessByForm: {}      // Track which forms successfully swapped
+    swapSuccessByForm: {},     // Track which forms successfully swapped
+    skeletonUtilsAvailable: null  // Track if SkeletonUtils is available
 };
 
 // DEBUG: Create on-screen debug display for GLB swap stats
@@ -791,12 +793,23 @@ function updateGlbDebugDisplay() {
         ? ((glbSwapStats.swapSuccess / glbSwapStats.tryLoadCalled) * 100).toFixed(1) 
         : '0.0';
     
+    // Check SkeletonUtils availability
+    const skeletonUtilsOk = typeof THREE !== 'undefined' && typeof THREE.SkeletonUtils !== 'undefined';
+    const skeletonStatus = skeletonUtilsOk 
+        ? '<span style="color: #00ff00;">OK</span>' 
+        : '<span style="color: #ff0000;">MISSING!</span>';
+    
     const formStats = Object.entries(glbSwapStats.swapSuccessByForm)
+        .map(([form, count]) => `  ${form}: ${count}`)
+        .join('\n');
+    
+    const nullFormStats = Object.entries(glbSwapStats.glbModelNullByForm || {})
         .map(([form, count]) => `  ${form}: ${count}`)
         .join('\n');
     
     debugDiv.innerHTML = `
         <div style="color: #ffff00; font-weight: bold;">GLB Debug Stats</div>
+        <div>SkeletonUtils: ${skeletonStatus}</div>
         <div>Spawned: ${glbSwapStats.totalSpawned}</div>
         <div>tryLoad called: ${glbSwapStats.tryLoadCalled}</div>
         <div style="color: #00ff00;">Swap success: ${glbSwapStats.swapSuccess} (${successRate}%)</div>
@@ -806,8 +819,10 @@ function updateGlbDebugDisplay() {
         <div>  inactive: ${glbSwapStats.fishInactive}</div>
         <div>  group: ${glbSwapStats.groupMissing}</div>
         <div>  null model: ${glbSwapStats.glbModelNull}</div>
-        <div style="color: #66ff66;">By form:</div>
+        <div style="color: #66ff66;">Success by form:</div>
         <pre style="margin: 0; font-size: 10px;">${formStats || '  (none yet)'}</pre>
+        <div style="color: #ff9966;">Null by form:</div>
+        <pre style="margin: 0; font-size: 10px;">${nullFormStats || '  (none yet)'}</pre>
     `;
 }
 
@@ -820,8 +835,11 @@ function resetGlbSwapStats() {
     glbSwapStats.fishInactive = 0;
     glbSwapStats.groupMissing = 0;
     glbSwapStats.glbModelNull = 0;
+    glbSwapStats.glbModelNullByForm = {};
     glbSwapStats.swapSuccess = 0;
     glbSwapStats.swapSuccessByForm = {};
+    // Check SkeletonUtils availability on reset
+    glbSwapStats.skeletonUtilsAvailable = typeof THREE !== 'undefined' && typeof THREE.SkeletonUtils !== 'undefined';
 }
 
 // FIX: Helper function to properly clone GLB models
@@ -830,12 +848,20 @@ function resetGlbSwapStats() {
 function cloneGLBModel(model, url) {
     const isSkinned = glbLoaderState.skinnedModelUrls.has(url);
     
-    if (isSkinned && typeof THREE.SkeletonUtils !== 'undefined') {
-        // Use SkeletonUtils.clone for skinned meshes
-        const clone = THREE.SkeletonUtils.clone(model);
-        // Copy userData manually since SkeletonUtils.clone may not preserve it
-        clone.userData = JSON.parse(JSON.stringify(model.userData));
-        return clone;
+    if (isSkinned) {
+        if (typeof THREE.SkeletonUtils !== 'undefined') {
+            // Use SkeletonUtils.clone for skinned meshes - this properly clones skeleton bindings
+            const clone = THREE.SkeletonUtils.clone(model);
+            // Copy userData manually since SkeletonUtils.clone may not preserve it
+            clone.userData = JSON.parse(JSON.stringify(model.userData));
+            console.log(`[GLB-LOADER] Cloned skinned mesh using SkeletonUtils: ${url}`);
+            return clone;
+        } else {
+            // CRITICAL WARNING: SkeletonUtils not available - skinned mesh will NOT move correctly!
+            // The mesh will render at the original skeleton's location instead of following the parent
+            console.error(`[GLB-LOADER] CRITICAL: SkeletonUtils not available for skinned mesh ${url}! Fish will appear stuck at origin. Make sure SkeletonUtils.js is loaded.`);
+            return model.clone();
+        }
     } else {
         // Regular clone for non-skinned meshes
         return model.clone();
@@ -6977,9 +7003,10 @@ class Fish {
                 return;
             }
             
-            // DEBUG: Track null model returns
+            // DEBUG: Track null model returns (with per-form tracking)
             if (!glbModel) {
                 glbSwapStats.glbModelNull++;
+                glbSwapStats.glbModelNullByForm[form] = (glbSwapStats.glbModelNullByForm[form] || 0) + 1;
                 updateGlbDebugDisplay();
             }
             
