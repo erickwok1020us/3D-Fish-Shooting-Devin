@@ -494,7 +494,7 @@ const CONFIG = {
         // SWIMMING: Tight synchronized waves, rapid direction changes
         sardine: { 
             hp: 20, speedMin: 65, speedMax: 100, reward: 30, size: 10, 
-            color: 0xccddee, secondaryColor: 0x88aacc, count: 40, 
+            color: 0xccddee, secondaryColor: 0x88aacc, count: 15, 
             pattern: 'waveFormation', schoolSize: [20, 40], form: 'sardine',
             category: 'smallSchool',
             boidsStrength: 3.0  // Extremely tight schooling
@@ -504,7 +504,7 @@ const CONFIG = {
         // SWIMMING: Swirling bait ball formation, very tight grouping
         anchovy: { 
             hp: 15, speedMin: 70, speedMax: 120, reward: 25, size: 8, 
-            color: 0xaabbcc, secondaryColor: 0x778899, count: 45, 
+            color: 0xaabbcc, secondaryColor: 0x778899, count: 15, 
             pattern: 'baitBall', schoolSize: [25, 45], form: 'anchovy',
             category: 'smallSchool',
             boidsStrength: 3.5  // Tightest schooling (bait ball)
@@ -810,10 +810,21 @@ function updateGlbDebugDisplay() {
         .map(([form, count]) => `  ${form}: ${count}`)
         .join('\n');
     
+    // PERFORMANCE: Add real-time fish count stats to help diagnose population issues
+    const currentActive = typeof activeFish !== 'undefined' ? activeFish.length : 0;
+    const currentFree = typeof freeFish !== 'undefined' ? freeFish.length : 0;
+    const poolSize = typeof fishPool !== 'undefined' ? fishPool.length : 0;
+    const maxCount = typeof FISH_SPAWN_CONFIG !== 'undefined' ? FISH_SPAWN_CONFIG.maxCount : '?';
+    
     debugDiv.innerHTML = `
         <div style="color: #ffff00; font-weight: bold;">GLB Debug Stats</div>
         <div>SkeletonUtils: ${skeletonStatus}</div>
-        <div>Spawned: ${glbSwapStats.totalSpawned}</div>
+        <div style="color: #00ffff; font-weight: bold;">--- Fish Population ---</div>
+        <div style="color: #00ff00;">Active: ${currentActive} / ${maxCount} max</div>
+        <div>Free pool: ${currentFree}</div>
+        <div>Total pool: ${poolSize}</div>
+        <div style="color: #00ffff; font-weight: bold;">--- GLB Loading ---</div>
+        <div>Spawn events: ${glbSwapStats.totalSpawned}</div>
         <div>tryLoad called: ${glbSwapStats.tryLoadCalled}</div>
         <div style="color: #00ff00;">Swap success: ${glbSwapStats.swapSuccess} (${successRate}%)</div>
         <div style="color: #ff6666;">Blocked reasons:</div>
@@ -9171,20 +9182,31 @@ function spawnInitialFish() {
         return;
     }
     
+    // PERFORMANCE FIX: Only spawn up to maxCount fish initially
+    // Remaining fish go to freeFish pool for dynamic spawning
+    let spawnedCount = 0;
     fishPool.forEach(fish => {
-        // Issue #1: Spawn fish in full 3D space around cannon (immersive 360°)
-        const position = getRandomFishPositionIn3DSpace();
-        fish.spawn(position);
-        activeFish.push(fish);
+        if (spawnedCount < FISH_SPAWN_CONFIG.maxCount) {
+            // Issue #1: Spawn fish in full 3D space around cannon (immersive 360°)
+            const position = getRandomFishPositionIn3DSpace();
+            fish.spawn(position);
+            activeFish.push(fish);
+            spawnedCount++;
+        } else {
+            // Put remaining fish in free pool for later spawning
+            freeFish.push(fish);
+        }
     });
+    
+    console.log(`[FISH] Initial spawn: ${spawnedCount} active, ${freeFish.length} in reserve (max: ${FISH_SPAWN_CONFIG.maxCount})`)
 }
 
 // ==================== DYNAMIC FISH RESPAWN SYSTEM ====================
 // Maintains target fish count and adjusts spawn rate based on kill rate
 const FISH_SPAWN_CONFIG = {
-    targetCount: 20,        // Target number of fish on screen
-    minCount: 15,           // Minimum fish count before emergency spawn
-    maxCount: 30,           // Maximum fish count
+    targetCount: 80,        // Target number of fish on screen
+    minCount: 60,           // Minimum fish count before emergency spawn
+    maxCount: 120,          // Maximum fish count - HARD CAP to prevent performance issues
     normalSpawnInterval: 1.0,    // Normal spawn interval (seconds)
     emergencySpawnInterval: 0.3, // Emergency spawn interval when fish < minCount
     maintainSpawnInterval: 2.0   // Slow spawn when at target
