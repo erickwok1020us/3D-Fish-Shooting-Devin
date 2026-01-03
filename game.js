@@ -6900,13 +6900,35 @@ class Fish {
                     // Disposing them would corrupt rendering for other fish
                 });
                 
-                // Update body reference to GLB model for animations
-                this.body = glbModel;
+                // FIX: Store GLB model root separately - don't overwrite this.body
+                // this.body is expected to be a Mesh with material for flash effects
+                // glbModel is a Group, so we need to find the actual meshes inside
+                this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
+                
+                // FIX: Collect all meshes from GLB for material operations
+                this.glbMeshes = [];
+                glbModel.traverse((child) => {
+                    if (child.isMesh) {
+                        this.glbMeshes.push(child);
+                        // Apply shadow settings to GLB meshes
+                        const isBossFish = this.tier >= 5 || BOSS_ONLY_SPECIES.includes(this.config.species);
+                        child.castShadow = isBossFish;
+                    }
+                });
+                
+                // FIX: Set this.body to first mesh found (for compatibility with existing code)
+                // This ensures this.body.material exists for flash effects
+                if (this.glbMeshes.length > 0) {
+                    this.body = this.glbMeshes[0];
+                }
+                
+                // Clear procedural tail reference since GLB has its own tail
+                this.tail = null;
                 
                 // FIX: Log successful GLB swap with verification
                 const childTypes = this.group.children.map(c => c.type || 'unknown').join(', ');
-                console.log(`[FISH-GLB] Successfully swapped to GLB for ${form} (tier ${this.tier}), children: [${childTypes}]`);
+                console.log(`[FISH-GLB] Successfully swapped to GLB for ${form} (tier ${this.tier}), meshes=${this.glbMeshes.length}, children: [${childTypes}]`);
             }
         } catch (error) {
             // Silently fail - procedural mesh is already showing
@@ -7987,8 +8009,17 @@ class Fish {
             (Math.random() - 0.5) * this.speed
         );
         
-        // Reset material
-        this.body.material.emissiveIntensity = 0.1;
+        // Reset material - handle both GLB and procedural fish
+        // FIX: Guard against missing material or emissiveIntensity property
+        if (this.glbLoaded && this.glbMeshes) {
+            this.glbMeshes.forEach(mesh => {
+                if (mesh.material && 'emissiveIntensity' in mesh.material) {
+                    mesh.material.emissiveIntensity = 0.1;
+                }
+            });
+        } else if (this.body && this.body.material && 'emissiveIntensity' in this.body.material) {
+            this.body.material.emissiveIntensity = 0.1;
+        }
         
         // Issue #5: Trigger rare fish effects for tier4 (boss fish)
         triggerRareFishEffects(this.tier);
@@ -8002,8 +8033,26 @@ class Fish {
             this.freezeTimer -= deltaTime;
             if (this.freezeTimer <= 0) {
                 this.isFrozen = false;
-                this.body.material.emissive.setHex(this.config.color);
-                this.body.material.emissiveIntensity = 0.1;
+                // FIX: Handle both GLB and procedural fish for freeze effect reset
+                if (this.glbLoaded && this.glbMeshes) {
+                    this.glbMeshes.forEach(mesh => {
+                        if (mesh.material) {
+                            if (mesh.material.emissive) {
+                                mesh.material.emissive.setHex(this.config.color);
+                            }
+                            if ('emissiveIntensity' in mesh.material) {
+                                mesh.material.emissiveIntensity = 0.1;
+                            }
+                        }
+                    });
+                } else if (this.body && this.body.material) {
+                    if (this.body.material.emissive) {
+                        this.body.material.emissive.setHex(this.config.color);
+                    }
+                    if ('emissiveIntensity' in this.body.material) {
+                        this.body.material.emissiveIntensity = 0.1;
+                    }
+                }
             }
             return;
         }
@@ -8471,13 +8520,33 @@ class Fish {
         
         this.hp -= damage;
         
-        // Flash effect
-        this.body.material.emissiveIntensity = 0.8;
-        setTimeout(() => {
-            if (this.isActive) {
-                this.body.material.emissiveIntensity = 0.1;
-            }
-        }, 100);
+        // Flash effect - apply to all meshes for GLB fish, or just body for procedural
+        // FIX: Guard against missing material or emissiveIntensity property
+        if (this.glbLoaded && this.glbMeshes) {
+            // Apply flash to all GLB meshes
+            this.glbMeshes.forEach(mesh => {
+                if (mesh.material && 'emissiveIntensity' in mesh.material) {
+                    mesh.material.emissiveIntensity = 0.8;
+                }
+            });
+            setTimeout(() => {
+                if (this.isActive && this.glbMeshes) {
+                    this.glbMeshes.forEach(mesh => {
+                        if (mesh.material && 'emissiveIntensity' in mesh.material) {
+                            mesh.material.emissiveIntensity = 0.1;
+                        }
+                    });
+                }
+            }, 100);
+        } else if (this.body && this.body.material && 'emissiveIntensity' in this.body.material) {
+            // Procedural fish - single body mesh
+            this.body.material.emissiveIntensity = 0.8;
+            setTimeout(() => {
+                if (this.isActive && this.body && this.body.material) {
+                    this.body.material.emissiveIntensity = 0.1;
+                }
+            }, 100);
+        }
         
         if (this.hp <= 0) {
             this.die(weaponKey);
