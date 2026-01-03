@@ -743,7 +743,10 @@ const glbLoaderState = {
     skinnedModelUrls: new Set(),
     // FIX: Form-to-variant lookup map for O(1) lookup by fish form name
     // This ensures each fish form gets its correct GLB model regardless of tier
-    formToVariant: new Map()
+    formToVariant: new Map(),
+    // Animation cache: stores gltf.animations arrays keyed by URL
+    // Separate from modelCache because animations are not cloned, they're shared
+    animationCache: new Map()
 };
 
 // DEBUG: GLB swap statistics for diagnosing rendering issues
@@ -1005,6 +1008,13 @@ async function loadGLBModel(urlOrKey) {
                     console.log(`[GLB-LOADER] Model has skinned meshes or animations: ${url}`);
                 }
                 
+                // Store animations in separate cache (not cloned, shared across instances)
+                if (hasAnimations) {
+                    glbLoaderState.animationCache.set(url, gltf.animations);
+                    const clipNames = gltf.animations.map(clip => `${clip.name}(${clip.duration.toFixed(2)}s)`).join(', ');
+                    console.log(`[GLB-LOADER] Cached ${gltf.animations.length} animation(s) for ${url}: ${clipNames}`);
+                }
+                
                 // FIX: Normalize fish GLB model like weapons - compute bounding box and center
                 const box = new THREE.Box3().setFromObject(model);
                 const center = new THREE.Vector3();
@@ -1106,6 +1116,19 @@ function getGLBLoaderStats() {
         cachedModels: glbLoaderState.modelCache.size,
         pendingLoads: glbLoaderState.loadingPromises.size
     };
+}
+
+// Get animations for a GLB model by URL or key
+// Returns the animation clips array or null if no animations
+function getGLBAnimations(urlOrKey) {
+    // Construct full URL if needed (same logic as loadGLBModel)
+    let url;
+    if (urlOrKey.startsWith('https://') || urlOrKey.startsWith('http://') || urlOrKey.startsWith('/')) {
+        url = urlOrKey;
+    } else {
+        url = glbLoaderState.baseUrl + encodeURI(urlOrKey);
+    }
+    return glbLoaderState.animationCache.get(url) || null;
 }
 
 // FIX: Preload fish GLB models at startup to prevent lag during gameplay
@@ -7033,6 +7056,12 @@ class Fish {
                 this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
                 
+                // FIX: Apply rotation correction for GLB models
+                // GLB fish models are typically authored with forward = +Z or -Z
+                // Our game expects forward = +X, so rotate -90° around Y axis
+                // This ensures fish face the correct direction when swimming
+                this.glbModelRoot.rotation.y = -Math.PI / 2;
+                
                 // FIX: Collect all meshes from GLB for material operations
                 this.glbMeshes = [];
                 glbModel.traverse((child) => {
@@ -7061,6 +7090,23 @@ class Fish {
                 // FIX: Log successful GLB swap with verification
                 const childTypes = this.group.children.map(c => c.type || 'unknown').join(', ');
                 console.log(`[FISH-GLB] Successfully swapped to GLB for ${form} (tier ${this.tier}), meshes=${this.glbMeshes.length}, children: [${childTypes}]`);
+                
+                // Setup animation playback for GLB models with animations
+                const animations = getGLBAnimations(glbKey);
+                if (animations && animations.length > 0) {
+                    // Create AnimationMixer for this fish's GLB model
+                    this.glbMixer = new THREE.AnimationMixer(this.glbModelRoot);
+                    
+                    // Find swimming animation or use first available
+                    let clip = animations.find(c => c.name.toLowerCase().includes('swim')) || animations[0];
+                    
+                    // Create and play the animation action
+                    this.glbAction = this.glbMixer.clipAction(clip);
+                    this.glbAction.setLoop(THREE.LoopRepeat);
+                    this.glbAction.play();
+                    
+                    console.log(`[FISH-GLB] Started animation "${clip.name}" (${clip.duration.toFixed(2)}s) for ${form}`);
+                }
             }
         } catch (error) {
             // Silently fail - procedural mesh is already showing
@@ -8138,6 +8184,11 @@ class Fish {
         this.isFrozen = false;
         this.group.visible = true;
         
+        // FIX: Reset rotation on spawn to prevent pooled fish from keeping old tilt
+        // This ensures fish start level (dorsal up) when respawning
+        this.group.rotation.x = 0;
+        this.group.rotation.z = 0;
+        
         // FIX: Update loadToken on each spawn to invalidate any in-flight async GLB loads
         // from previous lifecycle (fish recycling/pooling)
         this.loadToken = ++fishLoadTokenCounter;
@@ -8166,6 +8217,9 @@ class Fish {
         // Only load if not already loaded (prevents duplicate loading on respawn)
         if (!this.glbLoaded && this.form) {
             this.tryLoadGLBModel(this.form, this.config.size);
+        } else if (this.glbLoaded && this.glbAction) {
+            // Restart animation for recycled fish that already has GLB loaded
+            this.glbAction.reset().play();
         }
         
         // Issue #5: Trigger rare fish effects for tier4 (boss fish)
@@ -8174,6 +8228,11 @@ class Fish {
     
     update(deltaTime, allFish) {
         if (!this.isActive) return;
+        
+        // Update GLB animation mixer (deltaTime is in seconds)
+        if (this.glbMixer) {
+            this.glbMixer.update(deltaTime);
+        }
         
         // Handle freeze
         if (this.isFrozen) {
@@ -8609,13 +8668,33 @@ class Fish {
     }
     
     updateRotation() {
-        if (this.velocity.length() > 0.1) {
+        const speed = this.velocity.length();
+        const horizontalSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z);
+        
+        if (speed > 0.1) {
+            // Yaw: rotate to face movement direction (horizontal plane)
             const targetRotation = Math.atan2(-this.velocity.z, this.velocity.x);
             this.group.rotation.y = targetRotation;
             
-            const tiltAmount = Math.atan2(this.velocity.y, Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z));
-            this.group.rotation.z = -tiltAmount * 0.5;
+            // Pitch: tilt based on vertical velocity, but only when moving horizontally
+            // This prevents extreme tilting when fish is mostly moving vertically
+            if (horizontalSpeed > 0.5) {
+                // Normal pitch calculation when swimming horizontally
+                const tiltAmount = Math.atan2(this.velocity.y, horizontalSpeed);
+                // Clamp pitch to ±25° and reduce by 50% for more natural look
+                const clampedTilt = Math.max(-0.44, Math.min(0.44, tiltAmount)) * 0.5;
+                this.group.rotation.z = -clampedTilt;
+            } else {
+                // When horizontal speed is low, smoothly return to level (dorsal up)
+                this.group.rotation.z *= 0.9;
+            }
+        } else {
+            // When nearly stationary, smoothly return to level orientation
+            this.group.rotation.z *= 0.9;
         }
+        
+        // Always keep roll (rotation.x) at 0 to prevent fish from rolling sideways
+        this.group.rotation.x = 0;
     }
     
     animateTail(deltaTime) {
@@ -8705,6 +8784,11 @@ class Fish {
     die(weaponKey) {
         this.isActive = false;
         this.group.visible = false;
+        
+        // Stop GLB animation when fish dies (for pooling/recycling)
+        if (this.glbMixer) {
+            this.glbMixer.stopAllAction();
+        }
         
         // PERFORMANCE: Return fish to free-list for O(1) reuse (Boss Mode optimization)
         freeFish.push(this);
