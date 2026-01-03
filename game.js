@@ -1889,9 +1889,10 @@ const PERFORMANCE_CONFIG = {
             high: 4
         },
         // Whether to enable shadows for each quality level
+        // Only high quality has shadows enabled for better performance on low/medium
         shadowsEnabled: {
             low: false,
-            medium: true,
+            medium: false,
             high: true
         },
         // Shadow map type for each quality level
