@@ -785,11 +785,8 @@ function getVariantForForm(tierName, form) {
     const variant = tier.variants.find(v => v.form === form);
     if (variant) return variant;
     
-    if (tier.variants.length > 0) {
-        const randomIndex = Math.floor(Math.random() * tier.variants.length);
-        return tier.variants[randomIndex];
-    }
-    
+    // Strict mode: if this form has no GLB entry, do NOT fallback to other variants
+    // Keep procedural mesh until a proper GLB is provided for this form
     return null;
 }
 
