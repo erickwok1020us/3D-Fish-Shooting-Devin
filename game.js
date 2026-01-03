@@ -6909,6 +6909,11 @@ class Fish {
         this.freezeTimer = 0;
         this.isActive = false;
         
+        // STUCK FISH DETECTION: Track position to detect fish that stop moving
+        this.lastPosition = new THREE.Vector3();
+        this.stuckTimer = 0;
+        this.updateErrorCount = 0;
+        
         // FIX: Load token to prevent attaching GLB to stale/recycled fish instances
         this.loadToken = ++fishLoadTokenCounter;
         this.glbLoaded = false;
@@ -8403,6 +8408,40 @@ class Fish {
         
         // Update pattern timer
         this.patternState.timer += deltaTime;
+        
+        // STUCK FISH DETECTION: Check if fish has been stationary for too long
+        // This catches fish that get stuck due to errors or state corruption
+        const STUCK_THRESHOLD = 5.0; // seconds
+        const MOVEMENT_EPSILON = 0.5; // minimum movement per second
+        const displacement = this.group.position.distanceTo(this.lastPosition);
+        
+        if (displacement < MOVEMENT_EPSILON * deltaTime) {
+            this.stuckTimer += deltaTime;
+            if (this.stuckTimer > STUCK_THRESHOLD) {
+                // Fish has been stuck for too long - attempt recovery
+                console.warn(`[FISH] Stuck fish detected (${this.tier}/${this.species || this.form}), attempting recovery`);
+                
+                // Reset velocity with random direction
+                const randomAngle = Math.random() * Math.PI * 2;
+                this.velocity.set(
+                    Math.cos(randomAngle) * this.speed,
+                    (Math.random() - 0.5) * 20,
+                    Math.sin(randomAngle) * this.speed
+                );
+                
+                // Reset pattern state to prevent stuck patterns
+                this.patternState = null;
+                
+                // Reset stuck timer
+                this.stuckTimer = 0;
+            }
+        } else {
+            // Fish is moving - reset stuck timer
+            this.stuckTimer = 0;
+        }
+        
+        // Update last position for next frame's stuck detection
+        this.lastPosition.copy(this.group.position);
     }
     
     // Apply swimming pattern based on species
@@ -8880,6 +8919,14 @@ class Fish {
     }
     
     die(weaponKey) {
+        // POOL CORRUPTION FIX: Guard against duplicate die() calls
+        // This can happen if multiple bullets hit the same fish in the same frame
+        // or if chain damage effects hit an already-dead fish
+        if (!this.isActive) {
+            console.warn('[FISH] die() called on already-dead fish, skipping');
+            return;
+        }
+        
         this.isActive = false;
         this.group.visible = false;
         
@@ -8889,7 +8936,12 @@ class Fish {
         }
         
         // PERFORMANCE: Return fish to free-list for O(1) reuse (Boss Mode optimization)
-        freeFish.push(this);
+        // POOL CORRUPTION FIX: Check if already in freeFish to prevent duplicates
+        if (!freeFish.includes(this)) {
+            freeFish.push(this);
+        } else {
+            console.warn('[FISH] Fish already in freeFish pool, skipping duplicate push');
+        }
         
         const deathPosition = this.group.position.clone();
         
@@ -11368,16 +11420,36 @@ function animate() {
             if (fish && fish.isActive) {
                 try {
                     fish.update(deltaTime, activeFish);
+                    // Reset error count on successful update
+                    fish.updateErrorCount = 0;
                 } catch (e) {
                     fishUpdateErrors++;
+                    fish.updateErrorCount = (fish.updateErrorCount || 0) + 1;
+                    
                     if (fishUpdateErrors <= 3) {
-                        console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species);
+                        console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species || fish.form);
                     }
-                    // Attempt recovery: reset fish state
-                    fish.velocity.set(0, 0, 0);
-                    fish.acceleration.set(0, 0, 0);
+                    
+                    // IMPROVED RECOVERY: Track error count per fish
+                    // If a fish keeps throwing errors, do stronger recovery
+                    if (fish.updateErrorCount > 10) {
+                        // Fish has too many errors - reset completely
+                        console.warn(`[FISH] Fish ${fish.tier}/${fish.species || fish.form} has ${fish.updateErrorCount} errors, resetting state`);
+                        fish.patternState = null;
+                        fish.velocity.set(
+                            (Math.random() - 0.5) * fish.speed,
+                            (Math.random() - 0.5) * 20,
+                            (Math.random() - 0.5) * fish.speed
+                        );
+                        fish.acceleration.set(0, 0, 0);
+                        fish.updateErrorCount = 0;
+                    } else {
+                        // Simple recovery: just reset velocity/acceleration
+                        fish.velocity.set(0, 0, 0);
+                        fish.acceleration.set(0, 0, 0);
+                    }
                 }
-            } else if (fish && !fish.isActive) {
+            }else if (fish && !fish.isActive) {
                 activeFish.splice(i, 1);
             } else {
                 // Invalid fish reference - remove it
