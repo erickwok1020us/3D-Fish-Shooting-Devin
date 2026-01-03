@@ -8690,20 +8690,39 @@ class Fish {
             if (horizontalSpeed > 0.5) {
                 // Normal pitch calculation when swimming horizontally
                 const tiltAmount = Math.atan2(this.velocity.y, horizontalSpeed);
-                // Clamp pitch to ±25° and reduce by 50% for more natural look
-                const clampedTilt = Math.max(-0.44, Math.min(0.44, tiltAmount)) * 0.5;
-                this.group.rotation.z = -clampedTilt;
+                // Clamp pitch to ±30° for natural look
+                const clampedTilt = Math.max(-0.52, Math.min(0.52, tiltAmount));
+                
+                // FIX: For GLB models, apply pitch to the wrapper's X rotation
+                // The wrapper has a 90° Y rotation, so the pitch axis changes from Z to X
+                // For procedural fish, continue using rotation.z
+                if (this.glbAxisWrapper) {
+                    // GLB fish: pitch via wrapper's X rotation (after 90° Y rotation, X becomes the pitch axis)
+                    this.glbAxisWrapper.rotation.x = -clampedTilt;
+                } else {
+                    // Procedural fish: pitch via group's Z rotation
+                    this.group.rotation.z = -clampedTilt;
+                }
             } else {
                 // When horizontal speed is low, smoothly return to level (dorsal up)
-                this.group.rotation.z *= 0.9;
+                if (this.glbAxisWrapper) {
+                    this.glbAxisWrapper.rotation.x *= 0.9;
+                } else {
+                    this.group.rotation.z *= 0.9;
+                }
             }
         } else {
             // When nearly stationary, smoothly return to level orientation
-            this.group.rotation.z *= 0.9;
+            if (this.glbAxisWrapper) {
+                this.glbAxisWrapper.rotation.x *= 0.9;
+            } else {
+                this.group.rotation.z *= 0.9;
+            }
         }
         
-        // Always keep roll (rotation.x) at 0 to prevent fish from rolling sideways
+        // Always keep roll at 0 to prevent fish from rolling sideways
         this.group.rotation.x = 0;
+        this.group.rotation.z = 0; // Reset Z for GLB fish (pitch is on wrapper now)
     }
     
     animateTail(deltaTime) {
