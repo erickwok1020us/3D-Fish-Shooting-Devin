@@ -740,7 +740,10 @@ const glbLoaderState = {
     // FIX: Use same pattern as weapons - baseUrl + encodeURI(filename) at runtime
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     // FIX: Track which models have skinned meshes for proper cloning
-    skinnedModelUrls: new Set()
+    skinnedModelUrls: new Set(),
+    // FIX: Form-to-variant lookup map for O(1) lookup by fish form name
+    // This ensures each fish form gets its correct GLB model regardless of tier
+    formToVariant: new Map()
 };
 
 // FIX: Helper function to properly clone GLB models
@@ -773,7 +776,26 @@ async function loadFishManifest() {
         }
         glbLoaderState.manifest = await response.json();
         glbLoaderState.manifestLoaded = true;
-        console.log('[GLB-LOADER] Fish manifest loaded:', Object.keys(glbLoaderState.manifest.tiers).length, 'tiers');
+        
+        // FIX: Build form-to-variant lookup map for O(1) lookup by fish form name
+        // This ensures each fish form gets its correct GLB model regardless of tier
+        glbLoaderState.formToVariant.clear();
+        const tiers = glbLoaderState.manifest.tiers;
+        for (const tierName of Object.keys(tiers)) {
+            const tier = tiers[tierName];
+            if (!tier.variants) continue;
+            for (const variant of tier.variants) {
+                if (variant.form && variant.url) {
+                    // Only add if not already mapped (first occurrence wins)
+                    if (!glbLoaderState.formToVariant.has(variant.form)) {
+                        glbLoaderState.formToVariant.set(variant.form, variant);
+                        console.log(`[GLB-LOADER] Mapped form '${variant.form}' -> '${variant.url}'`);
+                    }
+                }
+            }
+        }
+        
+        console.log('[GLB-LOADER] Fish manifest loaded:', Object.keys(tiers).length, 'tiers,', glbLoaderState.formToVariant.size, 'form mappings');
         return glbLoaderState.manifest;
     } catch (error) {
         console.warn('[GLB-LOADER] Failed to load manifest:', error.message);
@@ -789,27 +811,23 @@ function getTierFromConfig(tierConfig) {
     return `tier${tierNum}`;
 }
 
+// FIX: Completely rewritten to use form-driven lookup instead of tier-based lookup
+// This ensures each fish form gets its correct GLB model regardless of tier
+// The old implementation had a bug where all fish were mapped to tier1 (Sardine)
 function getVariantForForm(tierName, form) {
     if (!glbLoaderState.manifest || !glbLoaderState.manifest.tiers) return null;
     
-    const tier = glbLoaderState.manifest.tiers[tierName];
-    if (!tier || !tier.variants) {
-        const specialTier = glbLoaderState.manifest.tiers.special;
-        if (specialTier && specialTier.variants) {
-            const specialVariant = specialTier.variants.find(v => v.form === form);
-            if (specialVariant) return specialVariant;
-        }
-        return null;
+    // FIX: Use the form-to-variant lookup map for O(1) lookup
+    // This searches ALL tiers for the matching form, not just the specified tier
+    if (glbLoaderState.formToVariant.has(form)) {
+        const variant = glbLoaderState.formToVariant.get(form);
+        console.log(`[GLB-LOADER] Found variant for form '${form}': ${variant.url}`);
+        return variant;
     }
     
-    const variant = tier.variants.find(v => v.form === form);
-    if (variant) return variant;
-    
-    if (tier.variants.length > 0) {
-        const randomIndex = Math.floor(Math.random() * tier.variants.length);
-        return tier.variants[randomIndex];
-    }
-    
+    // FIX: No fallback to random variant - if form not found, return null
+    // This prevents wrong models from being attached to fish
+    console.log(`[GLB-LOADER] No variant found for form '${form}' - using procedural mesh`);
     return null;
 }
 
@@ -978,6 +996,7 @@ function getGLBLoaderStats() {
 }
 
 // FIX: Preload fish GLB models at startup to prevent lag during gameplay
+// Now correctly handles R2 keys (filenames without '/') in addition to full URLs
 async function preloadFishGLBModels() {
     if (!glbLoaderState.enabled || !glbLoaderState.manifest) {
         console.log('[FISH-GLB] Skipping preload - manifest not loaded');
@@ -993,12 +1012,17 @@ async function preloadFishGLBModels() {
         if (!tier.variants) continue;
         
         for (const variant of tier.variants) {
-            // Only preload R2 URLs (skip local paths that don't exist)
-            if (variant.url && variant.url.startsWith('https://')) {
+            // FIX: Preload R2 keys (filenames) AND full URLs, but skip local paths (start with '/')
+            // R2 keys are filenames like "Sardine fish.glb" that don't start with '/' or 'http'
+            // Local paths start with '/' and will 404 since they don't exist
+            const isR2Key = variant.url && !variant.url.startsWith('/') && !variant.url.startsWith('http');
+            const isFullUrl = variant.url && variant.url.startsWith('https://');
+            
+            if (isR2Key || isFullUrl) {
                 try {
                     await loadGLBModel(variant.url);
                     loadedCount++;
-                    console.log(`[FISH-GLB] Preloaded: ${variant.form} (${loadedCount})`);
+                    console.log(`[FISH-GLB] Preloaded: ${variant.form} -> ${variant.url}`);
                 } catch (error) {
                     console.warn(`[FISH-GLB] Failed to preload ${variant.form}:`, error.message);
                 }
