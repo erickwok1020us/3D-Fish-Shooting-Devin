@@ -8678,44 +8678,40 @@ class Fish {
     
     updateRotation() {
         const speed = this.velocity.length();
-        const horizontalSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z);
         
         if (speed > 0.1) {
-            // Yaw: rotate to face movement direction (horizontal plane)
-            const targetRotation = Math.atan2(-this.velocity.z, this.velocity.x);
-            this.group.rotation.y = targetRotation;
+            // Use quaternion-based orientation to align fish with velocity direction
+            // This automatically handles both yaw AND pitch, making fish face their swim direction
             
-            // Pitch: tilt based on vertical velocity
-            // Lower threshold (0.2) allows pitch even at slower horizontal speeds
-            if (horizontalSpeed > 0.2) {
-                // Calculate pitch angle from vertical velocity ratio
-                // Multiply by 1.5 for more pronounced effect
-                const tiltAmount = Math.atan2(this.velocity.y, horizontalSpeed) * 1.5;
-                // Clamp pitch to ±45° (0.79 rad) for more visible tilting
-                const clampedTilt = Math.max(-0.79, Math.min(0.79, tiltAmount));
-                
-                // FIX: For GLB models, apply pitch to the wrapper's X rotation
-                // The wrapper has a 90° Y rotation, so the pitch axis changes from Z to X
-                // For procedural fish, continue using rotation.z
-                if (this.glbAxisWrapper) {
-                    // GLB fish: pitch via wrapper's X rotation (after 90° Y rotation, X becomes the pitch axis)
-                    this.glbAxisWrapper.rotation.x = -clampedTilt;
-                } else {
-                    // Procedural fish: pitch via group's Z rotation
-                    this.group.rotation.z = -clampedTilt;
-                }
+            // Normalize velocity to get direction
+            const dirX = this.velocity.x / speed;
+            const dirY = this.velocity.y / speed;
+            const dirZ = this.velocity.z / speed;
+            
+            // Calculate yaw (rotation around Y axis) from horizontal direction
+            const yaw = Math.atan2(-dirZ, dirX);
+            
+            // Calculate pitch (tilt up/down) from vertical component
+            // Using asin gives the angle between velocity and horizontal plane
+            const pitch = Math.asin(dirY);
+            
+            // Apply yaw to the group
+            this.group.rotation.y = yaw;
+            
+            // Apply pitch based on fish type
+            if (this.glbAxisWrapper) {
+                // GLB fish: The wrapper has rotation.y = PI/2 for axis correction
+                // After this Y rotation, we need to pitch around the wrapper's local Z axis
+                // to tilt the fish nose up/down in the direction it's facing
+                this.glbAxisWrapper.rotation.z = pitch;
             } else {
-                // When horizontal speed is very low, smoothly return to level (dorsal up)
-                if (this.glbAxisWrapper) {
-                    this.glbAxisWrapper.rotation.x *= 0.9;
-                } else {
-                    this.group.rotation.z *= 0.9;
-                }
+                // Procedural fish: pitch via group's Z rotation (tilt nose up/down)
+                this.group.rotation.z = -pitch;
             }
         } else {
             // When nearly stationary, smoothly return to level orientation
             if (this.glbAxisWrapper) {
-                this.glbAxisWrapper.rotation.x *= 0.9;
+                this.glbAxisWrapper.rotation.z *= 0.9;
             } else {
                 this.group.rotation.z *= 0.9;
             }
@@ -8723,7 +8719,6 @@ class Fish {
         
         // Always keep roll at 0 to prevent fish from rolling sideways
         this.group.rotation.x = 0;
-        this.group.rotation.z = 0; // Reset Z for GLB fish (pitch is on wrapper now)
     }
     
     animateTail(deltaTime) {
