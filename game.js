@@ -761,7 +761,11 @@ const glbSwapStats = {
     glbModelNullByForm: {},    // Track which forms returned null (for diagnosing missing models)
     swapSuccess: 0,            // Successfully swapped to GLB
     swapSuccessByForm: {},     // Track which forms successfully swapped
-    skeletonUtilsAvailable: null  // Track if SkeletonUtils is available
+    skeletonUtilsAvailable: null,  // Track if SkeletonUtils is available
+    // NEW: Track eligible vs ineligible attempts for clearer metrics
+    eligibleAttempts: 0,       // Fish forms that have a GLB model configured
+    noVariantFound: 0,         // Fish forms with no GLB model in manifest
+    loadFailed: 0              // GLB load attempted but failed (network/parse error)
 };
 
 // DEBUG: Create on-screen debug display for GLB swap stats
@@ -792,7 +796,20 @@ function createGlbDebugDisplay() {
 // DEBUG: Update the on-screen debug display
 function updateGlbDebugDisplay() {
     const debugDiv = createGlbDebugDisplay();
-    const successRate = glbSwapStats.tryLoadCalled > 0 
+    
+    // NEW: Calculate clearer metrics
+    // Coverage: % of fish forms that have a GLB model configured (6/20 = 30%)
+    const glbFormsAvailable = glbLoaderState.formToVariant ? glbLoaderState.formToVariant.size : 0;
+    const totalFishForms = 20; // CONFIG.fishTiers has 20 species
+    const coveragePercent = ((glbFormsAvailable / totalFishForms) * 100).toFixed(0);
+    
+    // Eligible success rate: % of eligible attempts that succeeded
+    const eligibleSuccessRate = glbSwapStats.eligibleAttempts > 0 
+        ? ((glbSwapStats.swapSuccess / glbSwapStats.eligibleAttempts) * 100).toFixed(1) 
+        : '0.0';
+    
+    // Overall rate (for comparison with old metric)
+    const overallRate = glbSwapStats.tryLoadCalled > 0 
         ? ((glbSwapStats.swapSuccess / glbSwapStats.tryLoadCalled) * 100).toFixed(1) 
         : '0.0';
     
@@ -823,20 +840,18 @@ function updateGlbDebugDisplay() {
         <div style="color: #00ff00;">Active: ${currentActive} / ${maxCount} max</div>
         <div>Free pool: ${currentFree}</div>
         <div>Total pool: ${poolSize}</div>
-        <div style="color: #00ffff; font-weight: bold;">--- GLB Loading ---</div>
-        <div>Spawn events: ${glbSwapStats.totalSpawned}</div>
-        <div>tryLoad called: ${glbSwapStats.tryLoadCalled}</div>
-        <div style="color: #00ff00;">Swap success: ${glbSwapStats.swapSuccess} (${successRate}%)</div>
-        <div style="color: #ff6666;">Blocked reasons:</div>
+        <div style="color: #00ffff; font-weight: bold;">--- GLB Coverage ---</div>
+        <div style="color: #ffff00;">GLB models: ${glbFormsAvailable}/${totalFishForms} forms (${coveragePercent}%)</div>
+        <div style="color: #00ff00;">Eligible success: ${glbSwapStats.swapSuccess}/${glbSwapStats.eligibleAttempts} (${eligibleSuccessRate}%)</div>
+        <div>No GLB available: ${glbSwapStats.noVariantFound}</div>
+        <div>Load failed: ${glbSwapStats.loadFailed}</div>
+        <div style="color: #888888;">Overall: ${glbSwapStats.swapSuccess}/${glbSwapStats.tryLoadCalled} (${overallRate}%)</div>
+        <div style="color: #ff6666;">Other blocks:</div>
         <div>  manifest: ${glbSwapStats.manifestNotReady}</div>
         <div>  token: ${glbSwapStats.tokenMismatch}</div>
         <div>  inactive: ${glbSwapStats.fishInactive}</div>
-        <div>  group: ${glbSwapStats.groupMissing}</div>
-        <div>  null model: ${glbSwapStats.glbModelNull}</div>
         <div style="color: #66ff66;">Success by form:</div>
         <pre style="margin: 0; font-size: 10px;">${formStats || '  (none yet)'}</pre>
-        <div style="color: #ff9966;">Null by form:</div>
-        <pre style="margin: 0; font-size: 10px;">${nullFormStats || '  (none yet)'}</pre>
     `;
 }
 
@@ -852,6 +867,10 @@ function resetGlbSwapStats() {
     glbSwapStats.glbModelNullByForm = {};
     glbSwapStats.swapSuccess = 0;
     glbSwapStats.swapSuccessByForm = {};
+    // NEW: Reset clearer metrics
+    glbSwapStats.eligibleAttempts = 0;
+    glbSwapStats.noVariantFound = 0;
+    glbSwapStats.loadFailed = 0;
     // Check SkeletonUtils availability on reset
     glbSwapStats.skeletonUtilsAvailable = typeof THREE !== 'undefined' && typeof THREE.SkeletonUtils !== 'undefined';
 }
@@ -1073,9 +1092,14 @@ async function tryLoadGLBForFish(tierConfig, form) {
     const tierName = getTierFromConfig(tierConfig);
     const variant = getVariantForForm(tierName, form);
     
+    // NEW: Track whether this form has a GLB model configured
     if (!variant || !variant.url) {
+        glbSwapStats.noVariantFound++;
         return null;
     }
+    
+    // NEW: This is an eligible attempt (form has a GLB model configured)
+    glbSwapStats.eligibleAttempts++;
     
     try {
         console.log(`[FISH-GLB] About to call loadGLBModel for variant.url='${variant.url}'`);
@@ -1113,9 +1137,13 @@ async function tryLoadGLBForFish(tierConfig, form) {
             return model;
         } else {
             console.log(`[FISH-GLB] loadGLBModel returned null/undefined for ${form}`);
+            // NEW: Track load failures (model exists in manifest but failed to load)
+            glbSwapStats.loadFailed++;
         }
     } catch (error) {
         console.warn('[GLB-LOADER] Error loading GLB for', form, ':', error.message, error.stack);
+        // NEW: Track load failures (network/parse error)
+        glbSwapStats.loadFailed++;
     }
     
     return null;
@@ -4102,6 +4130,9 @@ function spawnExpandingRingOptimized(position, color, startRadius, endRadius, du
     });
 }
 
+// PERFORMANCE: Temp vector for muzzle particle velocity - reused to avoid per-particle allocations
+const muzzleParticleTempVelocity = new THREE.Vector3();
+
 // Spawn muzzle particles
 function spawnMuzzleParticles(position, direction, color, count) {
     for (let i = 0; i < count; i++) {
@@ -4110,29 +4141,34 @@ function spawnMuzzleParticles(position, direction, color, count) {
         if (!particle) continue;
         
         const spread = 0.5;
-        const velocity = new THREE.Vector3(
+        // PERFORMANCE: Reuse temp vector instead of new THREE.Vector3() per particle
+        muzzleParticleTempVelocity.set(
             direction.x * 200 + (Math.random() - 0.5) * 100 * spread,
             direction.y * 200 + (Math.random() - 0.5) * 100 * spread,
             direction.z * 200 + (Math.random() - 0.5) * 100 * spread
         );
         
         // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
-        particle.spawn(position, velocity, color, 0.5 + Math.random() * 0.5, 0.3 + Math.random() * 0.2);
+        particle.spawn(position, muzzleParticleTempVelocity, color, 0.5 + Math.random() * 0.5, 0.3 + Math.random() * 0.2);
         activeParticles.push(particle);
     }
 }
+
+// PERFORMANCE: Temp vector for lightning burst end position - reused to avoid per-arc allocations
+const lightningBurstTempEndPos = new THREE.Vector3();
 
 // Spawn lightning burst effect (for 5x weapon)
 function spawnLightningBurst(position, color, count) {
     for (let i = 0; i < count; i++) {
         const angle = (i / count) * Math.PI * 2;
         const length = 30 + Math.random() * 20;
-        const endPos = position.clone();
-        endPos.x += Math.cos(angle) * length;
-        endPos.y += (Math.random() - 0.5) * length * 0.5;
-        endPos.z += Math.sin(angle) * length;
+        // PERFORMANCE: Reuse temp vector instead of position.clone() per arc
+        lightningBurstTempEndPos.copy(position);
+        lightningBurstTempEndPos.x += Math.cos(angle) * length;
+        lightningBurstTempEndPos.y += (Math.random() - 0.5) * length * 0.5;
+        lightningBurstTempEndPos.z += Math.sin(angle) * length;
         
-        spawnLightningArc(position, endPos, color);
+        spawnLightningArc(position, lightningBurstTempEndPos, color);
     }
 }
 
@@ -4251,35 +4287,118 @@ function showAbilityNotification(text, color) {
     }, 1500);
 }
 
+// PERFORMANCE: Fireball material pool to avoid creating new materials per shot
+const fireballMaterialPool = {
+    fireballPool: [],      // Pool of {mesh, material} for outer fireball
+    corePool: [],          // Pool of {mesh, material} for inner core
+    poolSize: 5            // Pre-allocate 5 of each (8x weapon fires slowly)
+};
+
+// Initialize fireball material pool
+function initFireballMaterialPool() {
+    if (!vfxGeometryCache.fireballSphere) initVfxGeometryCache();
+    
+    for (let i = 0; i < fireballMaterialPool.poolSize; i++) {
+        // Outer fireball
+        const fireballMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff4400,
+            transparent: true,
+            opacity: 0.9
+        });
+        const fireballMesh = new THREE.Mesh(vfxGeometryCache.fireballSphere, fireballMaterial);
+        fireballMesh.visible = false;
+        fireballMaterialPool.fireballPool.push({ mesh: fireballMesh, material: fireballMaterial });
+        
+        // Inner core
+        const coreMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffff88,
+            transparent: true,
+            opacity: 1
+        });
+        const coreMesh = new THREE.Mesh(vfxGeometryCache.fireballCore, coreMaterial);
+        coreMesh.visible = false;
+        fireballMaterialPool.corePool.push({ mesh: coreMesh, material: coreMaterial });
+    }
+}
+
+// Get fireball from pool or create new one
+function getFireballFromPool() {
+    let item = fireballMaterialPool.fireballPool.pop();
+    if (!item) {
+        // Pool exhausted, create new (fallback)
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xff4400,
+            transparent: true,
+            opacity: 0.9
+        });
+        const mesh = new THREE.Mesh(vfxGeometryCache.fireballSphere, material);
+        item = { mesh, material };
+    }
+    return item;
+}
+
+// Get core from pool or create new one
+function getCoreFromPool() {
+    let item = fireballMaterialPool.corePool.pop();
+    if (!item) {
+        // Pool exhausted, create new (fallback)
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xffff88,
+            transparent: true,
+            opacity: 1
+        });
+        const mesh = new THREE.Mesh(vfxGeometryCache.fireballCore, material);
+        item = { mesh, material };
+    }
+    return item;
+}
+
+// Return fireball to pool
+function returnFireballToPool(item) {
+    item.mesh.visible = false;
+    if (item.mesh.parent) item.mesh.parent.remove(item.mesh);
+    // Reset material properties
+    item.material.opacity = 0.9;
+    item.material.color.setHex(0xff4400);
+    fireballMaterialPool.fireballPool.push(item);
+}
+
+// Return core to pool
+function returnCoreToPool(item) {
+    item.mesh.visible = false;
+    if (item.mesh.parent) item.mesh.parent.remove(item.mesh);
+    // Reset material properties
+    item.material.opacity = 1;
+    item.material.color.setHex(0xffff88);
+    fireballMaterialPool.corePool.push(item);
+}
+
 // Spawn fireball muzzle flash (for 8x weapon) - REFACTORED to use VFX manager
-// PERFORMANCE: Uses cached geometry with scaling instead of creating new geometry each time
+// PERFORMANCE: Uses cached geometry with scaling AND pooled materials
 function spawnFireballMuzzleFlash(position, direction) {
     if (!scene) return;
     
     // Ensure geometry cache is initialized
     if (!vfxGeometryCache.fireballSphere) initVfxGeometryCache();
     
-    // PERFORMANCE: Use cached geometry and scale to target size (25)
-    const material = new THREE.MeshBasicMaterial({
-        color: 0xff4400,
-        transparent: true,
-        opacity: 0.9
-    });
+    // PERFORMANCE: Get from pool instead of creating new materials per shot
+    const fireballItem = getFireballFromPool();
+    const fireball = fireballItem.mesh;
+    const material = fireballItem.material;
     
-    const fireball = new THREE.Mesh(vfxGeometryCache.fireballSphere, material);
     fireball.position.copy(position);
     fireball.scale.set(25, 25, 25); // Scale unit sphere to size 25
+    fireball.visible = true;
     scene.add(fireball);
     
-    // Inner bright core - PERFORMANCE: Use cached geometry and scale to target size (15)
-    const coreMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffff88,
-        transparent: true,
-        opacity: 1
-    });
-    const core = new THREE.Mesh(vfxGeometryCache.fireballCore, coreMaterial);
+    // Inner bright core - PERFORMANCE: Get from pool
+    const coreItem = getCoreFromPool();
+    const core = coreItem.mesh;
+    const coreMaterial = coreItem.material;
+    
     core.position.copy(position);
     core.scale.set(15, 15, 15); // Scale unit sphere to size 15
+    core.visible = true;
     scene.add(core);
     
     // Register with VFX manager instead of using own RAF loop
@@ -4287,7 +4406,8 @@ function spawnFireballMuzzleFlash(position, direction) {
         type: 'fireballFlash',
         fireball: fireball,
         core: core,
-        // PERFORMANCE: No geometry references needed - using cached geometry
+        fireballItem: fireballItem,  // Store pool reference
+        coreItem: coreItem,          // Store pool reference
         material: material,
         coreMaterial: coreMaterial,
         baseFireballScale: 25,
@@ -4314,9 +4434,9 @@ function spawnFireballMuzzleFlash(position, direction) {
         cleanup() {
             scene.remove(this.fireball);
             scene.remove(this.core);
-            // PERFORMANCE: Only dispose materials, geometry is cached and reused
-            this.material.dispose();
-            this.coreMaterial.dispose();
+            // PERFORMANCE: Return to pool instead of disposing
+            returnFireballToPool(this.fireballItem);
+            returnCoreToPool(this.coreItem);
         }
     });
 }
