@@ -494,7 +494,7 @@ const CONFIG = {
         // SWIMMING: Tight synchronized waves, rapid direction changes
         sardine: { 
             hp: 20, speedMin: 65, speedMax: 100, reward: 30, size: 10, 
-            color: 0xccddee, secondaryColor: 0x88aacc, count: 40, 
+            color: 0xccddee, secondaryColor: 0x88aacc, count: 15, 
             pattern: 'waveFormation', schoolSize: [20, 40], form: 'sardine',
             category: 'smallSchool',
             boidsStrength: 3.0  // Extremely tight schooling
@@ -504,7 +504,7 @@ const CONFIG = {
         // SWIMMING: Swirling bait ball formation, very tight grouping
         anchovy: { 
             hp: 15, speedMin: 70, speedMax: 120, reward: 25, size: 8, 
-            color: 0xaabbcc, secondaryColor: 0x778899, count: 45, 
+            color: 0xaabbcc, secondaryColor: 0x778899, count: 15, 
             pattern: 'baitBall', schoolSize: [25, 45], form: 'anchovy',
             category: 'smallSchool',
             boidsStrength: 3.5  // Tightest schooling (bait ball)
@@ -810,10 +810,21 @@ function updateGlbDebugDisplay() {
         .map(([form, count]) => `  ${form}: ${count}`)
         .join('\n');
     
+    // PERFORMANCE: Add real-time fish count stats to help diagnose population issues
+    const currentActive = typeof activeFish !== 'undefined' ? activeFish.length : 0;
+    const currentFree = typeof freeFish !== 'undefined' ? freeFish.length : 0;
+    const poolSize = typeof fishPool !== 'undefined' ? fishPool.length : 0;
+    const maxCount = typeof FISH_SPAWN_CONFIG !== 'undefined' ? FISH_SPAWN_CONFIG.maxCount : '?';
+    
     debugDiv.innerHTML = `
         <div style="color: #ffff00; font-weight: bold;">GLB Debug Stats</div>
         <div>SkeletonUtils: ${skeletonStatus}</div>
-        <div>Spawned: ${glbSwapStats.totalSpawned}</div>
+        <div style="color: #00ffff; font-weight: bold;">--- Fish Population ---</div>
+        <div style="color: #00ff00;">Active: ${currentActive} / ${maxCount} max</div>
+        <div>Free pool: ${currentFree}</div>
+        <div>Total pool: ${poolSize}</div>
+        <div style="color: #00ffff; font-weight: bold;">--- GLB Loading ---</div>
+        <div>Spawn events: ${glbSwapStats.totalSpawned}</div>
         <div>tryLoad called: ${glbSwapStats.tryLoadCalled}</div>
         <div style="color: #00ff00;">Swap success: ${glbSwapStats.swapSuccess} (${successRate}%)</div>
         <div style="color: #ff6666;">Blocked reasons:</div>
@@ -6898,6 +6909,11 @@ class Fish {
         this.freezeTimer = 0;
         this.isActive = false;
         
+        // STUCK FISH DETECTION: Track position to detect fish that stop moving
+        this.lastPosition = new THREE.Vector3();
+        this.stuckTimer = 0;
+        this.updateErrorCount = 0;
+        
         // FIX: Load token to prevent attaching GLB to stale/recycled fish instances
         this.loadToken = ++fishLoadTokenCounter;
         this.glbLoaded = false;
@@ -8392,6 +8408,40 @@ class Fish {
         
         // Update pattern timer
         this.patternState.timer += deltaTime;
+        
+        // STUCK FISH DETECTION: Check if fish has been stationary for too long
+        // This catches fish that get stuck due to errors or state corruption
+        const STUCK_THRESHOLD = 5.0; // seconds
+        const MOVEMENT_EPSILON = 0.5; // minimum movement per second
+        const displacement = this.group.position.distanceTo(this.lastPosition);
+        
+        if (displacement < MOVEMENT_EPSILON * deltaTime) {
+            this.stuckTimer += deltaTime;
+            if (this.stuckTimer > STUCK_THRESHOLD) {
+                // Fish has been stuck for too long - attempt recovery
+                console.warn(`[FISH] Stuck fish detected (${this.tier}/${this.species || this.form}), attempting recovery`);
+                
+                // Reset velocity with random direction
+                const randomAngle = Math.random() * Math.PI * 2;
+                this.velocity.set(
+                    Math.cos(randomAngle) * this.speed,
+                    (Math.random() - 0.5) * 20,
+                    Math.sin(randomAngle) * this.speed
+                );
+                
+                // Reset pattern state to prevent stuck patterns
+                this.patternState = null;
+                
+                // Reset stuck timer
+                this.stuckTimer = 0;
+            }
+        } else {
+            // Fish is moving - reset stuck timer
+            this.stuckTimer = 0;
+        }
+        
+        // Update last position for next frame's stuck detection
+        this.lastPosition.copy(this.group.position);
     }
     
     // Apply swimming pattern based on species
@@ -8869,6 +8919,14 @@ class Fish {
     }
     
     die(weaponKey) {
+        // POOL CORRUPTION FIX: Guard against duplicate die() calls
+        // This can happen if multiple bullets hit the same fish in the same frame
+        // or if chain damage effects hit an already-dead fish
+        if (!this.isActive) {
+            console.warn('[FISH] die() called on already-dead fish, skipping');
+            return;
+        }
+        
         this.isActive = false;
         this.group.visible = false;
         
@@ -8878,7 +8936,12 @@ class Fish {
         }
         
         // PERFORMANCE: Return fish to free-list for O(1) reuse (Boss Mode optimization)
-        freeFish.push(this);
+        // POOL CORRUPTION FIX: Check if already in freeFish to prevent duplicates
+        if (!freeFish.includes(this)) {
+            freeFish.push(this);
+        } else {
+            console.warn('[FISH] Fish already in freeFish pool, skipping duplicate push');
+        }
         
         const deathPosition = this.group.position.clone();
         
@@ -9171,20 +9234,31 @@ function spawnInitialFish() {
         return;
     }
     
+    // PERFORMANCE FIX: Only spawn up to maxCount fish initially
+    // Remaining fish go to freeFish pool for dynamic spawning
+    let spawnedCount = 0;
     fishPool.forEach(fish => {
-        // Issue #1: Spawn fish in full 3D space around cannon (immersive 360°)
-        const position = getRandomFishPositionIn3DSpace();
-        fish.spawn(position);
-        activeFish.push(fish);
+        if (spawnedCount < FISH_SPAWN_CONFIG.maxCount) {
+            // Issue #1: Spawn fish in full 3D space around cannon (immersive 360°)
+            const position = getRandomFishPositionIn3DSpace();
+            fish.spawn(position);
+            activeFish.push(fish);
+            spawnedCount++;
+        } else {
+            // Put remaining fish in free pool for later spawning
+            freeFish.push(fish);
+        }
     });
+    
+    console.log(`[FISH] Initial spawn: ${spawnedCount} active, ${freeFish.length} in reserve (max: ${FISH_SPAWN_CONFIG.maxCount})`)
 }
 
 // ==================== DYNAMIC FISH RESPAWN SYSTEM ====================
 // Maintains target fish count and adjusts spawn rate based on kill rate
 const FISH_SPAWN_CONFIG = {
-    targetCount: 20,        // Target number of fish on screen
-    minCount: 15,           // Minimum fish count before emergency spawn
-    maxCount: 30,           // Maximum fish count
+    targetCount: 80,        // Target number of fish on screen
+    minCount: 60,           // Minimum fish count before emergency spawn
+    maxCount: 120,          // Maximum fish count - HARD CAP to prevent performance issues
     normalSpawnInterval: 1.0,    // Normal spawn interval (seconds)
     emergencySpawnInterval: 0.3, // Emergency spawn interval when fish < minCount
     maintainSpawnInterval: 2.0   // Slow spawn when at target
@@ -11346,16 +11420,36 @@ function animate() {
             if (fish && fish.isActive) {
                 try {
                     fish.update(deltaTime, activeFish);
+                    // Reset error count on successful update
+                    fish.updateErrorCount = 0;
                 } catch (e) {
                     fishUpdateErrors++;
+                    fish.updateErrorCount = (fish.updateErrorCount || 0) + 1;
+                    
                     if (fishUpdateErrors <= 3) {
-                        console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species);
+                        console.error('Fish update error:', e, 'Fish:', fish.tier, fish.species || fish.form);
                     }
-                    // Attempt recovery: reset fish state
-                    fish.velocity.set(0, 0, 0);
-                    fish.acceleration.set(0, 0, 0);
+                    
+                    // IMPROVED RECOVERY: Track error count per fish
+                    // If a fish keeps throwing errors, do stronger recovery
+                    if (fish.updateErrorCount > 10) {
+                        // Fish has too many errors - reset completely
+                        console.warn(`[FISH] Fish ${fish.tier}/${fish.species || fish.form} has ${fish.updateErrorCount} errors, resetting state`);
+                        fish.patternState = null;
+                        fish.velocity.set(
+                            (Math.random() - 0.5) * fish.speed,
+                            (Math.random() - 0.5) * 20,
+                            (Math.random() - 0.5) * fish.speed
+                        );
+                        fish.acceleration.set(0, 0, 0);
+                        fish.updateErrorCount = 0;
+                    } else {
+                        // Simple recovery: just reset velocity/acceleration
+                        fish.velocity.set(0, 0, 0);
+                        fish.acceleration.set(0, 0, 0);
+                    }
                 }
-            } else if (fish && !fish.isActive) {
+            }else if (fish && !fish.isActive) {
                 activeFish.splice(i, 1);
             } else {
                 // Invalid fish reference - remove it
@@ -11984,11 +12078,26 @@ function endBossEvent() {
     // Stop boss time music when boss event ends
     stopBossMusicMP3();
     
-    // Remove any remaining boss fish
+    // Remove any remaining boss fish and return them to the pool
+    // BUG FIX: Use fish.group.parent.remove() instead of scene.remove()
+    // because fish groups are added to fishGroup, not scene directly
     activeFish.forEach(fish => {
         if (fish.isBoss && fish.isActive) {
             fish.isActive = false;
-            scene.remove(fish.group);
+            fish.group.visible = false;
+            
+            // Remove from correct parent (fishGroup, not scene)
+            if (fish.group.parent) {
+                fish.group.parent.remove(fish.group);
+            }
+            
+            // Clear boss flag so fish can be reused as normal fish
+            fish.isBoss = false;
+            
+            // Return to free pool for reuse (with duplicate guard)
+            if (!freeFish.includes(fish)) {
+                freeFish.push(fish);
+            }
         }
     });
 }
