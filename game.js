@@ -1274,6 +1274,23 @@ const fireBulletTempVectors = {
     multiplayerDir: new THREE.Vector3()
 };
 
+// PERFORMANCE: Temp vectors for getAimDirectionFromMouse - reused to avoid per-call allocations
+// This is critical for third-person mode where aimCannon is called on every mouse move
+const aimTempVectors = {
+    mouseNDC: new THREE.Vector2(),
+    muzzlePos: new THREE.Vector3(),
+    targetPoint: new THREE.Vector3(),
+    direction: new THREE.Vector3(),
+    rayDirection: new THREE.Vector3()
+};
+
+// PERFORMANCE: Throttle state for aimCannon - limits calls to once per animation frame
+const aimThrottleState = {
+    pendingAim: false,
+    lastTargetX: 0,
+    lastTargetY: 0
+};
+
 // PERFORMANCE: Barrel recoil state for animation loop (replaces setTimeout)
 // IMPROVED: Two-phase recoil animation (kick + return) with easing for realistic feel
 const barrelRecoilState = {
@@ -6641,29 +6658,52 @@ function updateCannonVisual() {
 }
 
 // Get aim direction from mouse position (shared by cannon aiming and bullet firing)
-function getAimDirectionFromMouse(targetX, targetY) {
+// PERFORMANCE: Uses pre-allocated temp vectors to avoid garbage collection pressure
+// This is critical for third-person mode where this function is called on every mouse move
+function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     // Convert screen coordinates to normalized device coordinates
-    const mouseNDC = new THREE.Vector2(
+    // PERFORMANCE: Reuse temp Vector2 instead of creating new one
+    aimTempVectors.mouseNDC.set(
         (targetX / window.innerWidth) * 2 - 1,
         -(targetY / window.innerHeight) * 2 + 1
     );
     
     // Use raycaster to get direction from camera through mouse point
-    raycaster.setFromCamera(mouseNDC, camera);
+    raycaster.setFromCamera(aimTempVectors.mouseNDC, camera);
     
     // Get cannon muzzle position
-    const muzzlePos = new THREE.Vector3();
-    cannonMuzzle.getWorldPosition(muzzlePos);
+    // PERFORMANCE: Reuse temp Vector3 instead of creating new one
+    cannonMuzzle.getWorldPosition(aimTempVectors.muzzlePos);
     
     // Find target point along the ray (at a reasonable distance into the tank)
-    const targetPoint = raycaster.ray.origin.clone().add(
-        raycaster.ray.direction.clone().multiplyScalar(1500)
-    );
+    // PERFORMANCE: Avoid clone() calls - copy values directly to temp vectors
+    aimTempVectors.rayDirection.copy(raycaster.ray.direction).multiplyScalar(1500);
+    aimTempVectors.targetPoint.copy(raycaster.ray.origin).add(aimTempVectors.rayDirection);
     
     // Calculate direction from muzzle to target point
-    const direction = targetPoint.sub(muzzlePos).normalize();
+    // PERFORMANCE: Use output vector if provided, otherwise use temp vector
+    const result = outDirection || aimTempVectors.direction;
+    result.copy(aimTempVectors.targetPoint).sub(aimTempVectors.muzzlePos).normalize();
     
-    return direction;
+    return result;
+}
+
+// PERFORMANCE: Throttled version of aimCannon - stores mouse position and processes once per frame
+// This prevents excessive calls on every mouse move event in third-person mode
+function aimCannonThrottled(targetX, targetY) {
+    // Store the latest mouse position
+    aimThrottleState.lastTargetX = targetX;
+    aimThrottleState.lastTargetY = targetY;
+    
+    // If we already have a pending aim request, don't schedule another
+    if (aimThrottleState.pendingAim) return;
+    
+    // Schedule the aim to happen on the next animation frame
+    aimThrottleState.pendingAim = true;
+    requestAnimationFrame(() => {
+        aimThrottleState.pendingAim = false;
+        aimCannon(aimThrottleState.lastTargetX, aimThrottleState.lastTargetY);
+    });
 }
 
 function aimCannon(targetX, targetY) {
@@ -10483,7 +10523,9 @@ function setupEventListeners() {
         }
         
         // 3RD PERSON MODE: Aim cannon at mouse position
-        aimCannon(e.clientX, e.clientY);
+        // PERFORMANCE: Use throttled version to limit calls to once per animation frame
+        // This prevents excessive object allocations and garbage collection pressure
+        aimCannonThrottled(e.clientX, e.clientY);
         
         // Issue #16: Update crosshair position based on view mode
         const crosshair = document.getElementById('crosshair');
