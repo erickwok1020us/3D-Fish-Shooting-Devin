@@ -8702,7 +8702,12 @@ class Fish {
             
             // Calculate pitch (tilt up/down) from vertical component
             // Using asin gives the angle between velocity and horizontal plane
-            const pitch = Math.asin(dirY);
+            // FIX: Clamp pitch to ±45° (0.785 rad) to prevent extreme tilting
+            // When pitch approaches ±90°, non-uniformly scaled ellipsoid bodies appear as flat discs
+            // This is especially noticeable with procedural fish that have scale(1.5, 0.8, 0.6)
+            const rawPitch = Math.asin(dirY);
+            const maxPitch = Math.PI / 4; // 45 degrees
+            const pitch = Math.max(-maxPitch, Math.min(maxPitch, rawPitch));
             
             // Apply yaw to the group
             this.group.rotation.y = yaw;
