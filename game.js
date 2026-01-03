@@ -8685,13 +8685,14 @@ class Fish {
             const targetRotation = Math.atan2(-this.velocity.z, this.velocity.x);
             this.group.rotation.y = targetRotation;
             
-            // Pitch: tilt based on vertical velocity, but only when moving horizontally
-            // This prevents extreme tilting when fish is mostly moving vertically
-            if (horizontalSpeed > 0.5) {
-                // Normal pitch calculation when swimming horizontally
-                const tiltAmount = Math.atan2(this.velocity.y, horizontalSpeed);
-                // Clamp pitch to ±30° for natural look
-                const clampedTilt = Math.max(-0.52, Math.min(0.52, tiltAmount));
+            // Pitch: tilt based on vertical velocity
+            // Lower threshold (0.2) allows pitch even at slower horizontal speeds
+            if (horizontalSpeed > 0.2) {
+                // Calculate pitch angle from vertical velocity ratio
+                // Multiply by 1.5 for more pronounced effect
+                const tiltAmount = Math.atan2(this.velocity.y, horizontalSpeed) * 1.5;
+                // Clamp pitch to ±45° (0.79 rad) for more visible tilting
+                const clampedTilt = Math.max(-0.79, Math.min(0.79, tiltAmount));
                 
                 // FIX: For GLB models, apply pitch to the wrapper's X rotation
                 // The wrapper has a 90° Y rotation, so the pitch axis changes from Z to X
@@ -8704,7 +8705,7 @@ class Fish {
                     this.group.rotation.z = -clampedTilt;
                 }
             } else {
-                // When horizontal speed is low, smoothly return to level (dorsal up)
+                // When horizontal speed is very low, smoothly return to level (dorsal up)
                 if (this.glbAxisWrapper) {
                     this.glbAxisWrapper.rotation.x *= 0.9;
                 } else {
