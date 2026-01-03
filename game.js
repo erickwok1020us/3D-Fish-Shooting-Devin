@@ -952,13 +952,17 @@ async function tryLoadGLBForFish(tierConfig, form) {
     }
     
     try {
+        console.log(`[FISH-GLB] About to call loadGLBModel for variant.url='${variant.url}'`);
         const model = await loadGLBModel(variant.url);
+        console.log(`[FISH-GLB] loadGLBModel returned: ${model ? 'model object' : 'null'}, userData=${model ? JSON.stringify(model.userData) : 'N/A'}`);
         if (model) {
             // FIX: Use bounding box normalization like weapons instead of magic scale numbers
             // This ensures fish GLB models are always visible regardless of their original size
             const targetSize = tierConfig.size || 20; // Target fish size in game units
             const originalMaxDim = model.userData.originalMaxDim || 1;
             const originalCenterArray = model.userData.originalCenter; // [x, y, z] array
+            
+            console.log(`[FISH-GLB] Before normalization: targetSize=${targetSize}, originalMaxDim=${originalMaxDim}, originalCenterArray=${JSON.stringify(originalCenterArray)}`);
             
             // Calculate auto-scale to normalize to target size
             let autoScale = 1;
@@ -981,9 +985,11 @@ async function tryLoadGLBForFish(tierConfig, form) {
             console.log(`[FISH-GLB] Normalized ${form}: targetSize=${targetSize}, originalMaxDim=${originalMaxDim.toFixed(2)}, autoScale=${autoScale.toFixed(2)}`);
             
             return model;
+        } else {
+            console.log(`[FISH-GLB] loadGLBModel returned null/undefined for ${form}`);
         }
     } catch (error) {
-        console.warn('[GLB-LOADER] Error loading GLB for', form, ':', error.message);
+        console.warn('[GLB-LOADER] Error loading GLB for', form, ':', error.message, error.stack);
     }
     
     return null;
