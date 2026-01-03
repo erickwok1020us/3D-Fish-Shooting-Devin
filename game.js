@@ -746,6 +746,84 @@ const glbLoaderState = {
     formToVariant: new Map()
 };
 
+// DEBUG: GLB swap statistics for diagnosing rendering issues
+const glbSwapStats = {
+    totalSpawned: 0,           // Total fish spawned
+    tryLoadCalled: 0,          // Times tryLoadGLBModel was called
+    manifestNotReady: 0,       // Blocked because manifest not loaded
+    tokenMismatch: 0,          // Blocked because loadToken changed (fish recycled)
+    fishInactive: 0,           // Blocked because fish became inactive
+    groupMissing: 0,           // Blocked because group or parent missing
+    glbModelNull: 0,           // GLB model returned null (no model for this form)
+    swapSuccess: 0,            // Successfully swapped to GLB
+    swapSuccessByForm: {}      // Track which forms successfully swapped
+};
+
+// DEBUG: Create on-screen debug display for GLB swap stats
+function createGlbDebugDisplay() {
+    let debugDiv = document.getElementById('glb-debug-display');
+    if (!debugDiv) {
+        debugDiv = document.createElement('div');
+        debugDiv.id = 'glb-debug-display';
+        debugDiv.style.cssText = `
+            position: fixed;
+            top: 60px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 8px;
+            border-radius: 4px;
+            z-index: 10000;
+            max-width: 250px;
+            pointer-events: none;
+        `;
+        document.body.appendChild(debugDiv);
+    }
+    return debugDiv;
+}
+
+// DEBUG: Update the on-screen debug display
+function updateGlbDebugDisplay() {
+    const debugDiv = createGlbDebugDisplay();
+    const successRate = glbSwapStats.tryLoadCalled > 0 
+        ? ((glbSwapStats.swapSuccess / glbSwapStats.tryLoadCalled) * 100).toFixed(1) 
+        : '0.0';
+    
+    const formStats = Object.entries(glbSwapStats.swapSuccessByForm)
+        .map(([form, count]) => `  ${form}: ${count}`)
+        .join('\n');
+    
+    debugDiv.innerHTML = `
+        <div style="color: #ffff00; font-weight: bold;">GLB Debug Stats</div>
+        <div>Spawned: ${glbSwapStats.totalSpawned}</div>
+        <div>tryLoad called: ${glbSwapStats.tryLoadCalled}</div>
+        <div style="color: #00ff00;">Swap success: ${glbSwapStats.swapSuccess} (${successRate}%)</div>
+        <div style="color: #ff6666;">Blocked reasons:</div>
+        <div>  manifest: ${glbSwapStats.manifestNotReady}</div>
+        <div>  token: ${glbSwapStats.tokenMismatch}</div>
+        <div>  inactive: ${glbSwapStats.fishInactive}</div>
+        <div>  group: ${glbSwapStats.groupMissing}</div>
+        <div>  null model: ${glbSwapStats.glbModelNull}</div>
+        <div style="color: #66ff66;">By form:</div>
+        <pre style="margin: 0; font-size: 10px;">${formStats || '  (none yet)'}</pre>
+    `;
+}
+
+// DEBUG: Reset stats (call when starting new game)
+function resetGlbSwapStats() {
+    glbSwapStats.totalSpawned = 0;
+    glbSwapStats.tryLoadCalled = 0;
+    glbSwapStats.manifestNotReady = 0;
+    glbSwapStats.tokenMismatch = 0;
+    glbSwapStats.fishInactive = 0;
+    glbSwapStats.groupMissing = 0;
+    glbSwapStats.glbModelNull = 0;
+    glbSwapStats.swapSuccess = 0;
+    glbSwapStats.swapSuccessByForm = {};
+}
+
 // FIX: Helper function to properly clone GLB models
 // For skinned meshes, we need to use SkeletonUtils.clone() instead of Object3D.clone()
 // This ensures skeleton bindings and animations work correctly
@@ -6855,11 +6933,17 @@ class Fish {
     
     // FIX: Try to load GLB model asynchronously and replace procedural mesh when loaded
     async tryLoadGLBModel(form, size) {
+        // DEBUG: Track stats
+        glbSwapStats.tryLoadCalled++;
+        updateGlbDebugDisplay();
+        
         // DEBUG: Log entry to this function
         console.log(`[FISH-GLB] tryLoadGLBModel called for form='${form}', size=${size}, enabled=${glbLoaderState.enabled}, manifestLoaded=${!!glbLoaderState.manifest}`);
         
         // Skip if GLB loader is disabled or manifest not loaded
         if (!glbLoaderState.enabled || !glbLoaderState.manifest) {
+            glbSwapStats.manifestNotReady++;
+            updateGlbDebugDisplay();
             console.log(`[FISH-GLB] Skipping GLB load - enabled=${glbLoaderState.enabled}, manifest=${!!glbLoaderState.manifest}`);
             return;
         }
@@ -6878,14 +6962,25 @@ class Fish {
             // FIX: Check if fish instance is still valid after async load
             // If loadToken changed, this fish was recycled/reinitialized - don't attach GLB
             if (myLoadToken !== this.loadToken) {
+                glbSwapStats.tokenMismatch++;
+                updateGlbDebugDisplay();
                 console.log(`[FISH-GLB] Skipping stale GLB attachment for ${form} (token mismatch: ${myLoadToken} vs ${this.loadToken})`);
                 return;
             }
             
             // FIX: Check if fish is still active and has a valid group
             if (!this.isActive || !this.group || !this.group.parent) {
+                if (!this.isActive) glbSwapStats.fishInactive++;
+                else glbSwapStats.groupMissing++;
+                updateGlbDebugDisplay();
                 console.log(`[FISH-GLB] Skipping GLB attachment for inactive fish ${form} (isActive=${this.isActive}, group=${!!this.group}, parent=${!!this.group?.parent})`);
                 return;
+            }
+            
+            // DEBUG: Track null model returns
+            if (!glbModel) {
+                glbSwapStats.glbModelNull++;
+                updateGlbDebugDisplay();
             }
             
             if (glbModel && this.group) {
@@ -6930,6 +7025,11 @@ class Fish {
                 
                 // Clear procedural tail reference since GLB has its own tail
                 this.tail = null;
+                
+                // DEBUG: Track successful swap
+                glbSwapStats.swapSuccess++;
+                glbSwapStats.swapSuccessByForm[form] = (glbSwapStats.swapSuccessByForm[form] || 0) + 1;
+                updateGlbDebugDisplay();
                 
                 // FIX: Log successful GLB swap with verification
                 const childTypes = this.group.children.map(c => c.type || 'unknown').join(', ');
@@ -8001,6 +8101,10 @@ class Fish {
     }
     
     spawn(position) {
+        // DEBUG: Track spawns
+        glbSwapStats.totalSpawned++;
+        updateGlbDebugDisplay();
+        
         this.group.position.copy(position);
         this.hp = this.config.hp;
         this.isActive = true;
