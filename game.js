@@ -12078,11 +12078,26 @@ function endBossEvent() {
     // Stop boss time music when boss event ends
     stopBossMusicMP3();
     
-    // Remove any remaining boss fish
+    // Remove any remaining boss fish and return them to the pool
+    // BUG FIX: Use fish.group.parent.remove() instead of scene.remove()
+    // because fish groups are added to fishGroup, not scene directly
     activeFish.forEach(fish => {
         if (fish.isBoss && fish.isActive) {
             fish.isActive = false;
-            scene.remove(fish.group);
+            fish.group.visible = false;
+            
+            // Remove from correct parent (fishGroup, not scene)
+            if (fish.group.parent) {
+                fish.group.parent.remove(fish.group);
+            }
+            
+            // Clear boss flag so fish can be reused as normal fish
+            fish.isBoss = false;
+            
+            // Return to free pool for reuse (with duplicate guard)
+            if (!freeFish.includes(fish)) {
+                freeFish.push(fish);
+            }
         }
     });
 }
