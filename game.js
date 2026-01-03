@@ -8198,6 +8198,15 @@ class Fish {
         this.group.rotation.x = 0;
         this.group.rotation.z = 0;
         
+        // FIX: Reset glbAxisWrapper rotation if it exists (for recycled GLB fish)
+        // PR #93 used rotation.x for pitch, PR #94 changed to rotation.z
+        // Leftover rotation.x values from before PR #94 can cause fish to appear sideways
+        if (this.glbAxisWrapper) {
+            this.glbAxisWrapper.rotation.x = 0;
+            this.glbAxisWrapper.rotation.z = 0;
+            // Keep rotation.y = PI/2 for axis correction (set during GLB load)
+        }
+        
         // FIX: Update loadToken on each spawn to invalidate any in-flight async GLB loads
         // from previous lifecycle (fish recycling/pooling)
         this.loadToken = ++fishLoadTokenCounter;
@@ -8708,6 +8717,10 @@ class Fish {
                 // Before GLB loads, procedural fish use group.rotation.z for pitch
                 // After GLB swap, this leftover value becomes unwanted roll (sideways tilt)
                 this.group.rotation.z = 0;
+                // FIX: Reset wrapper rotation.x to prevent sideways roll
+                // PR #93 used rotation.x for pitch, PR #94 changed to rotation.z
+                // Leftover rotation.x values can cause fish to appear sideways (lying on side)
+                this.glbAxisWrapper.rotation.x = 0;
             } else {
                 // Procedural fish: pitch via group's Z rotation (tilt nose up/down)
                 this.group.rotation.z = -pitch;
