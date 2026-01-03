@@ -736,7 +736,9 @@ const glbLoaderState = {
     modelCache: new Map(),
     loadingPromises: new Map(),
     enabled: true,
-    manifestUrl: '/assets/fish/fish_models.json'
+    manifestUrl: '/assets/fish/fish_models.json',
+    // FIX: Use same pattern as weapons - baseUrl + encodeURI(filename) at runtime
+    baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/'
 };
 
 async function loadFishManifest() {
@@ -791,7 +793,21 @@ function getVariantForForm(tierName, form) {
     return null;
 }
 
-async function loadGLBModel(url) {
+async function loadGLBModel(urlOrKey) {
+    // FIX: Support both full URLs and R2 keys (filenames) like weapons do
+    // - Full URL: starts with 'https://' or 'http://' - use as-is
+    // - Local path: starts with '/' - use as-is (will 404 for missing local files)
+    // - R2 key: anything else - construct URL using baseUrl + encodeURI(key)
+    let url;
+    if (urlOrKey.startsWith('https://') || urlOrKey.startsWith('http://') || urlOrKey.startsWith('/')) {
+        url = urlOrKey;
+    } else {
+        // R2 key mode: baseUrl + encodeURI(key) - like weapons do
+        // Use encodeURI (not encodeURIComponent) to preserve '/' for subfolders
+        url = glbLoaderState.baseUrl + encodeURI(urlOrKey);
+        console.log(`[GLB-LOADER] Constructed URL from key: ${urlOrKey} -> ${url}`);
+    }
+    
     if (glbLoaderState.modelCache.has(url)) {
         return glbLoaderState.modelCache.get(url).clone();
     }
