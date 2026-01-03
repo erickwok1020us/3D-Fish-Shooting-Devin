@@ -6841,8 +6841,12 @@ class Fish {
     
     // FIX: Try to load GLB model asynchronously and replace procedural mesh when loaded
     async tryLoadGLBModel(form, size) {
+        // DEBUG: Log entry to this function
+        console.log(`[FISH-GLB] tryLoadGLBModel called for form='${form}', size=${size}, enabled=${glbLoaderState.enabled}, manifestLoaded=${!!glbLoaderState.manifest}`);
+        
         // Skip if GLB loader is disabled or manifest not loaded
         if (!glbLoaderState.enabled || !glbLoaderState.manifest) {
+            console.log(`[FISH-GLB] Skipping GLB load - enabled=${glbLoaderState.enabled}, manifest=${!!glbLoaderState.manifest}`);
             return;
         }
         
@@ -6853,7 +6857,9 @@ class Fish {
         const tierConfig = { tier: this.tier, size: size };
         
         try {
+            console.log(`[FISH-GLB] Calling tryLoadGLBForFish for form='${form}'`);
             const glbModel = await tryLoadGLBForFish(tierConfig, form);
+            console.log(`[FISH-GLB] tryLoadGLBForFish returned: ${glbModel ? 'model' : 'null'} for form='${form}'`);
             
             // FIX: Check if fish instance is still valid after async load
             // If loadToken changed, this fish was recycled/reinitialized - don't attach GLB
@@ -6864,7 +6870,7 @@ class Fish {
             
             // FIX: Check if fish is still active and has a valid group
             if (!this.isActive || !this.group || !this.group.parent) {
-                console.log(`[FISH-GLB] Skipping GLB attachment for inactive fish ${form}`);
+                console.log(`[FISH-GLB] Skipping GLB attachment for inactive fish ${form} (isActive=${this.isActive}, group=${!!this.group}, parent=${!!this.group?.parent})`);
                 return;
             }
             
