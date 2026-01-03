@@ -11904,29 +11904,14 @@ function animate() {
         // PERFORMANCE: Rebuild spatial hash before fish updates for O(n*k) boids instead of O(n²)
         rebuildSpatialHash(activeFish);
         
-        // OPTIMIZATION 4: Advance batch counter for distributed fish updates
-        advanceFishBatch();
-        
-        // OPTIMIZATION 2: Update LOD every N frames
-        LOD_CONFIG.frameCounter++;
-        const shouldUpdateLOD = (LOD_CONFIG.frameCounter % LOD_CONFIG.updateInterval === 0);
-        const cameraPos = camera.position;
+        // NOTE: Batch updates and LOD removed - they caused fish to freeze
+        // The batch system used array index which changes during splice operations
+        // The LOD system mutated shared materials affecting all fish
         
         let fishUpdateErrors = 0;
         for (let i = activeFish.length - 1; i >= 0; i--) {
             const fish = activeFish[i];
             if (fish && fish.isActive) {
-                // OPTIMIZATION 2: Update LOD for this fish
-                if (shouldUpdateLOD) {
-                    updateFishLOD(fish, cameraPos);
-                }
-                
-                // OPTIMIZATION 4: Check if this fish should update this frame (batch system)
-                const distance = fish.group.position.distanceTo(cameraPos);
-                if (!shouldFishUpdateThisFrame(i, distance)) {
-                    continue; // Skip this fish this frame, will update on its batch turn
-                }
-                
                 try {
                     fish.update(deltaTime, activeFish);
                     // Reset error count on successful update
