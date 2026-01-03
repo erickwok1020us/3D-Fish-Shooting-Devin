@@ -738,8 +738,28 @@ const glbLoaderState = {
     enabled: true,
     manifestUrl: '/assets/fish/fish_models.json',
     // FIX: Use same pattern as weapons - baseUrl + encodeURI(filename) at runtime
-    baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/'
+    baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
+    // FIX: Track which models have skinned meshes for proper cloning
+    skinnedModelUrls: new Set()
 };
+
+// FIX: Helper function to properly clone GLB models
+// For skinned meshes, we need to use SkeletonUtils.clone() instead of Object3D.clone()
+// This ensures skeleton bindings and animations work correctly
+function cloneGLBModel(model, url) {
+    const isSkinned = glbLoaderState.skinnedModelUrls.has(url);
+    
+    if (isSkinned && typeof THREE.SkeletonUtils !== 'undefined') {
+        // Use SkeletonUtils.clone for skinned meshes
+        const clone = THREE.SkeletonUtils.clone(model);
+        // Copy userData manually since SkeletonUtils.clone may not preserve it
+        clone.userData = JSON.parse(JSON.stringify(model.userData));
+        return clone;
+    } else {
+        // Regular clone for non-skinned meshes
+        return model.clone();
+    }
+}
 
 async function loadFishManifest() {
     if (glbLoaderState.manifestLoaded) return glbLoaderState.manifest;
@@ -809,12 +829,14 @@ async function loadGLBModel(urlOrKey) {
     }
     
     if (glbLoaderState.modelCache.has(url)) {
-        return glbLoaderState.modelCache.get(url).clone();
+        // FIX: Use cloneGLBModel helper for proper skinned mesh cloning
+        return cloneGLBModel(glbLoaderState.modelCache.get(url), url);
     }
     
     if (glbLoaderState.loadingPromises.has(url)) {
         const model = await glbLoaderState.loadingPromises.get(url);
-        return model ? model.clone() : null;
+        // FIX: Use cloneGLBModel helper for proper skinned mesh cloning
+        return model ? cloneGLBModel(model, url) : null;
     }
     
     const loadPromise = new Promise((resolve) => {
@@ -829,6 +851,11 @@ async function loadGLBModel(urlOrKey) {
             url,
             (gltf) => {
                 const model = gltf.scene;
+                
+                // FIX: Detect if model contains skinned meshes for proper cloning later
+                let hasSkinned = false;
+                let hasAnimations = gltf.animations && gltf.animations.length > 0;
+                
                 model.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
@@ -838,8 +865,20 @@ async function loadGLBModel(urlOrKey) {
                             child.material.visible = true;
                             child.material.needsUpdate = true;
                         }
+                        // FIX: Disable frustum culling for fish meshes to prevent disappearing
+                        child.frustumCulled = false;
+                    }
+                    // FIX: Detect skinned meshes
+                    if (child.isSkinnedMesh) {
+                        hasSkinned = true;
                     }
                 });
+                
+                // FIX: Track skinned models for proper cloning
+                if (hasSkinned || hasAnimations) {
+                    glbLoaderState.skinnedModelUrls.add(url);
+                    console.log(`[GLB-LOADER] Model has skinned meshes or animations: ${url}`);
+                }
                 
                 // FIX: Normalize fish GLB model like weapons - compute bounding box and center
                 const box = new THREE.Box3().setFromObject(model);
@@ -855,8 +894,10 @@ async function loadGLBModel(urlOrKey) {
                 model.userData.originalMaxDim = maxDimension;
                 model.userData.originalCenter = center.toArray(); // [x, y, z] array
                 model.userData.originalSize = size.toArray(); // [x, y, z] array
+                model.userData.hasSkinned = hasSkinned;
+                model.userData.hasAnimations = hasAnimations;
                 
-                console.log(`[GLB-LOADER] Loaded model: ${url}, maxDim=${maxDimension.toFixed(2)}, center=[${center.toArray().map(v => v.toFixed(2)).join(',')}]`);
+                console.log(`[GLB-LOADER] Loaded model: ${url}, maxDim=${maxDimension.toFixed(2)}, center=[${center.toArray().map(v => v.toFixed(2)).join(',')}], skinned=${hasSkinned}, animations=${hasAnimations}`);
                 
                 glbLoaderState.modelCache.set(url, model);
                 resolve(model);
@@ -873,7 +914,8 @@ async function loadGLBModel(urlOrKey) {
     const model = await loadPromise;
     glbLoaderState.loadingPromises.delete(url);
     
-    return model ? model.clone() : null;
+    // FIX: Use cloneGLBModel helper for proper skinned mesh cloning
+    return model ? cloneGLBModel(model, url) : null;
 }
 
 async function tryLoadGLBForFish(tierConfig, form) {
@@ -6639,6 +6681,9 @@ function autoFireAtFish(targetFish) {
 }
 
 // ==================== FISH SYSTEM ====================
+// FIX: Global counter for fish load tokens to prevent stale GLB attachments
+let fishLoadTokenCounter = 0;
+
 class Fish {
     constructor(tier, tierConfig) {
         this.tier = tier;
@@ -6651,6 +6696,10 @@ class Fish {
         this.isFrozen = false;
         this.freezeTimer = 0;
         this.isActive = false;
+        
+        // FIX: Load token to prevent attaching GLB to stale/recycled fish instances
+        this.loadToken = ++fishLoadTokenCounter;
+        this.glbLoaded = false;
         
         // Phase 2: Initialize shield HP for Shield Turtle
         if (tierConfig.ability === 'shield' && tierConfig.shieldHP) {
@@ -6773,11 +6822,27 @@ class Fish {
             return;
         }
         
+        // FIX: Capture load token before async operation to detect stale fish
+        const myLoadToken = this.loadToken;
+        
         // Get tier name from config (e.g., 'tier1', 'tier3', etc.)
         const tierConfig = { tier: this.tier, size: size };
         
         try {
             const glbModel = await tryLoadGLBForFish(tierConfig, form);
+            
+            // FIX: Check if fish instance is still valid after async load
+            // If loadToken changed, this fish was recycled/reinitialized - don't attach GLB
+            if (myLoadToken !== this.loadToken) {
+                console.log(`[FISH-GLB] Skipping stale GLB attachment for ${form} (token mismatch: ${myLoadToken} vs ${this.loadToken})`);
+                return;
+            }
+            
+            // FIX: Check if fish is still active and has a valid group
+            if (!this.isActive || !this.group || !this.group.parent) {
+                console.log(`[FISH-GLB] Skipping GLB attachment for inactive fish ${form}`);
+                return;
+            }
             
             if (glbModel && this.group) {
                 // Store reference to procedural mesh children for removal
@@ -6787,24 +6852,22 @@ class Fish {
                 this.group.add(glbModel);
                 
                 // Remove procedural mesh children (keep GLB only)
+                // FIX: Don't dispose cached materials - they are shared across fish
                 proceduralChildren.forEach(child => {
                     this.group.remove(child);
-                    // Dispose geometry and materials to free memory
+                    // Only dispose geometry, NOT materials (they come from cache and are shared)
                     if (child.geometry) child.geometry.dispose();
-                    if (child.material) {
-                        if (Array.isArray(child.material)) {
-                            child.material.forEach(m => m.dispose());
-                        } else {
-                            child.material.dispose();
-                        }
-                    }
+                    // FIX: Skip material disposal - materials are cached and shared
+                    // Disposing them would corrupt rendering for other fish
                 });
                 
                 // Update body reference to GLB model for animations
                 this.body = glbModel;
                 this.glbLoaded = true;
                 
-                console.log(`[FISH-GLB] Loaded GLB for ${form} (${this.tier})`);
+                // FIX: Log successful GLB swap with verification
+                const childTypes = this.group.children.map(c => c.type || 'unknown').join(', ');
+                console.log(`[FISH-GLB] Successfully swapped to GLB for ${form} (tier ${this.tier}), children: [${childTypes}]`);
             }
         } catch (error) {
             // Silently fail - procedural mesh is already showing
