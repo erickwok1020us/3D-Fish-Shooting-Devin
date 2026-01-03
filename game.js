@@ -2021,6 +2021,329 @@ const frustumCullingCache = {
     projScreenMatrix: new THREE.Matrix4()
 };
 
+// ==================== OPTIMIZATION 1: OBJECT POOLING SYSTEM ====================
+// Reduces GC pressure by reusing objects instead of creating/destroying them
+
+// Coin Pool - Pre-created coin objects for fish death effects
+const coinPool = {
+    pool: [],
+    poolSize: 50,
+    freeList: [],
+    initialized: false
+};
+
+// Effect Pool - Pre-created effect objects (explosions, water splashes, etc.)
+const effectPool = {
+    pool: [],
+    poolSize: 10,
+    freeList: [],
+    maxConcurrent: 10,
+    initialized: false
+};
+
+// Initialize coin pool
+function initCoinPool() {
+    if (coinPool.initialized) return;
+    
+    const geometry = new THREE.CylinderGeometry(8, 8, 3, 8);
+    
+    for (let i = 0; i < coinPool.poolSize; i++) {
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xffd700,
+            transparent: true,
+            opacity: 1
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.visible = false;
+        mesh.rotation.x = Math.PI / 2;
+        
+        const coinItem = {
+            mesh: mesh,
+            material: material,
+            velocity: new THREE.Vector3(),
+            inUse: false,
+            elapsedTime: 0,
+            poolIndex: i
+        };
+        
+        coinPool.pool.push(coinItem);
+        coinPool.freeList.push(i);
+    }
+    
+    coinPool.initialized = true;
+}
+
+// Get coin from pool
+function getCoinFromPool() {
+    if (!coinPool.initialized) initCoinPool();
+    
+    if (coinPool.freeList.length > 0) {
+        const idx = coinPool.freeList.pop();
+        const item = coinPool.pool[idx];
+        item.inUse = true;
+        item.elapsedTime = 0;
+        item.material.opacity = 1;
+        item.mesh.scale.setScalar(1);
+        return item;
+    }
+    
+    return null;
+}
+
+// Return coin to pool
+function returnCoinToPool(item) {
+    if (!item || !item.inUse) return;
+    
+    item.inUse = false;
+    item.mesh.visible = false;
+    if (item.mesh.parent) {
+        item.mesh.parent.remove(item.mesh);
+    }
+    coinPool.freeList.push(item.poolIndex);
+}
+
+// Initialize effect pool
+function initEffectPool() {
+    if (effectPool.initialized) return;
+    
+    const sphereGeometry = new THREE.SphereGeometry(15, 8, 8);
+    
+    for (let i = 0; i < effectPool.poolSize; i++) {
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xff6600,
+            transparent: true,
+            opacity: 0.8
+        });
+        const mesh = new THREE.Mesh(sphereGeometry, material);
+        mesh.visible = false;
+        
+        const effectItem = {
+            mesh: mesh,
+            material: material,
+            inUse: false,
+            elapsedTime: 0,
+            poolIndex: i,
+            type: 'explosion'
+        };
+        
+        effectPool.pool.push(effectItem);
+        effectPool.freeList.push(i);
+    }
+    
+    effectPool.initialized = true;
+}
+
+// Get effect from pool
+function getEffectFromPool() {
+    if (!effectPool.initialized) initEffectPool();
+    
+    // Enforce max concurrent limit
+    const inUseCount = effectPool.pool.filter(e => e.inUse).length;
+    if (inUseCount >= effectPool.maxConcurrent) {
+        return null;
+    }
+    
+    if (effectPool.freeList.length > 0) {
+        const idx = effectPool.freeList.pop();
+        const item = effectPool.pool[idx];
+        item.inUse = true;
+        item.elapsedTime = 0;
+        item.material.opacity = 0.8;
+        item.mesh.scale.setScalar(1);
+        return item;
+    }
+    
+    return null;
+}
+
+// Return effect to pool
+function returnEffectToPool(item) {
+    if (!item || !item.inUse) return;
+    
+    item.inUse = false;
+    item.mesh.visible = false;
+    if (item.mesh.parent) {
+        item.mesh.parent.remove(item.mesh);
+    }
+    effectPool.freeList.push(item.poolIndex);
+}
+
+// ==================== OPTIMIZATION 2: LOD SYSTEM ====================
+// Level of Detail - use simpler models for distant fish
+
+const LOD_CONFIG = {
+    highDetailDistance: 20,      // Full detail within 20 units
+    mediumDetailDistance: 40,    // Medium detail 20-40 units
+    lowDetailDistance: 100,      // Low detail beyond 40 units
+    updateInterval: 5,           // Update LOD every 5 frames
+    frameCounter: 0
+};
+
+// LOD state tracking per fish
+const fishLODState = new WeakMap();
+
+// Get LOD level based on distance from camera
+function getLODLevel(distance) {
+    if (distance < LOD_CONFIG.highDetailDistance) return 'high';
+    if (distance < LOD_CONFIG.mediumDetailDistance) return 'medium';
+    return 'low';
+}
+
+// Update fish LOD (called every N frames)
+function updateFishLOD(fish, cameraPosition) {
+    if (!fish || !fish.group || !fish.isActive) return;
+    
+    const distance = fish.group.position.distanceTo(cameraPosition);
+    const newLOD = getLODLevel(distance);
+    
+    let state = fishLODState.get(fish);
+    if (!state) {
+        state = { currentLOD: 'high', lastUpdate: 0 };
+        fishLODState.set(fish, state);
+    }
+    
+    if (state.currentLOD !== newLOD) {
+        state.currentLOD = newLOD;
+        applyLODToFish(fish, newLOD);
+    }
+}
+
+// Apply LOD level to fish mesh
+function applyLODToFish(fish, lodLevel) {
+    if (!fish || !fish.group) return;
+    
+    // Scale detail based on LOD level
+    // For procedural fish, we adjust material complexity
+    fish.group.traverse((child) => {
+        if (child.isMesh && child.material) {
+            switch (lodLevel) {
+                case 'high':
+                    child.material.flatShading = false;
+                    if (child.material.emissiveIntensity !== undefined) {
+                        child.material.emissiveIntensity = 0.1;
+                    }
+                    break;
+                case 'medium':
+                    child.material.flatShading = true;
+                    if (child.material.emissiveIntensity !== undefined) {
+                        child.material.emissiveIntensity = 0.05;
+                    }
+                    break;
+                case 'low':
+                    child.material.flatShading = true;
+                    if (child.material.emissiveIntensity !== undefined) {
+                        child.material.emissiveIntensity = 0;
+                    }
+                    break;
+            }
+            child.material.needsUpdate = true;
+        }
+    });
+}
+
+// ==================== OPTIMIZATION 3: SHARED GEOMETRIES & MATERIALS ====================
+// Same fish types share geometry and materials to reduce memory
+
+const SHARED_GEOMETRIES = {};
+const SHARED_MATERIALS = {};
+
+// Get or create shared geometry for fish type
+function getSharedGeometry(fishType, size) {
+    const key = `${fishType}_${Math.round(size)}`;
+    
+    if (!SHARED_GEOMETRIES[key]) {
+        // Create geometry based on fish type
+        switch (fishType) {
+            case 'sardine':
+            case 'anchovy':
+                SHARED_GEOMETRIES[key] = new THREE.SphereGeometry(size * 0.4, 8, 6);
+                break;
+            case 'shark':
+            case 'whale':
+                SHARED_GEOMETRIES[key] = new THREE.SphereGeometry(size * 0.5, 12, 8);
+                break;
+            default:
+                SHARED_GEOMETRIES[key] = new THREE.SphereGeometry(size * 0.45, 10, 7);
+        }
+    }
+    
+    return SHARED_GEOMETRIES[key];
+}
+
+// Get or create shared material for fish color
+function getSharedMaterial(color, metalness, roughness) {
+    const key = `${color}_${metalness}_${roughness}`;
+    
+    if (!SHARED_MATERIALS[key]) {
+        SHARED_MATERIALS[key] = new THREE.MeshStandardMaterial({
+            color: color,
+            metalness: metalness || 0.3,
+            roughness: roughness || 0.2
+        });
+    }
+    
+    return SHARED_MATERIALS[key];
+}
+
+// ==================== OPTIMIZATION 4: BATCH FISH ANIMATION UPDATES ====================
+// Distribute fish updates across multiple frames to reduce per-frame workload
+
+const BATCH_UPDATE_CONFIG = {
+    batchCount: 4,              // Divide fish into 4 batches
+    currentBatch: 0,            // Current batch being updated
+    frameCounter: 0,
+    distanceUpdateThreshold: 50, // Fish beyond this distance update less frequently
+    farFishUpdateInterval: 3     // Far fish update every 3 frames
+};
+
+// Get batch index for a fish based on its pool index
+function getFishBatchIndex(fishIndex) {
+    return fishIndex % BATCH_UPDATE_CONFIG.batchCount;
+}
+
+// Check if fish should update this frame
+function shouldFishUpdateThisFrame(fishIndex, distance) {
+    const batchIndex = getFishBatchIndex(fishIndex);
+    const isCurrentBatch = batchIndex === BATCH_UPDATE_CONFIG.currentBatch;
+    
+    // Near fish always update when it's their batch turn
+    if (distance < BATCH_UPDATE_CONFIG.distanceUpdateThreshold) {
+        return isCurrentBatch;
+    }
+    
+    // Far fish update less frequently
+    return isCurrentBatch && 
+           (BATCH_UPDATE_CONFIG.frameCounter % BATCH_UPDATE_CONFIG.farFishUpdateInterval === 0);
+}
+
+// Advance to next batch (called each frame)
+function advanceFishBatch() {
+    BATCH_UPDATE_CONFIG.frameCounter++;
+    BATCH_UPDATE_CONFIG.currentBatch = 
+        (BATCH_UPDATE_CONFIG.currentBatch + 1) % BATCH_UPDATE_CONFIG.batchCount;
+}
+
+// Get pool stats for debugging
+function getPoolStats() {
+    return {
+        coinPool: {
+            total: coinPool.poolSize,
+            free: coinPool.freeList.length,
+            inUse: coinPool.poolSize - coinPool.freeList.length
+        },
+        effectPool: {
+            total: effectPool.poolSize,
+            free: effectPool.freeList.length,
+            inUse: effectPool.poolSize - effectPool.freeList.length,
+            maxConcurrent: effectPool.maxConcurrent
+        },
+        sharedGeometries: Object.keys(SHARED_GEOMETRIES).length,
+        sharedMaterials: Object.keys(SHARED_MATERIALS).length,
+        lodConfig: LOD_CONFIG,
+        batchConfig: BATCH_UPDATE_CONFIG
+    };
+}
+
 // ==================== SPATIAL HASH FOR BOIDS OPTIMIZATION ====================
 // Cell size should be >= cohesionDistance (180) for correct neighbor lookup
 const SPATIAL_HASH_CELL_SIZE = 180;
@@ -4996,28 +5319,70 @@ function spawnFishDeathEffect(position, fishSize, color) {
 }
 
 // Issue #16: Spawn gold coins burst from fish death - REFACTORED to use VFX manager
-// PERFORMANCE: Uses cached geometry, creates per-coin material only for opacity animation
+// PERFORMANCE: Uses coin pool to avoid creating/destroying materials per coin
 function spawnCoinBurst(position, count) {
     if (!particleGroup) return;
     
-    // PERFORMANCE: Use cached geometry instead of creating new one per coin
-    const cachedGeometry = vfxGeometryCache.coinCylinder;
-    if (!cachedGeometry) return;
-    
     for (let i = 0; i < count; i++) {
-        // PERFORMANCE: Create material per coin (needed for individual opacity animation)
-        // but reuse cached geometry
-        const coinMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffd700,
-            transparent: true,
-            opacity: 1
-        });
-        const coin = new THREE.Mesh(cachedGeometry, coinMaterial);
-        coin.position.copy(position);
-        coin.rotation.x = Math.PI / 2;
+        // OPTIMIZATION 1: Get coin from pool instead of creating new
+        const coinItem = getCoinFromPool();
+        if (!coinItem) {
+            // Pool exhausted - fallback to old method for remaining coins
+            const cachedGeometry = vfxGeometryCache.coinCylinder;
+            if (!cachedGeometry) continue;
+            
+            const coinMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffd700,
+                transparent: true,
+                opacity: 1
+            });
+            const coin = new THREE.Mesh(cachedGeometry, coinMaterial);
+            coin.position.copy(position);
+            coin.rotation.x = Math.PI / 2;
+            
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 200,
+                Math.random() * 150 + 50,
+                (Math.random() - 0.5) * 200
+            );
+            
+            particleGroup.add(coin);
+            
+            addVfxEffect({
+                type: 'coinBurst',
+                mesh: coin,
+                material: coinMaterial,
+                velocity: velocity,
+                elapsedTime: 0,
+                gravity: 300,
+                spinSpeed: 12,
+                poolItem: null,
+                
+                update(dt, elapsed) {
+                    this.elapsedTime += dt;
+                    this.mesh.position.x += this.velocity.x * dt;
+                    this.mesh.position.y += this.velocity.y * dt;
+                    this.mesh.position.z += this.velocity.z * dt;
+                    this.velocity.y -= this.gravity * dt;
+                    this.mesh.rotation.z += this.spinSpeed * dt;
+                    this.material.opacity = Math.max(0, 1 - this.elapsedTime * 1.5);
+                    this.mesh.scale.setScalar(Math.max(0.1, 1 - this.elapsedTime));
+                    return this.elapsedTime < 1.0 && this.material.opacity > 0;
+                },
+                
+                cleanup() {
+                    particleGroup.remove(this.mesh);
+                    this.material.dispose();
+                }
+            });
+            continue;
+        }
         
-        // PERFORMANCE: Reuse temp vector for velocity calculation
-        const velocity = new THREE.Vector3(
+        // Use pooled coin
+        const coin = coinItem.mesh;
+        coin.position.copy(position);
+        coin.visible = true;
+        coinItem.velocity.set(
             (Math.random() - 0.5) * 200,
             Math.random() * 150 + 50,
             (Math.random() - 0.5) * 200
@@ -5025,15 +5390,16 @@ function spawnCoinBurst(position, count) {
         
         particleGroup.add(coin);
         
-        // Register with VFX manager instead of using own RAF loop
+        // Register with VFX manager
         addVfxEffect({
             type: 'coinBurst',
             mesh: coin,
-            material: coinMaterial,
-            velocity: velocity,
+            material: coinItem.material,
+            velocity: coinItem.velocity,
             elapsedTime: 0,
             gravity: 300,
             spinSpeed: 12,
+            poolItem: coinItem,
             
             update(dt, elapsed) {
                 this.elapsedTime += dt;
@@ -5054,8 +5420,12 @@ function spawnCoinBurst(position, count) {
             
             cleanup() {
                 particleGroup.remove(this.mesh);
-                // PERFORMANCE: Only dispose material, geometry is cached and shared
-                this.material.dispose();
+                // OPTIMIZATION 1: Return to pool instead of disposing
+                if (this.poolItem) {
+                    returnCoinToPool(this.poolItem);
+                } else {
+                    this.material.dispose();
+                }
             }
         });
     }
@@ -11534,10 +11904,29 @@ function animate() {
         // PERFORMANCE: Rebuild spatial hash before fish updates for O(n*k) boids instead of O(n²)
         rebuildSpatialHash(activeFish);
         
+        // OPTIMIZATION 4: Advance batch counter for distributed fish updates
+        advanceFishBatch();
+        
+        // OPTIMIZATION 2: Update LOD every N frames
+        LOD_CONFIG.frameCounter++;
+        const shouldUpdateLOD = (LOD_CONFIG.frameCounter % LOD_CONFIG.updateInterval === 0);
+        const cameraPos = camera.position;
+        
         let fishUpdateErrors = 0;
         for (let i = activeFish.length - 1; i >= 0; i--) {
             const fish = activeFish[i];
             if (fish && fish.isActive) {
+                // OPTIMIZATION 2: Update LOD for this fish
+                if (shouldUpdateLOD) {
+                    updateFishLOD(fish, cameraPos);
+                }
+                
+                // OPTIMIZATION 4: Check if this fish should update this frame (batch system)
+                const distance = fish.group.position.distanceTo(cameraPos);
+                if (!shouldFishUpdateThisFrame(i, distance)) {
+                    continue; // Skip this fish this frame, will update on its batch turn
+                }
+                
                 try {
                     fish.update(deltaTime, activeFish);
                     // Reset error count on successful update
