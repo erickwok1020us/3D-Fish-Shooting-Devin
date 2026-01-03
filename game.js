@@ -1031,6 +1031,7 @@ async function loadGLBModel(urlOrKey) {
                 model.userData.originalSize = size.toArray(); // [x, y, z] array
                 model.userData.hasSkinned = hasSkinned;
                 model.userData.hasAnimations = hasAnimations;
+                model.userData.glbUrl = url; // Store URL for animation lookup
                 
                 console.log(`[GLB-LOADER] Loaded model: ${url}, maxDim=${maxDimension.toFixed(2)}, center=[${center.toArray().map(v => v.toFixed(2)).join(',')}], skinned=${hasSkinned}, animations=${hasAnimations}`);
                 
@@ -7037,8 +7038,14 @@ class Fish {
                 // Store reference to procedural mesh children for removal
                 const proceduralChildren = [...this.group.children];
                 
-                // Add GLB model to group
-                this.group.add(glbModel);
+                // FIX: Create a wrapper group for axis correction
+                // The animation animates the GLB root node every frame, which would overwrite
+                // any rotation correction we apply directly to glbModel.
+                // By using a wrapper group, our axis correction is preserved.
+                // Hierarchy: this.group (velocity facing) -> glbAxisWrapper (axis fix) -> glbModel (animated)
+                this.glbAxisWrapper = new THREE.Group();
+                this.glbAxisWrapper.add(glbModel);
+                this.group.add(this.glbAxisWrapper);
                 
                 // Remove procedural mesh children (keep GLB only)
                 // FIX: Don't dispose cached materials - they are shared across fish
@@ -7056,11 +7063,11 @@ class Fish {
                 this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
                 
-                // FIX: Apply rotation correction for GLB models
-                // GLB fish models are typically authored with forward = +Z or -Z
-                // Our game expects forward = +X, so rotate -90° around Y axis
-                // This ensures fish face the correct direction when swimming
-                this.glbModelRoot.rotation.y = -Math.PI / 2;
+                // FIX: Apply rotation correction to the WRAPPER (not glbModel)
+                // This prevents the animation from overwriting our correction.
+                // GLB fish models are authored with forward = +Z, game expects forward = +X
+                // Rotate +90° around Y axis to align fish head with velocity direction
+                this.glbAxisWrapper.rotation.y = Math.PI / 2;
                 
                 // FIX: Collect all meshes from GLB for material operations
                 this.glbMeshes = [];
@@ -7092,7 +7099,9 @@ class Fish {
                 console.log(`[FISH-GLB] Successfully swapped to GLB for ${form} (tier ${this.tier}), meshes=${this.glbMeshes.length}, children: [${childTypes}]`);
                 
                 // Setup animation playback for GLB models with animations
-                const animations = getGLBAnimations(glbKey);
+                // FIX: Use glbUrl stored in userData instead of undefined glbKey
+                const glbUrl = glbModel.userData?.glbUrl;
+                const animations = glbUrl ? getGLBAnimations(glbUrl) : null;
                 if (animations && animations.length > 0) {
                     // Create AnimationMixer for this fish's GLB model
                     this.glbMixer = new THREE.AnimationMixer(this.glbModelRoot);
