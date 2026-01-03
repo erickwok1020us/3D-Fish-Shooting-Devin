@@ -740,7 +740,10 @@ const glbLoaderState = {
     // FIX: Use same pattern as weapons - baseUrl + encodeURI(filename) at runtime
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     // FIX: Track which models have skinned meshes for proper cloning
-    skinnedModelUrls: new Set()
+    skinnedModelUrls: new Set(),
+    // FIX: Form-to-variant lookup map for O(1) lookup by fish form name
+    // This ensures each fish form gets its correct GLB model regardless of tier
+    formToVariant: new Map()
 };
 
 // FIX: Helper function to properly clone GLB models
@@ -773,7 +776,26 @@ async function loadFishManifest() {
         }
         glbLoaderState.manifest = await response.json();
         glbLoaderState.manifestLoaded = true;
-        console.log('[GLB-LOADER] Fish manifest loaded:', Object.keys(glbLoaderState.manifest.tiers).length, 'tiers');
+        
+        // FIX: Build form-to-variant lookup map for O(1) lookup by fish form name
+        // This ensures each fish form gets its correct GLB model regardless of tier
+        glbLoaderState.formToVariant.clear();
+        const tiers = glbLoaderState.manifest.tiers;
+        for (const tierName of Object.keys(tiers)) {
+            const tier = tiers[tierName];
+            if (!tier.variants) continue;
+            for (const variant of tier.variants) {
+                if (variant.form && variant.url) {
+                    // Only add if not already mapped (first occurrence wins)
+                    if (!glbLoaderState.formToVariant.has(variant.form)) {
+                        glbLoaderState.formToVariant.set(variant.form, variant);
+                        console.log(`[GLB-LOADER] Mapped form '${variant.form}' -> '${variant.url}'`);
+                    }
+                }
+            }
+        }
+        
+        console.log('[GLB-LOADER] Fish manifest loaded:', Object.keys(tiers).length, 'tiers,', glbLoaderState.formToVariant.size, 'form mappings');
         return glbLoaderState.manifest;
     } catch (error) {
         console.warn('[GLB-LOADER] Failed to load manifest:', error.message);
@@ -789,27 +811,23 @@ function getTierFromConfig(tierConfig) {
     return `tier${tierNum}`;
 }
 
+// FIX: Completely rewritten to use form-driven lookup instead of tier-based lookup
+// This ensures each fish form gets its correct GLB model regardless of tier
+// The old implementation had a bug where all fish were mapped to tier1 (Sardine)
 function getVariantForForm(tierName, form) {
     if (!glbLoaderState.manifest || !glbLoaderState.manifest.tiers) return null;
     
-    const tier = glbLoaderState.manifest.tiers[tierName];
-    if (!tier || !tier.variants) {
-        const specialTier = glbLoaderState.manifest.tiers.special;
-        if (specialTier && specialTier.variants) {
-            const specialVariant = specialTier.variants.find(v => v.form === form);
-            if (specialVariant) return specialVariant;
-        }
-        return null;
+    // FIX: Use the form-to-variant lookup map for O(1) lookup
+    // This searches ALL tiers for the matching form, not just the specified tier
+    if (glbLoaderState.formToVariant.has(form)) {
+        const variant = glbLoaderState.formToVariant.get(form);
+        console.log(`[GLB-LOADER] Found variant for form '${form}': ${variant.url}`);
+        return variant;
     }
     
-    const variant = tier.variants.find(v => v.form === form);
-    if (variant) return variant;
-    
-    if (tier.variants.length > 0) {
-        const randomIndex = Math.floor(Math.random() * tier.variants.length);
-        return tier.variants[randomIndex];
-    }
-    
+    // FIX: No fallback to random variant - if form not found, return null
+    // This prevents wrong models from being attached to fish
+    console.log(`[GLB-LOADER] No variant found for form '${form}' - using procedural mesh`);
     return null;
 }
 
@@ -830,7 +848,10 @@ async function loadGLBModel(urlOrKey) {
     
     if (glbLoaderState.modelCache.has(url)) {
         // FIX: Use cloneGLBModel helper for proper skinned mesh cloning
-        return cloneGLBModel(glbLoaderState.modelCache.get(url), url);
+        console.log(`[GLB-LOADER] Cache hit for: ${url}`);
+        const clone = cloneGLBModel(glbLoaderState.modelCache.get(url), url);
+        console.log(`[GLB-LOADER] Cloned model from cache: ${clone ? 'success' : 'null'}`);
+        return clone;
     }
     
     if (glbLoaderState.loadingPromises.has(url)) {
@@ -931,13 +952,17 @@ async function tryLoadGLBForFish(tierConfig, form) {
     }
     
     try {
+        console.log(`[FISH-GLB] About to call loadGLBModel for variant.url='${variant.url}'`);
         const model = await loadGLBModel(variant.url);
+        console.log(`[FISH-GLB] loadGLBModel returned: ${model ? 'model object' : 'null'}, userData=${model ? JSON.stringify(model.userData) : 'N/A'}`);
         if (model) {
             // FIX: Use bounding box normalization like weapons instead of magic scale numbers
             // This ensures fish GLB models are always visible regardless of their original size
             const targetSize = tierConfig.size || 20; // Target fish size in game units
             const originalMaxDim = model.userData.originalMaxDim || 1;
             const originalCenterArray = model.userData.originalCenter; // [x, y, z] array
+            
+            console.log(`[FISH-GLB] Before normalization: targetSize=${targetSize}, originalMaxDim=${originalMaxDim}, originalCenterArray=${JSON.stringify(originalCenterArray)}`);
             
             // Calculate auto-scale to normalize to target size
             let autoScale = 1;
@@ -960,9 +985,11 @@ async function tryLoadGLBForFish(tierConfig, form) {
             console.log(`[FISH-GLB] Normalized ${form}: targetSize=${targetSize}, originalMaxDim=${originalMaxDim.toFixed(2)}, autoScale=${autoScale.toFixed(2)}`);
             
             return model;
+        } else {
+            console.log(`[FISH-GLB] loadGLBModel returned null/undefined for ${form}`);
         }
     } catch (error) {
-        console.warn('[GLB-LOADER] Error loading GLB for', form, ':', error.message);
+        console.warn('[GLB-LOADER] Error loading GLB for', form, ':', error.message, error.stack);
     }
     
     return null;
@@ -978,6 +1005,7 @@ function getGLBLoaderStats() {
 }
 
 // FIX: Preload fish GLB models at startup to prevent lag during gameplay
+// Now correctly handles R2 keys (filenames without '/') in addition to full URLs
 async function preloadFishGLBModels() {
     if (!glbLoaderState.enabled || !glbLoaderState.manifest) {
         console.log('[FISH-GLB] Skipping preload - manifest not loaded');
@@ -993,12 +1021,17 @@ async function preloadFishGLBModels() {
         if (!tier.variants) continue;
         
         for (const variant of tier.variants) {
-            // Only preload R2 URLs (skip local paths that don't exist)
-            if (variant.url && variant.url.startsWith('https://')) {
+            // FIX: Preload R2 keys (filenames) AND full URLs, but skip local paths (start with '/')
+            // R2 keys are filenames like "Sardine fish.glb" that don't start with '/' or 'http'
+            // Local paths start with '/' and will 404 since they don't exist
+            const isR2Key = variant.url && !variant.url.startsWith('/') && !variant.url.startsWith('http');
+            const isFullUrl = variant.url && variant.url.startsWith('https://');
+            
+            if (isR2Key || isFullUrl) {
                 try {
                     await loadGLBModel(variant.url);
                     loadedCount++;
-                    console.log(`[FISH-GLB] Preloaded: ${variant.form} (${loadedCount})`);
+                    console.log(`[FISH-GLB] Preloaded: ${variant.form} -> ${variant.url}`);
                 } catch (error) {
                     console.warn(`[FISH-GLB] Failed to preload ${variant.form}:`, error.message);
                 }
@@ -6817,8 +6850,12 @@ class Fish {
     
     // FIX: Try to load GLB model asynchronously and replace procedural mesh when loaded
     async tryLoadGLBModel(form, size) {
+        // DEBUG: Log entry to this function
+        console.log(`[FISH-GLB] tryLoadGLBModel called for form='${form}', size=${size}, enabled=${glbLoaderState.enabled}, manifestLoaded=${!!glbLoaderState.manifest}`);
+        
         // Skip if GLB loader is disabled or manifest not loaded
         if (!glbLoaderState.enabled || !glbLoaderState.manifest) {
+            console.log(`[FISH-GLB] Skipping GLB load - enabled=${glbLoaderState.enabled}, manifest=${!!glbLoaderState.manifest}`);
             return;
         }
         
@@ -6829,7 +6866,9 @@ class Fish {
         const tierConfig = { tier: this.tier, size: size };
         
         try {
+            console.log(`[FISH-GLB] Calling tryLoadGLBForFish for form='${form}'`);
             const glbModel = await tryLoadGLBForFish(tierConfig, form);
+            console.log(`[FISH-GLB] tryLoadGLBForFish returned: ${glbModel ? 'model' : 'null'} for form='${form}'`);
             
             // FIX: Check if fish instance is still valid after async load
             // If loadToken changed, this fish was recycled/reinitialized - don't attach GLB
@@ -6840,7 +6879,7 @@ class Fish {
             
             // FIX: Check if fish is still active and has a valid group
             if (!this.isActive || !this.group || !this.group.parent) {
-                console.log(`[FISH-GLB] Skipping GLB attachment for inactive fish ${form}`);
+                console.log(`[FISH-GLB] Skipping GLB attachment for inactive fish ${form} (isActive=${this.isActive}, group=${!!this.group}, parent=${!!this.group?.parent})`);
                 return;
             }
             
@@ -6861,13 +6900,35 @@ class Fish {
                     // Disposing them would corrupt rendering for other fish
                 });
                 
-                // Update body reference to GLB model for animations
-                this.body = glbModel;
+                // FIX: Store GLB model root separately - don't overwrite this.body
+                // this.body is expected to be a Mesh with material for flash effects
+                // glbModel is a Group, so we need to find the actual meshes inside
+                this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
+                
+                // FIX: Collect all meshes from GLB for material operations
+                this.glbMeshes = [];
+                glbModel.traverse((child) => {
+                    if (child.isMesh) {
+                        this.glbMeshes.push(child);
+                        // Apply shadow settings to GLB meshes
+                        const isBossFish = this.tier >= 5 || BOSS_ONLY_SPECIES.includes(this.config.species);
+                        child.castShadow = isBossFish;
+                    }
+                });
+                
+                // FIX: Set this.body to first mesh found (for compatibility with existing code)
+                // This ensures this.body.material exists for flash effects
+                if (this.glbMeshes.length > 0) {
+                    this.body = this.glbMeshes[0];
+                }
+                
+                // Clear procedural tail reference since GLB has its own tail
+                this.tail = null;
                 
                 // FIX: Log successful GLB swap with verification
                 const childTypes = this.group.children.map(c => c.type || 'unknown').join(', ');
-                console.log(`[FISH-GLB] Successfully swapped to GLB for ${form} (tier ${this.tier}), children: [${childTypes}]`);
+                console.log(`[FISH-GLB] Successfully swapped to GLB for ${form} (tier ${this.tier}), meshes=${this.glbMeshes.length}, children: [${childTypes}]`);
             }
         } catch (error) {
             // Silently fail - procedural mesh is already showing
@@ -7948,8 +8009,17 @@ class Fish {
             (Math.random() - 0.5) * this.speed
         );
         
-        // Reset material
-        this.body.material.emissiveIntensity = 0.1;
+        // Reset material - handle both GLB and procedural fish
+        // FIX: Guard against missing material or emissiveIntensity property
+        if (this.glbLoaded && this.glbMeshes) {
+            this.glbMeshes.forEach(mesh => {
+                if (mesh.material && 'emissiveIntensity' in mesh.material) {
+                    mesh.material.emissiveIntensity = 0.1;
+                }
+            });
+        } else if (this.body && this.body.material && 'emissiveIntensity' in this.body.material) {
+            this.body.material.emissiveIntensity = 0.1;
+        }
         
         // Issue #5: Trigger rare fish effects for tier4 (boss fish)
         triggerRareFishEffects(this.tier);
@@ -7963,8 +8033,26 @@ class Fish {
             this.freezeTimer -= deltaTime;
             if (this.freezeTimer <= 0) {
                 this.isFrozen = false;
-                this.body.material.emissive.setHex(this.config.color);
-                this.body.material.emissiveIntensity = 0.1;
+                // FIX: Handle both GLB and procedural fish for freeze effect reset
+                if (this.glbLoaded && this.glbMeshes) {
+                    this.glbMeshes.forEach(mesh => {
+                        if (mesh.material) {
+                            if (mesh.material.emissive) {
+                                mesh.material.emissive.setHex(this.config.color);
+                            }
+                            if ('emissiveIntensity' in mesh.material) {
+                                mesh.material.emissiveIntensity = 0.1;
+                            }
+                        }
+                    });
+                } else if (this.body && this.body.material) {
+                    if (this.body.material.emissive) {
+                        this.body.material.emissive.setHex(this.config.color);
+                    }
+                    if ('emissiveIntensity' in this.body.material) {
+                        this.body.material.emissiveIntensity = 0.1;
+                    }
+                }
             }
             return;
         }
@@ -8432,13 +8520,33 @@ class Fish {
         
         this.hp -= damage;
         
-        // Flash effect
-        this.body.material.emissiveIntensity = 0.8;
-        setTimeout(() => {
-            if (this.isActive) {
-                this.body.material.emissiveIntensity = 0.1;
-            }
-        }, 100);
+        // Flash effect - apply to all meshes for GLB fish, or just body for procedural
+        // FIX: Guard against missing material or emissiveIntensity property
+        if (this.glbLoaded && this.glbMeshes) {
+            // Apply flash to all GLB meshes
+            this.glbMeshes.forEach(mesh => {
+                if (mesh.material && 'emissiveIntensity' in mesh.material) {
+                    mesh.material.emissiveIntensity = 0.8;
+                }
+            });
+            setTimeout(() => {
+                if (this.isActive && this.glbMeshes) {
+                    this.glbMeshes.forEach(mesh => {
+                        if (mesh.material && 'emissiveIntensity' in mesh.material) {
+                            mesh.material.emissiveIntensity = 0.1;
+                        }
+                    });
+                }
+            }, 100);
+        } else if (this.body && this.body.material && 'emissiveIntensity' in this.body.material) {
+            // Procedural fish - single body mesh
+            this.body.material.emissiveIntensity = 0.8;
+            setTimeout(() => {
+                if (this.isActive && this.body && this.body.material) {
+                    this.body.material.emissiveIntensity = 0.1;
+                }
+            }, 100);
+        }
         
         if (this.hp <= 0) {
             this.die(weaponKey);
