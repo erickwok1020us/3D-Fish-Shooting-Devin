@@ -7056,6 +7056,12 @@ class Fish {
                 this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
                 
+                // FIX: Apply rotation correction for GLB models
+                // GLB fish models are typically authored with forward = +Z or -Z
+                // Our game expects forward = +X, so rotate -90° around Y axis
+                // This ensures fish face the correct direction when swimming
+                this.glbModelRoot.rotation.y = -Math.PI / 2;
+                
                 // FIX: Collect all meshes from GLB for material operations
                 this.glbMeshes = [];
                 glbModel.traverse((child) => {
@@ -8178,6 +8184,11 @@ class Fish {
         this.isFrozen = false;
         this.group.visible = true;
         
+        // FIX: Reset rotation on spawn to prevent pooled fish from keeping old tilt
+        // This ensures fish start level (dorsal up) when respawning
+        this.group.rotation.x = 0;
+        this.group.rotation.z = 0;
+        
         // FIX: Update loadToken on each spawn to invalidate any in-flight async GLB loads
         // from previous lifecycle (fish recycling/pooling)
         this.loadToken = ++fishLoadTokenCounter;
@@ -8657,13 +8668,33 @@ class Fish {
     }
     
     updateRotation() {
-        if (this.velocity.length() > 0.1) {
+        const speed = this.velocity.length();
+        const horizontalSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z);
+        
+        if (speed > 0.1) {
+            // Yaw: rotate to face movement direction (horizontal plane)
             const targetRotation = Math.atan2(-this.velocity.z, this.velocity.x);
             this.group.rotation.y = targetRotation;
             
-            const tiltAmount = Math.atan2(this.velocity.y, Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z));
-            this.group.rotation.z = -tiltAmount * 0.5;
+            // Pitch: tilt based on vertical velocity, but only when moving horizontally
+            // This prevents extreme tilting when fish is mostly moving vertically
+            if (horizontalSpeed > 0.5) {
+                // Normal pitch calculation when swimming horizontally
+                const tiltAmount = Math.atan2(this.velocity.y, horizontalSpeed);
+                // Clamp pitch to ±25° and reduce by 50% for more natural look
+                const clampedTilt = Math.max(-0.44, Math.min(0.44, tiltAmount)) * 0.5;
+                this.group.rotation.z = -clampedTilt;
+            } else {
+                // When horizontal speed is low, smoothly return to level (dorsal up)
+                this.group.rotation.z *= 0.9;
+            }
+        } else {
+            // When nearly stationary, smoothly return to level orientation
+            this.group.rotation.z *= 0.9;
         }
+        
+        // Always keep roll (rotation.x) at 0 to prevent fish from rolling sideways
+        this.group.rotation.x = 0;
     }
     
     animateTail(deltaTime) {
