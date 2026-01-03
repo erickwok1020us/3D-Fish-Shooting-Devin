@@ -6754,9 +6754,10 @@ class Fish {
         const bodyMaterial = getCachedFishMaterial(color, 0.3, 0.2, color, 0.1);
         const secondaryMaterial = getCachedFishMaterial(secondaryColor, 0.3, 0.2, null, 0);
         
-        // FIX: Try to load GLB model asynchronously while showing procedural mesh immediately
-        // This ensures fish are visible immediately, then upgraded to GLB when loaded
-        this.tryLoadGLBModel(form, size);
+        // FIX: GLB loading moved to spawn() to ensure fish is active and positioned
+        // This prevents GLB from being attached to inactive fish at origin (0,0,0)
+        // Store form for later use in spawn()
+        this.form = form;
         
         // Create mesh based on form type (procedural fallback, shown immediately)
         switch (form) {
@@ -6844,6 +6845,10 @@ class Fish {
         if (this.body) {
             this.body.castShadow = isBossFish;
         }
+        
+        // FIX: Set group invisible initially to prevent static model at origin (0,0,0)
+        // Fish will be made visible when spawn() is called
+        this.group.visible = false;
         
         fishGroup.add(this.group);
     }
@@ -8002,6 +8007,10 @@ class Fish {
         this.isFrozen = false;
         this.group.visible = true;
         
+        // FIX: Update loadToken on each spawn to invalidate any in-flight async GLB loads
+        // from previous lifecycle (fish recycling/pooling)
+        this.loadToken = ++fishLoadTokenCounter;
+        
         // Random initial velocity
         this.velocity.set(
             (Math.random() - 0.5) * this.speed,
@@ -8019,6 +8028,13 @@ class Fish {
             });
         } else if (this.body && this.body.material && 'emissiveIntensity' in this.body.material) {
             this.body.material.emissiveIntensity = 0.1;
+        }
+        
+        // FIX: Load GLB model AFTER fish is active and positioned
+        // This ensures the guard in tryLoadGLBModel() won't block attachment
+        // Only load if not already loaded (prevents duplicate loading on respawn)
+        if (!this.glbLoaded && this.form) {
+            this.tryLoadGLBModel(this.form, this.config.size);
         }
         
         // Issue #5: Trigger rare fish effects for tier4 (boss fish)
