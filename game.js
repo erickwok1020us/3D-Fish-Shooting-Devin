@@ -7516,25 +7516,28 @@ class Fish {
                 // Store reference to procedural mesh children for removal
                 const proceduralChildren = [...this.group.children];
                 
-                // FIX: Simplified wrapper structure using quaternions for per-model corrections
-                // Based on systematic bounding box analysis of each GLB model:
-                // - Hammerhead: forward=X, up=Y (already correct, no rotation needed)
-                // - Marlin: forward=Z, up=Y (needs Y rotation only)
-                // - Great White Shark, Grouper, Sardine: forward=Y, up=Z (needs complex rotation)
-                // - Tuna: forward=Y, up=X (needs complex rotation)
+                // FIX: Correct wrapper order for proper rig neutralization
+                // The inverse(rig) must be ADJACENT to the glbModel in the transform chain
+                // Otherwise the pitch wrapper interferes with the cancellation
                 //
-                // Hierarchy: this.group (yaw) -> glbCorrectionWrapper (static per-model quaternion) -> glbPitchWrapper (dynamic pitch) -> glbModel
+                // CORRECT Hierarchy: group (yaw) -> pitchWrapper (pitch) -> correctionWrapper (invRig + Y offset) -> glbModel
+                // Transform chain: yaw * pitch * (invRig * rig) = yaw * pitch * identity
+                //
+                // This ensures:
+                // 1. Yaw (facing direction) is applied first at the group level
+                // 2. Pitch (nose up/down) is applied second
+                // 3. The rig neutralization is adjacent to the glbModel, so it properly cancels
                 
-                // Layer 1: Per-model correction wrapper using quaternion (avoids Euler order issues)
-                this.glbCorrectionWrapper = new THREE.Group();
-                
-                // Layer 2: Pitch wrapper - for dynamic pitch (nose up/down)
+                // Layer 1: Pitch wrapper - for dynamic pitch (nose up/down)
                 this.glbPitchWrapper = new THREE.Group();
                 
-                // Build the hierarchy
-                this.glbPitchWrapper.add(glbModel);
-                this.glbCorrectionWrapper.add(this.glbPitchWrapper);
-                this.group.add(this.glbCorrectionWrapper);
+                // Layer 2: Per-model correction wrapper (invRig + Y offset) - MUST be adjacent to glbModel
+                this.glbCorrectionWrapper = new THREE.Group();
+                
+                // Build the hierarchy: group -> pitchWrapper -> correctionWrapper -> glbModel
+                this.glbCorrectionWrapper.add(glbModel);
+                this.glbPitchWrapper.add(this.glbCorrectionWrapper);
+                this.group.add(this.glbPitchWrapper);
                 
                 // Remove procedural mesh children (keep GLB only)
                 // FIX: Don't dispose cached materials - they are shared across fish
@@ -7552,17 +7555,20 @@ class Fish {
                 this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
                 
-                // FIX: Counter the +90° X rotation that ALL GLB models have on their "rig" node
-                // Analysis of all 6 R2 GLB models shows:
-                // - Every model has a "rig" Object3D with rotation [x:90°, y:0°, z:0°]
-                // - The animation tracks continuously set rig.quaternion to this value
-                // - This causes fish to appear sideways (rotated 90° around X axis)
+                // FIX: Dynamically read and neutralize the "rig" node's rotation
+                // All GLB models have a "rig" Object3D with rotation that needs to be cancelled
+                // Instead of hardcoding -90° X, we read the actual rig quaternion and compute its inverse
                 //
-                // Solution: Apply -90° X rotation to neutralize the rig's +90° X rotation
-                // Then apply Y rotation to face the fish forward (game expects X-forward)
-                // Result: (-90°X) * (+90°X from rig) = identity for the X component
+                // The correct formula is: qCorrection = qY * inverse(qRig)
+                // Where qY is the Y rotation to face the fish forward
                 //
-                // Hierarchy: group (yaw) -> glbCorrectionWrapper (-90°X + Y offset) -> glbPitchWrapper (pitch) -> glbModel
+                // Hierarchy: group (yaw) -> pitchWrapper (pitch) -> correctionWrapper (qY * invRig) -> glbModel
+                // The correctionWrapper MUST be adjacent to glbModel so that invRig properly cancels rig's rotation
+                
+                // Find the "rig" node in the loaded model
+                const rigNode = glbModel.getObjectByName('rig');
+                
+                // Per-model Y rotation to face forward (game expects X-forward)
                 const GLB_Y_ROTATION = {
                     'hammerhead': 0,           // Hammerhead faces +X in model space
                     'marlin': Math.PI / 2,     // Marlin faces +Z, rotate 90° to face +X
@@ -7574,13 +7580,29 @@ class Fish {
                 
                 const yRotation = GLB_Y_ROTATION[form] !== undefined ? GLB_Y_ROTATION[form] : Math.PI / 2;
                 
-                // Apply -90° X rotation to counter the rig's +90° X, then Y rotation for forward direction
-                // Using quaternion multiplication: first rotate -90° around X, then rotate around Y
-                const xCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-                const yCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation);
-                this.glbCorrectionWrapper.quaternion.copy(xCorrection).multiply(yCorrection);
-                
-                console.log(`[FISH-GLB] Applied orientation fix for ${form}: X=-90°, Y=${(yRotation * 180 / Math.PI).toFixed(0)}° (counters rig's +90° X rotation)`);
+                if (rigNode) {
+                    // Read the actual rig quaternion and compute its inverse
+                    const rigQuat = rigNode.quaternion.clone();
+                    const invRig = rigQuat.clone().invert();
+                    
+                    // Apply Y rotation first (for facing direction), then inverse(rig) to cancel rig's rotation
+                    // Formula: qParent = qY * inverse(qRig)
+                    // This ensures the inverse is adjacent to the rig in the transform chain
+                    const yCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation);
+                    this.glbCorrectionWrapper.quaternion.copy(yCorrection).multiply(invRig);
+                    
+                    // Log the actual rig rotation for debugging
+                    const rigEuler = new THREE.Euler().setFromQuaternion(rigQuat, 'XYZ');
+                    console.log(`[FISH-GLB] Found rig node for ${form}: rotation [x:${(rigEuler.x * 180 / Math.PI).toFixed(1)}°, y:${(rigEuler.y * 180 / Math.PI).toFixed(1)}°, z:${(rigEuler.z * 180 / Math.PI).toFixed(1)}°]`);
+                    console.log(`[FISH-GLB] Applied dynamic inverse correction for ${form}: Y=${(yRotation * 180 / Math.PI).toFixed(0)}° + inverse(rig)`);
+                } else {
+                    // Fallback: if no rig node found, use hardcoded correction
+                    // Most GLB models have +90° X rotation on rig
+                    const yCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation);
+                    const xCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+                    this.glbCorrectionWrapper.quaternion.copy(yCorrection).multiply(xCorrection);
+                    console.log(`[FISH-GLB] No rig node found for ${form}, using fallback: Y=${(yRotation * 180 / Math.PI).toFixed(0)}° + X=-90°`);
+                }
                 
                 // Store for reference (legacy compatibility)
                 this.glbAxisWrapper = this.glbCorrectionWrapper;
