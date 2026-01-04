@@ -368,7 +368,8 @@ const CONFIG = {
             color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, 
             pattern: 'cruise', schoolSize: [1, 2], form: 'whale',
             category: 'largePredator',
-            boidsStrength: 0.1  // Almost no schooling, mother-calf only
+            boidsStrength: 0.1,  // Almost no schooling, mother-calf only
+            maxTurnRate: 0.3    // Very slow turning - majestic cruise
         },
         // 2. Great White Shark - Apex predator, torpedo-shaped
         // ECOLOGY: Strictly solitary hunters, burst speeds up to 56 km/h
@@ -378,7 +379,8 @@ const CONFIG = {
             color: 0x667788, secondaryColor: 0xcccccc, count: 1, 
             pattern: 'burstAttack', schoolSize: [1, 1], form: 'shark',
             category: 'largePredator',
-            boidsStrength: 0  // Strictly solitary
+            boidsStrength: 0,   // Strictly solitary
+            maxTurnRate: 0.8    // Moderate turning - steady predator
         },
         // 3. Marlin - Fastest fish, long bill for slashing prey
         // ECOLOGY: Solitary hunters, burst speeds up to 130 km/h
@@ -388,7 +390,8 @@ const CONFIG = {
             color: 0x2266aa, secondaryColor: 0x44aaff, count: 2, 
             pattern: 'burstSprint', schoolSize: [1, 2], form: 'marlin',
             category: 'largePredator',
-            boidsStrength: 0  // Strictly solitary
+            boidsStrength: 0,   // Strictly solitary
+            maxTurnRate: 0.6    // Slow turning - long body, high speed
         },
         // 4. Hammerhead Shark - T-shaped head for enhanced electroreception
         // ECOLOGY: School by day (up to 100+), hunt solo at night
@@ -398,7 +401,8 @@ const CONFIG = {
             color: 0x556677, secondaryColor: 0x889999, count: 3, 
             pattern: 'sShape', schoolSize: [3, 8], form: 'hammerhead',
             category: 'largePredator',
-            boidsStrength: 1.5  // School by day (unique among sharks)
+            boidsStrength: 1.5, // School by day (unique among sharks)
+            maxTurnRate: 0.7    // Moderate turning - schooling shark
         },
         
         // ==================== MEDIUM-LARGE PELAGIC FISH (4 species) ====================
@@ -8859,6 +8863,54 @@ class Fish {
         // Update velocity (using addScaledVector to avoid clone() allocation)
         this.velocity.addScaledVector(this.acceleration, deltaTime);
         
+        // VELOCITY DIRECTION STABILITY: Limit how fast the velocity direction can change
+        // This prevents "wandering" or "swaying" behavior, especially for large predators
+        // maxTurnRate is in radians per second (e.g., 0.5 = ~29 deg/s, 1.0 = ~57 deg/s)
+        const maxTurnRate = this.config.maxTurnRate !== undefined ? this.config.maxTurnRate : 2.0;
+        if (maxTurnRate < 10 && this._lastVelocityDir) {
+            const currentSpeed = this.velocity.length();
+            if (currentSpeed > 1) {
+                // Get current and previous velocity directions (XZ plane only for yaw stability)
+                const currDirX = this.velocity.x / currentSpeed;
+                const currDirZ = this.velocity.z / currentSpeed;
+                const prevDirX = this._lastVelocityDir.x;
+                const prevDirZ = this._lastVelocityDir.z;
+                
+                // Calculate angle between previous and current direction
+                const dot = currDirX * prevDirX + currDirZ * prevDirZ;
+                const cross = currDirX * prevDirZ - currDirZ * prevDirX; // For sign of angle
+                const angleDelta = Math.acos(Math.max(-1, Math.min(1, dot)));
+                
+                // If turning too fast, limit the turn
+                const maxAngleStep = maxTurnRate * deltaTime;
+                if (angleDelta > maxAngleStep && angleDelta > 0.001) {
+                    // Interpolate direction: rotate previous direction toward current by maxAngleStep
+                    const t = maxAngleStep / angleDelta;
+                    const sign = cross >= 0 ? 1 : -1;
+                    const sinAngle = Math.sin(maxAngleStep) * sign;
+                    const cosAngle = Math.cos(maxAngleStep);
+                    
+                    // Rotate previous direction by maxAngleStep toward current
+                    const newDirX = prevDirX * cosAngle - prevDirZ * sinAngle;
+                    const newDirZ = prevDirX * sinAngle + prevDirZ * cosAngle;
+                    
+                    // Apply limited direction while preserving speed and Y velocity
+                    this.velocity.x = newDirX * currentSpeed;
+                    this.velocity.z = newDirZ * currentSpeed;
+                }
+            }
+        }
+        
+        // Store current velocity direction for next frame's turn rate limiting
+        const speed = this.velocity.length();
+        if (speed > 1) {
+            if (!this._lastVelocityDir) {
+                this._lastVelocityDir = { x: 0, z: 0 };
+            }
+            this._lastVelocityDir.x = this.velocity.x / speed;
+            this._lastVelocityDir.z = this.velocity.z / speed;
+        }
+        
         // Limit speed based on pattern
         let maxSpeed = this.speed;
         if (this.patternState.phase === 'burst') {
@@ -8867,9 +8919,9 @@ class Fish {
             maxSpeed = this.speed * 0.1; // Almost stopped
         }
         
-        const currentSpeed = this.velocity.length();
-        if (currentSpeed > maxSpeed) {
-            this.velocity.multiplyScalar(maxSpeed / currentSpeed);
+        const currentSpeedFinal = this.velocity.length();
+        if (currentSpeedFinal > maxSpeed) {
+            this.velocity.multiplyScalar(maxSpeed / currentSpeedFinal);
         }
         
         // Update position (using addScaledVector to avoid clone() allocation)
@@ -8923,11 +8975,17 @@ class Fish {
     applySwimmingPattern(pattern, deltaTime, allFish) {
         const time = performance.now() * 0.001;
         
+        // FPS-INDEPENDENT RANDOM: Convert per-frame probability to time-based
+        // probability = 1 - (1 - ratePerSec)^dt ≈ ratePerSec * dt for small dt
+        // This ensures consistent behavior regardless of frame rate
+        const timeBasedRandom = (ratePerSecond) => Math.random() < ratePerSecond * deltaTime;
+        
         switch (pattern) {
             case 'cruise':
                 // Continuous slow cruise (whale, sharks, tuna)
                 // Maintain steady direction with slight variations
-                if (Math.random() < 0.01) {
+                // FIX: Use time-based probability (~0.5/sec instead of 0.01/frame)
+                if (timeBasedRandom(0.5)) {
                     this.acceleration.x += (Math.random() - 0.5) * 20;
                     this.acceleration.z += (Math.random() - 0.5) * 20;
                 }
@@ -8942,9 +9000,16 @@ class Fish {
                         // Start burst
                         this.patternState.phase = 'burst';
                         this.patternState.burstTimer = 0.5 + Math.random() * 1.0;
-                        // Pick random direction for burst
-                        this.acceleration.x += (Math.random() - 0.5) * 200;
-                        this.acceleration.z += (Math.random() - 0.5) * 200;
+                        // Pick random direction for burst - apply in current velocity direction
+                        // FIX: Burst accelerates forward, not random sideways
+                        const speed = this.velocity.length();
+                        if (speed > 1) {
+                            this.acceleration.x += (this.velocity.x / speed) * 150;
+                            this.acceleration.z += (this.velocity.z / speed) * 150;
+                        } else {
+                            this.acceleration.x += (Math.random() - 0.5) * 100;
+                            this.acceleration.z += (Math.random() - 0.5) * 100;
+                        }
                     } else {
                         // End burst, return to normal
                         this.patternState.phase = 'normal';
@@ -8955,7 +9020,9 @@ class Fish {
                 
             case 'sShape':
                 // S-shaped swimming (hammerhead)
-                const sWave = Math.sin(time * 2 + this.patternState.waveOffset) * 30;
+                // FIX: Reduced amplitude from 30 to 12 for steadier swimming
+                // The turn rate limiter will further smooth this out
+                const sWave = Math.sin(time * 1.5 + this.patternState.waveOffset) * 12;
                 this.acceleration.z += sWave;
                 break;
                 
@@ -8967,7 +9034,8 @@ class Fish {
                 
             case 'irregularTurns':
                 // Fast irregular paths with sudden turns (mahi-mahi)
-                if (Math.random() < 0.02) {
+                // FIX: Use time-based probability (~1.2/sec for erratic fish)
+                if (timeBasedRandom(1.2)) {
                     this.acceleration.x += (Math.random() - 0.5) * 150;
                     this.acceleration.z += (Math.random() - 0.5) * 150;
                 }
@@ -8979,7 +9047,8 @@ class Fish {
                 if (this.patternState.phase === 'normal') {
                     // Almost stationary
                     this.velocity.multiplyScalar(0.95);
-                    if (this.patternState.burstTimer <= 0 && Math.random() < 0.01) {
+                    // FIX: Use time-based probability (~0.5/sec)
+                    if (this.patternState.burstTimer <= 0 && timeBasedRandom(0.5)) {
                         this.patternState.phase = 'burst';
                         this.patternState.burstTimer = 0.3 + Math.random() * 0.5;
                         this.acceleration.x += (Math.random() - 0.5) * 300;
@@ -8996,7 +9065,8 @@ class Fish {
             case 'bottomBurst':
                 // Slow bottom movement + short bursts (grouper)
                 this.acceleration.y -= 5; // Tendency to stay low
-                if (Math.random() < 0.005) {
+                // FIX: Use time-based probability (~0.3/sec)
+                if (timeBasedRandom(0.3)) {
                     this.acceleration.x += (Math.random() - 0.5) * 100;
                     this.acceleration.z += (Math.random() - 0.5) * 100;
                 }
@@ -9070,7 +9140,8 @@ class Fish {
                     this.acceleration.z += toTerritoryZ * 0.5;
                 }
                 // Quick darting movements
-                if (Math.random() < 0.03) {
+                // FIX: Use time-based probability (~1.8/sec for small darting fish)
+                if (timeBasedRandom(1.8)) {
                     this.acceleration.x += (Math.random() - 0.5) * 80;
                     this.acceleration.z += (Math.random() - 0.5) * 80;
                 }
@@ -9078,7 +9149,8 @@ class Fish {
                 
             case 'defensiveCharge':
                 // Quick up-down defensive charges (damselfish)
-                if (Math.random() < 0.02) {
+                // FIX: Use time-based probability (~1.2/sec)
+                if (timeBasedRandom(1.2)) {
                     this.acceleration.y += (Math.random() - 0.5) * 100;
                 }
                 this.acceleration.x += Math.sin(time * 3) * 10;
@@ -9089,7 +9161,8 @@ class Fish {
                 // Smooth gliding with gentle up-down motion
                 this.acceleration.y += Math.sin(time * 0.8 + this.patternState.waveOffset) * 8;
                 // Gentle banking turns
-                if (Math.random() < 0.005) {
+                // FIX: Use time-based probability (~0.3/sec for gentle manta)
+                if (timeBasedRandom(0.3)) {
                     this.acceleration.x += (Math.random() - 0.5) * 30;
                 }
                 break;
@@ -9099,7 +9172,8 @@ class Fish {
                 this.velocity.multiplyScalar(0.98); // Very slow
                 // Gentle rotation
                 this.group.rotation.y += deltaTime * 0.2;
-                if (Math.random() < 0.01) {
+                // FIX: Use time-based probability (~0.5/sec)
+                if (timeBasedRandom(0.5)) {
                     this.acceleration.x += (Math.random() - 0.5) * 20;
                     this.acceleration.z += (Math.random() - 0.5) * 20;
                 }
