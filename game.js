@@ -7552,53 +7552,35 @@ class Fish {
                 this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
                 
-                // FIX: Per-model orientation corrections based on systematic bounding box analysis
-                // Each model has different default orientation in the GLB file
-                // We use quaternions to avoid Euler angle order issues
-                // Game expects: forward = +X, up = +Y
+                // FIX: Counter the +90° X rotation that ALL GLB models have on their "rig" node
+                // Analysis of all 6 R2 GLB models shows:
+                // - Every model has a "rig" Object3D with rotation [x:90°, y:0°, z:0°]
+                // - The animation tracks continuously set rig.quaternion to this value
+                // - This causes fish to appear sideways (rotated 90° around X axis)
                 //
-                // Analysis results from R2 GLB files:
-                // - hammerhead: forward=X, up=Y (already correct)
-                // - marlin: forward=Z, up=Y (rotate 90° around Y)
-                // - greatwhiteshark, grouper, sardine: forward=Y, up=Z (rotate -90° around X, then 90° around Y)
-                // - tuna: forward=Y, up=X (rotate -90° around Z, then -90° around X)
+                // Solution: Apply -90° X rotation to neutralize the rig's +90° X rotation
+                // Then apply Y rotation to face the fish forward (game expects X-forward)
+                // Result: (-90°X) * (+90°X from rig) = identity for the X component
                 //
-                // Using quaternion.setFromEuler with explicit order to ensure correct rotation
-                // FIX: All models use the same correction - rotate to align with game's X-forward, Y-up convention
-                // The key insight is that most GLB models have Z-forward or Y-forward, and we need X-forward
-                const GLB_ORIENTATION_CORRECTIONS = {
-                    // Hammerhead: forward=X, up=Y - already correct, identity quaternion
-                    'hammerhead': { x: 0, y: 0, z: 0, order: 'XYZ' },
-                    
-                    // Marlin: forward=Z, up=Y - rotate 90° around Y to bring Z to X
-                    'marlin': { x: 0, y: Math.PI / 2, z: 0, order: 'XYZ' },
-                    
-                    // Great White Shark: forward=Y, up=Z - need to map Y→X and Z→Y
-                    // Rotate -90° around X (brings Z-up to Y-up), then 90° around Y (brings Y-forward to X-forward)
-                    'greatwhiteshark': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' },
-                    
-                    // Grouper: forward=Y, up=Z - same as Great White Shark
-                    'grouper': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' },
-                    
-                    // Sardine: forward=Y, up=Z - same as Great White Shark
-                    'sardine': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' },
-                    
-                    // Tuna: forward=Y, up=Z - same correction as other Y-forward models
-                    'tuna': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' }
+                // Hierarchy: group (yaw) -> glbCorrectionWrapper (-90°X + Y offset) -> glbPitchWrapper (pitch) -> glbModel
+                const GLB_Y_ROTATION = {
+                    'hammerhead': 0,           // Hammerhead faces +X in model space
+                    'marlin': Math.PI / 2,     // Marlin faces +Z, rotate 90° to face +X
+                    'greatwhiteshark': Math.PI / 2,
+                    'grouper': Math.PI / 2,
+                    'sardine': Math.PI / 2,
+                    'tuna': Math.PI / 2
                 };
                 
-                const correction = GLB_ORIENTATION_CORRECTIONS[form];
-                if (correction) {
-                    // Apply correction using Euler angles with explicit order
-                    const euler = new THREE.Euler(correction.x, correction.y, correction.z, correction.order);
-                    this.glbCorrectionWrapper.quaternion.setFromEuler(euler);
-                    console.log(`[FISH-GLB] Applied orientation correction for ${form}: x=${(correction.x * 180 / Math.PI).toFixed(0)}°, y=${(correction.y * 180 / Math.PI).toFixed(0)}°, z=${(correction.z * 180 / Math.PI).toFixed(0)}° (order=${correction.order})`);
-                } else {
-                    // Default: assume forward=Z, up=Y (standard GLB convention)
-                    // Rotate 90° around Y to convert Z-forward to X-forward
-                    this.glbCorrectionWrapper.rotation.y = Math.PI / 2;
-                    console.log(`[FISH-GLB] Applied default Y rotation for ${form}: 90°`);
-                }
+                const yRotation = GLB_Y_ROTATION[form] !== undefined ? GLB_Y_ROTATION[form] : Math.PI / 2;
+                
+                // Apply -90° X rotation to counter the rig's +90° X, then Y rotation for forward direction
+                // Using quaternion multiplication: first rotate -90° around X, then rotate around Y
+                const xCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+                const yCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation);
+                this.glbCorrectionWrapper.quaternion.copy(xCorrection).multiply(yCorrection);
+                
+                console.log(`[FISH-GLB] Applied orientation fix for ${form}: X=-90°, Y=${(yRotation * 180 / Math.PI).toFixed(0)}° (counters rig's +90° X rotation)`);
                 
                 // Store for reference (legacy compatibility)
                 this.glbAxisWrapper = this.glbCorrectionWrapper;
@@ -9282,12 +9264,10 @@ class Fish {
             const yaw = Math.atan2(-dirZ, dirX);
             
             const rawPitch = Math.asin(dirY);
-            const maxPitch = Math.PI / 4;
+            const maxPitch = Math.PI / 18; // 10 degrees - very limited pitch for natural look
             const pitch = Math.max(-maxPitch, Math.min(maxPitch, rawPitch));
             
-            this.group.rotation.y = yaw;
-            this.group.rotation.x = 0;
-            this.group.rotation.z = 0;
+            this.group.rotation.set(0, yaw, 0);
             
             if (this.glbPitchWrapper) {
                 this.glbPitchWrapper.rotation.set(0, 0, pitch);
