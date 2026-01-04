@@ -8876,7 +8876,7 @@ class Fish {
         this.group.position.addScaledVector(this.velocity, deltaTime);
         
         // Update rotation to face movement direction
-        this.updateRotation();
+        this.updateRotation(deltaTime);
         
         // Animate tail
         this.animateTail(deltaTime);
@@ -9250,16 +9250,27 @@ class Fish {
         this.acceleration.addScaledVector(force, 60);
     }
     
-    updateRotation() {
+    updateRotation(deltaTime) {
         // FIX: Use frame-to-frame displacement instead of velocity for yaw calculation
         // This ensures the fish faces the direction it's actually moving, not where velocity points
         // Important because boundary clamping and other position edits can cause velocity != displacement
+        //
+        // SMOOTHING: Use time-based damping to avoid jitter from frame-to-frame noise
+        // The target yaw is computed from displacement, then smoothly approached
         
-        // Initialize rotation tracking position if not set
+        // Initialize rotation tracking state if not set
         if (!this._lastRotationPos) {
             this._lastRotationPos = this.group.position.clone();
-            this._lastYaw = 0;
+            this._currentYaw = 0;      // Current smoothed yaw (what we display)
+            this._targetYaw = 0;       // Target yaw from displacement
+            this._currentPitch = 0;    // Current smoothed pitch
         }
+        
+        // Smoothing parameters (time-based for FPS independence)
+        const YAW_SMOOTHING_K = 8;           // Higher = faster response (~125ms time constant)
+        const PITCH_SMOOTHING_K = 10;        // Pitch can be slightly faster
+        const MAX_YAW_RATE = 4;              // Max radians per second (~230 deg/s)
+        const MIN_DISPLACEMENT = 0.15;       // Minimum XZ displacement to update target yaw
         
         // Calculate actual displacement this frame
         const dispX = this.group.position.x - this._lastRotationPos.x;
@@ -9270,58 +9281,61 @@ class Fish {
         // Update rotation tracking position
         this._lastRotationPos.copy(this.group.position);
         
-        // Only update yaw if there's significant movement (avoids jitter when stationary)
-        const MIN_DISPLACEMENT = 0.1;
+        // Compute target yaw from displacement (only if significant movement)
         if (dispMag > MIN_DISPLACEMENT) {
-            // Compute yaw from actual displacement direction
             const dirX = dispX / dispMag;
             const dirZ = dispZ / dispMag;
-            const yaw = Math.atan2(-dirZ, dirX);
-            this._lastYaw = yaw;
+            this._targetYaw = Math.atan2(-dirZ, dirX);
             
-            // Compute pitch from vertical displacement
+            // Compute target pitch from vertical displacement
             const totalDisp = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
             const dirY = totalDisp > 0.01 ? dispY / totalDisp : 0;
             const rawPitch = Math.asin(Math.max(-1, Math.min(1, dirY)));
             const maxPitch = Math.PI / 18; // 10 degrees - very limited pitch for natural look
-            const pitch = Math.max(-maxPitch, Math.min(maxPitch, rawPitch));
-            
-            this.group.rotation.set(0, yaw, 0);
-            
-            if (this.glbPitchWrapper) {
-                this.glbPitchWrapper.rotation.set(0, 0, pitch);
-            } else if (this.mantaPitchWrapper) {
-                this.mantaPitchWrapper.rotation.set(0, 0, pitch);
-            } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
-                const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
-                if (!this._originalCorrectionQuat) {
-                    this._originalCorrectionQuat = wrapper.quaternion.clone();
-                }
-                const pitchQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, pitch));
-                wrapper.quaternion.copy(this._originalCorrectionQuat).multiply(pitchQuat);
-            } else {
-                this.group.rotation.z = -pitch;
+            this._targetPitch = Math.max(-maxPitch, Math.min(maxPitch, rawPitch));
+        }
+        // If displacement is small, keep the current target (don't update)
+        
+        // Smooth yaw: compute shortest-angle delta to handle -π to +π wrap-around
+        // delta = ((target - current + π) mod 2π) - π
+        let yawDelta = this._targetYaw - this._currentYaw;
+        // Normalize to [-π, π] range
+        while (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
+        while (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
+        
+        // Apply time-based smoothing with max rate cap
+        const yawAlpha = 1 - Math.exp(-YAW_SMOOTHING_K * deltaTime);
+        const maxYawStep = MAX_YAW_RATE * deltaTime;
+        const yawStep = Math.max(-maxYawStep, Math.min(maxYawStep, yawDelta * yawAlpha));
+        this._currentYaw += yawStep;
+        
+        // Normalize current yaw to [-π, π]
+        while (this._currentYaw > Math.PI) this._currentYaw -= 2 * Math.PI;
+        while (this._currentYaw < -Math.PI) this._currentYaw += 2 * Math.PI;
+        
+        // Smooth pitch (simpler, no wrap-around needed)
+        const pitchAlpha = 1 - Math.exp(-PITCH_SMOOTHING_K * deltaTime);
+        const pitchDelta = (this._targetPitch || 0) - this._currentPitch;
+        this._currentPitch += pitchDelta * pitchAlpha;
+        
+        // Apply smoothed rotation
+        this.group.rotation.set(0, this._currentYaw, 0);
+        
+        // Apply pitch to appropriate wrapper
+        const pitch = this._currentPitch;
+        if (this.glbPitchWrapper) {
+            this.glbPitchWrapper.rotation.set(0, 0, pitch);
+        } else if (this.mantaPitchWrapper) {
+            this.mantaPitchWrapper.rotation.set(0, 0, pitch);
+        } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
+            const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
+            if (!this._originalCorrectionQuat) {
+                this._originalCorrectionQuat = wrapper.quaternion.clone();
             }
+            const pitchQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, pitch));
+            wrapper.quaternion.copy(this._originalCorrectionQuat).multiply(pitchQuat);
         } else {
-            // Keep last yaw when stationary, but decay pitch
-            this.group.rotation.set(0, this._lastYaw, 0);
-            this.group.rotation.x = 0;
-            this.group.rotation.z = 0;
-            
-            if (this.glbPitchWrapper) {
-                this.glbPitchWrapper.rotation.z *= 0.9;
-                this.glbPitchWrapper.rotation.x = 0;
-                this.glbPitchWrapper.rotation.y = 0;
-            } else if (this.mantaPitchWrapper) {
-                this.mantaPitchWrapper.rotation.z *= 0.9;
-                this.mantaPitchWrapper.rotation.x = 0;
-                this.mantaPitchWrapper.rotation.y = 0;
-            } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
-                const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
-                wrapper.rotation.z *= 0.9;
-            } else {
-                this.group.rotation.z *= 0.9;
-            }
+            this.group.rotation.z = -pitch;
         }
     }
     
