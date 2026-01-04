@@ -7516,28 +7516,30 @@ class Fish {
                 // Store reference to procedural mesh children for removal
                 const proceduralChildren = [...this.group.children];
                 
-                // FIX: Correct wrapper order for proper rig neutralization
-                // The inverse(rig) must be ADJACENT to the glbModel in the transform chain
-                // Otherwise the pitch wrapper interferes with the cancellation
+                // FIX: Simple wrapper structure - DO NOT cancel the rig's rotation!
+                // The rig's +90° X rotation is INTENTIONAL - it converts the model from vertical bind pose
+                // to horizontal swimming pose. Cancelling it makes fish stand vertically!
                 //
-                // CORRECT Hierarchy: group (yaw) -> pitchWrapper (pitch) -> correctionWrapper (invRig + Y offset) -> glbModel
-                // Transform chain: yaw * pitch * (invRig * rig) = yaw * pitch * identity
+                // The only correction needed is Y rotation to face the fish forward (align with movement)
+                //
+                // Hierarchy: group (yaw) -> correctionWrapper (Y rotation only) -> pitchWrapper (pitch) -> glbModel
                 //
                 // This ensures:
-                // 1. Yaw (facing direction) is applied first at the group level
-                // 2. Pitch (nose up/down) is applied second
-                // 3. The rig neutralization is adjacent to the glbModel, so it properly cancels
+                // 1. Yaw (facing direction) is applied at the group level
+                // 2. Y correction aligns the model's forward axis to game's +X forward
+                // 3. Pitch (nose up/down) is applied closest to the model
+                // 4. The rig's +90° X rotation is PRESERVED (makes fish horizontal)
                 
-                // Layer 1: Pitch wrapper - for dynamic pitch (nose up/down)
-                this.glbPitchWrapper = new THREE.Group();
-                
-                // Layer 2: Per-model correction wrapper (invRig + Y offset) - MUST be adjacent to glbModel
+                // Layer 1: Per-model Y correction wrapper (Y rotation only to face forward)
                 this.glbCorrectionWrapper = new THREE.Group();
                 
-                // Build the hierarchy: group -> pitchWrapper -> correctionWrapper -> glbModel
-                this.glbCorrectionWrapper.add(glbModel);
-                this.glbPitchWrapper.add(this.glbCorrectionWrapper);
-                this.group.add(this.glbPitchWrapper);
+                // Layer 2: Pitch wrapper - for dynamic pitch (nose up/down)
+                this.glbPitchWrapper = new THREE.Group();
+                
+                // Build the hierarchy: group -> correctionWrapper -> pitchWrapper -> glbModel
+                this.glbPitchWrapper.add(glbModel);
+                this.glbCorrectionWrapper.add(this.glbPitchWrapper);
+                this.group.add(this.glbCorrectionWrapper);
                 
                 // Remove procedural mesh children (keep GLB only)
                 // FIX: Don't dispose cached materials - they are shared across fish
@@ -7555,19 +7557,11 @@ class Fish {
                 this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
                 
-                // FIX: Dynamically read and neutralize the "rig" node's rotation
-                // All GLB models have a "rig" Object3D with rotation that needs to be cancelled
-                // Instead of hardcoding -90° X, we read the actual rig quaternion and compute its inverse
+                // FIX: Simple Y-only rotation to face fish forward
+                // DO NOT cancel the rig's +90° X rotation - it's INTENTIONAL!
+                // The rig rotation converts the model from vertical bind pose to horizontal swimming pose.
+                // We only need Y rotation to align the model's forward axis with the game's +X forward.
                 //
-                // The correct formula is: qCorrection = qY * inverse(qRig)
-                // Where qY is the Y rotation to face the fish forward
-                //
-                // Hierarchy: group (yaw) -> pitchWrapper (pitch) -> correctionWrapper (qY * invRig) -> glbModel
-                // The correctionWrapper MUST be adjacent to glbModel so that invRig properly cancels rig's rotation
-                
-                // Find the "rig" node in the loaded model
-                const rigNode = glbModel.getObjectByName('rig');
-                
                 // Per-model Y rotation to face forward (game expects X-forward)
                 const GLB_Y_ROTATION = {
                     'hammerhead': 0,           // Hammerhead faces +X in model space
@@ -7580,29 +7574,10 @@ class Fish {
                 
                 const yRotation = GLB_Y_ROTATION[form] !== undefined ? GLB_Y_ROTATION[form] : Math.PI / 2;
                 
-                if (rigNode) {
-                    // Read the actual rig quaternion and compute its inverse
-                    const rigQuat = rigNode.quaternion.clone();
-                    const invRig = rigQuat.clone().invert();
-                    
-                    // Apply Y rotation first (for facing direction), then inverse(rig) to cancel rig's rotation
-                    // Formula: qParent = qY * inverse(qRig)
-                    // This ensures the inverse is adjacent to the rig in the transform chain
-                    const yCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation);
-                    this.glbCorrectionWrapper.quaternion.copy(yCorrection).multiply(invRig);
-                    
-                    // Log the actual rig rotation for debugging
-                    const rigEuler = new THREE.Euler().setFromQuaternion(rigQuat, 'XYZ');
-                    console.log(`[FISH-GLB] Found rig node for ${form}: rotation [x:${(rigEuler.x * 180 / Math.PI).toFixed(1)}°, y:${(rigEuler.y * 180 / Math.PI).toFixed(1)}°, z:${(rigEuler.z * 180 / Math.PI).toFixed(1)}°]`);
-                    console.log(`[FISH-GLB] Applied dynamic inverse correction for ${form}: Y=${(yRotation * 180 / Math.PI).toFixed(0)}° + inverse(rig)`);
-                } else {
-                    // Fallback: if no rig node found, use hardcoded correction
-                    // Most GLB models have +90° X rotation on rig
-                    const yCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation);
-                    const xCorrection = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-                    this.glbCorrectionWrapper.quaternion.copy(yCorrection).multiply(xCorrection);
-                    console.log(`[FISH-GLB] No rig node found for ${form}, using fallback: Y=${(yRotation * 180 / Math.PI).toFixed(0)}° + X=-90°`);
-                }
+                // Apply ONLY Y rotation - do NOT touch X or Z!
+                // The rig's +90° X rotation is preserved and makes the fish horizontal
+                this.glbCorrectionWrapper.rotation.set(0, yRotation, 0);
+                console.log(`[FISH-GLB] Applied Y-only correction for ${form}: Y=${(yRotation * 180 / Math.PI).toFixed(0)}° (rig's +90° X preserved)`);
                 
                 // Store for reference (legacy compatibility)
                 this.glbAxisWrapper = this.glbCorrectionWrapper;
@@ -9276,16 +9251,38 @@ class Fish {
     }
     
     updateRotation() {
-        const speed = this.velocity.length();
+        // FIX: Use frame-to-frame displacement instead of velocity for yaw calculation
+        // This ensures the fish faces the direction it's actually moving, not where velocity points
+        // Important because boundary clamping and other position edits can cause velocity != displacement
         
-        if (speed > 0.1) {
-            const dirX = this.velocity.x / speed;
-            const dirY = this.velocity.y / speed;
-            const dirZ = this.velocity.z / speed;
-            
+        // Initialize rotation tracking position if not set
+        if (!this._lastRotationPos) {
+            this._lastRotationPos = this.group.position.clone();
+            this._lastYaw = 0;
+        }
+        
+        // Calculate actual displacement this frame
+        const dispX = this.group.position.x - this._lastRotationPos.x;
+        const dispY = this.group.position.y - this._lastRotationPos.y;
+        const dispZ = this.group.position.z - this._lastRotationPos.z;
+        const dispMag = Math.sqrt(dispX * dispX + dispZ * dispZ); // XZ plane displacement
+        
+        // Update rotation tracking position
+        this._lastRotationPos.copy(this.group.position);
+        
+        // Only update yaw if there's significant movement (avoids jitter when stationary)
+        const MIN_DISPLACEMENT = 0.1;
+        if (dispMag > MIN_DISPLACEMENT) {
+            // Compute yaw from actual displacement direction
+            const dirX = dispX / dispMag;
+            const dirZ = dispZ / dispMag;
             const yaw = Math.atan2(-dirZ, dirX);
+            this._lastYaw = yaw;
             
-            const rawPitch = Math.asin(dirY);
+            // Compute pitch from vertical displacement
+            const totalDisp = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
+            const dirY = totalDisp > 0.01 ? dispY / totalDisp : 0;
+            const rawPitch = Math.asin(Math.max(-1, Math.min(1, dirY)));
             const maxPitch = Math.PI / 18; // 10 degrees - very limited pitch for natural look
             const pitch = Math.max(-maxPitch, Math.min(maxPitch, rawPitch));
             
@@ -9306,6 +9303,8 @@ class Fish {
                 this.group.rotation.z = -pitch;
             }
         } else {
+            // Keep last yaw when stationary, but decay pitch
+            this.group.rotation.set(0, this._lastYaw, 0);
             this.group.rotation.x = 0;
             this.group.rotation.z = 0;
             
