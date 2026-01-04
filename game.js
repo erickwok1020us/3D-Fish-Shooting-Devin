@@ -8195,11 +8195,24 @@ class Fish {
     
     // Manta Ray - Flat wing shape
     createMantaRayMesh(size, bodyMaterial, secondaryMaterial) {
+        // FIX: Manta Ray wrapper structure (mirrors GLB fish structure):
+        // group (yaw only) -> mantaCorrectionWrapper (static roll fix) -> mantaPitchWrapper (dynamic pitch) -> meshes
+        // This ensures the base orientation correction is preserved when updateRotation() resets group.rotation.x = 0
+        
+        // Static correction wrapper - rotates the flat manta to be horizontal
+        // The geometry is built with Y as thin axis, but we need to verify if it needs roll correction
+        this.mantaCorrectionWrapper = new THREE.Group();
+        this.group.add(this.mantaCorrectionWrapper);
+        
+        // Dynamic pitch wrapper - for nose up/down tilt when swimming vertically
+        this.mantaPitchWrapper = new THREE.Group();
+        this.mantaCorrectionWrapper.add(this.mantaPitchWrapper);
+        
         // Flat diamond body
         const bodyGeometry = new THREE.BoxGeometry(size * 0.8, size * 0.1, size * 1.5);
         this.body = new THREE.Mesh(bodyGeometry, bodyMaterial);
         this.body.castShadow = true;
-        this.group.add(this.body);
+        this.mantaPitchWrapper.add(this.body);
         
         // Wings (extended sides)
         [-1, 1].forEach(side => {
@@ -8207,14 +8220,14 @@ class Fish {
             const wing = new THREE.Mesh(wingGeometry, bodyMaterial);
             wing.position.set(size * 0.1, 0, side * size * 0.9);
             wing.rotation.x = side * 0.2;
-            this.group.add(wing);
+            this.mantaPitchWrapper.add(wing);
         });
         
         // White belly
         const bellyGeometry = new THREE.BoxGeometry(size * 0.6, size * 0.05, size * 1.2);
         const belly = new THREE.Mesh(bellyGeometry, secondaryMaterial);
         belly.position.y = -size * 0.05;
-        this.group.add(belly);
+        this.mantaPitchWrapper.add(belly);
         
         // Cephalic fins (horn-like)
         [-1, 1].forEach(side => {
@@ -8222,7 +8235,7 @@ class Fish {
             const horn = new THREE.Mesh(hornGeometry, bodyMaterial);
             horn.rotation.z = -Math.PI / 2;
             horn.position.set(size * 0.5, 0, side * size * 0.2);
-            this.group.add(horn);
+            this.mantaPitchWrapper.add(horn);
         });
         
         // Long thin tail
@@ -8230,7 +8243,7 @@ class Fish {
         this.tail = new THREE.Mesh(tailGeometry, bodyMaterial);
         this.tail.rotation.z = Math.PI / 2;
         this.tail.position.x = -size * 0.7;
-        this.group.add(this.tail);
+        this.mantaPitchWrapper.add(this.tail);
         
         // Eyes on sides
         const eyeGeometry = new THREE.SphereGeometry(size * 0.05, 8, 8);
@@ -8238,7 +8251,7 @@ class Fish {
         [-1, 1].forEach(side => {
             const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
             eye.position.set(size * 0.3, size * 0.05, side * size * 0.3);
-            this.group.add(eye);
+            this.mantaPitchWrapper.add(eye);
         });
     }
     
@@ -9291,7 +9304,11 @@ class Fish {
                 // group (yaw) -> glbCorrectionWrapper (static per-model quaternion) -> glbPitchWrapper (pitch) -> glbModel
                 // Pitch is applied to the dedicated pitch wrapper, keeping model correction separate
                 this.glbPitchWrapper.rotation.z = pitch;
-                // FIX: Reset group.rotation.z for GLB fish to prevent roll from procedural state
+                this.group.rotation.z = 0;
+            } else if (this.mantaPitchWrapper) {
+                // Manta Ray procedural fish with wrapper structure:
+                // group (yaw) -> mantaCorrectionWrapper (static roll fix) -> mantaPitchWrapper (pitch) -> meshes
+                this.mantaPitchWrapper.rotation.z = pitch;
                 this.group.rotation.z = 0;
             } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
                 // Legacy fallback for any fish that might still use old structure
@@ -9306,6 +9323,9 @@ class Fish {
             // When nearly stationary, smoothly return to level orientation
             if (this.glbPitchWrapper) {
                 this.glbPitchWrapper.rotation.z *= 0.9;
+                this.group.rotation.z = 0;
+            } else if (this.mantaPitchWrapper) {
+                this.mantaPitchWrapper.rotation.z *= 0.9;
                 this.group.rotation.z = 0;
             } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
                 const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
