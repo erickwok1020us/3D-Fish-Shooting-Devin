@@ -9251,16 +9251,38 @@ class Fish {
     }
     
     updateRotation() {
-        const speed = this.velocity.length();
+        // FIX: Use frame-to-frame displacement instead of velocity for yaw calculation
+        // This ensures the fish faces the direction it's actually moving, not where velocity points
+        // Important because boundary clamping and other position edits can cause velocity != displacement
         
-        if (speed > 0.1) {
-            const dirX = this.velocity.x / speed;
-            const dirY = this.velocity.y / speed;
-            const dirZ = this.velocity.z / speed;
-            
+        // Initialize rotation tracking position if not set
+        if (!this._lastRotationPos) {
+            this._lastRotationPos = this.group.position.clone();
+            this._lastYaw = 0;
+        }
+        
+        // Calculate actual displacement this frame
+        const dispX = this.group.position.x - this._lastRotationPos.x;
+        const dispY = this.group.position.y - this._lastRotationPos.y;
+        const dispZ = this.group.position.z - this._lastRotationPos.z;
+        const dispMag = Math.sqrt(dispX * dispX + dispZ * dispZ); // XZ plane displacement
+        
+        // Update rotation tracking position
+        this._lastRotationPos.copy(this.group.position);
+        
+        // Only update yaw if there's significant movement (avoids jitter when stationary)
+        const MIN_DISPLACEMENT = 0.1;
+        if (dispMag > MIN_DISPLACEMENT) {
+            // Compute yaw from actual displacement direction
+            const dirX = dispX / dispMag;
+            const dirZ = dispZ / dispMag;
             const yaw = Math.atan2(-dirZ, dirX);
+            this._lastYaw = yaw;
             
-            const rawPitch = Math.asin(dirY);
+            // Compute pitch from vertical displacement
+            const totalDisp = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
+            const dirY = totalDisp > 0.01 ? dispY / totalDisp : 0;
+            const rawPitch = Math.asin(Math.max(-1, Math.min(1, dirY)));
             const maxPitch = Math.PI / 18; // 10 degrees - very limited pitch for natural look
             const pitch = Math.max(-maxPitch, Math.min(maxPitch, rawPitch));
             
@@ -9281,6 +9303,8 @@ class Fish {
                 this.group.rotation.z = -pitch;
             }
         } else {
+            // Keep last yaw when stationary, but decay pitch
+            this.group.rotation.set(0, this._lastYaw, 0);
             this.group.rotation.x = 0;
             this.group.rotation.z = 0;
             
