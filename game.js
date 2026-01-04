@@ -8866,7 +8866,10 @@ class Fish {
         // VELOCITY DIRECTION STABILITY: Limit how fast the velocity direction can change
         // This prevents "wandering" or "swaying" behavior, especially for large predators
         // maxTurnRate is in radians per second (e.g., 0.5 = ~29 deg/s, 1.0 = ~57 deg/s)
-        const maxTurnRate = this.config.maxTurnRate !== undefined ? this.config.maxTurnRate : 2.0;
+        // FIX: Only apply to fish that explicitly have maxTurnRate configured (large predators)
+        // Default is now very high (100 rad/s) to effectively disable for other fish
+        // This prevents fish from being unable to turn back at boundaries
+        const maxTurnRate = this.config.maxTurnRate !== undefined ? this.config.maxTurnRate : 100.0;
         if (maxTurnRate < 10 && this._lastVelocityDir) {
             const currentSpeed = this.velocity.length();
             if (currentSpeed > 1) {
