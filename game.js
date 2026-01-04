@@ -7564,6 +7564,8 @@ class Fish {
                 // - tuna: forward=Y, up=X (rotate -90° around Z, then -90° around X)
                 //
                 // Using quaternion.setFromEuler with explicit order to ensure correct rotation
+                // FIX: All models use the same correction - rotate to align with game's X-forward, Y-up convention
+                // The key insight is that most GLB models have Z-forward or Y-forward, and we need X-forward
                 const GLB_ORIENTATION_CORRECTIONS = {
                     // Hammerhead: forward=X, up=Y - already correct, identity quaternion
                     'hammerhead': { x: 0, y: 0, z: 0, order: 'XYZ' },
@@ -7572,8 +7574,7 @@ class Fish {
                     'marlin': { x: 0, y: Math.PI / 2, z: 0, order: 'XYZ' },
                     
                     // Great White Shark: forward=Y, up=Z - need to map Y→X and Z→Y
-                    // First rotate -90° around X (brings Z-up to Y-up), then 90° around Y (brings Y-forward to X-forward)
-                    // But with Euler XYZ order, we apply X first, then Y
+                    // Rotate -90° around X (brings Z-up to Y-up), then 90° around Y (brings Y-forward to X-forward)
                     'greatwhiteshark': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' },
                     
                     // Grouper: forward=Y, up=Z - same as Great White Shark
@@ -7582,8 +7583,7 @@ class Fish {
                     // Sardine: forward=Y, up=Z - same as Great White Shark
                     'sardine': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' },
                     
-                    // Tuna: forward=Y, up=X - need to map Y→X and X→Y
-                    // This is a different rotation than the Z-up models
+                    // Tuna: forward=Y, up=Z - same correction as other Y-forward models
                     'tuna': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' }
                 };
                 
@@ -9275,69 +9275,53 @@ class Fish {
         const speed = this.velocity.length();
         
         if (speed > 0.1) {
-            // Use quaternion-based orientation to align fish with velocity direction
-            // This automatically handles both yaw AND pitch, making fish face their swim direction
-            
-            // Normalize velocity to get direction
             const dirX = this.velocity.x / speed;
             const dirY = this.velocity.y / speed;
             const dirZ = this.velocity.z / speed;
             
-            // Calculate yaw (rotation around Y axis) from horizontal direction
             const yaw = Math.atan2(-dirZ, dirX);
             
-            // Calculate pitch (tilt up/down) from vertical component
-            // Using asin gives the angle between velocity and horizontal plane
-            // FIX: Clamp pitch to ±45° (0.785 rad) to prevent extreme tilting
-            // When pitch approaches ±90°, non-uniformly scaled ellipsoid bodies appear as flat discs
-            // This is especially noticeable with procedural fish that have scale(1.5, 0.8, 0.6)
             const rawPitch = Math.asin(dirY);
-            const maxPitch = Math.PI / 4; // 45 degrees
+            const maxPitch = Math.PI / 4;
             const pitch = Math.max(-maxPitch, Math.min(maxPitch, rawPitch));
             
-            // Apply yaw to the group
             this.group.rotation.y = yaw;
+            this.group.rotation.x = 0;
+            this.group.rotation.z = 0;
             
-            // Apply pitch based on fish type
             if (this.glbPitchWrapper) {
-                // GLB fish with simplified wrapper structure:
-                // group (yaw) -> glbCorrectionWrapper (static per-model quaternion) -> glbPitchWrapper (pitch) -> glbModel
-                // Pitch is applied to the dedicated pitch wrapper, keeping model correction separate
-                this.glbPitchWrapper.rotation.z = pitch;
-                this.group.rotation.z = 0;
+                this.glbPitchWrapper.rotation.set(0, 0, pitch);
             } else if (this.mantaPitchWrapper) {
-                // Manta Ray procedural fish with wrapper structure:
-                // group (yaw) -> mantaCorrectionWrapper (static roll fix) -> mantaPitchWrapper (pitch) -> meshes
-                this.mantaPitchWrapper.rotation.z = pitch;
-                this.group.rotation.z = 0;
+                this.mantaPitchWrapper.rotation.set(0, 0, pitch);
             } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
-                // Legacy fallback for any fish that might still use old structure
                 const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
-                wrapper.rotation.z = pitch;
-                this.group.rotation.z = 0;
+                if (!this._originalCorrectionQuat) {
+                    this._originalCorrectionQuat = wrapper.quaternion.clone();
+                }
+                const pitchQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, pitch));
+                wrapper.quaternion.copy(this._originalCorrectionQuat).multiply(pitchQuat);
             } else {
-                // Procedural fish: pitch via group's Z rotation (tilt nose up/down)
                 this.group.rotation.z = -pitch;
             }
         } else {
-            // When nearly stationary, smoothly return to level orientation
+            this.group.rotation.x = 0;
+            this.group.rotation.z = 0;
+            
             if (this.glbPitchWrapper) {
                 this.glbPitchWrapper.rotation.z *= 0.9;
-                this.group.rotation.z = 0;
+                this.glbPitchWrapper.rotation.x = 0;
+                this.glbPitchWrapper.rotation.y = 0;
             } else if (this.mantaPitchWrapper) {
                 this.mantaPitchWrapper.rotation.z *= 0.9;
-                this.group.rotation.z = 0;
+                this.mantaPitchWrapper.rotation.x = 0;
+                this.mantaPitchWrapper.rotation.y = 0;
             } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
                 const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
                 wrapper.rotation.z *= 0.9;
-                this.group.rotation.z = 0;
             } else {
                 this.group.rotation.z *= 0.9;
             }
         }
-        
-        // Always keep roll at 0 to prevent fish from rolling sideways
-        this.group.rotation.x = 0;
     }
     
     animateTail(deltaTime) {
