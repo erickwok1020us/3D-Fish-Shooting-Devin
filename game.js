@@ -7516,27 +7516,25 @@ class Fish {
                 // Store reference to procedural mesh children for removal
                 const proceduralChildren = [...this.group.children];
                 
-                // FIX: Create nested wrapper groups to separate axis fix, model fix, and pitch
-                // Using nested groups avoids Euler rotation order issues when combining rotations
-                // Hierarchy: this.group (yaw) -> glbAxisWrapper (Y axis fix) -> glbModelFixWrapper (roll fix) -> glbPitchWrapper (pitch) -> glbModel (animated)
+                // FIX: Simplified wrapper structure using quaternions for per-model corrections
+                // Based on systematic bounding box analysis of each GLB model:
+                // - Hammerhead: forward=X, up=Y (already correct, no rotation needed)
+                // - Marlin: forward=Z, up=Y (needs Y rotation only)
+                // - Great White Shark, Grouper, Sardine: forward=Y, up=Z (needs complex rotation)
+                // - Tuna: forward=Y, up=X (needs complex rotation)
+                //
+                // Hierarchy: this.group (yaw) -> glbCorrectionWrapper (static per-model quaternion) -> glbPitchWrapper (dynamic pitch) -> glbModel
                 
-                // Layer 1: Axis fix wrapper - converts from GLB's +Z forward to game's +X forward
-                this.glbAxisWrapper = new THREE.Group();
-                this.glbAxisWrapper.rotation.y = Math.PI / 2;  // Fixed: rotate +90° around Y
+                // Layer 1: Per-model correction wrapper using quaternion (avoids Euler order issues)
+                this.glbCorrectionWrapper = new THREE.Group();
                 
-                // Layer 2: Model-specific roll fix wrapper - corrects models with different default orientations
-                // After Y rotation, the fish's forward axis is now +X, so roll is around X axis
-                this.glbModelFixWrapper = new THREE.Group();
-                
-                // Layer 3: Pitch wrapper - for dynamic pitch (nose up/down)
-                // After Y rotation, pitch should be around Z axis (perpendicular to forward X and up Y)
+                // Layer 2: Pitch wrapper - for dynamic pitch (nose up/down)
                 this.glbPitchWrapper = new THREE.Group();
                 
                 // Build the hierarchy
                 this.glbPitchWrapper.add(glbModel);
-                this.glbModelFixWrapper.add(this.glbPitchWrapper);
-                this.glbAxisWrapper.add(this.glbModelFixWrapper);
-                this.group.add(this.glbAxisWrapper);
+                this.glbCorrectionWrapper.add(this.glbPitchWrapper);
+                this.group.add(this.glbCorrectionWrapper);
                 
                 // Remove procedural mesh children (keep GLB only)
                 // FIX: Don't dispose cached materials - they are shared across fish
@@ -7554,26 +7552,57 @@ class Fish {
                 this.glbModelRoot = glbModel;
                 this.glbLoaded = true;
                 
-                // FIX: Model-specific roll corrections for fish with different default orientations
-                // Some GLB models are authored with different up axes (e.g., Z-up instead of Y-up)
-                // After the Y axis fix, roll correction is applied around the local X axis
-                // Models that need roll correction to stand upright (dorsal fin up):
-                const GLB_ROLL_CORRECTIONS = {
-                    'grouper': Math.PI / 2,    // Grouper: roll +90° to stand upright
-                    'sardine': Math.PI / 2,    // Try same correction for other GLB fish
-                    'marlin': Math.PI / 2,
-                    'tuna': Math.PI / 2,
-                    'dolphin': Math.PI / 2,
-                    'greatwhiteshark': Math.PI / 2
+                // FIX: Per-model orientation corrections based on systematic bounding box analysis
+                // Each model has different default orientation in the GLB file
+                // We use quaternions to avoid Euler angle order issues
+                // Game expects: forward = +X, up = +Y
+                //
+                // Analysis results from R2 GLB files:
+                // - hammerhead: forward=X, up=Y (already correct)
+                // - marlin: forward=Z, up=Y (rotate 90° around Y)
+                // - greatwhiteshark, grouper, sardine: forward=Y, up=Z (rotate -90° around X, then 90° around Y)
+                // - tuna: forward=Y, up=X (rotate -90° around Z, then -90° around X)
+                //
+                // Using quaternion.setFromEuler with explicit order to ensure correct rotation
+                const GLB_ORIENTATION_CORRECTIONS = {
+                    // Hammerhead: forward=X, up=Y - already correct, identity quaternion
+                    'hammerhead': { x: 0, y: 0, z: 0, order: 'XYZ' },
+                    
+                    // Marlin: forward=Z, up=Y - rotate 90° around Y to bring Z to X
+                    'marlin': { x: 0, y: Math.PI / 2, z: 0, order: 'XYZ' },
+                    
+                    // Great White Shark: forward=Y, up=Z - need to map Y→X and Z→Y
+                    // First rotate -90° around X (brings Z-up to Y-up), then 90° around Y (brings Y-forward to X-forward)
+                    // But with Euler XYZ order, we apply X first, then Y
+                    'greatwhiteshark': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' },
+                    
+                    // Grouper: forward=Y, up=Z - same as Great White Shark
+                    'grouper': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' },
+                    
+                    // Sardine: forward=Y, up=Z - same as Great White Shark
+                    'sardine': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' },
+                    
+                    // Tuna: forward=Y, up=X - need to map Y→X and X→Y
+                    // This is a different rotation than the Z-up models
+                    'tuna': { x: -Math.PI / 2, y: Math.PI / 2, z: 0, order: 'XYZ' }
                 };
-                const rollCorrection = GLB_ROLL_CORRECTIONS[form];
-                if (rollCorrection !== undefined) {
-                    this.glbModelFixWrapper.rotation.x = rollCorrection;
-                    this.modelRollCorrection = rollCorrection;
-                    console.log(`[FISH-GLB] Applied roll correction for ${form}: x=${rollCorrection.toFixed(2)} rad (${(rollCorrection * 180 / Math.PI).toFixed(0)}°)`);
+                
+                const correction = GLB_ORIENTATION_CORRECTIONS[form];
+                if (correction) {
+                    // Apply correction using Euler angles with explicit order
+                    const euler = new THREE.Euler(correction.x, correction.y, correction.z, correction.order);
+                    this.glbCorrectionWrapper.quaternion.setFromEuler(euler);
+                    console.log(`[FISH-GLB] Applied orientation correction for ${form}: x=${(correction.x * 180 / Math.PI).toFixed(0)}°, y=${(correction.y * 180 / Math.PI).toFixed(0)}°, z=${(correction.z * 180 / Math.PI).toFixed(0)}° (order=${correction.order})`);
                 } else {
-                    this.modelRollCorrection = 0;
+                    // Default: assume forward=Z, up=Y (standard GLB convention)
+                    // Rotate 90° around Y to convert Z-forward to X-forward
+                    this.glbCorrectionWrapper.rotation.y = Math.PI / 2;
+                    console.log(`[FISH-GLB] Applied default Y rotation for ${form}: 90°`);
                 }
+                
+                // Store for reference (legacy compatibility)
+                this.glbAxisWrapper = this.glbCorrectionWrapper;
+                this.glbModelFixWrapper = null;  // No longer used
                 
                 // FIX: Collect all meshes from GLB for material operations
                 this.glbMeshes = [];
@@ -8705,15 +8734,16 @@ class Fish {
         this.group.rotation.z = 0;
         
         // FIX: Reset GLB wrapper rotations for recycled fish
-        // With nested wrapper structure: glbAxisWrapper (Y fix) -> glbModelFixWrapper (roll fix) -> glbPitchWrapper (pitch)
-        // Only reset the pitch wrapper - axis fix and model fix are constant
+        // With simplified wrapper structure: glbCorrectionWrapper (static quaternion) -> glbPitchWrapper (pitch)
+        // Only reset the pitch wrapper - correction wrapper uses static quaternion per model
         if (this.glbPitchWrapper) {
             this.glbPitchWrapper.rotation.z = 0;  // Reset pitch to level
-            // glbAxisWrapper.rotation.y and glbModelFixWrapper.rotation.x are fixed, don't reset
-        } else if (this.glbAxisWrapper) {
+            // glbCorrectionWrapper quaternion is static per model, don't reset
+        } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
             // Legacy fallback for any fish that might still use old structure
-            this.glbAxisWrapper.rotation.z = 0;
-            // Keep rotation.y = PI/2 for axis correction (set during GLB load)
+            const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
+            wrapper.rotation.z = 0;
+            // Keep quaternion/rotation for axis correction (set during GLB load)
         }
         
         // FIX: Update loadToken on each spawn to invalidate any in-flight async GLB loads
@@ -9257,15 +9287,16 @@ class Fish {
             
             // Apply pitch based on fish type
             if (this.glbPitchWrapper) {
-                // GLB fish with nested wrapper structure:
-                // group (yaw) -> glbAxisWrapper (Y fix) -> glbModelFixWrapper (roll fix) -> glbPitchWrapper (pitch)
-                // Pitch is applied to the dedicated pitch wrapper, keeping other corrections separate
+                // GLB fish with simplified wrapper structure:
+                // group (yaw) -> glbCorrectionWrapper (static per-model quaternion) -> glbPitchWrapper (pitch) -> glbModel
+                // Pitch is applied to the dedicated pitch wrapper, keeping model correction separate
                 this.glbPitchWrapper.rotation.z = pitch;
                 // FIX: Reset group.rotation.z for GLB fish to prevent roll from procedural state
                 this.group.rotation.z = 0;
-            } else if (this.glbAxisWrapper) {
+            } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
                 // Legacy fallback for any fish that might still use old structure
-                this.glbAxisWrapper.rotation.z = pitch;
+                const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
+                wrapper.rotation.z = pitch;
                 this.group.rotation.z = 0;
             } else {
                 // Procedural fish: pitch via group's Z rotation (tilt nose up/down)
@@ -9276,8 +9307,9 @@ class Fish {
             if (this.glbPitchWrapper) {
                 this.glbPitchWrapper.rotation.z *= 0.9;
                 this.group.rotation.z = 0;
-            } else if (this.glbAxisWrapper) {
-                this.glbAxisWrapper.rotation.z *= 0.9;
+            } else if (this.glbCorrectionWrapper || this.glbAxisWrapper) {
+                const wrapper = this.glbCorrectionWrapper || this.glbAxisWrapper;
+                wrapper.rotation.z *= 0.9;
                 this.group.rotation.z = 0;
             } else {
                 this.group.rotation.z *= 0.9;
