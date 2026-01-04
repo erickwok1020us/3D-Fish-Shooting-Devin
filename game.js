@@ -2280,6 +2280,188 @@ function getPoolStats() {
     };
 }
 
+// ==================== FISH BEHAVIOR SYSTEM ====================
+// Smooth value noise for natural swimming paths
+// Uses hash-based approach for performance (no allocations)
+
+// Simple hash function for noise
+function hashNoise(x, y, z) {
+    // Fast integer hash
+    let h = (x * 374761393 + y * 668265263 + z * 1274126177) | 0;
+    h = ((h ^ (h >> 13)) * 1274126177) | 0;
+    return (h & 0x7fffffff) / 0x7fffffff; // 0 to 1
+}
+
+// Smooth interpolation (smoothstep)
+function smoothstep(t) {
+    return t * t * (3 - 2 * t);
+}
+
+// 3D Value noise with smooth interpolation
+// Returns value in range [-1, 1]
+function valueNoise3D(x, y, z) {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const zi = Math.floor(z);
+    const xf = smoothstep(x - xi);
+    const yf = smoothstep(y - yi);
+    const zf = smoothstep(z - zi);
+    
+    // Sample 8 corners of the cube
+    const c000 = hashNoise(xi, yi, zi);
+    const c100 = hashNoise(xi + 1, yi, zi);
+    const c010 = hashNoise(xi, yi + 1, zi);
+    const c110 = hashNoise(xi + 1, yi + 1, zi);
+    const c001 = hashNoise(xi, yi, zi + 1);
+    const c101 = hashNoise(xi + 1, yi, zi + 1);
+    const c011 = hashNoise(xi, yi + 1, zi + 1);
+    const c111 = hashNoise(xi + 1, yi + 1, zi + 1);
+    
+    // Trilinear interpolation
+    const c00 = c000 + xf * (c100 - c000);
+    const c10 = c010 + xf * (c110 - c010);
+    const c01 = c001 + xf * (c101 - c001);
+    const c11 = c011 + xf * (c111 - c011);
+    const c0 = c00 + yf * (c10 - c00);
+    const c1 = c01 + yf * (c11 - c01);
+    
+    return (c0 + zf * (c1 - c0)) * 2 - 1; // Map to [-1, 1]
+}
+
+// 2D Value noise (for horizontal wander)
+function valueNoise2D(x, y) {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const xf = smoothstep(x - xi);
+    const yf = smoothstep(y - yi);
+    
+    const c00 = hashNoise(xi, yi, 0);
+    const c10 = hashNoise(xi + 1, yi, 0);
+    const c01 = hashNoise(xi, yi + 1, 0);
+    const c11 = hashNoise(xi + 1, yi + 1, 0);
+    
+    const c0 = c00 + xf * (c10 - c00);
+    const c1 = c01 + xf * (c11 - c01);
+    
+    return (c0 + yf * (c1 - c0)) * 2 - 1;
+}
+
+// Fish behavior configuration by category
+// Each species can override these defaults
+const FISH_BEHAVIOR_CONFIG = {
+    // Depth bands (Y coordinates relative to tank)
+    // Tank: floorY=-450, height=900, so range is -450 to 450
+    depthBands: {
+        surface: { min: 100, max: 350 },      // Near top
+        midWater: { min: -150, max: 150 },    // Middle
+        bottom: { min: -350, max: -100 },     // Near bottom
+        fullColumn: { min: -300, max: 300 }   // Anywhere
+    },
+    
+    // Default behavior parameters by category
+    categoryDefaults: {
+        largePredator: {
+            depthBand: 'fullColumn',
+            verticalAmplitude: 40,      // Gentle up-down
+            noiseScale: 0.003,          // Very slow wander
+            noiseDrift: 0.15,           // Slow time evolution
+            wanderStrength: 15          // Gentle steering
+        },
+        mediumLarge: {
+            depthBand: 'midWater',
+            verticalAmplitude: 30,
+            noiseScale: 0.005,
+            noiseDrift: 0.25,
+            wanderStrength: 25
+        },
+        reefFish: {
+            depthBand: 'midWater',
+            verticalAmplitude: 20,
+            noiseScale: 0.008,
+            noiseDrift: 0.4,
+            wanderStrength: 35
+        },
+        smallSchool: {
+            depthBand: 'midWater',
+            verticalAmplitude: 25,
+            noiseScale: 0.01,
+            noiseDrift: 0.5,
+            wanderStrength: 40
+        },
+        specialForm: {
+            depthBand: 'midWater',
+            verticalAmplitude: 15,
+            noiseScale: 0.004,
+            noiseDrift: 0.2,
+            wanderStrength: 20
+        }
+    },
+    
+    // Species-specific overrides
+    speciesOverrides: {
+        // Bottom dwellers
+        grouper: { depthBand: 'bottom', verticalAmplitude: 10 },
+        seahorse: { depthBand: 'bottom', verticalAmplitude: 8 },
+        // Surface dwellers
+        mahiMahi: { depthBand: 'surface', verticalAmplitude: 35 },
+        flyingFish: { depthBand: 'surface', verticalAmplitude: 50 },
+        // Full column predators
+        blueWhale: { depthBand: 'fullColumn', verticalAmplitude: 60, noiseScale: 0.002 },
+        greatWhiteShark: { depthBand: 'fullColumn', verticalAmplitude: 45 },
+        marlin: { depthBand: 'fullColumn', verticalAmplitude: 40 },
+        // Manta ray - graceful glider
+        mantaRay: { depthBand: 'midWater', verticalAmplitude: 50, noiseScale: 0.003 }
+    }
+};
+
+// Get behavior config for a fish species
+function getFishBehaviorConfig(species, category) {
+    const defaults = FISH_BEHAVIOR_CONFIG.categoryDefaults[category] || FISH_BEHAVIOR_CONFIG.categoryDefaults.reefFish;
+    const overrides = FISH_BEHAVIOR_CONFIG.speciesOverrides[species] || {};
+    return { ...defaults, ...overrides };
+}
+
+// Get depth band bounds
+function getDepthBandBounds(bandName) {
+    return FISH_BEHAVIOR_CONFIG.depthBands[bandName] || FISH_BEHAVIOR_CONFIG.depthBands.midWater;
+}
+
+// ==================== LEADER-FOLLOWER SCHOOLING SYSTEM ====================
+// For tight schooling fish (sardine, anchovy), assign leaders that followers track
+// This creates more cohesive school movement than pure boids
+
+// Track school leaders by tier (species)
+const schoolLeaders = new Map();
+
+// Get or assign a leader for a school of fish of the same tier
+function getSchoolLeader(tier, allFish) {
+    // Check if we have a valid leader
+    const existingLeader = schoolLeaders.get(tier);
+    if (existingLeader && existingLeader.isActive) {
+        return existingLeader;
+    }
+    
+    // Find a new leader from active fish of this tier
+    for (let i = 0; i < allFish.length; i++) {
+        const fish = allFish[i];
+        if (fish.isActive && fish.tier === tier) {
+            schoolLeaders.set(tier, fish);
+            fish.isSchoolLeader = true;
+            return fish;
+        }
+    }
+    
+    return null;
+}
+
+// Clear school leader when fish dies or despawns
+function clearSchoolLeader(fish) {
+    if (fish.isSchoolLeader) {
+        schoolLeaders.delete(fish.tier);
+        fish.isSchoolLeader = false;
+    }
+}
+
 // ==================== SPATIAL HASH FOR BOIDS OPTIMIZATION ====================
 // Cell size should be >= cohesionDistance (180) for correct neighbor lookup
 const SPATIAL_HASH_CELL_SIZE = 180;
@@ -8775,6 +8957,42 @@ class Fish {
             this.glbAction.reset().play();
         }
         
+        // FISH BEHAVIOR SYSTEM: Initialize behavior state for smooth swimming paths
+        // Each fish gets unique noise seed and behavior parameters based on species/category
+        const category = this.config.category || 'reefFish';
+        const behaviorConfig = getFishBehaviorConfig(this.tier, category);
+        const depthBand = getDepthBandBounds(behaviorConfig.depthBand);
+        
+        // Initialize behavior state (reused across spawns for pooled fish)
+        if (!this.behaviorState) {
+            this.behaviorState = {
+                noiseSeed: 0,
+                baseDepth: 0,
+                noiseScale: 0,
+                noiseDrift: 0,
+                verticalAmplitude: 0,
+                wanderStrength: 0,
+                depthMin: 0,
+                depthMax: 0,
+                noiseTime: 0
+            };
+        }
+        
+        // Set behavior parameters for this spawn
+        this.behaviorState.noiseSeed = Math.random() * 10000;
+        this.behaviorState.noiseScale = behaviorConfig.noiseScale;
+        this.behaviorState.noiseDrift = behaviorConfig.noiseDrift;
+        this.behaviorState.verticalAmplitude = behaviorConfig.verticalAmplitude;
+        this.behaviorState.wanderStrength = behaviorConfig.wanderStrength;
+        this.behaviorState.depthMin = depthBand.min;
+        this.behaviorState.depthMax = depthBand.max;
+        this.behaviorState.noiseTime = Math.random() * 100; // Random start time for variety
+        
+        // Set base depth within the species' preferred depth band
+        // Spawn position Y is used as initial hint, clamped to depth band
+        this.behaviorState.baseDepth = Math.max(depthBand.min, 
+            Math.min(depthBand.max, position.y));
+        
         // Issue #5: Trigger rare fish effects for tier4 (boss fish)
         triggerRareFishEffects(this.tier);
     }
@@ -8836,6 +9054,44 @@ class Fish {
         // Apply pattern-specific behavior
         const pattern = this.config.pattern || 'cruise';
         this.applySwimmingPattern(pattern, deltaTime, allFish);
+        
+        // FISH BEHAVIOR SYSTEM: Apply noise-based smooth swimming and vertical floating
+        // This creates natural, organic movement paths instead of random jitter
+        if (this.behaviorState) {
+            // Update noise time
+            this.behaviorState.noiseTime += deltaTime * this.behaviorState.noiseDrift;
+            
+            const seed = this.behaviorState.noiseSeed;
+            const scale = this.behaviorState.noiseScale;
+            const t = this.behaviorState.noiseTime;
+            const pos = this.group.position;
+            
+            // Sample noise for horizontal wander direction
+            // Use position-based noise so fish in different locations move differently
+            const noiseX = valueNoise2D(seed + pos.x * scale, t);
+            const noiseZ = valueNoise2D(seed + 1000 + pos.z * scale, t);
+            
+            // Apply smooth wander acceleration (replaces some of the random jitter)
+            const wanderStrength = this.behaviorState.wanderStrength;
+            this.acceleration.x += noiseX * wanderStrength;
+            this.acceleration.z += noiseZ * wanderStrength;
+            
+            // VERTICAL FLOATING: Natural up-down motion within depth band
+            // Use slower noise for vertical movement (more gentle)
+            const verticalNoise = valueNoise2D(seed + 2000, t * 0.5);
+            const desiredY = this.behaviorState.baseDepth + 
+                verticalNoise * this.behaviorState.verticalAmplitude;
+            
+            // Clamp desired Y to depth band
+            const clampedDesiredY = Math.max(this.behaviorState.depthMin,
+                Math.min(this.behaviorState.depthMax, desiredY));
+            
+            // Apply spring force toward desired depth (gentle, not abrupt)
+            const depthError = clampedDesiredY - pos.y;
+            const verticalSpringK = 0.8; // Spring constant
+            const verticalDamping = 0.3; // Damping to prevent oscillation
+            this.acceleration.y += depthError * verticalSpringK - this.velocity.y * verticalDamping;
+        }
         
         // Apply boids behavior (stronger for schooling fish)
         // PERFORMANCE: Throttle boids update for distant fish (LOD 2/3)
@@ -9278,13 +9534,62 @@ class Fish {
             this.acceleration.y += centerY * 0.01 * CONFIG.boids.cohesionWeight * strength;
             this.acceleration.z += centerZ * 0.01 * CONFIG.boids.cohesionWeight * strength;
         }
+        
+        // LEADER-FOLLOWER ENHANCEMENT for tight schooling fish (boidsStrength >= 2.5)
+        // Followers steer toward an offset position relative to the leader
+        // This creates more cohesive school movement than pure boids alone
+        if (strength >= 2.5 && !this.isSchoolLeader) {
+            const leader = getSchoolLeader(this.tier, allFish);
+            if (leader && leader !== this) {
+                // Calculate offset position behind and to the side of leader
+                // Use fish's noise seed to determine unique offset position in school
+                const offsetAngle = (this.behaviorState?.noiseSeed || Math.random() * 1000) % (Math.PI * 2);
+                const offsetDist = 30 + (this.behaviorState?.noiseSeed || 0) % 40; // 30-70 units
+                
+                // Target position is offset from leader's position
+                const leaderPos = leader.group.position;
+                const leaderVel = leader.velocity;
+                const leaderSpeed = leaderVel.length();
+                
+                // Calculate offset perpendicular to leader's heading
+                let perpX = -leaderVel.z;
+                let perpZ = leaderVel.x;
+                if (leaderSpeed > 1) {
+                    perpX /= leaderSpeed;
+                    perpZ /= leaderSpeed;
+                }
+                
+                // Target position: behind leader + perpendicular offset
+                const behindDist = 20 + offsetDist * 0.3;
+                const targetX = leaderPos.x - (leaderVel.x / Math.max(1, leaderSpeed)) * behindDist 
+                              + perpX * Math.sin(offsetAngle) * offsetDist;
+                const targetY = leaderPos.y + Math.cos(offsetAngle) * offsetDist * 0.3;
+                const targetZ = leaderPos.z - (leaderVel.z / Math.max(1, leaderSpeed)) * behindDist 
+                              + perpZ * Math.cos(offsetAngle) * offsetDist;
+                
+                // Steer toward target position with spring-like force
+                const toTargetX = targetX - myPos.x;
+                const toTargetY = targetY - myPos.y;
+                const toTargetZ = targetZ - myPos.z;
+                
+                const leaderFollowStrength = 0.5; // Gentle following
+                this.acceleration.x += toTargetX * leaderFollowStrength;
+                this.acceleration.y += toTargetY * leaderFollowStrength * 0.5; // Less vertical following
+                this.acceleration.z += toTargetZ * leaderFollowStrength;
+            }
+        }
     }
     
     applyBoundaryForces() {
-        // Use rectangular bounds for aquarium tank
+        // IMPROVED BOUNDARY AVOIDANCE with predictive look-ahead
+        // Instead of only reacting when already at boundary, look ahead 1-2 seconds
+        // and start turning early for smoother, more natural avoidance
+        
         const { width, height, depth, floorY } = CONFIG.aquarium;
         const { marginX, marginY, marginZ } = CONFIG.fishArena;
         const pos = this.group.position;
+        const vel = this.velocity;
+        
         // Use pre-allocated vector to avoid new Vector3() allocation
         const force = fishTempVectors.boundaryForce;
         force.set(0, 0, 0);
@@ -9297,7 +9602,20 @@ class Fish {
         const minZ = -depth / 2 + marginZ;
         const maxZ = depth / 2 - marginZ;
         
-        // X boundaries (left/right walls)
+        // PREDICTIVE AVOIDANCE: Look ahead 1.5 seconds
+        const lookAheadTime = 1.5;
+        const predictedX = pos.x + vel.x * lookAheadTime;
+        const predictedY = pos.y + vel.y * lookAheadTime;
+        const predictedZ = pos.z + vel.z * lookAheadTime;
+        
+        // Smoothstep function for gradual force increase
+        const boundarySmooth = (dist, margin) => {
+            const t = Math.max(0, Math.min(1, dist / margin));
+            return t * t * (3 - 2 * t); // smoothstep
+        };
+        
+        // X boundaries - combine reactive and predictive forces
+        // Reactive: immediate force when near boundary
         if (pos.x < minX) {
             const t = (minX - pos.x) / marginX;
             force.x += t * 4.0;
@@ -9305,8 +9623,16 @@ class Fish {
             const t = (pos.x - maxX) / marginX;
             force.x -= t * 4.0;
         }
+        // Predictive: gentler force when heading toward boundary
+        if (predictedX < minX && vel.x < 0) {
+            const urgency = boundarySmooth(minX - predictedX, marginX);
+            force.x += urgency * 2.0;
+        } else if (predictedX > maxX && vel.x > 0) {
+            const urgency = boundarySmooth(predictedX - maxX, marginX);
+            force.x -= urgency * 2.0;
+        }
         
-        // Y boundaries (floor/ceiling)
+        // Y boundaries - combine reactive and predictive forces
         if (pos.y < minY) {
             const t = (minY - pos.y) / marginY;
             force.y += t * 4.0;
@@ -9314,14 +9640,30 @@ class Fish {
             const t = (pos.y - maxY) / marginY;
             force.y -= t * 4.0;
         }
+        // Predictive Y
+        if (predictedY < minY && vel.y < 0) {
+            const urgency = boundarySmooth(minY - predictedY, marginY);
+            force.y += urgency * 2.0;
+        } else if (predictedY > maxY && vel.y > 0) {
+            const urgency = boundarySmooth(predictedY - maxY, marginY);
+            force.y -= urgency * 2.0;
+        }
         
-        // Z boundaries (front/back walls)
+        // Z boundaries - combine reactive and predictive forces
         if (pos.z < minZ) {
             const t = (minZ - pos.z) / marginZ;
             force.z += t * 4.0;
         } else if (pos.z > maxZ) {
             const t = (pos.z - maxZ) / marginZ;
             force.z -= t * 4.0;
+        }
+        // Predictive Z
+        if (predictedZ < minZ && vel.z < 0) {
+            const urgency = boundarySmooth(minZ - predictedZ, marginZ);
+            force.z += urgency * 2.0;
+        } else if (predictedZ > maxZ && vel.z > 0) {
+            const urgency = boundarySmooth(predictedZ - maxZ, marginZ);
+            force.z -= urgency * 2.0;
         }
         
         this.acceleration.addScaledVector(force, 60);
