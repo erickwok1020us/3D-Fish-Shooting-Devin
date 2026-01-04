@@ -2168,78 +2168,10 @@ function returnEffectToPool(item) {
     effectPool.freeList.push(item.poolIndex);
 }
 
-// ==================== OPTIMIZATION 2: LOD SYSTEM ====================
-// Level of Detail - use simpler models for distant fish
-
-const LOD_CONFIG = {
-    highDetailDistance: 20,      // Full detail within 20 units
-    mediumDetailDistance: 40,    // Medium detail 20-40 units
-    lowDetailDistance: 100,      // Low detail beyond 40 units
-    updateInterval: 5,           // Update LOD every 5 frames
-    frameCounter: 0
-};
-
-// LOD state tracking per fish
-const fishLODState = new WeakMap();
-
-// Get LOD level based on distance from camera
-function getLODLevel(distance) {
-    if (distance < LOD_CONFIG.highDetailDistance) return 'high';
-    if (distance < LOD_CONFIG.mediumDetailDistance) return 'medium';
-    return 'low';
-}
-
-// Update fish LOD (called every N frames)
-function updateFishLOD(fish, cameraPosition) {
-    if (!fish || !fish.group || !fish.isActive) return;
-    
-    const distance = fish.group.position.distanceTo(cameraPosition);
-    const newLOD = getLODLevel(distance);
-    
-    let state = fishLODState.get(fish);
-    if (!state) {
-        state = { currentLOD: 'high', lastUpdate: 0 };
-        fishLODState.set(fish, state);
-    }
-    
-    if (state.currentLOD !== newLOD) {
-        state.currentLOD = newLOD;
-        applyLODToFish(fish, newLOD);
-    }
-}
-
-// Apply LOD level to fish mesh
-function applyLODToFish(fish, lodLevel) {
-    if (!fish || !fish.group) return;
-    
-    // Scale detail based on LOD level
-    // For procedural fish, we adjust material complexity
-    fish.group.traverse((child) => {
-        if (child.isMesh && child.material) {
-            switch (lodLevel) {
-                case 'high':
-                    child.material.flatShading = false;
-                    if (child.material.emissiveIntensity !== undefined) {
-                        child.material.emissiveIntensity = 0.1;
-                    }
-                    break;
-                case 'medium':
-                    child.material.flatShading = true;
-                    if (child.material.emissiveIntensity !== undefined) {
-                        child.material.emissiveIntensity = 0.05;
-                    }
-                    break;
-                case 'low':
-                    child.material.flatShading = true;
-                    if (child.material.emissiveIntensity !== undefined) {
-                        child.material.emissiveIntensity = 0;
-                    }
-                    break;
-            }
-            child.material.needsUpdate = true;
-        }
-    });
-}
+// ==================== LOD SYSTEM REMOVED ====================
+// LOD was removed in PR #103 because it modified shared materials,
+// causing all fish to be affected when any fish's LOD changed.
+// DO NOT RE-IMPLEMENT without cloning materials per fish instance.
 
 // ==================== OPTIMIZATION 3: SHARED GEOMETRIES & MATERIALS ====================
 // Same fish types share geometry and materials to reduce memory
@@ -7615,6 +7547,21 @@ class Fish {
                 // Rotate +90° around Y axis to align fish head with velocity direction
                 this.glbAxisWrapper.rotation.y = Math.PI / 2;
                 
+                // FIX: Model-specific axis corrections for fish with different default orientations
+                // Some GLB models (like Grouper) are authored with different up/forward axes
+                // Apply additional rotation to correct their orientation
+                const MODEL_AXIS_CORRECTIONS = {
+                    'grouper': { x: -Math.PI / 2, z: 0 }  // Grouper model needs -90° X rotation to stand upright
+                };
+                const correction = MODEL_AXIS_CORRECTIONS[form];
+                if (correction) {
+                    this.glbAxisWrapper.rotation.x = correction.x;
+                    this.modelAxisCorrectionX = correction.x;  // Store for use in update loop
+                    console.log(`[FISH-GLB] Applied model-specific axis correction for ${form}: x=${correction.x}`);
+                } else {
+                    this.modelAxisCorrectionX = 0;
+                }
+                
                 // FIX: Collect all meshes from GLB for material operations
                 this.glbMeshes = [];
                 glbModel.traverse((child) => {
@@ -8746,9 +8693,9 @@ class Fish {
         
         // FIX: Reset glbAxisWrapper rotation if it exists (for recycled GLB fish)
         // PR #93 used rotation.x for pitch, PR #94 changed to rotation.z
-        // Leftover rotation.x values from before PR #94 can cause fish to appear sideways
+        // Preserve model-specific axis correction (e.g., Grouper needs -90° X rotation)
         if (this.glbAxisWrapper) {
-            this.glbAxisWrapper.rotation.x = 0;
+            this.glbAxisWrapper.rotation.x = this.modelAxisCorrectionX || 0;
             this.glbAxisWrapper.rotation.z = 0;
             // Keep rotation.y = PI/2 for axis correction (set during GLB load)
         }
@@ -9302,10 +9249,11 @@ class Fish {
                 // Before GLB loads, procedural fish use group.rotation.z for pitch
                 // After GLB swap, this leftover value becomes unwanted roll (sideways tilt)
                 this.group.rotation.z = 0;
-                // FIX: Reset wrapper rotation.x to prevent sideways roll
+                // FIX: Preserve model-specific axis correction instead of resetting to 0
+                // Some GLB models (like Grouper) need a fixed X rotation to stand upright
                 // PR #93 used rotation.x for pitch, PR #94 changed to rotation.z
-                // Leftover rotation.x values can cause fish to appear sideways (lying on side)
-                this.glbAxisWrapper.rotation.x = 0;
+                // Now we preserve modelAxisCorrectionX for models that need it
+                this.glbAxisWrapper.rotation.x = this.modelAxisCorrectionX || 0;
             } else {
                 // Procedural fish: pitch via group's Z rotation (tilt nose up/down)
                 this.group.rotation.z = -pitch;
