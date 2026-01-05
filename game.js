@@ -3216,11 +3216,13 @@ function removeMapBackgroundMeshes(mapScene) {
     const { width, height, depth } = CONFIG.aquarium;
     const aquariumMaxDim = Math.max(width, height, depth);
     
-    // Threshold: meshes larger than 2x the aquarium size are likely background/skybox
-    const backgroundThreshold = aquariumMaxDim * 2;
+    // Threshold: meshes larger than 1.5x the aquarium size are likely background/skybox
+    // Lowered from 2x to catch more potential occluders
+    const backgroundThreshold = aquariumMaxDim * 1.5;
     
+    // Collect all meshes with their sizes for analysis
+    const allMeshes = [];
     const meshesToRemove = [];
-    const meshesToMakeTransparent = [];
     
     mapScene.traverse((obj) => {
         if (!obj.isMesh) return;
@@ -3228,10 +3230,21 @@ function removeMapBackgroundMeshes(mapScene) {
         // Calculate mesh bounding box
         const box = new THREE.Box3().setFromObject(obj);
         const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
         box.getSize(size);
+        box.getCenter(center);
         
         const maxDim = Math.max(size.x, size.y, size.z);
         const meshName = (obj.name || '').toLowerCase();
+        
+        // Store for analysis
+        allMeshes.push({
+            mesh: obj,
+            name: obj.name || '(unnamed)',
+            maxDim: maxDim,
+            size: size.clone(),
+            center: center.clone()
+        });
         
         // Check if this looks like a background/skybox mesh
         const isLargeMesh = maxDim > backgroundThreshold;
@@ -3241,7 +3254,12 @@ function removeMapBackgroundMeshes(mapScene) {
                                   meshName.includes('dome') ||
                                   meshName.includes('environment') ||
                                   meshName.includes('backdrop') ||
-                                  meshName.includes('surround');
+                                  meshName.includes('surround') ||
+                                  meshName.includes('ceiling') ||
+                                  meshName.includes('floor') ||
+                                  meshName.includes('wall') ||
+                                  meshName.includes('shell') ||
+                                  meshName.includes('enclosure');
         
         // Check if material is dark/black (common for background meshes)
         let isDarkMaterial = false;
@@ -3251,43 +3269,43 @@ function removeMapBackgroundMeshes(mapScene) {
                 const r = mat.color.r;
                 const g = mat.color.g;
                 const b = mat.color.b;
-                // Consider "dark" if all RGB values are below 0.2
-                isDarkMaterial = (r < 0.2 && g < 0.2 && b < 0.2);
+                // Consider "dark" if all RGB values are below 0.3 (raised threshold)
+                isDarkMaterial = (r < 0.3 && g < 0.3 && b < 0.3);
             }
         }
         
-        // Remove if: large mesh with background-like name, OR very large dark mesh
-        if (hasBackgroundName || (isLargeMesh && isDarkMaterial)) {
-            console.log(`[MAP-BG] Found background mesh: "${obj.name}", size: ${maxDim.toFixed(0)}, dark: ${isDarkMaterial}`);
+        // Check if this mesh encloses the camera spawn area (center of aquarium)
+        // If a large mesh's bounding box contains the origin, it's likely an enclosing shell
+        const containsOrigin = box.containsPoint(new THREE.Vector3(0, 0, 0));
+        const isEnclosingShell = isLargeMesh && containsOrigin;
+        
+        // Remove if: 
+        // 1. Has background-like name, OR
+        // 2. Large dark mesh, OR
+        // 3. Large mesh that encloses the camera spawn area
+        if (hasBackgroundName || (isLargeMesh && isDarkMaterial) || isEnclosingShell) {
+            console.log(`[MAP-BG] Found occluding mesh: "${obj.name}", size: ${maxDim.toFixed(0)}, dark: ${isDarkMaterial}, enclosing: ${isEnclosingShell}`);
             meshesToRemove.push(obj);
-        } else if (isLargeMesh) {
-            // Large mesh but not clearly a background - make it transparent instead
-            console.log(`[MAP-BG] Large mesh (making transparent): "${obj.name}", size: ${maxDim.toFixed(0)}`);
-            meshesToMakeTransparent.push(obj);
         }
+    });
+    
+    // Log top 10 largest meshes for debugging
+    allMeshes.sort((a, b) => b.maxDim - a.maxDim);
+    console.log('[MAP-BG] Top 10 largest meshes in map:');
+    allMeshes.slice(0, 10).forEach((m, i) => {
+        const willRemove = meshesToRemove.includes(m.mesh);
+        console.log(`[MAP-BG]   ${i+1}. "${m.name}" - size: ${m.maxDim.toFixed(0)} ${willRemove ? '(REMOVING)' : ''}`);
     });
     
     // Remove identified background meshes
     meshesToRemove.forEach(mesh => {
         if (mesh.parent) {
             mesh.parent.remove(mesh);
-            console.log(`[MAP-BG] Removed background mesh: "${mesh.name}"`);
+            console.log(`[MAP-BG] Removed: "${mesh.name}"`);
         }
     });
     
-    // Make large meshes transparent so video can show through
-    meshesToMakeTransparent.forEach(mesh => {
-        if (mesh.material) {
-            // Clone material to avoid affecting other meshes
-            mesh.material = mesh.material.clone();
-            mesh.material.transparent = true;
-            mesh.material.opacity = 0.3;
-            mesh.material.depthWrite = false;
-            console.log(`[MAP-BG] Made mesh transparent: "${mesh.name}"`);
-        }
-    });
-    
-    console.log(`[MAP-BG] Removed ${meshesToRemove.length} background meshes, made ${meshesToMakeTransparent.length} transparent`);
+    console.log(`[MAP-BG] Total meshes: ${allMeshes.length}, Removed: ${meshesToRemove.length}`);
 }
 
 // ==================== ENHANCED WEAPON VFX ====================
