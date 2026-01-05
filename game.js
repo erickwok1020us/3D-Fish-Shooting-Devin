@@ -7480,52 +7480,37 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     // PERFORMANCE: Reuse temp Vector3 instead of creating new one
     cannonMuzzle.getWorldPosition(aimTempVectors.muzzlePos);
     
-    // FIX: Use ray-plane intersection instead of fixed convergence distance
-    // This makes aiming robust regardless of muzzle position changes from cannonRotationFix
-    // Fish swim around Y=0 plane, so we intersect with that plane
-    // Ray equation: P(t) = ray.origin + ray.direction * t
-    // Plane equation: Y = 0
-    // Solve: ray.origin.y + ray.direction.y * t = 0 => t = -ray.origin.y / ray.direction.y
-    
     const rayDir = raycaster.ray.direction;
     const rayOrigin = raycaster.ray.origin;
     
     // PERFORMANCE: Use output vector if provided, otherwise use temp vector
     const result = outDirection || aimTempVectors.direction;
     
-    // Check if ray can intersect the fish plane (need to be aiming toward Y=0)
-    if (Math.abs(rayDir.y) > 0.001) {
-        const t = -rayOrigin.y / rayDir.y;
-        
-        if (t > 0) {
-            // Valid intersection in front of camera
-            // Calculate intersection point
-            aimTempVectors.targetPoint.set(
-                rayOrigin.x + rayDir.x * t,
-                0,  // Y=0 plane
-                rayOrigin.z + rayDir.z * t
-            );
-            
-            // Calculate direction from muzzle to intersection point
-            result.copy(aimTempVectors.targetPoint).sub(aimTempVectors.muzzlePos).normalize();
-            return result;
-        }
-    }
+    // FIX: Use a far point along the ray direction as the target
+    // This is the most robust approach - it guarantees the bullet direction
+    // matches where the user clicked on screen, regardless of muzzle position
+    // 
+    // Previous approach (ray-plane intersection at Y=0) failed because:
+    // - When the intersection point is BEHIND the muzzle (tIntersect < tMuzzle),
+    //   the direction (targetPoint - muzzlePos) becomes opposite to rayDir
+    // - This caused bullets to shoot 180 degrees opposite to where user clicked
+    //
+    // New approach: Always use a point far along the ray direction
+    // Then ensure the final direction aligns with rayDir (dot product check)
+    const targetDistance = 2000;
+    aimTempVectors.targetPoint.copy(rayOrigin).addScaledVector(rayDir, targetDistance);
     
-    // Fallback: ray doesn't intersect fish plane (parallel or pointing away)
-    // Use a far point along the ray direction, ensuring it's always in front of muzzle
-    const fallbackDistance = 2000;
-    aimTempVectors.targetPoint.copy(rayOrigin).addScaledVector(rayDir, fallbackDistance);
+    // Calculate direction from muzzle to target point
+    result.copy(aimTempVectors.targetPoint).sub(aimTempVectors.muzzlePos).normalize();
     
-    // Ensure target is in front of muzzle (dot product check)
-    aimTempVectors.rayDirection.copy(aimTempVectors.targetPoint).sub(aimTempVectors.muzzlePos);
-    const dotWithRay = aimTempVectors.rayDirection.dot(rayDir);
-    
+    // CRITICAL FIX: Ensure direction aligns with ray direction (same general direction as click)
+    // If dot product is negative, the direction is opposite to where user clicked
+    // This can happen when muzzle is positioned such that the target point ends up "behind" it
+    const dotWithRay = result.dot(rayDir);
     if (dotWithRay < 0) {
-        // Target is behind muzzle relative to ray direction, use ray direction directly
+        // Direction is opposite to ray - use ray direction directly
+        // This ensures bullets always go toward where user clicked
         result.copy(rayDir);
-    } else {
-        result.copy(aimTempVectors.rayDirection).normalize();
     }
     
     return result;
