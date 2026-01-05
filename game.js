@@ -6093,12 +6093,12 @@ function initGameScene() {
     
     // Create scene
     scene = new THREE.Scene();
-    // Set initial background color (will be replaced by video background if enabled)
-    scene.background = new THREE.Color(VIDEO_BACKGROUND_CONFIG.fogColor);
-    scene.fog = new THREE.Fog(VIDEO_BACKGROUND_CONFIG.fogColor, VIDEO_BACKGROUND_CONFIG.fogNear, VIDEO_BACKGROUND_CONFIG.fogFar);
+    // Set initial background color (will be replaced by panorama background if enabled)
+    scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+    scene.fog = new THREE.Fog(PANORAMA_CONFIG.fogColor, PANORAMA_CONFIG.fogNear, PANORAMA_CONFIG.fogFar);
     
-    // Load video background (async, replaces solid color when loaded)
-    loadVideoBackground();
+    // Load panorama background (async, replaces solid color when loaded)
+    loadPanoramaBackground();
     
     // Create camera (viewing from outside the tank)
     camera = new THREE.PerspectiveCamera(
