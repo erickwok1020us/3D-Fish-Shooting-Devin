@@ -3603,6 +3603,9 @@ const AUDIO_CONFIG = {
         weapon3x: '3X 發射音效.mp3',
         weapon5x: '5X 發射音效.mp3',
         weapon8x: '8X 發射音效.mp3',
+        hit3x: '3X 武器擊中音效.mp3',
+        hit5x: '5X 武器擊中音效.mp3',
+        hit8x: '8X 武器擊中音效.mp3',
         bossTime: 'Boss time.mp3',
         coinReceive: 'Coin receive.mp3',
         background: 'background.mp3'
@@ -3612,6 +3615,9 @@ const AUDIO_CONFIG = {
         weapon3x: 0.5,
         weapon5x: 0.6,
         weapon8x: 0.7,
+        hit3x: 0.5,
+        hit5x: 0.6,
+        hit8x: 0.7,
         bossTime: 0.5,
         coinReceive: 0.6,
         background: 0.3
@@ -4126,7 +4132,7 @@ function playImpactSound(type) {
     
     switch (type) {
         case 'hit':
-            // Splash + damage indicator
+            // Splash + damage indicator (fallback for 1x weapon)
             playNoise(1500, 2, 0.1, 0.15, 'bandpass');
             const oscH = audioContext.createOscillator();
             const gainH = audioContext.createGain();
@@ -4150,6 +4156,21 @@ function playImpactSound(type) {
             // Water splash
             playNoise(800, 3, 0.2, 0.2, 'bandpass');
             break;
+    }
+}
+
+// Play weapon-specific hit sound effect (MP3 from R2)
+// For 3x, 5x, 8x weapons, play the custom hit sound
+// For 1x weapon, fall back to procedural sound
+function playWeaponHitSound(weaponKey) {
+    const hitSoundKey = `hit${weaponKey}`;
+    
+    // Check if we have a custom hit sound for this weapon
+    if (AUDIO_CONFIG.sounds[hitSoundKey]) {
+        playMP3Sound(hitSoundKey);
+    } else {
+        // Fallback to procedural hit sound for 1x weapon
+        playImpactSound('hit');
     }
 }
 
@@ -4581,8 +4602,9 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     } else if (weaponKey === '5x') {
         // PERFORMANCE: Simplified 5x muzzle flash - single ring + lightning
         // REDUCED SIZE: 16->42 instead of 20->60 (user feedback: too big)
+        // PERFORMANCE: Reduced lightning burst count from 4 to 2 to reduce stutter
         spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 16, 42, 0.4, barrelDirection);
-        spawnLightningBurst(muzzlePos, config.muzzleColor, 4);
+        spawnLightningBurst(muzzlePos, config.muzzleColor, 2);
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 8);
         
     } else if (weaponKey === '8x') {
@@ -10270,8 +10292,8 @@ class Fish {
         
         const deathPosition = this.group.position.clone();
         
-        // Issue #16: Play impact sound
-        playImpactSound('hit');
+        // Issue #16: Play weapon-specific hit sound (MP3 for 3x, 5x, 8x weapons)
+        playWeaponHitSound(weaponKey);
         
         // Phase 2: Trigger special abilities on death
         if (this.config.ability) {
@@ -11533,18 +11555,46 @@ function triggerChainLightning(initialFish, weaponKey, initialDamage) {
     });
 }
 
+// PERFORMANCE: Temp vectors for lightning arc to reduce GC pressure
+const lightningArcTempVectors = {
+    direction: new THREE.Vector3(),
+    point: new THREE.Vector3(),
+    sparkPos: new THREE.Vector3()
+};
+
+// PERFORMANCE: Shared geometries for lightning effects (created once, reused)
+let lightningSharedGeometries = null;
+function getLightningSharedGeometries() {
+    if (!lightningSharedGeometries) {
+        lightningSharedGeometries = {
+            flash: new THREE.SphereGeometry(40, 8, 8),  // Reduced from 12,12 to 8,8
+            spark: new THREE.SphereGeometry(8, 4, 4)   // Reduced from 6,6 to 4,4
+        };
+    }
+    return lightningSharedGeometries;
+}
+
 // Spawn lightning arc visual between two points - Issue #3 & #15: Enhanced visuals with golden chain lightning
+// PERFORMANCE OPTIMIZED: Reduced segments (16->8), sparks (8->4), shared geometry, temp vectors
 function spawnLightningArc(startPos, endPos, color) {
     const points = [];
-    const segments = 16;  // More segments for more detail
-    const direction = endPos.clone().sub(startPos);
-    const length = direction.length();
-    direction.normalize();
+    const segments = 8;  // PERFORMANCE: Reduced from 16 to 8 segments
+    const tv = lightningArcTempVectors;
+    
+    // Use temp vector for direction calculation
+    tv.direction.copy(endPos).sub(startPos);
+    const length = tv.direction.length();
+    tv.direction.normalize();
     
     // Create jagged lightning path with more dramatic zigzag
     for (let i = 0; i <= segments; i++) {
         const t = i / segments;
-        const point = startPos.clone().add(direction.clone().multiplyScalar(length * t));
+        // PERFORMANCE: Create new Vector3 only for points array (required for BufferGeometry)
+        const point = new THREE.Vector3();
+        point.copy(startPos);
+        point.x += tv.direction.x * length * t;
+        point.y += tv.direction.y * length * t;
+        point.z += tv.direction.z * length * t;
         
         // Add random offset for middle segments (not start/end) - larger offsets
         if (i > 0 && i < segments) {
@@ -11569,51 +11619,42 @@ function spawnLightningArc(startPos, endPos, color) {
     const lightning = new THREE.Line(geometry, material);
     scene.add(lightning);
     
-    // Issue #15: Create golden glow effect (second line with offset for fake thickness)
+    // Issue #15: Create golden glow effect - PERFORMANCE: Share same geometry (no clone)
     const glowMaterial = new THREE.LineBasicMaterial({
         color: 0xffdd00,  // Golden glow
         linewidth: 6,
         transparent: true,
         opacity: 0.8
     });
-    const glowLightning = new THREE.Line(geometry.clone(), glowMaterial);
+    const glowLightning = new THREE.Line(geometry, glowMaterial);  // PERFORMANCE: No clone
     scene.add(glowLightning);
     
-    // Issue #15: Create third line slightly offset for more thickness (WebGL line width workaround)
-    const outerGlowMaterial = new THREE.LineBasicMaterial({
-        color: 0xffaa00,  // Darker golden outer glow
-        linewidth: 8,
-        transparent: true,
-        opacity: 0.5
-    });
-    const outerGlowLightning = new THREE.Line(geometry.clone(), outerGlowMaterial);
-    outerGlowLightning.position.x += 2;
-    outerGlowLightning.position.y += 2;
-    scene.add(outerGlowLightning);
+    // PERFORMANCE: Removed third outer glow line to reduce object count
     
-    // Issue #15: Add larger golden flash at hit point
-    const flashGeometry = new THREE.SphereGeometry(40, 12, 12);  // Larger flash
+    // Issue #15: Add larger golden flash at hit point - PERFORMANCE: Use shared geometry
+    const sharedGeo = getLightningSharedGeometries();
     const flashMaterial = new THREE.MeshBasicMaterial({
         color: 0xffee00,  // Bright golden flash
         transparent: true,
         opacity: 1.0
     });
-    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+    const flash = new THREE.Mesh(sharedGeo.flash, flashMaterial);
     flash.position.copy(endPos);
     scene.add(flash);
     
-    // Issue #15: Add golden spark particles along the lightning path
+    // Issue #15: Add golden spark particles - PERFORMANCE: Reduced from 8 to 4 sparks
     const sparkGroup = new THREE.Group();
-    for (let i = 0; i < 8; i++) {
-        const sparkGeometry = new THREE.SphereGeometry(8, 6, 6);
+    for (let i = 0; i < 4; i++) {  // PERFORMANCE: Reduced from 8 to 4
         const sparkMaterial = new THREE.MeshBasicMaterial({
             color: 0xffdd00,
             transparent: true,
             opacity: 0.9
         });
-        const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
+        const spark = new THREE.Mesh(sharedGeo.spark, sparkMaterial);  // PERFORMANCE: Shared geometry
         const t = Math.random();
-        spark.position.copy(startPos.clone().lerp(endPos, t));
+        // PERFORMANCE: Use temp vector for lerp calculation
+        tv.sparkPos.copy(startPos).lerp(endPos, t);
+        spark.position.copy(tv.sparkPos);
         spark.position.x += (Math.random() - 0.5) * 30;
         spark.position.y += (Math.random() - 0.5) * 30;
         spark.position.z += (Math.random() - 0.5) * 30;
@@ -11621,14 +11662,13 @@ function spawnLightningArc(startPos, endPos, color) {
     }
     scene.add(sparkGroup);
     
-    // Issue #15: Slower fade out for more visible effect (400ms instead of 200ms)
+    // Issue #15: Faster fade out for better performance (300ms instead of 400ms)
     let opacity = 1;
-    const fadeSpeed = 0.025;  // Slower fade (was 0.08)
+    const fadeSpeed = 0.04;  // PERFORMANCE: Faster fade (was 0.025)
     const fadeOut = () => {
         opacity -= fadeSpeed;
         material.opacity = opacity;
         glowMaterial.opacity = opacity * 0.7;
-        outerGlowMaterial.opacity = opacity * 0.4;
         flashMaterial.opacity = opacity * 0.9;
         flash.scale.setScalar(1 + (1 - opacity) * 3);  // Expand flash more
         
@@ -11643,22 +11683,20 @@ function spawnLightningArc(startPos, endPos, color) {
         } else {
             scene.remove(lightning);
             scene.remove(glowLightning);
-            scene.remove(outerGlowLightning);
             scene.remove(flash);
             scene.remove(sparkGroup);
             geometry.dispose();
             material.dispose();
             glowMaterial.dispose();
-            outerGlowMaterial.dispose();
-            flashGeometry.dispose();
+            // PERFORMANCE: Don't dispose shared geometries (flash, spark)
             flashMaterial.dispose();
             sparkGroup.children.forEach(spark => {
-                spark.geometry.dispose();
+                // PERFORMANCE: Only dispose material, geometry is shared
                 spark.material.dispose();
             });
         }
     };
-    setTimeout(fadeOut, 80);
+    setTimeout(fadeOut, 60);  // PERFORMANCE: Faster start (was 80ms)
 }
 
 // AOE Explosion Effect (8x weapon)
