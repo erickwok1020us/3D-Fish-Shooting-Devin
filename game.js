@@ -7480,21 +7480,53 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     // PERFORMANCE: Reuse temp Vector3 instead of creating new one
     cannonMuzzle.getWorldPosition(aimTempVectors.muzzlePos);
     
-    // Find target point along the ray (at a reasonable distance into the tank)
-    // Use per-weapon convergence distance for better close-range targeting
-    // 1x, 3x, 5x weapons use 750 (halved), 8x uses 1500 (original)
-    const weaponKey = gameState.currentWeapon;
-    const weapon = CONFIG.weapons[weaponKey];
-    const convergenceDistance = weapon?.convergenceDistance || 1500;
+    // FIX: Use ray-plane intersection instead of fixed convergence distance
+    // This makes aiming robust regardless of muzzle position changes from cannonRotationFix
+    // Fish swim around Y=0 plane, so we intersect with that plane
+    // Ray equation: P(t) = ray.origin + ray.direction * t
+    // Plane equation: Y = 0
+    // Solve: ray.origin.y + ray.direction.y * t = 0 => t = -ray.origin.y / ray.direction.y
     
-    // PERFORMANCE: Avoid clone() calls - copy values directly to temp vectors
-    aimTempVectors.rayDirection.copy(raycaster.ray.direction).multiplyScalar(convergenceDistance);
-    aimTempVectors.targetPoint.copy(raycaster.ray.origin).add(aimTempVectors.rayDirection);
+    const rayDir = raycaster.ray.direction;
+    const rayOrigin = raycaster.ray.origin;
     
-    // Calculate direction from muzzle to target point
     // PERFORMANCE: Use output vector if provided, otherwise use temp vector
     const result = outDirection || aimTempVectors.direction;
-    result.copy(aimTempVectors.targetPoint).sub(aimTempVectors.muzzlePos).normalize();
+    
+    // Check if ray can intersect the fish plane (need to be aiming toward Y=0)
+    if (Math.abs(rayDir.y) > 0.001) {
+        const t = -rayOrigin.y / rayDir.y;
+        
+        if (t > 0) {
+            // Valid intersection in front of camera
+            // Calculate intersection point
+            aimTempVectors.targetPoint.set(
+                rayOrigin.x + rayDir.x * t,
+                0,  // Y=0 plane
+                rayOrigin.z + rayDir.z * t
+            );
+            
+            // Calculate direction from muzzle to intersection point
+            result.copy(aimTempVectors.targetPoint).sub(aimTempVectors.muzzlePos).normalize();
+            return result;
+        }
+    }
+    
+    // Fallback: ray doesn't intersect fish plane (parallel or pointing away)
+    // Use a far point along the ray direction, ensuring it's always in front of muzzle
+    const fallbackDistance = 2000;
+    aimTempVectors.targetPoint.copy(rayOrigin).addScaledVector(rayDir, fallbackDistance);
+    
+    // Ensure target is in front of muzzle (dot product check)
+    aimTempVectors.rayDirection.copy(aimTempVectors.targetPoint).sub(aimTempVectors.muzzlePos);
+    const dotWithRay = aimTempVectors.rayDirection.dot(rayDir);
+    
+    if (dotWithRay < 0) {
+        // Target is behind muzzle relative to ray direction, use ray direction directly
+        result.copy(rayDir);
+    } else {
+        result.copy(aimTempVectors.rayDirection).normalize();
+    }
     
     return result;
 }
@@ -7764,6 +7796,7 @@ class Fish {
         // Create mesh based on form type (procedural fallback, shown immediately)
         switch (form) {
             case 'whale':
+            case 'killerWhale':
                 this.createWhaleMesh(size, bodyMaterial, secondaryMaterial);
                 break;
             case 'shark':
@@ -9653,25 +9686,65 @@ class Fish {
                 this.acceleration.x += Math.cos(perpAngle) * headSweep * 0.5;
                 this.acceleration.z += Math.sin(perpAngle) * headSweep * 0.5;
                 
-                // IMPROVED: Stronger boundary awareness - steer toward center if near edge
-                const pos = this.group.position;
-                const { width, depth } = CONFIG.aquarium;
-                const safeMargin = 400; // Larger margin for hammerhead
-                const centerPullStrength = 50;
+                // FIX: Hard boundary enforcement for hammerhead shark
+                // The shark was escaping boundaries because soft forces weren't strong enough
+                const sharkPos = this.group.position;
+                const { width: tankWidth, depth: tankDepth } = CONFIG.aquarium;
+                const hardMargin = 200; // Hard boundary margin - shark CANNOT go past this
+                const softMargin = 400; // Soft boundary margin - shark starts turning here
+                const hardBoundaryForce = 150; // Very strong force at hard boundary
+                const softBoundaryForce = 80;  // Strong force at soft boundary
                 
-                if (pos.x < -width/2 + safeMargin) {
-                    this.patternState.patrolAngle = 0; // Turn right
-                    this.acceleration.x += centerPullStrength;
-                } else if (pos.x > width/2 - safeMargin) {
-                    this.patternState.patrolAngle = Math.PI; // Turn left
-                    this.acceleration.x -= centerPullStrength;
+                // Calculate hard boundaries
+                const hardMinX = -tankWidth/2 + hardMargin;
+                const hardMaxX = tankWidth/2 - hardMargin;
+                const hardMinZ = -tankDepth/2 + hardMargin;
+                const hardMaxZ = tankDepth/2 - hardMargin;
+                
+                // Calculate soft boundaries
+                const softMinX = -tankWidth/2 + softMargin;
+                const softMaxX = tankWidth/2 - softMargin;
+                const softMinZ = -tankDepth/2 + softMargin;
+                const softMaxZ = tankDepth/2 - softMargin;
+                
+                // HARD BOUNDARY: Clamp position and reverse velocity if past hard boundary
+                if (sharkPos.x < hardMinX) {
+                    sharkPos.x = hardMinX;
+                    if (this.velocity.x < 0) this.velocity.x *= -0.5;
+                    this.patternState.patrolAngle = 0; // Force turn right
+                    this.acceleration.x += hardBoundaryForce;
+                } else if (sharkPos.x > hardMaxX) {
+                    sharkPos.x = hardMaxX;
+                    if (this.velocity.x > 0) this.velocity.x *= -0.5;
+                    this.patternState.patrolAngle = Math.PI; // Force turn left
+                    this.acceleration.x -= hardBoundaryForce;
                 }
-                if (pos.z < -depth/2 + safeMargin) {
-                    this.patternState.patrolAngle = Math.PI / 2; // Turn forward
-                    this.acceleration.z += centerPullStrength;
-                } else if (pos.z > depth/2 - safeMargin) {
-                    this.patternState.patrolAngle = -Math.PI / 2; // Turn back
-                    this.acceleration.z -= centerPullStrength;
+                if (sharkPos.z < hardMinZ) {
+                    sharkPos.z = hardMinZ;
+                    if (this.velocity.z < 0) this.velocity.z *= -0.5;
+                    this.patternState.patrolAngle = Math.PI / 2; // Force turn forward
+                    this.acceleration.z += hardBoundaryForce;
+                } else if (sharkPos.z > hardMaxZ) {
+                    sharkPos.z = hardMaxZ;
+                    if (this.velocity.z > 0) this.velocity.z *= -0.5;
+                    this.patternState.patrolAngle = -Math.PI / 2; // Force turn back
+                    this.acceleration.z -= hardBoundaryForce;
+                }
+                
+                // SOFT BOUNDARY: Strong steering force when approaching boundary
+                if (sharkPos.x < softMinX) {
+                    this.patternState.patrolAngle = 0;
+                    this.acceleration.x += softBoundaryForce;
+                } else if (sharkPos.x > softMaxX) {
+                    this.patternState.patrolAngle = Math.PI;
+                    this.acceleration.x -= softBoundaryForce;
+                }
+                if (sharkPos.z < softMinZ) {
+                    this.patternState.patrolAngle = Math.PI / 2;
+                    this.acceleration.z += softBoundaryForce;
+                } else if (sharkPos.z > softMaxZ) {
+                    this.patternState.patrolAngle = -Math.PI / 2;
+                    this.acceleration.z -= softBoundaryForce;
                 }
                 
                 if (this.patternState.patrolPhase === 'cruise') {
