@@ -897,7 +897,8 @@ function updatePerfDisplay() {
     let fishWithAnimations = 0;
     let fishWithMixers = 0;
     for (const fish of activeFish) {
-        if (fish && fish.mixer) {
+        // FIX: Check fish.glbMixer (not fish.mixer) - this was causing GLB Mixers to always show 0
+        if (fish && fish.glbMixer) {
             fishWithMixers++;
             // Check for glbAction (the actual swimming animation) instead of private _actions
             if (fish.glbAction) {
