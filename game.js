@@ -860,6 +860,100 @@ function updateGlbDebugDisplay() {
 }
 
 // DEBUG: Reset stats (call when starting new game)
+// PERFORMANCE: Create on-screen performance display (for users who can't open DevTools)
+function createPerfDisplay() {
+    let perfDiv = document.getElementById('perf-display');
+    if (!perfDiv) {
+        perfDiv = document.createElement('div');
+        perfDiv.id = 'perf-display';
+        perfDiv.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            z-index: 10001;
+            min-width: 200px;
+            pointer-events: none;
+            border: 1px solid #00ff00;
+        `;
+        document.body.appendChild(perfDiv);
+    }
+    return perfDiv;
+}
+
+// PERFORMANCE: Update the on-screen performance display
+let perfDisplayData = {
+    fps: 0,
+    fpsHistory: [],
+    lastUpdate: 0
+};
+
+function updatePerfDisplay() {
+    const perfDiv = createPerfDisplay();
+    const now = performance.now();
+    
+    // Update FPS history for averaging
+    const currentFps = deltaTime > 0 ? Math.round(1 / deltaTime) : 0;
+    perfDisplayData.fpsHistory.push(currentFps);
+    if (perfDisplayData.fpsHistory.length > 30) {
+        perfDisplayData.fpsHistory.shift();
+    }
+    const avgFps = Math.round(perfDisplayData.fpsHistory.reduce((a, b) => a + b, 0) / perfDisplayData.fpsHistory.length);
+    
+    // Only update display every 500ms to avoid performance impact
+    if (now - perfDisplayData.lastUpdate < 500) return;
+    perfDisplayData.lastUpdate = now;
+    
+    // Get renderer info
+    const drawCalls = renderer ? renderer.info.render.calls : 0;
+    const triangles = renderer ? renderer.info.render.triangles : 0;
+    const textures = renderer ? renderer.info.memory.textures : 0;
+    const geometries = renderer ? renderer.info.memory.geometries : 0;
+    
+    // Count fish with animations
+    let fishWithAnimations = 0;
+    for (const fish of activeFish) {
+        if (fish && fish.mixer && fish.mixer._actions && fish.mixer._actions.length > 0) {
+            fishWithAnimations++;
+        }
+    }
+    
+    // Color code FPS
+    let fpsColor = '#00ff00'; // Green for good
+    if (avgFps < 30) fpsColor = '#ffff00'; // Yellow for warning
+    if (avgFps < 20) fpsColor = '#ff0000'; // Red for bad
+    
+    // Color code draw calls (high = bad)
+    let drawCallColor = '#00ff00';
+    if (drawCalls > 500) drawCallColor = '#ffff00';
+    if (drawCalls > 1000) drawCallColor = '#ff0000';
+    
+    // Color code triangles (high = bad)
+    let triColor = '#00ff00';
+    if (triangles > 1000000) triColor = '#ffff00';
+    if (triangles > 3000000) triColor = '#ff0000';
+    
+    perfDiv.innerHTML = `
+        <div style="color: #00ffff; font-weight: bold; border-bottom: 1px solid #00ffff; padding-bottom: 4px; margin-bottom: 4px;">Performance Monitor</div>
+        <div style="color: ${fpsColor}; font-size: 16px; font-weight: bold;">FPS: ${avgFps}</div>
+        <div style="margin-top: 6px; color: #888;">--- GPU ---</div>
+        <div style="color: ${drawCallColor};">Draw Calls: ${drawCalls}</div>
+        <div style="color: ${triColor};">Triangles: ${triangles.toLocaleString()}</div>
+        <div>Textures: ${textures}</div>
+        <div>Geometries: ${geometries}</div>
+        <div style="margin-top: 6px; color: #888;">--- CPU ---</div>
+        <div>Fish: ${activeFish.length} / ${CONFIG.maxFish}</div>
+        <div>Animated: ${fishWithAnimations}</div>
+        <div>Bullets: ${activeBullets.length}</div>
+        <div>Particles: ${activeParticles.length}</div>
+    `;
+}
+
 function resetGlbSwapStats() {
     glbSwapStats.totalSpawned = 0;
     glbSwapStats.tryLoadCalled = 0;
@@ -12519,6 +12613,9 @@ function animate() {
     
         // Update UI
         updateUI();
+        
+        // Update on-screen performance display
+        updatePerfDisplay();
     
         // DIAGNOSTIC: Log performance metrics every 60 frames (~1 second at 60fps)
         if (!window._perfDiagFrame) window._perfDiagFrame = 0;
