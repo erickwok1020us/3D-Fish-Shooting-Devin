@@ -47,7 +47,7 @@ function loadVideoBackground() {
     if (!VIDEO_BACKGROUND_CONFIG.enabled) return;
     
     // Debug marker - unique build ID to confirm new code is running
-    const BUILD_ID = 'VIDEO_BG_v3_' + Date.now();
+    const BUILD_ID = 'VIDEO_BG_v4_' + Date.now();
     console.log('[VIDEO_BG] Build ID:', BUILD_ID);
     console.log('[VIDEO_BG] Starting video background initialization...');
     
@@ -94,11 +94,35 @@ function loadVideoBackground() {
         texture.magFilter = THREE.LinearFilter;
         texture.generateMipmaps = false;  // VideoTexture doesn't support mipmaps
         
+        // IMPORTANT: Texture settings for proper equirectangular mapping
+        // flipY = false is often needed for video textures to display correctly
+        texture.flipY = false;
+        
+        // Clamp to edge to avoid seam artifacts
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        
+        // Ensure texture covers the full UV range (no repeat, no offset)
+        texture.repeat.set(1, 1);
+        texture.offset.set(0, 0);
+        
+        console.log('[VIDEO_BG] Texture settings: flipY=' + texture.flipY + 
+                    ', wrapS=' + texture.wrapS + ', wrapT=' + texture.wrapT);
+        
         videoBackgroundTexture = texture;
         
-        // Create sky-sphere geometry
+        // Create sky-sphere geometry for equirectangular projection
+        // SphereGeometry with default UV mapping works for 2:1 equirectangular videos
         const config = VIDEO_BACKGROUND_CONFIG.skySphere;
-        const geometry = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
+        const geometry = new THREE.SphereGeometry(
+            config.radius, 
+            config.segments, 
+            config.segments,
+            0,              // phiStart - start at 0 for full horizontal coverage
+            Math.PI * 2,    // phiLength - full 360° horizontal
+            0,              // thetaStart - start at top
+            Math.PI         // thetaLength - full 180° vertical
+        );
         
         // Create material with video texture
         const material = new THREE.MeshBasicMaterial({
@@ -106,7 +130,7 @@ function loadVideoBackground() {
             fog: false,
             depthWrite: false,
             depthTest: false,
-            side: THREE.BackSide
+            side: THREE.BackSide  // Render inside of sphere
         });
         
         // Create sky-sphere mesh
