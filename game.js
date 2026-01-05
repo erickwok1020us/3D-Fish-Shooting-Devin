@@ -606,7 +606,8 @@ const CONFIG = {
             multiplier: 1, cost: 1, speed: 800, 
             damage: 100, shotsPerSecond: 2, // cooldown = 0.5s
             type: 'projectile', color: 0xcccccc, size: 8,
-            cannonColor: 0xcccccc, cannonEmissive: 0x666666
+            cannonColor: 0xcccccc, cannonEmissive: 0x666666,
+            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
         },
         '3x': { 
             multiplier: 3, cost: 3, speed: 700, 
@@ -615,7 +616,8 @@ const CONFIG = {
             // Each bullet does NOT penetrate - stops on hit
             type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 10,
-            cannonColor: 0xff8800, cannonEmissive: 0xff4400
+            cannonColor: 0xff8800, cannonEmissive: 0xff4400,
+            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
         },
         '5x': { 
             multiplier: 5, cost: 5, speed: 750, 
@@ -623,14 +625,16 @@ const CONFIG = {
             // Issue #15: Chain lightning jumps 2-3 times with 50% damage reduction per jump
             type: 'chain', maxChains: 3, chainDecay: 0.5, chainRadius: 250,
             color: 0xffdd00, size: 12,  // Golden color for lightning
-            cannonColor: 0xffcc00, cannonEmissive: 0xffaa00
+            cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
+            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
         },
         '8x': { 
             multiplier: 8, cost: 8, speed: 600, 
             damage: 250, damageEdge: 100, shotsPerSecond: 2.5, // cooldown = 0.4s
             type: 'aoe', aoeRadius: 150,
             color: 0xff4444, size: 14,
-            cannonColor: 0xff2222, cannonEmissive: 0xcc0000
+            cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
+            convergenceDistance: 1500  // Original distance for 8x weapon
         }
     },
     
@@ -7452,8 +7456,14 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     cannonMuzzle.getWorldPosition(aimTempVectors.muzzlePos);
     
     // Find target point along the ray (at a reasonable distance into the tank)
+    // Use per-weapon convergence distance for better close-range targeting
+    // 1x, 3x, 5x weapons use 750 (halved), 8x uses 1500 (original)
+    const weaponKey = gameState.currentWeapon;
+    const weapon = CONFIG.weapons[weaponKey];
+    const convergenceDistance = weapon?.convergenceDistance || 1500;
+    
     // PERFORMANCE: Avoid clone() calls - copy values directly to temp vectors
-    aimTempVectors.rayDirection.copy(raycaster.ray.direction).multiplyScalar(1500);
+    aimTempVectors.rayDirection.copy(raycaster.ray.direction).multiplyScalar(convergenceDistance);
     aimTempVectors.targetPoint.copy(raycaster.ray.origin).add(aimTempVectors.rayDirection);
     
     // Calculate direction from muzzle to target point
