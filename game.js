@@ -3180,6 +3180,9 @@ function downscaleMapTextures(mapScene, scale) {
 function setupMapMaterialsWithQuality(mapScene) {
     const quality = performanceState.graphicsQuality;
     
+    // First, remove any large background/skybox meshes that would occlude the video background
+    removeMapBackgroundMeshes(mapScene);
+    
     mapScene.traverse((obj) => {
         if (!obj.isMesh) return;
         
@@ -3205,6 +3208,86 @@ function setupMapMaterialsWithQuality(mapScene) {
     });
     
     console.log(`[PERF] Map materials configured for ${quality} quality`);
+}
+
+// Remove large background/skybox meshes from the 3D map that would occlude the video background
+// These are typically large enclosing spheres, boxes, or domes used as static backgrounds in the GLB
+function removeMapBackgroundMeshes(mapScene) {
+    const { width, height, depth } = CONFIG.aquarium;
+    const aquariumMaxDim = Math.max(width, height, depth);
+    
+    // Threshold: meshes larger than 2x the aquarium size are likely background/skybox
+    const backgroundThreshold = aquariumMaxDim * 2;
+    
+    const meshesToRemove = [];
+    const meshesToMakeTransparent = [];
+    
+    mapScene.traverse((obj) => {
+        if (!obj.isMesh) return;
+        
+        // Calculate mesh bounding box
+        const box = new THREE.Box3().setFromObject(obj);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const meshName = (obj.name || '').toLowerCase();
+        
+        // Check if this looks like a background/skybox mesh
+        const isLargeMesh = maxDim > backgroundThreshold;
+        const hasBackgroundName = meshName.includes('background') || 
+                                  meshName.includes('skybox') || 
+                                  meshName.includes('sky') ||
+                                  meshName.includes('dome') ||
+                                  meshName.includes('environment') ||
+                                  meshName.includes('backdrop') ||
+                                  meshName.includes('surround');
+        
+        // Check if material is dark/black (common for background meshes)
+        let isDarkMaterial = false;
+        if (obj.material) {
+            const mat = obj.material;
+            if (mat.color) {
+                const r = mat.color.r;
+                const g = mat.color.g;
+                const b = mat.color.b;
+                // Consider "dark" if all RGB values are below 0.2
+                isDarkMaterial = (r < 0.2 && g < 0.2 && b < 0.2);
+            }
+        }
+        
+        // Remove if: large mesh with background-like name, OR very large dark mesh
+        if (hasBackgroundName || (isLargeMesh && isDarkMaterial)) {
+            console.log(`[MAP-BG] Found background mesh: "${obj.name}", size: ${maxDim.toFixed(0)}, dark: ${isDarkMaterial}`);
+            meshesToRemove.push(obj);
+        } else if (isLargeMesh) {
+            // Large mesh but not clearly a background - make it transparent instead
+            console.log(`[MAP-BG] Large mesh (making transparent): "${obj.name}", size: ${maxDim.toFixed(0)}`);
+            meshesToMakeTransparent.push(obj);
+        }
+    });
+    
+    // Remove identified background meshes
+    meshesToRemove.forEach(mesh => {
+        if (mesh.parent) {
+            mesh.parent.remove(mesh);
+            console.log(`[MAP-BG] Removed background mesh: "${mesh.name}"`);
+        }
+    });
+    
+    // Make large meshes transparent so video can show through
+    meshesToMakeTransparent.forEach(mesh => {
+        if (mesh.material) {
+            // Clone material to avoid affecting other meshes
+            mesh.material = mesh.material.clone();
+            mesh.material.transparent = true;
+            mesh.material.opacity = 0.3;
+            mesh.material.depthWrite = false;
+            console.log(`[MAP-BG] Made mesh transparent: "${mesh.name}"`);
+        }
+    });
+    
+    console.log(`[MAP-BG] Removed ${meshesToRemove.length} background meshes, made ${meshesToMakeTransparent.length} transparent`);
 }
 
 // ==================== ENHANCED WEAPON VFX ====================
