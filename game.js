@@ -6414,7 +6414,8 @@ function updateLoadingProgress(percent, text) {
 }
 
 // ==================== 3D MAP LOADING ====================
-const MAP_URL = 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/MAP.glb';
+// Optimized map: 24MB (was 257MB), 1.8M triangles (was 6.1M), Draco compressed
+const MAP_URL = 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/MAPV2.0.glb';
 let loadedMapScene = null;  // Cache loaded map to avoid reloading
 
 // PRELOAD FIX: Track combined loading progress for map + weapons
