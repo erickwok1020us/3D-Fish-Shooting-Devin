@@ -6560,7 +6560,16 @@ function createAquariumScene() {
         // Scale and position the map to fit aquarium bounds
         scaleAndPositionMap(mapScene);
         tunnelGroup.add(mapScene);
+        
+        // Enhanced debug logging for map verification
+        const mapBox = new THREE.Box3().setFromObject(mapScene);
+        const mapSize = new THREE.Vector3();
+        mapBox.getSize(mapSize);
         console.log('[MAP] 3D map added to scene');
+        console.log('[MAP] Map bounding box size:', mapSize.x.toFixed(0), 'x', mapSize.y.toFixed(0), 'x', mapSize.z.toFixed(0));
+        console.log('[MAP] Map position:', mapScene.position.x.toFixed(0), mapScene.position.y.toFixed(0), mapScene.position.z.toFixed(0));
+        console.log('[MAP] Map scale:', mapScene.scale.x.toFixed(4));
+        console.log('[MAP] tunnelGroup children count:', tunnelGroup.children.length);
     });
 }
 
@@ -6932,6 +6941,12 @@ function createCannon() {
     cannonBaseRingInnerDisk.position.y = 14.5;  // Above platform top (y=14) to cover gray area
     cannonBaseRingInnerDisk.renderOrder = 2;  // Render after rings (core=1, glow=0) to ensure it's on top
     cannonGroup.add(cannonBaseRingInnerDisk);
+    
+    // Debug logging for sci-fi ring verification
+    console.log('[CANNON] Sci-fi ring created: core=' + (cannonBaseRingCore ? 'OK' : 'FAIL') + 
+                ', glow=' + (cannonBaseRingGlow ? 'OK' : 'FAIL') + 
+                ', innerDisk=' + (cannonBaseRingInnerDisk ? 'OK' : 'FAIL'));
+    console.log('[CANNON] cannonGroup children count:', cannonGroup.children.length);
     
     // Issue #10: Create pitch group - this rotates for vertical aiming
     // Both barrel and muzzle are children of this group so they rotate together
