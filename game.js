@@ -1,27 +1,35 @@
 // Fish Shooter 3D - Clean Aquarium Version
 // Using Three.js for 3D rendering
 
-// ==================== VIDEO BACKGROUND SYSTEM ====================
-// Sky-sphere mesh with VideoTexture for animated underwater background
-// Features: Ping-Pong loop playback (forward then reverse) for seamless looping
-const VIDEO_BACKGROUND_CONFIG = {
+// ==================== SPHERICAL PANORAMA BACKGROUND SYSTEM ====================
+// Sky-sphere mesh approach for full control over panorama positioning and animation
+// Benefits: Can tilt to show seafloor, add dynamic rotation, wider effective view
+// 8K HD Quality: Uses R2 cloud image with anisotropic filtering and mipmaps
+const PANORAMA_CONFIG = {
     enabled: true,
-    // Video from R2 bucket
-    videoUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Background_video.mp4',
-    // Fallback to solid color if video fails
-    fallbackColor: 0x0a4d6c,
+    // 8K HD panorama from R2 bucket
+    imageUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/background.jpg',
+    // Fallback to local image if R2 fails
+    fallbackUrl: 'assets/underwater_panorama.jpg',
     fogColor: 0x0a4d6c,
     fogNear: 600,
     fogFar: 3500,
     // Sky-sphere settings
     skySphere: {
         radius: 4000,           // Large sphere to encompass entire scene
-        segments: 64,           // Reduced segments for video (doesn't need as much detail)
+        segments: 128,          // Increased sphere detail for 8K quality
         tiltX: -15 * (Math.PI / 180),  // Tilt panorama down so seafloor appears at bottom (-15°)
         // Dynamic animation settings
-        rotationSpeedY: 0.0003,  // Very slow Y-axis rotation (rad/frame) for subtle movement
-        bobAmplitude: 0.002,     // Subtle X-axis bobbing amplitude
-        bobSpeed: 0.0002         // Bobbing speed
+        rotationSpeedY: 0.0005,  // Very slow Y-axis rotation (rad/frame) for subtle movement
+        bobAmplitude: 0.003,     // Subtle X-axis bobbing amplitude
+        bobSpeed: 0.0003         // Bobbing speed
+    },
+    // 8K HD texture quality settings
+    textureQuality: {
+        anisotropy: 16,         // Max anisotropic filtering (will be clamped to GPU max)
+        generateMipmaps: true,  // Enable mipmaps for better quality at distance
+        minFilter: 'LinearMipmapLinearFilter',  // Trilinear filtering
+        magFilter: 'LinearFilter'               // Linear magnification
     },
     dynamicEffects: {
         floatingParticles: true,
@@ -33,303 +41,187 @@ const VIDEO_BACKGROUND_CONFIG = {
     }
 };
 
-let videoBackgroundTexture = null;
-let videoBackgroundElement = null;  // HTML5 video element
-let videoBackgroundSkySphere = null;  // Sky-sphere mesh for video background
-let videoPlaybackDirection = 1;  // 1 = forward, -1 = reverse (for Ping-Pong loop)
+let panoramaTexture = null;
+let panoramaSkySphere = null;  // Sky-sphere mesh for panorama
 let underwaterParticleSystem = null;
 let underwaterParticles = [];
 
-// Load and create sky-sphere video background
-// Uses VideoTexture with Ping-Pong loop for seamless playback
-// Ping-Pong: plays forward (0s→15s) then reverse (15s→0s) for smooth looping
-function loadVideoBackground() {
-    if (!VIDEO_BACKGROUND_CONFIG.enabled) return;
+// Load and create sky-sphere panorama background
+// Uses inverted sphere mesh for full control over positioning and animation
+// 8K HD Quality: Applies anisotropic filtering and mipmaps for maximum sharpness
+function loadPanoramaBackground() {
+    if (!PANORAMA_CONFIG.enabled) return;
     
-    // Debug marker - unique build ID to confirm new code is running
-    const BUILD_ID = 'VIDEO_BG_v4_' + Date.now();
-    console.log('[VIDEO_BG] Build ID:', BUILD_ID);
-    console.log('[VIDEO_BG] Starting video background initialization...');
+    const loader = new THREE.TextureLoader();
+    // Enable cross-origin for R2 bucket images
+    loader.setCrossOrigin('anonymous');
     
-    // Create HTML5 video element
-    const video = document.createElement('video');
-    
-    // IMPORTANT: Set all attributes BEFORE setting src
-    video.crossOrigin = 'anonymous';
-    video.muted = true;           // Required for autoplay
-    video.loop = false;           // We handle looping manually with Ping-Pong
-    video.playsInline = true;     // Required for iOS
-    video.preload = 'auto';
-    video.autoplay = true;        // Try to autoplay immediately
-    
-    // Style video element (hidden but in DOM for better browser compatibility)
-    video.style.position = 'absolute';
-    video.style.top = '-9999px';
-    video.style.left = '-9999px';
-    video.style.width = '1px';
-    video.style.height = '1px';
-    video.style.opacity = '0';
-    video.style.pointerEvents = 'none';
-    
-    // Store reference for Ping-Pong control
-    videoBackgroundElement = video;
-    videoPlaybackDirection = 1;   // Start playing forward
-    
-    // Helper function to create sky-sphere once video is ready
-    function createVideoSkySphere() {
-        if (videoBackgroundSkySphere) {
-            console.log('[VIDEO_BG] Sky-sphere already created, skipping');
-            return;
+    // Helper function to create sky-sphere with loaded texture
+    function createSkySphereWithTexture(texture, imageUrl) {
+        // Apply 8K HD quality settings
+        texture.colorSpace = THREE.SRGBColorSpace;
+        
+        // Apply texture quality settings for maximum sharpness
+        const qualityConfig = PANORAMA_CONFIG.textureQuality;
+        if (qualityConfig) {
+            // Anisotropic filtering - clamp to GPU maximum
+            if (renderer && renderer.capabilities) {
+                const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+                texture.anisotropy = Math.min(qualityConfig.anisotropy || 16, maxAnisotropy);
+                console.log('[PANORAMA] Anisotropic filtering:', texture.anisotropy, '(GPU max:', maxAnisotropy + ')');
+            }
+            
+            // Mipmaps for better quality at distance
+            texture.generateMipmaps = qualityConfig.generateMipmaps !== false;
+            
+            // Texture filtering
+            texture.minFilter = THREE.LinearMipmapLinearFilter;  // Trilinear filtering
+            texture.magFilter = THREE.LinearFilter;
         }
         
-        console.log('[VIDEO_BG] Creating sky-sphere...');
-        console.log('[VIDEO_BG] Video state: readyState=' + video.readyState + ', networkState=' + video.networkState);
-        console.log('[VIDEO_BG] Duration:', video.duration, 'seconds');
-        console.log('[VIDEO_BG] Resolution:', video.videoWidth + 'x' + video.videoHeight);
+        // Force texture update
+        texture.needsUpdate = true;
         
-        // Create VideoTexture from video element
-        const texture = new THREE.VideoTexture(video);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.generateMipmaps = false;  // VideoTexture doesn't support mipmaps
+        panoramaTexture = texture;
         
-        // IMPORTANT: Texture settings for proper equirectangular mapping
-        // flipY = false is often needed for video textures to display correctly
-        texture.flipY = false;
+        // FIX: Set scene.background as RELIABLE FALLBACK using EquirectangularReflectionMapping
+        // This ensures the panorama is ALWAYS visible even if sky-sphere fails to render
+        const bgTexture = texture.clone();
+        bgTexture.mapping = THREE.EquirectangularReflectionMapping;
+        bgTexture.needsUpdate = true;
+        scene.background = bgTexture;
+        console.log('[PANORAMA] Set scene.background with EquirectangularReflectionMapping as fallback');
         
-        // Clamp to edge to avoid seam artifacts
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
+        // Create sky-sphere geometry - FIX: Use BackSide instead of scale(-1,1,1) for better compatibility
+        // Some GPU drivers have issues with negative scale + FrontSide face culling
+        const config = PANORAMA_CONFIG.skySphere;
+        const geometry = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
+        // Don't use geometry.scale(-1, 1, 1) - use BackSide instead for cross-device compatibility
         
-        // Ensure texture covers the full UV range (no repeat, no offset)
-        texture.repeat.set(1, 1);
-        texture.offset.set(0, 0);
-        
-        console.log('[VIDEO_BG] Texture settings: flipY=' + texture.flipY + 
-                    ', wrapS=' + texture.wrapS + ', wrapT=' + texture.wrapT);
-        
-        videoBackgroundTexture = texture;
-        
-        // Create sky-sphere geometry for equirectangular projection
-        // SphereGeometry with default UV mapping works for 2:1 equirectangular videos
-        const config = VIDEO_BACKGROUND_CONFIG.skySphere;
-        const geometry = new THREE.SphereGeometry(
-            config.radius, 
-            config.segments, 
-            config.segments,
-            0,              // phiStart - start at 0 for full horizontal coverage
-            Math.PI * 2,    // phiLength - full 360° horizontal
-            0,              // thetaStart - start at top
-            Math.PI         // thetaLength - full 180° vertical
-        );
-        
-        // Create material with video texture
+        // FIX: Create material with robust settings for cross-device compatibility
         const material = new THREE.MeshBasicMaterial({
             map: texture,
             fog: false,
             depthWrite: false,
-            depthTest: false,
-            side: THREE.BackSide  // Render inside of sphere
+            depthTest: false,      // FIX: Disable depth test for background mesh
+            side: THREE.BackSide   // FIX: Use BackSide instead of scale(-1,1,1) + FrontSide
         });
         
         // Create sky-sphere mesh
-        videoBackgroundSkySphere = new THREE.Mesh(geometry, material);
-        videoBackgroundSkySphere.name = 'videoBackgroundSkySphere';
-        videoBackgroundSkySphere.frustumCulled = false;
+        panoramaSkySphere = new THREE.Mesh(geometry, material);
+        panoramaSkySphere.name = 'panoramaSkySphere';
+        panoramaSkySphere.frustumCulled = false;  // FIX: Prevent frustum culling issues
         
-        // Apply initial tilt
-        videoBackgroundSkySphere.rotation.x = config.tiltX;
+        // Apply initial tilt to position seafloor at bottom of view
+        panoramaSkySphere.rotation.x = config.tiltX;
         
         // Render order: -1000 ensures it renders first (behind everything)
-        videoBackgroundSkySphere.renderOrder = -1000;
+        panoramaSkySphere.renderOrder = -1000;
         
-        scene.add(videoBackgroundSkySphere);
+        scene.add(panoramaSkySphere);
         
-        // Clear scene background so sky-sphere is visible
-        scene.background = null;
+        // DIAGNOSTIC: Comprehensive logging to identify texture quality issues
+        if (texture.image) {
+            const imgWidth = texture.image.width;
+            const imgHeight = texture.image.height;
+            console.log('[PANORAMA] === TEXTURE DIAGNOSTIC ===');
+            console.log('[PANORAMA] Image loaded:', imgWidth + 'x' + imgHeight, 'from', imageUrl);
+            
+            // Check GPU texture size limit
+            if (renderer && renderer.capabilities) {
+                const maxTexSize = renderer.capabilities.maxTextureSize;
+                console.log('[PANORAMA] GPU maxTextureSize:', maxTexSize);
+                if (imgWidth > maxTexSize || imgHeight > maxTexSize) {
+                    console.warn('[PANORAMA] WARNING: Image exceeds GPU limit! Will be downscaled to', 
+                        Math.min(imgWidth, maxTexSize) + 'x' + Math.min(imgHeight, maxTexSize));
+                }
+            }
+            
+            // Check renderer pixel ratio
+            if (renderer) {
+                console.log('[PANORAMA] Renderer pixelRatio:', renderer.getPixelRatio());
+                console.log('[PANORAMA] Canvas size:', renderer.domElement.width + 'x' + renderer.domElement.height);
+            }
+            
+            // Check graphics quality setting
+            console.log('[PANORAMA] Graphics quality:', performanceState.graphicsQuality);
+            console.log('[PANORAMA] === END DIAGNOSTIC ===');
+        }
+        console.log('[PANORAMA] Sky-sphere created with tilt:', config.tiltX * (180/Math.PI), 'degrees, segments:', config.segments);
         
-        console.log('[VIDEO_BG] Sky-sphere created and added to scene');
-        console.log('[VIDEO_BG] Sky-sphere tilt:', config.tiltX * (180/Math.PI), 'degrees');
+        // Update fog to match panorama colors
+        scene.fog = new THREE.Fog(
+            PANORAMA_CONFIG.fogColor,
+            PANORAMA_CONFIG.fogNear,
+            PANORAMA_CONFIG.fogFar
+        );
+        
+        // FIX: Keep scene.background as fallback - don't set to null
+        // The sky-sphere renders on top, but scene.background provides a safety net
+        // for devices where the sky-sphere might not render correctly
     }
     
-    // IMPORTANT: Register ALL event listeners BEFORE setting src
-    
-    // Debug: Log all video events for troubleshooting
-    video.addEventListener('loadstart', () => {
-        console.log('[VIDEO_BG] Event: loadstart - video loading started');
-    });
-    
-    video.addEventListener('loadedmetadata', () => {
-        console.log('[VIDEO_BG] Event: loadedmetadata - metadata loaded');
-        console.log('[VIDEO_BG] Duration:', video.duration, 'Resolution:', video.videoWidth + 'x' + video.videoHeight);
-    });
-    
-    video.addEventListener('loadeddata', () => {
-        console.log('[VIDEO_BG] Event: loadeddata - first frame available');
-        createVideoSkySphere();
-    });
-    
-    video.addEventListener('canplay', () => {
-        console.log('[VIDEO_BG] Event: canplay - video can start playing');
-        // Also try to create sky-sphere here as fallback
-        createVideoSkySphere();
-        // Try to play if not already playing
-        if (video.paused) {
-            video.play().catch(err => {
-                console.warn('[VIDEO_BG] Play on canplay failed:', err.message);
-            });
-        }
-    });
-    
-    video.addEventListener('canplaythrough', () => {
-        console.log('[VIDEO_BG] Event: canplaythrough - video can play without buffering');
-    });
-    
-    video.addEventListener('playing', () => {
-        console.log('[VIDEO_BG] Event: playing - video is now playing');
-    });
-    
-    video.addEventListener('waiting', () => {
-        console.log('[VIDEO_BG] Event: waiting - video is buffering');
-    });
-    
-    video.addEventListener('stalled', () => {
-        console.warn('[VIDEO_BG] Event: stalled - video download stalled');
-    });
-    
-    video.addEventListener('suspend', () => {
-        console.log('[VIDEO_BG] Event: suspend - video loading suspended');
-    });
-    
-    // Handle video error
-    video.addEventListener('error', (e) => {
-        const errorCode = video.error ? video.error.code : 'unknown';
-        const errorMessage = video.error ? video.error.message : 'unknown';
-        console.error('[VIDEO_BG] Event: error - Failed to load video');
-        console.error('[VIDEO_BG] Error code:', errorCode, 'Message:', errorMessage);
-        console.error('[VIDEO_BG] Video src:', video.src);
-        console.log('[VIDEO_BG] Using fallback solid color');
-        scene.background = new THREE.Color(VIDEO_BACKGROUND_CONFIG.fallbackColor);
-    });
-    
-    // Ping-Pong loop: when video ends, reverse direction
-    video.addEventListener('ended', () => {
-        // Video reached end while playing forward
-        if (videoPlaybackDirection === 1) {
-            console.log('[VIDEO_BG] Reached end, reversing playback');
-            videoPlaybackDirection = -1;
-            // Start reverse playback from near the end
-            video.currentTime = video.duration - 0.1;
-        }
-    });
-    
-    // NOW set the src (after all listeners are registered)
+    // Load primary 8K image from R2 (with cache-bust to ensure fresh load)
     const cacheBust = '?v=' + Date.now();
-    video.src = VIDEO_BACKGROUND_CONFIG.videoUrl + cacheBust;
-    console.log('[VIDEO_BG] Video src set:', VIDEO_BACKGROUND_CONFIG.videoUrl);
+    const imageUrlWithCacheBust = PANORAMA_CONFIG.imageUrl + cacheBust;
+    console.log('[PANORAMA] Loading from:', imageUrlWithCacheBust);
     
-    // Append video to DOM (hidden) - some browsers need this for proper loading
-    document.body.appendChild(video);
-    console.log('[VIDEO_BG] Video element appended to DOM');
-    
-    // Explicitly call load() to start loading
-    video.load();
-    console.log('[VIDEO_BG] video.load() called');
-    
-    // Try to play immediately (muted autoplay should work)
-    video.play().then(() => {
-        console.log('[VIDEO_BG] Initial play() succeeded');
-    }).catch(err => {
-        console.warn('[VIDEO_BG] Initial play() failed:', err.message);
-        // Add click listener to start video on user interaction
-        const startVideo = () => {
-            video.play().then(() => {
-                console.log('[VIDEO_BG] Play on user interaction succeeded');
-            }).catch(e => {
-                console.error('[VIDEO_BG] Play on user interaction failed:', e.message);
-            });
-            document.removeEventListener('click', startVideo);
-            document.removeEventListener('touchstart', startVideo);
-        };
-        document.addEventListener('click', startVideo);
-        document.addEventListener('touchstart', startVideo);
-    });
-    
-    // Periodic status check for debugging (first 10 seconds)
-    let checkCount = 0;
-    const statusInterval = setInterval(() => {
-        checkCount++;
-        console.log('[VIDEO_BG] Status check #' + checkCount + ': readyState=' + video.readyState + 
-                    ', networkState=' + video.networkState + 
-                    ', paused=' + video.paused + 
-                    ', currentTime=' + video.currentTime.toFixed(2) +
-                    ', skySphere=' + (videoBackgroundSkySphere ? 'created' : 'pending'));
-        if (checkCount >= 10 || videoBackgroundSkySphere) {
-            clearInterval(statusInterval);
-            console.log('[VIDEO_BG] Status checks complete');
+    loader.load(
+        imageUrlWithCacheBust,
+        (texture) => {
+            createSkySphereWithTexture(texture, PANORAMA_CONFIG.imageUrl);
+        },
+        undefined,
+        (error) => {
+            console.warn('[PANORAMA] Failed to load 8K panorama from R2:', error.message || error);
+            
+            // Try fallback URL if available
+            if (PANORAMA_CONFIG.fallbackUrl) {
+                console.log('[PANORAMA] Trying fallback image:', PANORAMA_CONFIG.fallbackUrl);
+                loader.load(
+                    PANORAMA_CONFIG.fallbackUrl,
+                    (texture) => {
+                        createSkySphereWithTexture(texture, PANORAMA_CONFIG.fallbackUrl);
+                    },
+                    undefined,
+                    (fallbackError) => {
+                        console.warn('[PANORAMA] Fallback also failed, using solid color:', fallbackError);
+                        scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+                    }
+                );
+            } else {
+                scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+            }
         }
-    }, 1000);
-}
-
-// Update Ping-Pong video playback (called from animate loop)
-// Manually controls reverse playback since HTML5 video doesn't support negative playbackRate well
-function updateVideoBackgroundPingPong(deltaTime) {
-    if (!videoBackgroundElement) return;
-    
-    const video = videoBackgroundElement;
-    
-    // Handle reverse playback manually (video is paused during reverse)
-    if (videoPlaybackDirection === -1) {
-        // Manually decrement currentTime for reverse playback
-        // Use deltaTime to maintain consistent speed
-        video.currentTime = Math.max(0, video.currentTime - deltaTime);
-        
-        // Check if we've reached the beginning
-        if (video.currentTime <= 0.1) {
-            console.log('[VIDEO_BG] Reached start, playing forward');
-            videoPlaybackDirection = 1;
-            video.currentTime = 0;
-            video.play();
-        }
-    }
-}
-
-// Alias for backward compatibility
-function loadPanoramaBackground() {
-    loadVideoBackground();
+    );
 }
 
 // Update sky-sphere animation (called from animate loop)
 // Adds subtle dynamic movement: slow Y rotation + gentle X bobbing
-// Also handles Ping-Pong video playback
 function updatePanoramaAnimation(deltaTime) {
-    // Update Ping-Pong video playback
-    updateVideoBackgroundPingPong(deltaTime);
+    if (!panoramaSkySphere) return;
     
-    if (!videoBackgroundSkySphere) return;
-    
-    const config = VIDEO_BACKGROUND_CONFIG.skySphere;
+    const config = PANORAMA_CONFIG.skySphere;
     const time = performance.now();
     
     // Slow Y-axis rotation for subtle movement
-    videoBackgroundSkySphere.rotation.y += config.rotationSpeedY * deltaTime * 60;
+    panoramaSkySphere.rotation.y += config.rotationSpeedY * deltaTime * 60;
     
     // Gentle X-axis bobbing (simulates underwater current)
     const bobOffset = Math.sin(time * config.bobSpeed) * config.bobAmplitude;
-    videoBackgroundSkySphere.rotation.x = config.tiltX + bobOffset;
+    panoramaSkySphere.rotation.x = config.tiltX + bobOffset;
     
     // Keep sky-sphere centered on camera position (so it always surrounds the viewer)
     if (camera) {
-        videoBackgroundSkySphere.position.copy(camera.position);
+        panoramaSkySphere.position.copy(camera.position);
     }
 }
 
 // Create floating underwater particles for dynamic atmosphere
 function createUnderwaterParticles() {
-    if (!VIDEO_BACKGROUND_CONFIG.dynamicEffects.floatingParticles) return;
+    if (!PANORAMA_CONFIG.dynamicEffects.floatingParticles) return;
     
-    const config = VIDEO_BACKGROUND_CONFIG.dynamicEffects;
+    const config = PANORAMA_CONFIG.dynamicEffects;
     const particleCount = config.particleCount;
     const spread = config.particleSpread;
     
@@ -375,7 +267,7 @@ function createUnderwaterParticles() {
     underwaterParticleSystem.userData.spread = spread;
     scene.add(underwaterParticleSystem);
     
-    console.log(`[VIDEO_BG] Created ${particleCount} floating underwater particles`);
+    console.log(`[PANORAMA] Created ${particleCount} floating underwater particles`);
 }
 
 // Update floating particles animation (called from animate loop)
@@ -3180,9 +3072,6 @@ function downscaleMapTextures(mapScene, scale) {
 function setupMapMaterialsWithQuality(mapScene) {
     const quality = performanceState.graphicsQuality;
     
-    // First, remove any large background/skybox meshes that would occlude the video background
-    removeMapBackgroundMeshes(mapScene);
-    
     mapScene.traverse((obj) => {
         if (!obj.isMesh) return;
         
@@ -3208,104 +3097,6 @@ function setupMapMaterialsWithQuality(mapScene) {
     });
     
     console.log(`[PERF] Map materials configured for ${quality} quality`);
-}
-
-// Remove large background/skybox meshes from the 3D map that would occlude the video background
-// These are typically large enclosing spheres, boxes, or domes used as static backgrounds in the GLB
-function removeMapBackgroundMeshes(mapScene) {
-    const { width, height, depth } = CONFIG.aquarium;
-    const aquariumMaxDim = Math.max(width, height, depth);
-    
-    // Threshold: meshes larger than 1.5x the aquarium size are likely background/skybox
-    // Lowered from 2x to catch more potential occluders
-    const backgroundThreshold = aquariumMaxDim * 1.5;
-    
-    // Collect all meshes with their sizes for analysis
-    const allMeshes = [];
-    const meshesToRemove = [];
-    
-    mapScene.traverse((obj) => {
-        if (!obj.isMesh) return;
-        
-        // Calculate mesh bounding box
-        const box = new THREE.Box3().setFromObject(obj);
-        const size = new THREE.Vector3();
-        const center = new THREE.Vector3();
-        box.getSize(size);
-        box.getCenter(center);
-        
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const meshName = (obj.name || '').toLowerCase();
-        
-        // Store for analysis
-        allMeshes.push({
-            mesh: obj,
-            name: obj.name || '(unnamed)',
-            maxDim: maxDim,
-            size: size.clone(),
-            center: center.clone()
-        });
-        
-        // Check if this looks like a background/skybox mesh
-        const isLargeMesh = maxDim > backgroundThreshold;
-        const hasBackgroundName = meshName.includes('background') || 
-                                  meshName.includes('skybox') || 
-                                  meshName.includes('sky') ||
-                                  meshName.includes('dome') ||
-                                  meshName.includes('environment') ||
-                                  meshName.includes('backdrop') ||
-                                  meshName.includes('surround') ||
-                                  meshName.includes('ceiling') ||
-                                  meshName.includes('floor') ||
-                                  meshName.includes('wall') ||
-                                  meshName.includes('shell') ||
-                                  meshName.includes('enclosure');
-        
-        // Check if material is dark/black (common for background meshes)
-        let isDarkMaterial = false;
-        if (obj.material) {
-            const mat = obj.material;
-            if (mat.color) {
-                const r = mat.color.r;
-                const g = mat.color.g;
-                const b = mat.color.b;
-                // Consider "dark" if all RGB values are below 0.3 (raised threshold)
-                isDarkMaterial = (r < 0.3 && g < 0.3 && b < 0.3);
-            }
-        }
-        
-        // Check if this mesh encloses the camera spawn area (center of aquarium)
-        // If a large mesh's bounding box contains the origin, it's likely an enclosing shell
-        const containsOrigin = box.containsPoint(new THREE.Vector3(0, 0, 0));
-        const isEnclosingShell = isLargeMesh && containsOrigin;
-        
-        // Remove if: 
-        // 1. Has background-like name, OR
-        // 2. Large dark mesh, OR
-        // 3. Large mesh that encloses the camera spawn area
-        if (hasBackgroundName || (isLargeMesh && isDarkMaterial) || isEnclosingShell) {
-            console.log(`[MAP-BG] Found occluding mesh: "${obj.name}", size: ${maxDim.toFixed(0)}, dark: ${isDarkMaterial}, enclosing: ${isEnclosingShell}`);
-            meshesToRemove.push(obj);
-        }
-    });
-    
-    // Log top 10 largest meshes for debugging
-    allMeshes.sort((a, b) => b.maxDim - a.maxDim);
-    console.log('[MAP-BG] Top 10 largest meshes in map:');
-    allMeshes.slice(0, 10).forEach((m, i) => {
-        const willRemove = meshesToRemove.includes(m.mesh);
-        console.log(`[MAP-BG]   ${i+1}. "${m.name}" - size: ${m.maxDim.toFixed(0)} ${willRemove ? '(REMOVING)' : ''}`);
-    });
-    
-    // Remove identified background meshes
-    meshesToRemove.forEach(mesh => {
-        if (mesh.parent) {
-            mesh.parent.remove(mesh);
-            console.log(`[MAP-BG] Removed: "${mesh.name}"`);
-        }
-    });
-    
-    console.log(`[MAP-BG] Total meshes: ${allMeshes.length}, Removed: ${meshesToRemove.length}`);
 }
 
 // ==================== ENHANCED WEAPON VFX ====================
