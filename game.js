@@ -607,7 +607,7 @@ const CONFIG = {
             damage: 100, shotsPerSecond: 2, // cooldown = 0.5s
             type: 'projectile', color: 0xcccccc, size: 8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
-            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
+            convergenceDistance: 375  // Reduced to match typical fish swimming distance (250-500 units)
         },
         '3x': { 
             multiplier: 3, cost: 3, speed: 700, 
@@ -617,7 +617,7 @@ const CONFIG = {
             type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 10,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
-            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
+            convergenceDistance: 375  // Reduced to match typical fish swimming distance (250-500 units)
         },
         '5x': { 
             multiplier: 5, cost: 5, speed: 750, 
@@ -626,7 +626,7 @@ const CONFIG = {
             type: 'chain', maxChains: 3, chainDecay: 0.5, chainRadius: 250,
             color: 0xffdd00, size: 12,  // Golden color for lightning
             cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
+            convergenceDistance: 375  // Reduced to match typical fish swimming distance (250-500 units)
         },
         '8x': { 
             multiplier: 8, cost: 8, speed: 600, 
