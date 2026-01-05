@@ -1,6 +1,6 @@
 {
-  "version": "2.0.0",
-  "description": "Fish GLB model manifest for 3D Fish Shooting game - R2 Cloud Models",
+  "version": "3.0.0",
+  "description": "Fish GLB model manifest for 3D Fish Shooting game - 20 species with R2 Cloud Models",
   "r2BaseUrl": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/",
   "constraints": {
     "maxFileSizeMB": 15,
@@ -9,133 +9,147 @@
   },
   "tiers": {
     "tier1": {
-      "name": "Common Fish",
+      "name": "Common Fish (Small Schooling)",
       "variants": [
-                {
-                  "id": "sardine_01",
-                  "form": "sardine",
-                  "url": "Sardine fish.glb",
-                  "scale": 0.08,
-                  "fallbackColor": "#87CEEB"
-                },
+        {
+          "id": "sardine_01",
+          "form": "sardine",
+          "url": "Sardine fish.glb",
+          "scale": 0.08,
+          "fallbackColor": "#87CEEB"
+        },
         {
           "id": "anchovy_01",
           "form": "anchovy",
-          "url": "/assets/fish/tier1/anchovy_01.glb",
-          "scale": 0.9,
+          "url": "Anchovy.glb",
+          "scale": 0.08,
           "fallbackColor": "#B0C4DE"
         },
         {
           "id": "clownfish_01",
           "form": "clownfish",
-          "url": "/assets/fish/tier1/clownfish_01.glb",
-          "scale": 1.0,
+          "url": "Clownfish.glb",
+          "scale": 0.10,
           "fallbackColor": "#FF6347"
-        }
-      ]
-    },
-    "tier2": {
-      "name": "Uncommon Fish",
-      "variants": [
-        {
-          "id": "angelfish_01",
-          "form": "angelfish",
-          "url": "/assets/fish/tier2/angelfish_01.glb",
-          "scale": 1.0,
-          "fallbackColor": "#FFD700"
-        },
-        {
-          "id": "butterflyfish_01",
-          "form": "butterflyfish",
-          "url": "/assets/fish/tier2/butterflyfish_01.glb",
-          "scale": 1.0,
-          "fallbackColor": "#FFFF00"
         },
         {
           "id": "damselfish_01",
           "form": "damselfish",
-          "url": "/assets/fish/tier2/damselfish_01.glb",
-          "scale": 1.0,
+          "url": "Damselfish.glb",
+          "scale": 0.10,
           "fallbackColor": "#4169E1"
         }
       ]
     },
-    "tier3": {
-      "name": "Rare Fish",
+    "tier2": {
+      "name": "Uncommon Fish (Small-Medium Reef)",
       "variants": [
         {
-          "id": "parrotfish_01",
-          "form": "parrotfish",
-          "url": "/assets/fish/tier3/parrotfish_01.glb",
-          "scale": 1.0,
-          "fallbackColor": "#32CD32"
+          "id": "angelfish_01",
+          "form": "angelfish",
+          "url": "Angelfish.glb",
+          "scale": 0.12,
+          "fallbackColor": "#FFD700"
         },
         {
           "id": "tang_01",
           "form": "tang",
-          "url": "/assets/fish/tier3/tang_01.glb",
-          "scale": 1.0,
+          "url": "Blue Tang.glb",
+          "scale": 0.12,
           "fallbackColor": "#1E90FF"
         },
-                {
-                  "id": "grouper_01",
-                  "form": "grouper",
-                  "url": "Grouper fish.glb",
-                  "scale": 0.15,
-                  "fallbackColor": "#8B4513"
-                }
+        {
+          "id": "lionfish_01",
+          "form": "lionfish",
+          "url": "lionfish.glb",
+          "scale": 0.12,
+          "fallbackColor": "#DC143C"
+        }
+      ]
+    },
+    "tier3": {
+      "name": "Rare Fish (Medium Reef)",
+      "variants": [
+        {
+          "id": "parrotfish_01",
+          "form": "parrotfish",
+          "url": "Parrotfish.glb",
+          "scale": 0.14,
+          "fallbackColor": "#32CD32"
+        },
+        {
+          "id": "pufferfish_01",
+          "form": "pufferfish",
+          "url": "Pufferfish.glb",
+          "scale": 0.14,
+          "fallbackColor": "#FFDAB9"
+        },
+        {
+          "id": "grouper_01",
+          "form": "grouper",
+          "url": "Grouper fish.glb",
+          "scale": 0.15,
+          "fallbackColor": "#8B4513"
+        }
       ]
     },
     "tier4": {
-      "name": "Epic Fish",
+      "name": "Epic Fish (Medium-Large Pelagic)",
       "variants": [
         {
           "id": "barracuda_01",
           "form": "barracuda",
-          "url": "/assets/fish/tier4/barracuda_01.glb",
-          "scale": 1.0,
+          "url": "Barracuda.glb",
+          "scale": 0.16,
           "fallbackColor": "#C0C0C0"
         },
-                {
-                  "id": "tuna_01",
-                  "form": "tuna",
-                  "url": "Yellowfin Tuna.glb",
-                  "scale": 0.12,
-                  "fallbackColor": "#4682B4"
-                },
         {
           "id": "dolphinfish_01",
           "form": "dolphinfish",
-          "url": "/assets/fish/tier4/dolphinfish_01.glb",
-          "scale": 1.0,
+          "url": "Mahi-Mahi.glb",
+          "scale": 0.16,
           "fallbackColor": "#00CED1"
+        },
+        {
+          "id": "flyingfish_01",
+          "form": "flyingFish",
+          "url": "Flying Fish.glb",
+          "scale": 0.14,
+          "fallbackColor": "#87CEEB"
         }
       ]
     },
     "tier5": {
-      "name": "Legendary Fish",
+      "name": "Legendary Fish (Large Predators)",
       "variants": [
-                {
-                  "id": "marlin_01",
-                  "form": "marlin",
-                  "url": "Marlin fish.glb",
-                  "scale": 0.18,
-                  "fallbackColor": "#000080"
-                },
-                {
-                  "id": "shark_01",
-                  "form": "shark",
-                  "url": "Great White Shark.glb",
-                  "scale": 0.22,
-                  "fallbackColor": "#708090"
-                },
-                {
-                  "id": "hammerhead_01",
-                  "form": "hammerhead",
-                  "url": "Hammerhead Shark.glb",
-                  "scale": 0.20,
-                  "fallbackColor": "#696969"
-                }
+        {
+          "id": "tuna_01",
+          "form": "tuna",
+          "url": "Yellowfin Tuna.glb",
+          "scale": 0.12,
+          "fallbackColor": "#4682B4"
+        },
+        {
+          "id": "marlin_01",
+          "form": "marlin",
+          "url": "Marlin fish.glb",
+          "scale": 0.18,
+          "fallbackColor": "#000080"
+        },
+        {
+          "id": "shark_01",
+          "form": "shark",
+          "url": "Great White Shark.glb",
+          "scale": 0.22,
+          "fallbackColor": "#708090"
+        },
+        {
+          "id": "hammerhead_01",
+          "form": "hammerhead",
+          "url": "Hammerhead Shark.glb",
+          "scale": 0.20,
+          "fallbackColor": "#696969"
+        }
       ]
     },
     "tier6": {
@@ -144,56 +158,35 @@
         {
           "id": "whale_01",
           "form": "whale",
-          "url": "/assets/fish/tier6/whale_01.glb",
-          "scale": 1.0,
+          "url": "Blue Whale.glb",
+          "scale": 0.30,
           "fallbackColor": "#1C1C1C"
+        },
+        {
+          "id": "killerwhale_01",
+          "form": "killerWhale",
+          "url": "Killer Whale.glb",
+          "scale": 0.28,
+          "fallbackColor": "#000000"
         },
         {
           "id": "mantaray_01",
           "form": "mantaRay",
-          "url": "/assets/fish/tier6/mantaray_01.glb",
-          "scale": 1.0,
+          "url": "Manta ray.glb",
+          "scale": 0.25,
           "fallbackColor": "#2F4F4F"
         }
       ]
     },
     "special": {
-      "name": "Special Ability Fish",
+      "name": "Special Form Fish",
       "variants": [
         {
-          "id": "goldfish_01",
-          "form": "goldfish",
-          "url": "/assets/fish/special/goldfish_01.glb",
-          "scale": 1.0,
+          "id": "seahorse_01",
+          "form": "seahorse",
+          "url": "Seahorse.glb",
+          "scale": 0.12,
           "fallbackColor": "#FFD700"
-        },
-        {
-          "id": "pufferfish_01",
-          "form": "pufferfish",
-          "url": "/assets/fish/special/pufferfish_01.glb",
-          "scale": 1.0,
-          "fallbackColor": "#FFDAB9"
-        },
-        {
-          "id": "turtle_01",
-          "form": "turtle",
-          "url": "/assets/fish/special/turtle_01.glb",
-          "scale": 1.0,
-          "fallbackColor": "#228B22"
-        },
-        {
-          "id": "eel_01",
-          "form": "eel",
-          "url": "/assets/fish/special/eel_01.glb",
-          "scale": 1.0,
-          "fallbackColor": "#4B0082"
-        },
-        {
-          "id": "crab_01",
-          "form": "crab",
-          "url": "/assets/fish/special/crab_01.glb",
-          "scale": 1.0,
-          "fallbackColor": "#FF4500"
         }
       ]
     }
