@@ -47,30 +47,43 @@ function loadVideoBackground() {
     if (!VIDEO_BACKGROUND_CONFIG.enabled) return;
     
     // Debug marker - unique build ID to confirm new code is running
-    const BUILD_ID = 'VIDEO_BG_v2_' + Date.now();
+    const BUILD_ID = 'VIDEO_BG_v3_' + Date.now();
     console.log('[VIDEO_BG] Build ID:', BUILD_ID);
     console.log('[VIDEO_BG] Starting video background initialization...');
     
     // Create HTML5 video element
     const video = document.createElement('video');
+    
+    // IMPORTANT: Set all attributes BEFORE setting src
     video.crossOrigin = 'anonymous';
     video.muted = true;           // Required for autoplay
     video.loop = false;           // We handle looping manually with Ping-Pong
     video.playsInline = true;     // Required for iOS
     video.preload = 'auto';
+    video.autoplay = true;        // Try to autoplay immediately
+    
+    // Style video element (hidden but in DOM for better browser compatibility)
+    video.style.position = 'absolute';
+    video.style.top = '-9999px';
+    video.style.left = '-9999px';
+    video.style.width = '1px';
+    video.style.height = '1px';
+    video.style.opacity = '0';
+    video.style.pointerEvents = 'none';
     
     // Store reference for Ping-Pong control
     videoBackgroundElement = video;
     videoPlaybackDirection = 1;   // Start playing forward
     
-    // Add cache-bust to ensure fresh load
-    const cacheBust = '?v=' + Date.now();
-    video.src = VIDEO_BACKGROUND_CONFIG.videoUrl + cacheBust;
-    console.log('[VIDEO_BG] Loading video from:', VIDEO_BACKGROUND_CONFIG.videoUrl);
-    
-    // Handle video load success
-    video.addEventListener('loadeddata', () => {
-        console.log('[VIDEO_BG] Video loaded successfully');
+    // Helper function to create sky-sphere once video is ready
+    function createVideoSkySphere() {
+        if (videoBackgroundSkySphere) {
+            console.log('[VIDEO_BG] Sky-sphere already created, skipping');
+            return;
+        }
+        
+        console.log('[VIDEO_BG] Creating sky-sphere...');
+        console.log('[VIDEO_BG] Video state: readyState=' + video.readyState + ', networkState=' + video.networkState);
         console.log('[VIDEO_BG] Duration:', video.duration, 'seconds');
         console.log('[VIDEO_BG] Resolution:', video.videoWidth + 'x' + video.videoHeight);
         
@@ -109,44 +122,71 @@ function loadVideoBackground() {
         
         scene.add(videoBackgroundSkySphere);
         
-        // Set fallback background color
-        scene.background = new THREE.Color(VIDEO_BACKGROUND_CONFIG.fallbackColor);
+        // Clear scene background so sky-sphere is visible
+        scene.background = null;
         
-        // Update fog
-        scene.fog = new THREE.Fog(
-            VIDEO_BACKGROUND_CONFIG.fogColor,
-            VIDEO_BACKGROUND_CONFIG.fogNear,
-            VIDEO_BACKGROUND_CONFIG.fogFar
-        );
-        
-        console.log('[VIDEO_BG] Sky-sphere created with tilt:', config.tiltX * (180/Math.PI), 'degrees');
-        
-        // Start video playback
-        video.play().then(() => {
-            console.log('[VIDEO_BG] Video playback started (forward)');
-        }).catch(err => {
-            console.warn('[VIDEO_BG] Autoplay failed, will retry on user interaction:', err);
-            // Add click listener to start video on user interaction
-            const startVideo = () => {
-                video.play();
-                document.removeEventListener('click', startVideo);
-                document.removeEventListener('touchstart', startVideo);
-            };
-            document.addEventListener('click', startVideo);
-            document.addEventListener('touchstart', startVideo);
-        });
+        console.log('[VIDEO_BG] Sky-sphere created and added to scene');
+        console.log('[VIDEO_BG] Sky-sphere tilt:', config.tiltX * (180/Math.PI), 'degrees');
+    }
+    
+    // IMPORTANT: Register ALL event listeners BEFORE setting src
+    
+    // Debug: Log all video events for troubleshooting
+    video.addEventListener('loadstart', () => {
+        console.log('[VIDEO_BG] Event: loadstart - video loading started');
+    });
+    
+    video.addEventListener('loadedmetadata', () => {
+        console.log('[VIDEO_BG] Event: loadedmetadata - metadata loaded');
+        console.log('[VIDEO_BG] Duration:', video.duration, 'Resolution:', video.videoWidth + 'x' + video.videoHeight);
+    });
+    
+    video.addEventListener('loadeddata', () => {
+        console.log('[VIDEO_BG] Event: loadeddata - first frame available');
+        createVideoSkySphere();
+    });
+    
+    video.addEventListener('canplay', () => {
+        console.log('[VIDEO_BG] Event: canplay - video can start playing');
+        // Also try to create sky-sphere here as fallback
+        createVideoSkySphere();
+        // Try to play if not already playing
+        if (video.paused) {
+            video.play().catch(err => {
+                console.warn('[VIDEO_BG] Play on canplay failed:', err.message);
+            });
+        }
+    });
+    
+    video.addEventListener('canplaythrough', () => {
+        console.log('[VIDEO_BG] Event: canplaythrough - video can play without buffering');
+    });
+    
+    video.addEventListener('playing', () => {
+        console.log('[VIDEO_BG] Event: playing - video is now playing');
+    });
+    
+    video.addEventListener('waiting', () => {
+        console.log('[VIDEO_BG] Event: waiting - video is buffering');
+    });
+    
+    video.addEventListener('stalled', () => {
+        console.warn('[VIDEO_BG] Event: stalled - video download stalled');
+    });
+    
+    video.addEventListener('suspend', () => {
+        console.log('[VIDEO_BG] Event: suspend - video loading suspended');
     });
     
     // Handle video error
     video.addEventListener('error', (e) => {
-        console.error('[VIDEO_BG] Failed to load video:', e);
+        const errorCode = video.error ? video.error.code : 'unknown';
+        const errorMessage = video.error ? video.error.message : 'unknown';
+        console.error('[VIDEO_BG] Event: error - Failed to load video');
+        console.error('[VIDEO_BG] Error code:', errorCode, 'Message:', errorMessage);
+        console.error('[VIDEO_BG] Video src:', video.src);
         console.log('[VIDEO_BG] Using fallback solid color');
         scene.background = new THREE.Color(VIDEO_BACKGROUND_CONFIG.fallbackColor);
-        scene.fog = new THREE.Fog(
-            VIDEO_BACKGROUND_CONFIG.fogColor,
-            VIDEO_BACKGROUND_CONFIG.fogNear,
-            VIDEO_BACKGROUND_CONFIG.fogFar
-        );
     });
     
     // Ping-Pong loop: when video ends, reverse direction
@@ -160,8 +200,52 @@ function loadVideoBackground() {
         }
     });
     
-    // Load the video
+    // NOW set the src (after all listeners are registered)
+    const cacheBust = '?v=' + Date.now();
+    video.src = VIDEO_BACKGROUND_CONFIG.videoUrl + cacheBust;
+    console.log('[VIDEO_BG] Video src set:', VIDEO_BACKGROUND_CONFIG.videoUrl);
+    
+    // Append video to DOM (hidden) - some browsers need this for proper loading
+    document.body.appendChild(video);
+    console.log('[VIDEO_BG] Video element appended to DOM');
+    
+    // Explicitly call load() to start loading
     video.load();
+    console.log('[VIDEO_BG] video.load() called');
+    
+    // Try to play immediately (muted autoplay should work)
+    video.play().then(() => {
+        console.log('[VIDEO_BG] Initial play() succeeded');
+    }).catch(err => {
+        console.warn('[VIDEO_BG] Initial play() failed:', err.message);
+        // Add click listener to start video on user interaction
+        const startVideo = () => {
+            video.play().then(() => {
+                console.log('[VIDEO_BG] Play on user interaction succeeded');
+            }).catch(e => {
+                console.error('[VIDEO_BG] Play on user interaction failed:', e.message);
+            });
+            document.removeEventListener('click', startVideo);
+            document.removeEventListener('touchstart', startVideo);
+        };
+        document.addEventListener('click', startVideo);
+        document.addEventListener('touchstart', startVideo);
+    });
+    
+    // Periodic status check for debugging (first 10 seconds)
+    let checkCount = 0;
+    const statusInterval = setInterval(() => {
+        checkCount++;
+        console.log('[VIDEO_BG] Status check #' + checkCount + ': readyState=' + video.readyState + 
+                    ', networkState=' + video.networkState + 
+                    ', paused=' + video.paused + 
+                    ', currentTime=' + video.currentTime.toFixed(2) +
+                    ', skySphere=' + (videoBackgroundSkySphere ? 'created' : 'pending'));
+        if (checkCount >= 10 || videoBackgroundSkySphere) {
+            clearInterval(statusInterval);
+            console.log('[VIDEO_BG] Status checks complete');
+        }
+    }, 1000);
 }
 
 // Update Ping-Pong video playback (called from animate loop)
