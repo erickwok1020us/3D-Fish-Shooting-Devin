@@ -915,13 +915,21 @@ function updatePerfDisplay() {
     const textures = renderer ? renderer.info.memory.textures : 0;
     const geometries = renderer ? renderer.info.memory.geometries : 0;
     
-    // Count fish with animations
+    // Count fish with animations (check for glbAction which is the actual animation action)
     let fishWithAnimations = 0;
+    let fishWithMixers = 0;
     for (const fish of activeFish) {
-        if (fish && fish.mixer && fish.mixer._actions && fish.mixer._actions.length > 0) {
-            fishWithAnimations++;
+        if (fish && fish.mixer) {
+            fishWithMixers++;
+            // Check for glbAction (the actual swimming animation) instead of private _actions
+            if (fish.glbAction) {
+                fishWithAnimations++;
+            }
         }
     }
+    
+    // Get max fish count from FISH_SPAWN_CONFIG (the actual runtime limit)
+    const maxFishCount = typeof FISH_SPAWN_CONFIG !== 'undefined' ? FISH_SPAWN_CONFIG.maxCount : '?';
     
     // Color code FPS
     let fpsColor = '#00ff00'; // Green for good
@@ -947,7 +955,8 @@ function updatePerfDisplay() {
         <div>Textures: ${textures}</div>
         <div>Geometries: ${geometries}</div>
         <div style="margin-top: 6px; color: #888;">--- CPU ---</div>
-        <div>Fish: ${activeFish.length} / ${CONFIG.maxFish}</div>
+        <div>Fish: ${activeFish.length} / ${maxFishCount}</div>
+        <div>GLB Mixers: ${fishWithMixers}</div>
         <div>Animated: ${fishWithAnimations}</div>
         <div>Bullets: ${activeBullets.length}</div>
         <div>Particles: ${activeParticles.length}</div>
