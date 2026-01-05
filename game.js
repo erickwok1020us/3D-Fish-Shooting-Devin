@@ -371,6 +371,17 @@ const CONFIG = {
             boidsStrength: 0.1,  // Almost no schooling, mother-calf only
             maxTurnRate: 0.3    // Very slow turning - majestic cruise
         },
+        // 1b. Killer Whale (Orca) - Apex predator, pack hunter
+        // ECOLOGY: Pods of 5-30, highly intelligent coordinated hunters
+        // SWIMMING: Fast, agile, coordinated pack attacks
+        killerWhale: { 
+            hp: 700, speedMin: 30, speedMax: 55, reward: 450, size: 120, 
+            color: 0x111111, secondaryColor: 0xffffff, count: 1, 
+            pattern: 'burstAttack', schoolSize: [2, 4], form: 'killerWhale',
+            category: 'largePredator',
+            boidsStrength: 1.8,  // Strong pod coordination
+            maxTurnRate: 0.6    // More agile than blue whale
+        },
         // 2. Great White Shark - Apex predator, torpedo-shaped
         // ECOLOGY: Strictly solitary hunters, burst speeds up to 56 km/h
         // SWIMMING: Slow patrol + explosive burst attacks
@@ -470,15 +481,15 @@ const CONFIG = {
             category: 'reefFish',
             boidsStrength: 0.8  // Paired/small group
         },
-        // 11. Butterflyfish - Small flat body, paired swimmers
-        // ECOLOGY: Strictly monogamous pairs, agile reef navigation
-        // SWIMMING: Quick, agile weaving through coral
-        butterflyfish: { 
-            hp: 70, speedMin: 35, speedMax: 65, reward: 90, size: 22, 
-            color: 0xffffaa, secondaryColor: 0x222222, count: 10, 
-            pattern: 'agileWeave', schoolSize: [2, 2], form: 'butterflyfish',
+        // 11. Lionfish - Venomous spines, striking appearance
+        // ECOLOGY: Solitary ambush predators, slow deliberate movements
+        // SWIMMING: Slow, deliberate, hovering near reef structures
+        lionfish: { 
+            hp: 80, speedMin: 20, speedMax: 45, reward: 100, size: 28, 
+            color: 0xcc3333, secondaryColor: 0xffffff, count: 8, 
+            pattern: 'ambush', schoolSize: [1, 2], form: 'lionfish',
             category: 'reefFish',
-            boidsStrength: 1.5  // Tight pair bonding
+            boidsStrength: 0.2  // Mostly solitary
         },
         // 12. Blue Tang - Oval flat body, schooling herbivore
         // ECOLOGY: Schools of 5-20 for grazing, coordinated movements
@@ -577,47 +588,9 @@ const CONFIG = {
             boidsStrength: 2.0  // Strong schooling for predator evasion
         },
         
-        // ==================== SPECIAL ABILITY FISH (Phase 2) ====================
-        // 21. Bomb Crab - Explodes when killed, damaging nearby fish
-        bombCrab: { 
-            hp: 150, speedMin: 25, speedMax: 45, reward: 200, size: 35, 
-            color: 0xff4400, secondaryColor: 0xcc2200, count: 2, 
-            pattern: 'slowRotation', schoolSize: [1, 1], form: 'crab',
-            category: 'abilityFish',
-            ability: 'bomb', // Explodes on death, damages nearby fish
-            abilityRadius: 200, // Explosion radius
-            abilityDamage: 300 // Damage to nearby fish
-        },
-        // 22. Electric Eel - Chain lightning on death
-        electricEel: { 
-            hp: 180, speedMin: 40, speedMax: 70, reward: 250, size: 50, 
-            color: 0x00ffff, secondaryColor: 0xffff00, count: 2, 
-            pattern: 'sShape', schoolSize: [1, 2], form: 'eel',
-            category: 'abilityFish',
-            ability: 'lightning', // Chain lightning on death
-            abilityChains: 4, // Number of chain jumps
-            abilityDamage: 150, // Damage per chain
-            abilityDecay: 0.6 // Damage reduction per jump
-        },
-        // 23. Shield Turtle - Has protective shield that must be broken first
-        shieldTurtle: { 
-            hp: 100, speedMin: 15, speedMax: 30, reward: 180, size: 40, 
-            color: 0x228844, secondaryColor: 0x44aa66, count: 3, 
-            pattern: 'cruise', schoolSize: [1, 2], form: 'turtle',
-            category: 'abilityFish',
-            ability: 'shield', // Has protective shield
-            shieldHP: 200, // Shield HP (must break shield first)
-            shieldColor: 0x00ffff // Cyan shield bubble
-        },
-        // 24. Gold Fish - Bonus coins on death
-        goldFish: { 
-            hp: 60, speedMin: 60, speedMax: 100, reward: 500, size: 25, 
-            color: 0xffdd00, secondaryColor: 0xffaa00, count: 1, 
-            pattern: 'agileWeave', schoolSize: [1, 1], form: 'goldfish',
-            category: 'abilityFish',
-            ability: 'bonus', // Extra coin burst on death
-            bonusCoins: 10 // Number of bonus coins
-        }
+        // ==================== SPECIAL ABILITY FISH (Phase 2 - Reserved for future GLB models) ====================
+        // NOTE: Ability fish (bombCrab, electricEel, shieldTurtle, goldFish) removed until GLB models are available
+        // These can be re-added when corresponding GLB models are uploaded to R2
     },
     
     // Weapons (multiplier-based with unique mechanics)
@@ -804,7 +777,7 @@ function updateGlbDebugDisplay() {
     // NEW: Calculate clearer metrics
     // Coverage: % of fish forms that have a GLB model configured (6/20 = 30%)
     const glbFormsAvailable = glbLoaderState.formToVariant ? glbLoaderState.formToVariant.size : 0;
-    const totalFishForms = 20; // CONFIG.fishTiers has 20 species
+    const totalFishForms = 21; // CONFIG.fishTiers has 21 species (20 base + killerWhale)
     const coveragePercent = ((glbFormsAvailable / totalFishForms) * 100).toFixed(0);
     
     // Eligible success rate: % of eligible attempts that succeeded
@@ -3236,6 +3209,16 @@ const BOSS_FISH_TYPES = [
         speedMultiplier: 0.8,
         glowColor: 0x4488ff,
         description: 'Massive blue whale!'
+    },
+    {
+        name: 'ALPHA ORCA',
+        baseSpecies: 'killerWhale',
+        sizeMultiplier: 1.8,  // GIANT sized
+        hpMultiplier: 4,
+        rewardMultiplier: 4,
+        speedMultiplier: 1.3,
+        glowColor: 0x000000,
+        description: 'Deadly pack leader!'
     },
     {
         name: 'MEGA SHARK',
