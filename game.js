@@ -897,7 +897,8 @@ function updatePerfDisplay() {
     let fishWithAnimations = 0;
     let fishWithMixers = 0;
     for (const fish of activeFish) {
-        if (fish && fish.mixer) {
+        // FIX: Check fish.glbMixer (not fish.mixer) - this was causing GLB Mixers to always show 0
+        if (fish && fish.glbMixer) {
             fishWithMixers++;
             // Check for glbAction (the actual swimming animation) instead of private _actions
             if (fish.glbAction) {
@@ -1387,8 +1388,53 @@ const bulletTempVectors = {
     velocityScaled: new THREE.Vector3(),
     fishToBullet: new THREE.Vector3(),
     hitPos: new THREE.Vector3(),
-    bulletDir: new THREE.Vector3()
+    bulletDir: new THREE.Vector3(),
+    // Segment-sphere collision temp vectors
+    segmentDir: new THREE.Vector3(),
+    toCenter: new THREE.Vector3(),
+    closestPoint: new THREE.Vector3()
 };
+
+// COLLISION OPTIMIZATION: Segment-sphere intersection for accurate bullet collision
+// This replaces the old point-sphere + 100 buffer approach which caused inaccurate hitboxes
+// Returns: { hit: boolean, t: number (0-1 along segment), point: Vector3 (closest point) }
+function segmentIntersectsSphere(p0, p1, center, radius, outPoint) {
+    // Segment direction vector: d = p1 - p0
+    bulletTempVectors.segmentDir.subVectors(p1, p0);
+    const segLengthSq = bulletTempVectors.segmentDir.lengthSq();
+    
+    // Handle degenerate case (bullet didn't move)
+    if (segLengthSq < 0.0001) {
+        const distSq = p0.distanceToSquared(center);
+        if (distSq <= radius * radius) {
+            if (outPoint) outPoint.copy(p0);
+            return { hit: true, t: 0 };
+        }
+        return { hit: false, t: -1 };
+    }
+    
+    // Vector from segment start to sphere center: w = center - p0
+    bulletTempVectors.toCenter.subVectors(center, p0);
+    
+    // Project w onto segment direction to find closest point parameter t
+    // t = dot(w, d) / dot(d, d), clamped to [0, 1]
+    const t = Math.max(0, Math.min(1, 
+        bulletTempVectors.toCenter.dot(bulletTempVectors.segmentDir) / segLengthSq
+    ));
+    
+    // Calculate closest point on segment: Q = p0 + t * d
+    bulletTempVectors.closestPoint.copy(p0).addScaledVector(bulletTempVectors.segmentDir, t);
+    
+    // Check if closest point is within sphere radius
+    const distSq = bulletTempVectors.closestPoint.distanceToSquared(center);
+    
+    if (distSq <= radius * radius) {
+        if (outPoint) outPoint.copy(bulletTempVectors.closestPoint);
+        return { hit: true, t: t };
+    }
+    
+    return { hit: false, t: -1 };
+}
 
 // PERFORMANCE: Temp vectors for fireBullet - reused to avoid per-shot allocations
 const fireBulletTempVectors = {
@@ -9057,6 +9103,21 @@ class Fish {
         // from previous lifecycle (fish recycling/pooling)
         this.loadToken = ++fishLoadTokenCounter;
         
+        // FIX: Ensure this.speed is valid for current config (important for pooled fish reuse)
+        // When a fish is recycled (e.g., Boss fish reusing a sardine from pool), this.speed
+        // may still have the old fish's value. This causes sharks to move very slowly if they
+        // inherited a small fish's speed value.
+        const speedMin = this.config.speedMin;
+        const speedMax = this.config.speedMax;
+        if (this.speed < speedMin || this.speed > speedMax) {
+            this.speed = speedMin + Math.random() * (speedMax - speedMin);
+        }
+        
+        // FIX: Reset patternState on spawn to prevent stuck phases from previous lifecycle
+        // This is critical for burstAttack fish (sharks) - if they were in 'stop' phase when
+        // recycled, they would stay nearly motionless because min-speed enforcement skips 'stop'
+        this.patternState = null;
+        
         // Random initial velocity
         this.velocity.set(
             (Math.random() - 0.5) * this.speed,
@@ -10611,6 +10672,10 @@ class Bullet {
         this.glbModel = null;
         this.useGLB = false;
         
+        // COLLISION OPTIMIZATION: Store last position for segment-sphere collision
+        // This enables accurate swept collision detection to prevent tunneling
+        this.lastPosition = new THREE.Vector3();
+        
         this.createMesh();
     }
     
@@ -10689,6 +10754,8 @@ class Bullet {
         this.isGrenade = (weapon.type === 'aoe' || weapon.type === 'superAoe');
         
         this.group.position.copy(origin);
+        // COLLISION OPTIMIZATION: Initialize lastPosition for segment-sphere collision
+        this.lastPosition.copy(origin);
         this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
         // Issue #4: Add upward arc for grenades
@@ -10756,6 +10823,9 @@ class Bullet {
             this.group.lookAt(bulletTempVectors.lookTarget);
         }
         
+        // COLLISION OPTIMIZATION: Store last position before moving for segment-sphere collision
+        this.lastPosition.copy(this.group.position);
+        
         // PERFORMANCE: Use temp vector instead of clone() for position update
         bulletTempVectors.velocityScaled.copy(this.velocity).multiplyScalar(deltaTime);
         this.group.position.add(bulletTempVectors.velocityScaled);
@@ -10778,6 +10848,7 @@ class Bullet {
     checkFishCollision() {
         const weapon = CONFIG.weapons[this.weaponKey];
         const bulletPos = this.group.position;
+        const lastPos = this.lastPosition;
         
         // PERFORMANCE: Use spatial hash to only check nearby fish
         // This reduces O(bullets * fish) to O(bullets * k) where k is nearby fish count
@@ -10786,30 +10857,31 @@ class Bullet {
         for (const fish of nearbyFish) {
             if (!fish.isActive) continue;
             
-            // PERFORMANCE: Use squared distance to avoid sqrt
             const fishPos = fish.group.position;
-            const dx = bulletPos.x - fishPos.x;
-            const dy = bulletPos.y - fishPos.y;
-            const dz = bulletPos.z - fishPos.z;
-            const distSq = dx * dx + dy * dy + dz * dz;
-            const threshold = fish.boundingRadius + 100;
-            const thresholdSq = threshold * threshold;
+            const fishRadius = fish.boundingRadius;
             
-            if (distSq < thresholdSq) {
+            // COLLISION OPTIMIZATION: Use segment-sphere collision for accurate hit detection
+            // This replaces the old point-sphere + 100 buffer approach which caused:
+            // - Small fish (size=10) to have 13x larger hitbox than intended
+            // - Large fish (size=100) to have 2.25x larger hitbox than intended
+            // Segment-sphere collision naturally handles tunneling at any FPS
+            const collision = segmentIntersectsSphere(lastPos, bulletPos, fishPos, fishRadius, bulletTempVectors.hitPos);
+            
+            if (collision.hit) {
                 // PERFORMANCE: Use temp vectors instead of clone() calls
                 bulletTempVectors.bulletDir.copy(this.velocity).normalize();
                 
                 // Calculate hit position on fish's surface for accurate hit effect placement
                 if (weapon.type === 'projectile' || weapon.type === 'spread') {
-                    // 1x/3x: Calculate impact point on fish's surface
-                    bulletTempVectors.fishToBullet.copy(bulletPos).sub(fishPos).normalize();
+                    // 1x/3x: Use the collision point from segment-sphere intersection
+                    // hitPos is already set by segmentIntersectsSphere
+                    // Adjust to be on fish surface for better visual effect
+                    bulletTempVectors.fishToBullet.copy(bulletTempVectors.hitPos).sub(fishPos).normalize();
                     bulletTempVectors.hitPos.copy(fishPos).add(
-                        bulletTempVectors.fishToBullet.multiplyScalar(fish.boundingRadius * 0.8)
+                        bulletTempVectors.fishToBullet.multiplyScalar(fishRadius * 0.8)
                     );
-                } else {
-                    // 5x/8x: Use bullet position (explosion effects are more forgiving)
-                    bulletTempVectors.hitPos.copy(bulletPos);
                 }
+                // For 5x/8x: hitPos from segmentIntersectsSphere is already good (explosion effects)
                 
                 // Handle different weapon types
                 if (weapon.type === 'chain') {
