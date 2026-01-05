@@ -46,6 +46,11 @@ let underwaterParticles = [];
 function loadVideoBackground() {
     if (!VIDEO_BACKGROUND_CONFIG.enabled) return;
     
+    // Debug marker - unique build ID to confirm new code is running
+    const BUILD_ID = 'VIDEO_BG_v2_' + Date.now();
+    console.log('[VIDEO_BG] Build ID:', BUILD_ID);
+    console.log('[VIDEO_BG] Starting video background initialization...');
+    
     // Create HTML5 video element
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
@@ -162,11 +167,11 @@ function loadVideoBackground() {
 // Update Ping-Pong video playback (called from animate loop)
 // Manually controls reverse playback since HTML5 video doesn't support negative playbackRate well
 function updateVideoBackgroundPingPong(deltaTime) {
-    if (!videoBackgroundElement || videoBackgroundElement.paused) return;
+    if (!videoBackgroundElement) return;
     
     const video = videoBackgroundElement;
     
-    // Handle reverse playback manually
+    // Handle reverse playback manually (video is paused during reverse)
     if (videoPlaybackDirection === -1) {
         // Manually decrement currentTime for reverse playback
         // Use deltaTime to maintain consistent speed
