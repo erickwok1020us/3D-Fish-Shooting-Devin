@@ -9597,11 +9597,55 @@ class Fish {
                 break;
                 
             case 'sShape':
-                // S-shaped swimming (hammerhead)
-                // FIX: Reduced amplitude from 30 to 12 for steadier swimming
-                // The turn rate limiter will further smooth this out
-                const sWave = Math.sin(time * 1.5 + this.patternState.waveOffset) * 12;
-                this.acceleration.z += sWave;
+                // S-shaped swimming with patrol behavior (hammerhead)
+                // Hammerheads sweep their heads side-to-side while patrolling
+                // Initialize patrol state if needed
+                if (!this.patternState.patrolTimer) {
+                    this.patternState.patrolTimer = 3 + Math.random() * 4;
+                    this.patternState.patrolPhase = 'cruise';
+                    this.patternState.headSweepPhase = 0;
+                }
+                
+                this.patternState.patrolTimer -= deltaTime;
+                this.patternState.headSweepPhase += deltaTime * 2.5;
+                
+                // Head sweep motion - distinctive hammerhead behavior
+                const headSweep = Math.sin(this.patternState.headSweepPhase + this.patternState.waveOffset) * 18;
+                this.acceleration.z += headSweep;
+                
+                if (this.patternState.patrolPhase === 'cruise') {
+                    // Steady forward cruising with slight variations
+                    const currentSpeed = this.velocity.length();
+                    const targetSpeed = (this.config.speedMin + this.config.speedMax) * 0.4;
+                    
+                    if (currentSpeed < targetSpeed) {
+                        // Maintain forward momentum
+                        if (currentSpeed > 0.1) {
+                            this.acceleration.x += (this.velocity.x / currentSpeed) * 25;
+                            this.acceleration.z += (this.velocity.z / currentSpeed) * 25;
+                        } else {
+                            const angle = Math.random() * Math.PI * 2;
+                            this.acceleration.x += Math.cos(angle) * 25;
+                            this.acceleration.z += Math.sin(angle) * 25;
+                        }
+                    }
+                    
+                    // Occasional direction change during patrol
+                    if (this.patternState.patrolTimer <= 0) {
+                        this.patternState.patrolPhase = 'turn';
+                        this.patternState.patrolTimer = 0.8 + Math.random() * 0.5;
+                        // Pick new patrol direction
+                        this.patternState.turnDirection = (Math.random() - 0.5) * 120;
+                    }
+                } else if (this.patternState.patrolPhase === 'turn') {
+                    // Turning to new patrol direction
+                    this.acceleration.x += this.patternState.turnDirection * 0.8;
+                    
+                    if (this.patternState.patrolTimer <= 0) {
+                        this.patternState.patrolPhase = 'cruise';
+                        this.patternState.patrolTimer = 4 + Math.random() * 5;
+                    }
+                }
                 break;
                 
             case 'synchronizedFast':
@@ -9620,22 +9664,60 @@ class Fish {
                 break;
                 
             case 'ambush':
-                // Still waiting + explosive sprints (barracuda)
+                // Slow cruise + explosive strike (barracuda)
+                // Barracudas cruise slowly while scanning, then strike at prey
+                // Initialize ambush state if needed
+                if (!this.patternState.ambushPhase) {
+                    this.patternState.ambushPhase = 'cruise';
+                    this.patternState.burstTimer = 3 + Math.random() * 5;
+                    this.patternState.cruiseDirection = Math.random() * Math.PI * 2;
+                }
+                
                 this.patternState.burstTimer -= deltaTime;
-                if (this.patternState.phase === 'normal') {
-                    // Almost stationary
-                    this.velocity.multiplyScalar(0.95);
-                    // FIX: Use time-based probability (~0.5/sec)
-                    if (this.patternState.burstTimer <= 0 && timeBasedRandom(0.5)) {
-                        this.patternState.phase = 'burst';
-                        this.patternState.burstTimer = 0.3 + Math.random() * 0.5;
-                        this.acceleration.x += (Math.random() - 0.5) * 300;
-                        this.acceleration.z += (Math.random() - 0.5) * 300;
+                
+                if (this.patternState.ambushPhase === 'cruise') {
+                    // Slow, deliberate cruising - NOT stationary
+                    const currentSpeed = this.velocity.length();
+                    const cruiseSpeed = this.config.speedMin * 1.5; // Slow but moving
+                    
+                    if (currentSpeed < cruiseSpeed) {
+                        // Maintain slow forward movement
+                        this.acceleration.x += Math.cos(this.patternState.cruiseDirection) * 20;
+                        this.acceleration.z += Math.sin(this.patternState.cruiseDirection) * 20;
+                    } else if (currentSpeed > cruiseSpeed * 2) {
+                        // Slow down if too fast (after burst)
+                        this.velocity.multiplyScalar(0.98);
                     }
-                } else {
+                    
+                    // Occasional slight direction adjustment while cruising
+                    if (timeBasedRandom(0.3)) {
+                        this.patternState.cruiseDirection += (Math.random() - 0.5) * 0.5;
+                    }
+                    
+                    // Trigger strike
                     if (this.patternState.burstTimer <= 0) {
-                        this.patternState.phase = 'normal';
-                        this.patternState.burstTimer = 2 + Math.random() * 4;
+                        this.patternState.ambushPhase = 'strike';
+                        this.patternState.burstTimer = 0.4 + Math.random() * 0.4;
+                        // Explosive forward strike in current direction
+                        const strikeAngle = this.patternState.cruiseDirection + (Math.random() - 0.5) * 0.8;
+                        this.acceleration.x += Math.cos(strikeAngle) * 350;
+                        this.acceleration.z += Math.sin(strikeAngle) * 350;
+                    }
+                } else if (this.patternState.ambushPhase === 'strike') {
+                    // During strike - maintain high speed
+                    if (this.patternState.burstTimer <= 0) {
+                        this.patternState.ambushPhase = 'recover';
+                        this.patternState.burstTimer = 1 + Math.random() * 1.5;
+                    }
+                } else if (this.patternState.ambushPhase === 'recover') {
+                    // Slow down after strike, prepare for next cruise
+                    this.velocity.multiplyScalar(0.96);
+                    
+                    if (this.patternState.burstTimer <= 0) {
+                        this.patternState.ambushPhase = 'cruise';
+                        this.patternState.burstTimer = 4 + Math.random() * 6;
+                        // Pick new cruise direction
+                        this.patternState.cruiseDirection = Math.random() * Math.PI * 2;
                     }
                 }
                 break;
