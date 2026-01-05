@@ -703,7 +703,7 @@ const gameState = {
     autoPanDirection: 1,  // 1 = right, -1 = left
     autoPanInterval: 5.0,  // Pan every 5 seconds
     // Boss Fish Event System (Issue #12)
-    bossSpawnTimer: 60,  // Boss spawns every 60 seconds exactly
+    bossSpawnTimer: 45,  // Boss spawns every 45 seconds exactly
     activeBoss: null,  // Currently active boss fish
     bossCountdown: 0,  // Countdown timer for boss event
     bossActive: false,  // Whether a boss event is currently active
@@ -1314,8 +1314,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.5,
             hitEffectScale: 1.0,
             muzzleOffset: new THREE.Vector3(0, 25, 60),
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
@@ -1331,8 +1332,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.6,
             hitEffectScale: 1.2,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
@@ -1347,8 +1349,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.7,
             hitEffectScale: 1.5,
             muzzleOffset: new THREE.Vector3(0, 25, 70),
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 200,
             fpsCameraUpOffset: 70
@@ -9620,52 +9623,73 @@ class Fish {
                 
             case 'sShape':
                 // S-shaped swimming with patrol behavior (hammerhead)
-                // Hammerheads sweep their heads side-to-side while patrolling
+                // IMPROVED: More visible patrol with direction-based movement
                 // Initialize patrol state if needed
                 if (!this.patternState.patrolTimer) {
-                    this.patternState.patrolTimer = 3 + Math.random() * 4;
+                    this.patternState.patrolTimer = 2 + Math.random() * 3;
                     this.patternState.patrolPhase = 'cruise';
                     this.patternState.headSweepPhase = 0;
+                    // Initialize patrol direction angle (radians)
+                    this.patternState.patrolAngle = Math.random() * Math.PI * 2;
                 }
                 
                 this.patternState.patrolTimer -= deltaTime;
-                this.patternState.headSweepPhase += deltaTime * 2.5;
+                this.patternState.headSweepPhase += deltaTime * 3.0;
                 
-                // Head sweep motion - distinctive hammerhead behavior
-                const headSweep = Math.sin(this.patternState.headSweepPhase + this.patternState.waveOffset) * 18;
-                this.acceleration.z += headSweep;
+                // Head sweep motion - distinctive hammerhead behavior (increased amplitude)
+                const headSweep = Math.sin(this.patternState.headSweepPhase + this.patternState.waveOffset) * 25;
+                
+                // IMPROVED: Use patrol angle for consistent directional movement
+                const patrolSpeed = (this.config.speedMin + this.config.speedMax) * 0.5;
+                const currentSpeed = this.velocity.length();
+                
+                // Always apply forward thrust in patrol direction
+                const thrustStrength = currentSpeed < patrolSpeed ? 35 : 15;
+                this.acceleration.x += Math.cos(this.patternState.patrolAngle) * thrustStrength;
+                this.acceleration.z += Math.sin(this.patternState.patrolAngle) * thrustStrength;
+                
+                // Add perpendicular head sweep for S-shape motion
+                const perpAngle = this.patternState.patrolAngle + Math.PI / 2;
+                this.acceleration.x += Math.cos(perpAngle) * headSweep * 0.5;
+                this.acceleration.z += Math.sin(perpAngle) * headSweep * 0.5;
+                
+                // IMPROVED: Stronger boundary awareness - steer toward center if near edge
+                const pos = this.group.position;
+                const { width, depth } = CONFIG.aquarium;
+                const safeMargin = 400; // Larger margin for hammerhead
+                const centerPullStrength = 50;
+                
+                if (pos.x < -width/2 + safeMargin) {
+                    this.patternState.patrolAngle = 0; // Turn right
+                    this.acceleration.x += centerPullStrength;
+                } else if (pos.x > width/2 - safeMargin) {
+                    this.patternState.patrolAngle = Math.PI; // Turn left
+                    this.acceleration.x -= centerPullStrength;
+                }
+                if (pos.z < -depth/2 + safeMargin) {
+                    this.patternState.patrolAngle = Math.PI / 2; // Turn forward
+                    this.acceleration.z += centerPullStrength;
+                } else if (pos.z > depth/2 - safeMargin) {
+                    this.patternState.patrolAngle = -Math.PI / 2; // Turn back
+                    this.acceleration.z -= centerPullStrength;
+                }
                 
                 if (this.patternState.patrolPhase === 'cruise') {
-                    // Steady forward cruising with slight variations
-                    const currentSpeed = this.velocity.length();
-                    const targetSpeed = (this.config.speedMin + this.config.speedMax) * 0.4;
-                    
-                    if (currentSpeed < targetSpeed) {
-                        // Maintain forward momentum
-                        if (currentSpeed > 0.1) {
-                            this.acceleration.x += (this.velocity.x / currentSpeed) * 25;
-                            this.acceleration.z += (this.velocity.z / currentSpeed) * 25;
-                        } else {
-                            const angle = Math.random() * Math.PI * 2;
-                            this.acceleration.x += Math.cos(angle) * 25;
-                            this.acceleration.z += Math.sin(angle) * 25;
-                        }
-                    }
-                    
-                    // Occasional direction change during patrol
+                    // Occasional direction change during patrol (more frequent)
                     if (this.patternState.patrolTimer <= 0) {
                         this.patternState.patrolPhase = 'turn';
-                        this.patternState.patrolTimer = 0.8 + Math.random() * 0.5;
-                        // Pick new patrol direction
-                        this.patternState.turnDirection = (Math.random() - 0.5) * 120;
+                        this.patternState.patrolTimer = 1.0 + Math.random() * 0.8;
+                        // Pick new patrol direction (larger turn angle)
+                        this.patternState.targetAngle = this.patternState.patrolAngle + (Math.random() - 0.5) * Math.PI;
                     }
                 } else if (this.patternState.patrolPhase === 'turn') {
-                    // Turning to new patrol direction
-                    this.acceleration.x += this.patternState.turnDirection * 0.8;
+                    // Smoothly interpolate toward target angle
+                    const angleDiff = this.patternState.targetAngle - this.patternState.patrolAngle;
+                    this.patternState.patrolAngle += angleDiff * deltaTime * 2.0;
                     
                     if (this.patternState.patrolTimer <= 0) {
                         this.patternState.patrolPhase = 'cruise';
-                        this.patternState.patrolTimer = 4 + Math.random() * 5;
+                        this.patternState.patrolTimer = 2 + Math.random() * 3;
                     }
                 }
                 break;
@@ -11537,6 +11561,13 @@ function triggerChainLightning(initialFish, weaponKey, initialDamage) {
                 // Create particles at hit location
                 createHitParticles(nearestFish.group.position, weapon.color, 5);
                 
+                // FIX: Spawn GLB hit effect for secondary targets affected by chain damage
+                // Calculate direction from previous fish to current fish for hit effect orientation
+                const chainDirection = new THREE.Vector3()
+                    .subVectors(nearestFish.group.position, chainState.currentFish.group.position)
+                    .normalize();
+                spawnWeaponHitEffect(weaponKey, nearestFish.group.position.clone(), nearestFish, chainDirection);
+                
                 visitedFish.add(nearestFish);
                 chainState.currentFish = nearestFish;
                 chainState.chainCount++;
@@ -13184,59 +13215,117 @@ function hideBossUI() {
 }
 
 function createBossCrosshair(bossFish) {
-    // Create 3D crosshair that follows the boss fish
+    // Create SCI-FI 3D crosshair that follows the boss fish
     const crosshairGroup = new THREE.Group();
+    const baseSize = bossFish.config.size;
     
-    // Outer ring
-    const outerRingGeometry = new THREE.TorusGeometry(bossFish.config.size * 1.5, 3, 8, 32);
+    // === OUTER HEXAGONAL RING (sci-fi style) ===
+    const outerRadius = baseSize * 1.8;
+    const outerRingGeometry = new THREE.RingGeometry(outerRadius - 4, outerRadius, 6);
     const outerRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff4444,
+        color: 0x00ffff,  // Cyan for sci-fi look
         transparent: true,
-        opacity: 0.8
+        opacity: 0.7,
+        side: THREE.DoubleSide
     });
     const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
     crosshairGroup.add(outerRing);
     
-    // Inner ring
-    const innerRingGeometry = new THREE.TorusGeometry(bossFish.config.size * 0.8, 2, 8, 32);
-    const innerRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffff00,
+    // === MIDDLE CIRCULAR RING with glow ===
+    const middleRadius = baseSize * 1.2;
+    const middleRingGeometry = new THREE.RingGeometry(middleRadius - 3, middleRadius, 32);
+    const middleRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff3366,  // Magenta-red
         transparent: true,
-        opacity: 0.9
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    const middleRing = new THREE.Mesh(middleRingGeometry, middleRingMaterial);
+    crosshairGroup.add(middleRing);
+    
+    // === INNER TARGETING RING ===
+    const innerRadius = baseSize * 0.6;
+    const innerRingGeometry = new THREE.RingGeometry(innerRadius - 2, innerRadius, 32);
+    const innerRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffff00,  // Yellow center
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide
     });
     const innerRing = new THREE.Mesh(innerRingGeometry, innerRingMaterial);
     crosshairGroup.add(innerRing);
     
-    // Crosshair lines
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xff4444, linewidth: 2 });
-    const lineLength = bossFish.config.size * 2;
+    // === SCI-FI TARGETING LINES (dashed style) ===
+    const lineLength = baseSize * 2.2;
+    const gapStart = baseSize * 0.3;
+    const gapEnd = baseSize * 0.8;
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
     
-    // Horizontal line
-    const hPoints = [new THREE.Vector3(-lineLength, 0, 0), new THREE.Vector3(lineLength, 0, 0)];
-    const hGeometry = new THREE.BufferGeometry().setFromPoints(hPoints);
-    const hLine = new THREE.Line(hGeometry, lineMaterial);
-    crosshairGroup.add(hLine);
+    // Create 4 targeting lines with gaps in center
+    const lineAngles = [0, Math.PI/2, Math.PI, Math.PI * 1.5];
+    lineAngles.forEach(angle => {
+        // Outer segment
+        const outerPoints = [
+            new THREE.Vector3(Math.cos(angle) * gapEnd, Math.sin(angle) * gapEnd, 0),
+            new THREE.Vector3(Math.cos(angle) * lineLength, Math.sin(angle) * lineLength, 0)
+        ];
+        const outerGeometry = new THREE.BufferGeometry().setFromPoints(outerPoints);
+        const outerLine = new THREE.Line(outerGeometry, lineMaterial);
+        crosshairGroup.add(outerLine);
+        
+        // Inner segment (small tick marks)
+        const innerPoints = [
+            new THREE.Vector3(Math.cos(angle) * gapStart * 0.5, Math.sin(angle) * gapStart * 0.5, 0),
+            new THREE.Vector3(Math.cos(angle) * gapStart, Math.sin(angle) * gapStart, 0)
+        ];
+        const innerGeometry = new THREE.BufferGeometry().setFromPoints(innerPoints);
+        const innerLine = new THREE.Line(innerGeometry, new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2 }));
+        crosshairGroup.add(innerLine);
+    });
     
-    // Vertical line
-    const vPoints = [new THREE.Vector3(0, -lineLength, 0), new THREE.Vector3(0, lineLength, 0)];
-    const vGeometry = new THREE.BufferGeometry().setFromPoints(vPoints);
-    const vLine = new THREE.Line(vGeometry, lineMaterial);
-    crosshairGroup.add(vLine);
+    // === DIAGONAL CORNER BRACKETS (sci-fi HUD style) ===
+    const bracketSize = baseSize * 1.5;
+    const bracketMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 });
     
-    // Corner brackets
-    const bracketSize = bossFish.config.size * 1.2;
-    const bracketMaterial = new THREE.LineBasicMaterial({ color: 0xffdd00, linewidth: 3 });
-    
-    [[-1, -1], [-1, 1], [1, -1], [1, 1]].forEach(([dx, dy]) => {
+    // 8 corner brackets at 45-degree angles
+    const bracketAngles = [Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4];
+    bracketAngles.forEach(angle => {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
         const bracketPoints = [
-            new THREE.Vector3(dx * bracketSize, dy * bracketSize * 0.7, 0),
-            new THREE.Vector3(dx * bracketSize, dy * bracketSize, 0),
-            new THREE.Vector3(dx * bracketSize * 0.7, dy * bracketSize, 0)
+            new THREE.Vector3(cos * bracketSize * 0.7, sin * bracketSize * 0.7, 0),
+            new THREE.Vector3(cos * bracketSize, sin * bracketSize, 0),
+            new THREE.Vector3(cos * bracketSize * 0.85 - sin * 0.15 * bracketSize, sin * bracketSize * 0.85 + cos * 0.15 * bracketSize, 0)
         ];
         const bracketGeometry = new THREE.BufferGeometry().setFromPoints(bracketPoints);
         const bracket = new THREE.Line(bracketGeometry, bracketMaterial);
         crosshairGroup.add(bracket);
     });
+    
+    // === ROTATING TRIANGULAR MARKERS ===
+    const markerRadius = baseSize * 1.4;
+    const markerMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff3366,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide
+    });
+    
+    for (let i = 0; i < 3; i++) {
+        const angle = (i / 3) * Math.PI * 2;
+        const triangleShape = new THREE.Shape();
+        const triSize = baseSize * 0.15;
+        triangleShape.moveTo(0, triSize);
+        triangleShape.lineTo(-triSize * 0.6, -triSize * 0.5);
+        triangleShape.lineTo(triSize * 0.6, -triSize * 0.5);
+        triangleShape.closePath();
+        
+        const triangleGeometry = new THREE.ShapeGeometry(triangleShape);
+        const triangle = new THREE.Mesh(triangleGeometry, markerMaterial);
+        triangle.position.set(Math.cos(angle) * markerRadius, Math.sin(angle) * markerRadius, 0);
+        triangle.rotation.z = angle - Math.PI / 2;
+        crosshairGroup.add(triangle);
+    }
     
     crosshairGroup.userData.targetFish = bossFish;
     crosshairGroup.userData.rotationSpeed = 1;
@@ -13260,9 +13349,19 @@ function updateBossCrosshair() {
     // Face the camera
     bossCrosshair.lookAt(camera.position);
     
-    // Rotate the crosshair
-    bossCrosshair.children[0].rotation.z += 0.02;  // Outer ring spins
-    bossCrosshair.children[1].rotation.z -= 0.03;  // Inner ring spins opposite
+    // SCI-FI ANIMATION: Multiple rotating elements
+    // children[0] = outer hexagonal ring (slow clockwise)
+    // children[1] = middle ring (counter-clockwise)
+    // children[2] = inner ring (fast clockwise)
+    if (bossCrosshair.children[0]) bossCrosshair.children[0].rotation.z += 0.008;
+    if (bossCrosshair.children[1]) bossCrosshair.children[1].rotation.z -= 0.015;
+    if (bossCrosshair.children[2]) bossCrosshair.children[2].rotation.z += 0.025;
+    
+    // Pulse effect on opacity for sci-fi feel
+    const pulse = Math.sin(Date.now() * 0.005) * 0.15 + 0.85;
+    if (bossCrosshair.children[0] && bossCrosshair.children[0].material) {
+        bossCrosshair.children[0].material.opacity = 0.7 * pulse;
+    }
 }
 
 function removeBossCrosshair() {
@@ -13417,7 +13516,7 @@ function updateBossEvent(deltaTime) {
             gameState.bossActive = false;
             gameState.activeBoss = null;
             gameState.bossCountdown = 0;
-            gameState.bossSpawnTimer = 60;
+            gameState.bossSpawnTimer = 45;
             hideBossUI();
             hideBossWaitingUI();
         }
@@ -13452,7 +13551,7 @@ function updateBossEvent(deltaTime) {
         if (gameState.bossSpawnTimer <= 0) {
             hideBossWaitingUI();  // Hide waiting timer when boss spawns
             spawnBossFish();
-            gameState.bossSpawnTimer = 60;  // Next boss in exactly 60 seconds
+            gameState.bossSpawnTimer = 45;  // Next boss in exactly 45 seconds
         }
     } else {
         // Update boss countdown
