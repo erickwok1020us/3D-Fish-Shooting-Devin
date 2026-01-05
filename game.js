@@ -341,6 +341,11 @@ const CONFIG = {
         showRtpOnButtons: true  // Issue 4: Show RTP% on weapon buttons (set false for production)
     },
     
+    // GLB Model Scale Multiplier - applies to all fish GLB models
+    // Increase this value to make all fish larger (e.g., 3.0 = 3x bigger)
+    // This affects both GLB models and procedural fallback meshes
+    glbModelScaleMultiplier: 3.0,
+    
     // Fish arena - inside the aquarium tank (rectangular bounds)
     fishArena: {
         // Fish swim inside the tank with some margin from walls
@@ -1188,7 +1193,10 @@ async function tryLoadGLBForFish(tierConfig, form) {
         if (model) {
             // FIX: Use bounding box normalization like weapons instead of magic scale numbers
             // This ensures fish GLB models are always visible regardless of their original size
-            const targetSize = tierConfig.size || 20; // Target fish size in game units
+            // Apply global scale multiplier to make fish larger/smaller as needed
+            const baseTargetSize = tierConfig.size || 20; // Target fish size in game units
+            const scaleMultiplier = CONFIG.glbModelScaleMultiplier || 1.0;
+            const targetSize = baseTargetSize * scaleMultiplier;
             const originalMaxDim = model.userData.originalMaxDim || 1;
             const originalCenterArray = model.userData.originalCenter; // [x, y, z] array
             
@@ -7639,7 +7647,10 @@ class Fish {
     createMesh() {
         this.group = new THREE.Group();
         
-        const size = this.config.size;
+        // Apply global scale multiplier to procedural meshes (same as GLB models)
+        const baseSize = this.config.size;
+        const scaleMultiplier = CONFIG.glbModelScaleMultiplier || 1.0;
+        const size = baseSize * scaleMultiplier;
         const color = this.config.color;
         const secondaryColor = this.config.secondaryColor || color;
         const form = this.config.form || 'standard';
@@ -9206,13 +9217,19 @@ class Fish {
             this.patternState = {
                 timer: 0,
                 phase: 'normal',
-                burstTimer: 0,
+                burstTimer: 1 + Math.random() * 3, // FIX: Start with random delay (1-4 sec) instead of 0
                 waveOffset: Math.random() * Math.PI * 2,
                 circleAngle: Math.random() * Math.PI * 2,
                 stopTimer: 0,
                 territoryCenter: this.group.position.clone(),
                 jumpPhase: 0
             };
+        }
+        
+        // FIX: Ensure burstTimer is a valid number (guard against NaN from stuck recovery)
+        if (!Number.isFinite(this.patternState.burstTimer)) {
+            this.patternState.burstTimer = 1 + Math.random() * 3;
+            this.patternState.phase = 'normal';
         }
         
         // Reset acceleration
@@ -9440,6 +9457,30 @@ class Fish {
                         // End burst, return to normal
                         this.patternState.phase = 'normal';
                         this.patternState.burstTimer = 3 + Math.random() * 5;
+                    }
+                } else if (this.patternState.phase === 'normal') {
+                    // FIX: Add gentle cruising during normal phase to prevent sharks from stopping
+                    // This maintains forward momentum between bursts (like cruise pattern)
+                    const currentSpeed = this.velocity.length();
+                    const minCruiseSpeed = this.config.speedMin * 0.5;
+                    
+                    if (currentSpeed < minCruiseSpeed) {
+                        // Speed too low - apply forward acceleration to maintain minimum cruise
+                        if (currentSpeed > 0.1) {
+                            // Accelerate in current direction
+                            this.acceleration.x += (this.velocity.x / currentSpeed) * 30;
+                            this.acceleration.z += (this.velocity.z / currentSpeed) * 30;
+                        } else {
+                            // No velocity - pick random direction
+                            const angle = Math.random() * Math.PI * 2;
+                            this.acceleration.x += Math.cos(angle) * 30;
+                            this.acceleration.z += Math.sin(angle) * 30;
+                        }
+                    }
+                    // Add slight random variation for natural movement
+                    if (timeBasedRandom(0.3)) {
+                        this.acceleration.x += (Math.random() - 0.5) * 15;
+                        this.acceleration.z += (Math.random() - 0.5) * 15;
                     }
                 }
                 break;
