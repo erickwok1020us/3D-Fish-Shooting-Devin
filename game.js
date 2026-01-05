@@ -7656,6 +7656,21 @@ class Fish {
         const secondaryColor = this.config.secondaryColor || color;
         const form = this.config.form || 'standard';
         
+        // FIX: Reset GLB state when form changes (e.g., Boss fish using recycled pool fish)
+        // This ensures the new form's GLB model will be loaded in spawn()
+        // Without this fix, Boss fish like ALPHA ORCA would show geometry instead of GLB
+        // because glbLoaded remained true from the previous fish's form
+        if (this.form !== form) {
+            this.glbLoaded = false;
+            // Clean up old GLB model references to allow new model to load
+            this.glbModelRoot = null;
+            this.glbMeshes = null;
+            this.glbMixer = null;
+            this.glbAction = null;
+            this.glbPitchWrapper = null;
+            this.glbCorrectionWrapper = null;
+        }
+        
         // PERFORMANCE: Use cached materials (same color fish share materials - reduces GPU state changes)
         const bodyMaterial = getCachedFishMaterial(color, 0.3, 0.2, color, 0.1);
         const secondaryMaterial = getCachedFishMaterial(secondaryColor, 0.3, 0.2, null, 0);
