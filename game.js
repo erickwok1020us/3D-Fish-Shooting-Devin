@@ -9003,6 +9003,59 @@ class Fish {
         // Update GLB animation mixer (deltaTime is in seconds)
         if (this.glbMixer) {
             this.glbMixer.update(deltaTime);
+            
+            // ANIMATION SPEED SYSTEM: Adjust animation timeScale based on fish velocity
+            // When fish is moving fast: normal swim animation (timeScale = 1.0)
+            // When fish is slow/idle: slow animation to look like gentle hovering (timeScale = 0.1)
+            // Uses hysteresis to prevent flickering near threshold
+            if (this.glbAction) {
+                // Initialize animation state if not set
+                if (this._animTimeScale === undefined) {
+                    this._animTimeScale = 1.0;
+                    this._animMode = 'swim'; // 'swim' or 'idle'
+                }
+                
+                // Calculate speed relative to fish's configured speed range
+                const speedSq = this.velocity.x * this.velocity.x + 
+                               this.velocity.y * this.velocity.y + 
+                               this.velocity.z * this.velocity.z;
+                const speedMax = this.config.speedMax || 60;
+                
+                // Hysteresis thresholds (relative to speedMax)
+                // Enter swim mode at 20% of max speed, exit at 12%
+                const swimEnterThreshold = speedMax * 0.20;
+                const swimExitThreshold = speedMax * 0.12;
+                const swimEnterSq = swimEnterThreshold * swimEnterThreshold;
+                const swimExitSq = swimExitThreshold * swimExitThreshold;
+                
+                // Determine target mode with hysteresis
+                if (this._animMode === 'idle' && speedSq > swimEnterSq) {
+                    this._animMode = 'swim';
+                } else if (this._animMode === 'swim' && speedSq < swimExitSq) {
+                    this._animMode = 'idle';
+                }
+                
+                // Target timeScale based on mode
+                // Idle: very slow animation (0.1) for gentle hovering look
+                // Swim: scale from 0.5 to 1.0 based on speed
+                let targetTimeScale;
+                if (this._animMode === 'idle') {
+                    targetTimeScale = 0.1;
+                } else {
+                    // Map speed to timeScale (0.5 at threshold, 1.0 at max speed)
+                    const speed = Math.sqrt(speedSq);
+                    const speedRatio = Math.min(1, speed / speedMax);
+                    targetTimeScale = 0.5 + speedRatio * 0.5;
+                }
+                
+                // Smooth transition (lerp) to avoid jarring changes
+                // ~200ms transition time at 60fps
+                const smoothFactor = Math.min(1, deltaTime * 5);
+                this._animTimeScale += (targetTimeScale - this._animTimeScale) * smoothFactor;
+                
+                // Apply to animation action
+                this.glbAction.setEffectiveTimeScale(this._animTimeScale);
+            }
         }
         
         // Handle freeze
