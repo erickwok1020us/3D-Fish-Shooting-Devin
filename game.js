@@ -2436,10 +2436,11 @@ const FISH_BEHAVIOR_CONFIG = {
     // Depth bands (Y coordinates relative to tank)
     // Tank: floorY=-450, height=900, so range is -450 to 450
     depthBands: {
-        surface: { min: 100, max: 350 },      // Near top
-        midWater: { min: -150, max: 150 },    // Middle
-        bottom: { min: -350, max: -100 },     // Near bottom
-        fullColumn: { min: -300, max: 300 }   // Anywhere
+        surface: { min: 100, max: 350 },      // Near top (flying fish, mahi-mahi)
+        midWater: { min: -100, max: 150 },    // Middle (medium predators)
+        reef: { min: -280, max: -50 },        // Reef zone (coral reef fish, small schooling fish)
+        bottom: { min: -350, max: -150 },     // Near bottom (grouper, seahorse)
+        fullColumn: { min: -300, max: 300 }   // Anywhere (large predators)
     },
     
     // Default behavior parameters by category
@@ -2459,14 +2460,14 @@ const FISH_BEHAVIOR_CONFIG = {
             wanderStrength: 25
         },
         reefFish: {
-            depthBand: 'midWater',
+            depthBand: 'reef',           // FIX: Changed from midWater to reef - coral reef fish should swim near the reef
             verticalAmplitude: 20,
             noiseScale: 0.008,
             noiseDrift: 0.4,
             wanderStrength: 35
         },
         smallSchool: {
-            depthBand: 'midWater',
+            depthBand: 'reef',           // FIX: Changed from midWater to reef - schooling fish should swim near the reef
             verticalAmplitude: 25,
             noiseScale: 0.01,
             noiseDrift: 0.5,
@@ -9365,6 +9366,30 @@ class Fish {
         const currentSpeedFinal = this.velocity.length();
         if (currentSpeedFinal > maxSpeed) {
             this.velocity.multiplyScalar(maxSpeed / currentSpeedFinal);
+        }
+        
+        // FIX: MINIMUM SPEED ENFORCEMENT for burstAttack/burstSprint fish (sharks, marlin, etc.)
+        // This ensures large predators always maintain forward momentum even when other forces
+        // (boundary, turn-rate limiter, boids) would slow them down to a stop.
+        // Applied AFTER all other velocity modifications to guarantee minimum movement.
+        const pattern = this.config.pattern;
+        if ((pattern === 'burstAttack' || pattern === 'burstSprint') && 
+            this.patternState.phase !== 'stop') {
+            const minSpeed = this.config.speedMin * 0.4; // 40% of speedMin as absolute minimum
+            const currentSpeedAfterClamp = this.velocity.length();
+            
+            if (currentSpeedAfterClamp < minSpeed) {
+                if (currentSpeedAfterClamp > 0.5) {
+                    // Scale up velocity in current direction to reach minimum speed
+                    this.velocity.multiplyScalar(minSpeed / currentSpeedAfterClamp);
+                } else {
+                    // Velocity too low to determine direction - pick random direction
+                    const randomAngle = Math.random() * Math.PI * 2;
+                    this.velocity.x = Math.cos(randomAngle) * minSpeed;
+                    this.velocity.z = Math.sin(randomAngle) * minSpeed;
+                    // Keep Y velocity for vertical movement
+                }
+            }
         }
         
         // Update position (using addScaledVector to avoid clone() allocation)
