@@ -1314,9 +1314,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.5,
             hitEffectScale: 1.0,
             muzzleOffset: new THREE.Vector3(0, 25, 60),
-            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
-            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
+            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
@@ -1332,9 +1332,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.6,
             hitEffectScale: 1.2,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
-            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
-            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
+            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
@@ -1349,9 +1349,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.7,
             hitEffectScale: 1.5,
             muzzleOffset: new THREE.Vector3(0, 25, 70),
-            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
-            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
+            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 200,
             fpsCameraUpOffset: 70
