@@ -9372,8 +9372,8 @@ class Fish {
         // This ensures large predators always maintain forward momentum even when other forces
         // (boundary, turn-rate limiter, boids) would slow them down to a stop.
         // Applied AFTER all other velocity modifications to guarantee minimum movement.
-        const pattern = this.config.pattern;
-        if ((pattern === 'burstAttack' || pattern === 'burstSprint') && 
+        // Note: 'pattern' variable is already declared earlier in this function (line ~9240)
+        if ((pattern === 'burstAttack' || pattern === 'burstSprint') &&
             this.patternState.phase !== 'stop') {
             const minSpeed = this.config.speedMin * 0.4; // 40% of speedMin as absolute minimum
             const currentSpeedAfterClamp = this.velocity.length();
