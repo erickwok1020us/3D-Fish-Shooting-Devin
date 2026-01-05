@@ -9057,6 +9057,21 @@ class Fish {
         // from previous lifecycle (fish recycling/pooling)
         this.loadToken = ++fishLoadTokenCounter;
         
+        // FIX: Ensure this.speed is valid for current config (important for pooled fish reuse)
+        // When a fish is recycled (e.g., Boss fish reusing a sardine from pool), this.speed
+        // may still have the old fish's value. This causes sharks to move very slowly if they
+        // inherited a small fish's speed value.
+        const speedMin = this.config.speedMin;
+        const speedMax = this.config.speedMax;
+        if (this.speed < speedMin || this.speed > speedMax) {
+            this.speed = speedMin + Math.random() * (speedMax - speedMin);
+        }
+        
+        // FIX: Reset patternState on spawn to prevent stuck phases from previous lifecycle
+        // This is critical for burstAttack fish (sharks) - if they were in 'stop' phase when
+        // recycled, they would stay nearly motionless because min-speed enforcement skips 'stop'
+        this.patternState = null;
+        
         // Random initial velocity
         this.velocity.set(
             (Math.random() - 0.5) * this.speed,
