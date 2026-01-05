@@ -9038,14 +9038,26 @@ class Fish {
                 // Target timeScale based on mode
                 // Idle: very slow animation (0.1) for gentle hovering look
                 // Swim: scale from 0.5 to 1.0 based on speed
+                // Boost: scale from 1.0 to 1.35 when speed exceeds speedMax
                 let targetTimeScale;
                 if (this._animMode === 'idle') {
                     targetTimeScale = 0.1;
                 } else {
-                    // Map speed to timeScale (0.5 at threshold, 1.0 at max speed)
                     const speed = Math.sqrt(speedSq);
-                    const speedRatio = Math.min(1, speed / speedMax);
-                    targetTimeScale = 0.5 + speedRatio * 0.5;
+                    const speedRatio = speed / speedMax;
+                    
+                    if (speedRatio <= 1.0) {
+                        // Normal swim: 0.5 to 1.0 based on speed
+                        targetTimeScale = 0.5 + speedRatio * 0.5;
+                    } else {
+                        // Boost mode: 1.0 to 1.35 when exceeding speedMax
+                        // Use smoothstep curve to prevent sudden acceleration
+                        // Cap at 1.5x speedMax to avoid extreme values
+                        const boostRatio = Math.min(1, (speedRatio - 1.0) / 0.5); // 0 at speedMax, 1 at 1.5x speedMax
+                        const smoothBoost = boostRatio * boostRatio * (3 - 2 * boostRatio); // smoothstep
+                        const maxBoostTimeScale = 1.35;
+                        targetTimeScale = 1.0 + smoothBoost * (maxBoostTimeScale - 1.0);
+                    }
                 }
                 
                 // Smooth transition (lerp) to avoid jarring changes
