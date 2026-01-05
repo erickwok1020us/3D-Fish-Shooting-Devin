@@ -1314,8 +1314,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.5,
             hitEffectScale: 1.0,
             muzzleOffset: new THREE.Vector3(0, 25, 60),
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
@@ -1331,8 +1332,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.6,
             hitEffectScale: 1.2,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
@@ -1347,8 +1349,9 @@ const WEAPON_GLB_CONFIG = {
             bulletScale: 0.7,
             hitEffectScale: 1.5,
             muzzleOffset: new THREE.Vector3(0, 25, 70),
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            // FIX: Changed from +90° to -90° to correct cannon facing direction in third-person view
+            cannonRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
+            bulletRotationFix: new THREE.Euler(0, -Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 200,
             fpsCameraUpOffset: 70
@@ -11536,6 +11539,13 @@ function triggerChainLightning(initialFish, weaponKey, initialDamage) {
                 
                 // Create particles at hit location
                 createHitParticles(nearestFish.group.position, weapon.color, 5);
+                
+                // FIX: Spawn GLB hit effect for secondary targets affected by chain damage
+                // Calculate direction from previous fish to current fish for hit effect orientation
+                const chainDirection = new THREE.Vector3()
+                    .subVectors(nearestFish.group.position, chainState.currentFish.group.position)
+                    .normalize();
+                spawnWeaponHitEffect(weaponKey, nearestFish.group.position.clone(), nearestFish, chainDirection);
                 
                 visitedFish.add(nearestFish);
                 chainState.currentFish = nearestFish;
