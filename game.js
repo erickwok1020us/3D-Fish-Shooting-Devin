@@ -12520,6 +12520,34 @@ function animate() {
         // Update UI
         updateUI();
     
+        // DIAGNOSTIC: Log performance metrics every 60 frames (~1 second at 60fps)
+        if (!window._perfDiagFrame) window._perfDiagFrame = 0;
+        window._perfDiagFrame++;
+        if (window._perfDiagFrame % 60 === 0) {
+            // Count fish with active animations
+            let fishWithAnimations = 0;
+            let totalMixers = 0;
+            for (const fish of activeFish) {
+                if (fish && fish.mixer) {
+                    totalMixers++;
+                    if (fish.mixer._actions && fish.mixer._actions.length > 0) {
+                        fishWithAnimations++;
+                    }
+                }
+            }
+            
+            console.log('[PERF-DIAG] === Performance Diagnostics ===');
+            console.log('[PERF-DIAG] Draw calls:', renderer.info.render.calls);
+            console.log('[PERF-DIAG] Triangles:', renderer.info.render.triangles.toLocaleString());
+            console.log('[PERF-DIAG] Textures:', renderer.info.memory.textures);
+            console.log('[PERF-DIAG] Geometries:', renderer.info.memory.geometries);
+            console.log('[PERF-DIAG] Fish count:', activeFish.length, '/ max:', CONFIG.maxFish);
+            console.log('[PERF-DIAG] Fish with mixers:', totalMixers, ', with active animations:', fishWithAnimations);
+            console.log('[PERF-DIAG] Active bullets:', activeBullets.length);
+            console.log('[PERF-DIAG] Active particles:', activeParticles.length);
+            console.log('[PERF-DIAG] FPS:', Math.round(1 / deltaTime));
+        }
+        
         // Render
         renderer.render(scene, camera);
 }
