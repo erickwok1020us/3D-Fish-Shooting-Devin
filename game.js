@@ -4576,25 +4576,20 @@ const muzzleFlashTemp = {
 };
 
 // Spawn muzzle flash effect at cannon muzzle
-// IMPROVED: Ring follows barrel direction (like collar around barrel), not bullet direction
-// FIX: In FPS mode, use bullet direction instead of barrel direction because the cannon
-// model orientation may not match the camera/aim direction in FPS view
+// Ring follows barrel direction (like collar around barrel) in BOTH view modes
+// This ensures FPS and third-person views have consistent muzzle flash appearance
 function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
     if (!config) return;
     
     // Get barrel forward direction from cannonMuzzle's world orientation
     // This ensures ring "wraps around" the barrel regardless of where bullets go
-    let barrelDirection = direction;  // Fallback to bullet direction
+    // FIX: Use barrel direction for BOTH FPS and third-person modes for visual consistency
+    // cannonMuzzle's world quaternion is properly updated in FPS mode (used by updateFPSCamera)
+    let barrelDirection = direction;  // Fallback to bullet direction if cannonMuzzle unavailable
     
-    // FIX: In FPS mode, always use bullet direction for muzzle flash ring orientation
-    // This ensures the ring faces the correct direction (toward where bullets go)
-    // In third-person mode, use barrel direction for visual accuracy
-    if (gameState.viewMode === 'fps') {
-        // FPS mode: Use bullet direction (matches crosshair/aim direction)
-        barrelDirection = direction;
-    } else if (cannonMuzzle) {
-        // Third-person mode: Use barrel direction (collar around barrel)
+    if (cannonMuzzle) {
+        // Use barrel direction for consistent ring orientation in both view modes
         cannonMuzzle.getWorldQuaternion(muzzleFlashTemp.worldQuat);
         muzzleFlashTemp.barrelForward.copy(muzzleFlashTemp.localForward)
             .applyQuaternion(muzzleFlashTemp.worldQuat);
