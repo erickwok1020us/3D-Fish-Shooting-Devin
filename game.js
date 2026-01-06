@@ -9588,16 +9588,27 @@ class Fish {
                     // Scale up velocity in current direction to reach minimum speed
                     this.velocity.multiplyScalar(minSpeed / currentSpeedAfterClamp);
                 } else {
-                    // Velocity too low to determine direction - use patrolAngle for sShape
+                    // Velocity too low to determine direction - use waypoint for sShape
                     // or random direction for other patterns
-                    let targetAngle;
-                    if (pattern === 'sShape' && this.patternState.patrolAngle !== undefined) {
-                        targetAngle = this.patternState.patrolAngle;
+                    if (pattern === 'sShape' && this.patternState.waypoint) {
+                        // Use direction toward waypoint
+                        const toWp = this.patternState.waypoint.clone().sub(this.group.position);
+                        const dist = toWp.length();
+                        if (dist > 1) {
+                            toWp.divideScalar(dist);
+                            this.velocity.x = toWp.x * minSpeed;
+                            this.velocity.z = toWp.z * minSpeed;
+                        } else {
+                            // At waypoint - pick random direction
+                            const angle = Math.random() * Math.PI * 2;
+                            this.velocity.x = Math.cos(angle) * minSpeed;
+                            this.velocity.z = Math.sin(angle) * minSpeed;
+                        }
                     } else {
-                        targetAngle = Math.random() * Math.PI * 2;
+                        const targetAngle = Math.random() * Math.PI * 2;
+                        this.velocity.x = Math.cos(targetAngle) * minSpeed;
+                        this.velocity.z = Math.sin(targetAngle) * minSpeed;
                     }
-                    this.velocity.x = Math.cos(targetAngle) * minSpeed;
-                    this.velocity.z = Math.sin(targetAngle) * minSpeed;
                     // Keep Y velocity for vertical movement
                 }
             }
@@ -9769,122 +9780,70 @@ class Fish {
                 break;
                 
             case 'sShape':
-                // S-shaped swimming with patrol behavior (hammerhead)
-                // FIX: Redesigned to prevent "stuck in place shaking head" bug
-                // Root cause was: soft boundary zone too narrow (±200 for Z), causing patrolAngle
-                // to be overwritten every frame, while headSweep lateral force caused visual jitter
+                // COMPLETE REDESIGN: Hammerhead shark swimming pattern
+                // Uses velocity-based steering (like burstAttack) instead of angle-based control
+                // Relies on global applyBoundaryForces() for boundary handling - no custom boundary logic
+                // Creates S-shape path via smooth yaw oscillation, not lateral forces
                 
-                // Initialize patrol state if needed
-                if (!this.patternState.patrolTimer) {
-                    this.patternState.patrolTimer = 2 + Math.random() * 3;
-                    this.patternState.patrolPhase = 'cruise';
-                    this.patternState.headSweepPhase = 0;
-                    // Initialize patrol direction angle (radians)
-                    this.patternState.patrolAngle = Math.random() * Math.PI * 2;
+                // Initialize waypoint patrol state
+                if (!this.patternState.waypoint) {
+                    const { width, depth, height, floorY } = CONFIG.aquarium;
+                    const margin = 300; // Stay this far from walls
+                    this.patternState.waypoint = new THREE.Vector3(
+                        (Math.random() - 0.5) * (width - margin * 2),
+                        floorY + height * 0.3 + Math.random() * height * 0.4,
+                        (Math.random() - 0.5) * (depth - margin * 2)
+                    );
+                    this.patternState.yawOscillation = 0;
+                    this.patternState.cruiseSpeed = (this.config.speedMin + this.config.speedMax) * 0.6;
                 }
                 
-                this.patternState.patrolTimer -= deltaTime;
-                // FIX: Slower head sweep frequency (1.5 instead of 3.0) for smoother motion
-                this.patternState.headSweepPhase += deltaTime * 1.5;
+                // Update yaw oscillation phase for S-shape path
+                this.patternState.yawOscillation += deltaTime * 0.8; // Slow oscillation frequency
                 
-                // FIX: Reduced head sweep amplitude (10 instead of 25) to prevent jitter
-                // Head sweep is now a subtle S-shape motion, not aggressive lateral force
-                const headSweepAmplitude = 10;
-                const headSweep = Math.sin(this.patternState.headSweepPhase + (this.patternState.waveOffset || 0)) * headSweepAmplitude;
+                // Calculate direction to waypoint
+                const toWaypoint = new THREE.Vector3();
+                toWaypoint.subVectors(this.patternState.waypoint, this.group.position);
+                const distToWaypoint = toWaypoint.length();
                 
-                // IMPROVED: Use patrol angle for consistent directional movement
-                const patrolSpeed = (this.config.speedMin + this.config.speedMax) * 0.5;
-                const currentSpeed = this.velocity.length();
-                
-                // FIX: Stronger forward thrust (50/25 instead of 35/15) to ensure movement
-                const thrustStrength = currentSpeed < patrolSpeed ? 50 : 25;
-                this.acceleration.x += Math.cos(this.patternState.patrolAngle) * thrustStrength;
-                this.acceleration.z += Math.sin(this.patternState.patrolAngle) * thrustStrength;
-                
-                // FIX: Limit lateral force to max 30% of forward thrust to prevent jitter
-                // Head sweep creates S-shape path but doesn't overpower forward movement
-                const perpAngle = this.patternState.patrolAngle + Math.PI / 2;
-                const maxLateralForce = thrustStrength * 0.3;
-                const lateralForce = Math.min(Math.abs(headSweep * 0.5), maxLateralForce) * Math.sign(headSweep);
-                this.acceleration.x += Math.cos(perpAngle) * lateralForce;
-                this.acceleration.z += Math.sin(perpAngle) * lateralForce;
-                
-                // FIX: Boundary handling - use smaller margins and gradual steering
-                // Previous softMargin=400 with depth=1200 left only ±200 active zone
-                const sharkPos = this.group.position;
-                const { width: tankWidth, depth: tankDepth } = CONFIG.aquarium;
-                const hardMargin = 150; // Hard boundary - shark CANNOT go past this
-                const softMargin = 250; // Soft boundary - shark starts turning here (was 400)
-                const hardBoundaryForce = 120;
-                const softBoundaryForce = 60;
-                
-                // Calculate boundaries
-                const hardMinX = -tankWidth/2 + hardMargin;
-                const hardMaxX = tankWidth/2 - hardMargin;
-                const hardMinZ = -tankDepth/2 + hardMargin;
-                const hardMaxZ = tankDepth/2 - hardMargin;
-                const softMinX = -tankWidth/2 + softMargin;
-                const softMaxX = tankWidth/2 - softMargin;
-                const softMinZ = -tankDepth/2 + softMargin;
-                const softMaxZ = tankDepth/2 - softMargin;
-                
-                // HARD BOUNDARY: Clamp position and reverse velocity if past hard boundary
-                // FIX: Only set patrolAngle at hard boundary, not soft boundary
-                if (sharkPos.x < hardMinX) {
-                    sharkPos.x = hardMinX;
-                    if (this.velocity.x < 0) this.velocity.x *= -0.5;
-                    this.patternState.patrolAngle = 0; // Force turn right
-                    this.acceleration.x += hardBoundaryForce;
-                } else if (sharkPos.x > hardMaxX) {
-                    sharkPos.x = hardMaxX;
-                    if (this.velocity.x > 0) this.velocity.x *= -0.5;
-                    this.patternState.patrolAngle = Math.PI; // Force turn left
-                    this.acceleration.x -= hardBoundaryForce;
-                }
-                if (sharkPos.z < hardMinZ) {
-                    sharkPos.z = hardMinZ;
-                    if (this.velocity.z < 0) this.velocity.z *= -0.5;
-                    this.patternState.patrolAngle = Math.PI / 2; // Force turn forward
-                    this.acceleration.z += hardBoundaryForce;
-                } else if (sharkPos.z > hardMaxZ) {
-                    sharkPos.z = hardMaxZ;
-                    if (this.velocity.z > 0) this.velocity.z *= -0.5;
-                    this.patternState.patrolAngle = -Math.PI / 2; // Force turn back
-                    this.acceleration.z -= hardBoundaryForce;
+                // Pick new waypoint when close enough
+                if (distToWaypoint < 200) {
+                    const { width, depth, height, floorY } = CONFIG.aquarium;
+                    const margin = 300;
+                    this.patternState.waypoint.set(
+                        (Math.random() - 0.5) * (width - margin * 2),
+                        floorY + height * 0.3 + Math.random() * height * 0.4,
+                        (Math.random() - 0.5) * (depth - margin * 2)
+                    );
+                    toWaypoint.subVectors(this.patternState.waypoint, this.group.position);
                 }
                 
-                // SOFT BOUNDARY: Apply steering force but DON'T overwrite patrolAngle
-                // FIX: This was the main bug - soft boundary was overwriting patrolAngle every frame
-                // causing the shark to be stuck with only headSweep jitter visible
-                if (sharkPos.x < softMinX) {
-                    this.acceleration.x += softBoundaryForce;
-                } else if (sharkPos.x > softMaxX) {
-                    this.acceleration.x -= softBoundaryForce;
-                }
-                if (sharkPos.z < softMinZ) {
-                    this.acceleration.z += softBoundaryForce;
-                } else if (sharkPos.z > softMaxZ) {
-                    this.acceleration.z -= softBoundaryForce;
+                // Normalize direction to waypoint
+                if (distToWaypoint > 0.1) {
+                    toWaypoint.divideScalar(distToWaypoint);
                 }
                 
-                if (this.patternState.patrolPhase === 'cruise') {
-                    // Occasional direction change during patrol
-                    if (this.patternState.patrolTimer <= 0) {
-                        this.patternState.patrolPhase = 'turn';
-                        this.patternState.patrolTimer = 1.0 + Math.random() * 0.8;
-                        // Pick new patrol direction
-                        this.patternState.targetAngle = this.patternState.patrolAngle + (Math.random() - 0.5) * Math.PI;
-                    }
-                } else if (this.patternState.patrolPhase === 'turn') {
-                    // Smoothly interpolate toward target angle
-                    const angleDiff = this.patternState.targetAngle - this.patternState.patrolAngle;
-                    this.patternState.patrolAngle += angleDiff * deltaTime * 2.0;
-                    
-                    if (this.patternState.patrolTimer <= 0) {
-                        this.patternState.patrolPhase = 'cruise';
-                        this.patternState.patrolTimer = 2 + Math.random() * 3;
-                    }
-                }
+                // Add yaw oscillation for S-shape path (rotate direction vector around Y axis)
+                const yawOffset = Math.sin(this.patternState.yawOscillation) * 0.4; // ~23 degrees max
+                const cosYaw = Math.cos(yawOffset);
+                const sinYaw = Math.sin(yawOffset);
+                const oscillatedX = toWaypoint.x * cosYaw - toWaypoint.z * sinYaw;
+                const oscillatedZ = toWaypoint.x * sinYaw + toWaypoint.z * cosYaw;
+                
+                // Compute desired velocity at cruise speed
+                const desiredVelX = oscillatedX * this.patternState.cruiseSpeed;
+                const desiredVelY = toWaypoint.y * this.patternState.cruiseSpeed * 0.3; // Reduced vertical
+                const desiredVelZ = oscillatedZ * this.patternState.cruiseSpeed;
+                
+                // Proportional steering: accel = (desiredVel - currentVel) * steerGain
+                // This is robust and can't "cancel itself out" like competing forces
+                const steerGain = 2.5;
+                this.acceleration.x += (desiredVelX - this.velocity.x) * steerGain;
+                this.acceleration.y += (desiredVelY - this.velocity.y) * steerGain;
+                this.acceleration.z += (desiredVelZ - this.velocity.z) * steerGain;
+                
+                // Note: Boundary handling is done by global applyBoundaryForces()
+                // No custom boundary logic needed here - keeps code simple and robust
                 break;
                 
             case 'synchronizedFast':
