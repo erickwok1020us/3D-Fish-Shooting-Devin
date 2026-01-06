@@ -9239,9 +9239,29 @@ class Fish {
         // Only load if not already loaded (prevents duplicate loading on respawn)
         if (!this.glbLoaded && this.form) {
             this.tryLoadGLBModel(this.form, this.config.size);
-        } else if (this.glbLoaded && this.glbAction) {
-            // Restart animation for recycled fish that already has GLB loaded
-            this.glbAction.reset().play();
+        } else if (this.glbLoaded && this.glbModelRoot) {
+            // ANIMATION FIX: Reinitialize AnimationMixer for recycled fish
+            // The previous mixer's actions were uncached in die() via uncacheRoot(),
+            // so we MUST create a new mixer and action - the old glbAction is invalid.
+            // This is the root cause of "sliding statue" fish that move but don't animate.
+            const glbUrl = this.glbModelRoot.userData?.glbUrl;
+            const animations = glbUrl ? getGLBAnimations(glbUrl) : null;
+            if (animations && animations.length > 0) {
+                // Create fresh AnimationMixer (old one was invalidated by uncacheRoot)
+                this.glbMixer = new THREE.AnimationMixer(this.glbModelRoot);
+                
+                // Find swimming animation or use first available
+                let clip = animations.find(c => c.name.toLowerCase().includes('swim')) || animations[0];
+                
+                // Create and play the animation action
+                this.glbAction = this.glbMixer.clipAction(clip);
+                this.glbAction.setLoop(THREE.LoopRepeat);
+                this.glbAction.play();
+                
+                // Reset animation speed state for fresh start
+                this._animTimeScale = 1.0;
+                this._animMode = 'swim';
+            }
         }
         
         // FISH BEHAVIOR SYSTEM: Initialize behavior state for smooth swimming paths
@@ -10460,12 +10480,17 @@ class Fish {
         
         // MEMORY LEAK FIX: Properly cleanup AnimationMixer to prevent accumulation
         // stopAllAction() alone is not enough - we need uncacheRoot() to release references
+        // ANIMATION FIX: After uncacheRoot(), the mixer and action are invalidated and cannot be reused.
+        // We MUST null them here so spawn() knows to create fresh ones.
+        // This fixes the "sliding statue" bug where fish move but don't animate after respawn.
         if (this.glbMixer) {
             this.glbMixer.stopAllAction();
             if (this.glbModelRoot) {
                 this.glbMixer.uncacheRoot(this.glbModelRoot);
             }
-            // Don't null the mixer here - we'll reuse it on respawn if GLB is already loaded
+            // Clear references - they're invalid after uncacheRoot() and must be recreated on spawn
+            this.glbMixer = null;
+            this.glbAction = null;
         }
         
         // PERFORMANCE: Return fish to free-list for O(1) reuse (Boss Mode optimization)
