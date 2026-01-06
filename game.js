@@ -9752,7 +9752,10 @@ class Fish {
                 
             case 'sShape':
                 // S-shaped swimming with patrol behavior (hammerhead)
-                // IMPROVED: More visible patrol with direction-based movement
+                // FIX: Redesigned to prevent "stuck in place shaking head" bug
+                // Root cause was: soft boundary zone too narrow (±200 for Z), causing patrolAngle
+                // to be overwritten every frame, while headSweep lateral force caused visual jitter
+                
                 // Initialize patrol state if needed
                 if (!this.patternState.patrolTimer) {
                     this.patternState.patrolTimer = 2 + Math.random() * 3;
@@ -9763,47 +9766,52 @@ class Fish {
                 }
                 
                 this.patternState.patrolTimer -= deltaTime;
-                this.patternState.headSweepPhase += deltaTime * 3.0;
+                // FIX: Slower head sweep frequency (1.5 instead of 3.0) for smoother motion
+                this.patternState.headSweepPhase += deltaTime * 1.5;
                 
-                // Head sweep motion - distinctive hammerhead behavior (increased amplitude)
-                const headSweep = Math.sin(this.patternState.headSweepPhase + this.patternState.waveOffset) * 25;
+                // FIX: Reduced head sweep amplitude (10 instead of 25) to prevent jitter
+                // Head sweep is now a subtle S-shape motion, not aggressive lateral force
+                const headSweepAmplitude = 10;
+                const headSweep = Math.sin(this.patternState.headSweepPhase + (this.patternState.waveOffset || 0)) * headSweepAmplitude;
                 
                 // IMPROVED: Use patrol angle for consistent directional movement
                 const patrolSpeed = (this.config.speedMin + this.config.speedMax) * 0.5;
                 const currentSpeed = this.velocity.length();
                 
-                // Always apply forward thrust in patrol direction
-                const thrustStrength = currentSpeed < patrolSpeed ? 35 : 15;
+                // FIX: Stronger forward thrust (50/25 instead of 35/15) to ensure movement
+                const thrustStrength = currentSpeed < patrolSpeed ? 50 : 25;
                 this.acceleration.x += Math.cos(this.patternState.patrolAngle) * thrustStrength;
                 this.acceleration.z += Math.sin(this.patternState.patrolAngle) * thrustStrength;
                 
-                // Add perpendicular head sweep for S-shape motion
+                // FIX: Limit lateral force to max 30% of forward thrust to prevent jitter
+                // Head sweep creates S-shape path but doesn't overpower forward movement
                 const perpAngle = this.patternState.patrolAngle + Math.PI / 2;
-                this.acceleration.x += Math.cos(perpAngle) * headSweep * 0.5;
-                this.acceleration.z += Math.sin(perpAngle) * headSweep * 0.5;
+                const maxLateralForce = thrustStrength * 0.3;
+                const lateralForce = Math.min(Math.abs(headSweep * 0.5), maxLateralForce) * Math.sign(headSweep);
+                this.acceleration.x += Math.cos(perpAngle) * lateralForce;
+                this.acceleration.z += Math.sin(perpAngle) * lateralForce;
                 
-                // FIX: Hard boundary enforcement for hammerhead shark
-                // The shark was escaping boundaries because soft forces weren't strong enough
+                // FIX: Boundary handling - use smaller margins and gradual steering
+                // Previous softMargin=400 with depth=1200 left only ±200 active zone
                 const sharkPos = this.group.position;
                 const { width: tankWidth, depth: tankDepth } = CONFIG.aquarium;
-                const hardMargin = 200; // Hard boundary margin - shark CANNOT go past this
-                const softMargin = 400; // Soft boundary margin - shark starts turning here
-                const hardBoundaryForce = 150; // Very strong force at hard boundary
-                const softBoundaryForce = 80;  // Strong force at soft boundary
+                const hardMargin = 150; // Hard boundary - shark CANNOT go past this
+                const softMargin = 250; // Soft boundary - shark starts turning here (was 400)
+                const hardBoundaryForce = 120;
+                const softBoundaryForce = 60;
                 
-                // Calculate hard boundaries
+                // Calculate boundaries
                 const hardMinX = -tankWidth/2 + hardMargin;
                 const hardMaxX = tankWidth/2 - hardMargin;
                 const hardMinZ = -tankDepth/2 + hardMargin;
                 const hardMaxZ = tankDepth/2 - hardMargin;
-                
-                // Calculate soft boundaries
                 const softMinX = -tankWidth/2 + softMargin;
                 const softMaxX = tankWidth/2 - softMargin;
                 const softMinZ = -tankDepth/2 + softMargin;
                 const softMaxZ = tankDepth/2 - softMargin;
                 
                 // HARD BOUNDARY: Clamp position and reverse velocity if past hard boundary
+                // FIX: Only set patrolAngle at hard boundary, not soft boundary
                 if (sharkPos.x < hardMinX) {
                     sharkPos.x = hardMinX;
                     if (this.velocity.x < 0) this.velocity.x *= -0.5;
@@ -9827,28 +9835,26 @@ class Fish {
                     this.acceleration.z -= hardBoundaryForce;
                 }
                 
-                // SOFT BOUNDARY: Strong steering force when approaching boundary
+                // SOFT BOUNDARY: Apply steering force but DON'T overwrite patrolAngle
+                // FIX: This was the main bug - soft boundary was overwriting patrolAngle every frame
+                // causing the shark to be stuck with only headSweep jitter visible
                 if (sharkPos.x < softMinX) {
-                    this.patternState.patrolAngle = 0;
                     this.acceleration.x += softBoundaryForce;
                 } else if (sharkPos.x > softMaxX) {
-                    this.patternState.patrolAngle = Math.PI;
                     this.acceleration.x -= softBoundaryForce;
                 }
                 if (sharkPos.z < softMinZ) {
-                    this.patternState.patrolAngle = Math.PI / 2;
                     this.acceleration.z += softBoundaryForce;
                 } else if (sharkPos.z > softMaxZ) {
-                    this.patternState.patrolAngle = -Math.PI / 2;
                     this.acceleration.z -= softBoundaryForce;
                 }
                 
                 if (this.patternState.patrolPhase === 'cruise') {
-                    // Occasional direction change during patrol (more frequent)
+                    // Occasional direction change during patrol
                     if (this.patternState.patrolTimer <= 0) {
                         this.patternState.patrolPhase = 'turn';
                         this.patternState.patrolTimer = 1.0 + Math.random() * 0.8;
-                        // Pick new patrol direction (larger turn angle)
+                        // Pick new patrol direction
                         this.patternState.targetAngle = this.patternState.patrolAngle + (Math.random() - 0.5) * Math.PI;
                     }
                 } else if (this.patternState.patrolPhase === 'turn') {
