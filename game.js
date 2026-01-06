@@ -7940,14 +7940,12 @@ class Fish {
                         this.glbMixer.uncacheRoot(this.glbModelRoot);
                     }
                     
-                    // Dispose old GLB geometries (but not shared materials)
-                    if (this.glbMeshes) {
-                        this.glbMeshes.forEach(mesh => {
-                            if (mesh.geometry) mesh.geometry.dispose();
-                        });
-                    }
+                    // NOTE: Do NOT dispose GLB geometries here!
+                    // GLB clones share geometry references with the cached model.
+                    // Disposing them would corrupt other fish using the same model.
+                    // The global GLB cache owns these geometries for the app's lifetime.
                     
-                    // Clear references
+                    // Clear references (but don't dispose shared resources)
                     this.glbCorrectionWrapper = null;
                     this.glbPitchWrapper = null;
                     this.glbModelRoot = null;
