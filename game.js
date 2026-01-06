@@ -9172,6 +9172,12 @@ class Fish {
         this.isFrozen = false;
         this.group.visible = true;
         
+        // FIX: Reset lastPosition on spawn to prevent stuck fish detection from using stale data
+        // This is critical for pooled fish reuse - without this, the first frame's displacement
+        // calculation would use the old fish's last position, potentially triggering false stuck detection
+        this.lastPosition.copy(position);
+        this.stuckTimer = 0;
+        
         // FIX: Reset rotation on spawn to prevent pooled fish from keeping old tilt
         // This ensures fish start level (dorsal up) when respawning
         this.group.rotation.x = 0;
@@ -9557,6 +9563,53 @@ class Fish {
                     // Keep Y velocity for vertical movement
                 }
             }
+        }
+        
+        // NaN RECOVERY GUARD: Detect and recover from NaN/Infinity in velocity or position
+        // This is a defensive "seatbelt" that prevents fish from freezing due to edge cases
+        // in boids, boundary forces, or pattern calculations that produce non-finite values
+        const velNaN = !Number.isFinite(this.velocity.x) || !Number.isFinite(this.velocity.y) || !Number.isFinite(this.velocity.z);
+        const posNaN = !Number.isFinite(this.group.position.x) || !Number.isFinite(this.group.position.y) || !Number.isFinite(this.group.position.z);
+        
+        if (velNaN || posNaN) {
+            console.warn(`[FISH] NaN detected in ${this.tier}/${this.species || this.form} - vel:${velNaN} pos:${posNaN}, recovering`);
+            
+            // Reset velocity to random direction at base speed
+            const randomAngle = Math.random() * Math.PI * 2;
+            this.velocity.set(
+                Math.cos(randomAngle) * this.speed,
+                (Math.random() - 0.5) * 20,
+                Math.sin(randomAngle) * this.speed
+            );
+            
+            // Reset position to center of aquarium if position is NaN
+            if (posNaN) {
+                this.group.position.set(
+                    (Math.random() - 0.5) * CONFIG.aquarium.width * 0.5,
+                    CONFIG.aquarium.floorY + CONFIG.aquarium.height * 0.5,
+                    (Math.random() - 0.5) * CONFIG.aquarium.depth * 0.5
+                );
+            }
+            
+            // Reset acceleration
+            this.acceleration.set(0, 0, 0);
+            
+            // Reset pattern state to prevent stuck patterns
+            this.patternState = null;
+            
+            // Reset animation timeScale
+            if (this._animTimeScale !== undefined) {
+                this._animTimeScale = 1.0;
+            }
+            
+            // Reset last velocity direction
+            this._lastVelocityDir = null;
+            
+            // Reset stuck timer
+            this.stuckTimer = 0;
+            
+            // Skip position update this frame to let recovery take effect
+            return;
         }
         
         // Update position (using addScaledVector to avoid clone() allocation)
