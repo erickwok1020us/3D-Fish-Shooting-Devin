@@ -9242,7 +9242,15 @@ class Fish {
         // FIX: Load GLB model AFTER fish is active and positioned
         // This ensures the guard in tryLoadGLBModel() won't block attachment
         // Only load if not already loaded (prevents duplicate loading on respawn)
-        if (!this.glbLoaded && this.form) {
+        // BOSS MODE FIX: Also reload if glbLoaded is true but glbModelRoot is missing/invalid
+        // This can happen when a fish is recycled from freeFish pool - the GLB model may have
+        // been detached or corrupted, but glbLoaded remains true from the previous lifecycle
+        const needsGLBReload = !this.glbLoaded || 
+            (this.glbLoaded && (!this.glbModelRoot || !this.glbModelRoot.parent));
+        
+        if (needsGLBReload && this.form) {
+            // Reset GLB state to ensure fresh load
+            this.glbLoaded = false;
             this.tryLoadGLBModel(this.form, this.config.size);
         } else if (this.glbLoaded && this.glbModelRoot) {
             // ANIMATION FIX: Reinitialize AnimationMixer for recycled fish
@@ -9777,17 +9785,24 @@ class Fish {
             case 'sShape':
                 // COMPLETE REDESIGN: Hammerhead shark swimming pattern
                 // Uses velocity-based steering (like burstAttack) instead of angle-based control
-                // Relies on global applyBoundaryForces() for boundary handling - no custom boundary logic
                 // Creates S-shape path via smooth yaw oscillation, not lateral forces
+                
+                // Get boundary limits from CONFIG (use fishArena margins for consistency)
+                const sShapeAquarium = CONFIG.aquarium;
+                const sShapeArena = CONFIG.fishArena;
+                const sShapeMinX = -sShapeAquarium.width / 2 + sShapeArena.marginX;
+                const sShapeMaxX = sShapeAquarium.width / 2 - sShapeArena.marginX;
+                const sShapeMinY = sShapeAquarium.floorY + sShapeArena.marginY;
+                const sShapeMaxY = sShapeAquarium.floorY + sShapeAquarium.height - sShapeArena.marginY;
+                const sShapeMinZ = -sShapeAquarium.depth / 2 + sShapeArena.marginZ;
+                const sShapeMaxZ = sShapeAquarium.depth / 2 - sShapeArena.marginZ;
                 
                 // Initialize waypoint patrol state
                 if (!this.patternState.waypoint) {
-                    const { width, depth, height, floorY } = CONFIG.aquarium;
-                    const margin = 300; // Stay this far from walls
                     this.patternState.waypoint = new THREE.Vector3(
-                        (Math.random() - 0.5) * (width - margin * 2),
-                        floorY + height * 0.3 + Math.random() * height * 0.4,
-                        (Math.random() - 0.5) * (depth - margin * 2)
+                        sShapeMinX + Math.random() * (sShapeMaxX - sShapeMinX),
+                        sShapeMinY + Math.random() * (sShapeMaxY - sShapeMinY),
+                        sShapeMinZ + Math.random() * (sShapeMaxZ - sShapeMinZ)
                     );
                     this.patternState.yawOscillation = 0;
                     this.patternState.cruiseSpeed = (this.config.speedMin + this.config.speedMax) * 0.6;
@@ -9796,49 +9811,77 @@ class Fish {
                 // Update yaw oscillation phase for S-shape path
                 this.patternState.yawOscillation += deltaTime * 0.8; // Slow oscillation frequency
                 
-                // Calculate direction to waypoint
-                const toWaypoint = new THREE.Vector3();
-                toWaypoint.subVectors(this.patternState.waypoint, this.group.position);
-                const distToWaypoint = toWaypoint.length();
+                // Calculate direction to waypoint (reuse temp vector to avoid GC)
+                const toWaypointVec = fishTempVectors.boundaryForce; // Reuse existing temp vector
+                toWaypointVec.subVectors(this.patternState.waypoint, this.group.position);
+                let sShapeDist = toWaypointVec.length();
                 
                 // Pick new waypoint when close enough
-                if (distToWaypoint < 200) {
-                    const { width, depth, height, floorY } = CONFIG.aquarium;
-                    const margin = 300;
+                if (sShapeDist < 200) {
                     this.patternState.waypoint.set(
-                        (Math.random() - 0.5) * (width - margin * 2),
-                        floorY + height * 0.3 + Math.random() * height * 0.4,
-                        (Math.random() - 0.5) * (depth - margin * 2)
+                        sShapeMinX + Math.random() * (sShapeMaxX - sShapeMinX),
+                        sShapeMinY + Math.random() * (sShapeMaxY - sShapeMinY),
+                        sShapeMinZ + Math.random() * (sShapeMaxZ - sShapeMinZ)
                     );
-                    toWaypoint.subVectors(this.patternState.waypoint, this.group.position);
+                    toWaypointVec.subVectors(this.patternState.waypoint, this.group.position);
+                    sShapeDist = toWaypointVec.length(); // FIX: Recalculate distance after new waypoint
                 }
                 
                 // Normalize direction to waypoint
-                if (distToWaypoint > 0.1) {
-                    toWaypoint.divideScalar(distToWaypoint);
+                if (sShapeDist > 0.1) {
+                    toWaypointVec.divideScalar(sShapeDist);
                 }
                 
                 // Add yaw oscillation for S-shape path (rotate direction vector around Y axis)
-                const yawOffset = Math.sin(this.patternState.yawOscillation) * 0.4; // ~23 degrees max
-                const cosYaw = Math.cos(yawOffset);
-                const sinYaw = Math.sin(yawOffset);
-                const oscillatedX = toWaypoint.x * cosYaw - toWaypoint.z * sinYaw;
-                const oscillatedZ = toWaypoint.x * sinYaw + toWaypoint.z * cosYaw;
+                const sShapeYawOffset = Math.sin(this.patternState.yawOscillation) * 0.4; // ~23 degrees max
+                const sShapeCosYaw = Math.cos(sShapeYawOffset);
+                const sShapeSinYaw = Math.sin(sShapeYawOffset);
+                const sShapeOscX = toWaypointVec.x * sShapeCosYaw - toWaypointVec.z * sShapeSinYaw;
+                const sShapeOscZ = toWaypointVec.x * sShapeSinYaw + toWaypointVec.z * sShapeCosYaw;
                 
                 // Compute desired velocity at cruise speed
-                const desiredVelX = oscillatedX * this.patternState.cruiseSpeed;
-                const desiredVelY = toWaypoint.y * this.patternState.cruiseSpeed * 0.3; // Reduced vertical
-                const desiredVelZ = oscillatedZ * this.patternState.cruiseSpeed;
+                const sShapeDesVelX = sShapeOscX * this.patternState.cruiseSpeed;
+                const sShapeDesVelY = toWaypointVec.y * this.patternState.cruiseSpeed * 0.3; // Reduced vertical
+                const sShapeDesVelZ = sShapeOscZ * this.patternState.cruiseSpeed;
                 
                 // Proportional steering: accel = (desiredVel - currentVel) * steerGain
-                // This is robust and can't "cancel itself out" like competing forces
-                const steerGain = 2.5;
-                this.acceleration.x += (desiredVelX - this.velocity.x) * steerGain;
-                this.acceleration.y += (desiredVelY - this.velocity.y) * steerGain;
-                this.acceleration.z += (desiredVelZ - this.velocity.z) * steerGain;
+                const sShapeSteerGain = 2.5;
+                this.acceleration.x += (sShapeDesVelX - this.velocity.x) * sShapeSteerGain;
+                this.acceleration.y += (sShapeDesVelY - this.velocity.y) * sShapeSteerGain;
+                this.acceleration.z += (sShapeDesVelZ - this.velocity.z) * sShapeSteerGain;
                 
-                // Note: Boundary handling is done by global applyBoundaryForces()
-                // No custom boundary logic needed here - keeps code simple and robust
+                // SAFETY NET: Hard clamp position to prevent escaping boundaries
+                // This catches edge cases where steering + boundary forces aren't enough
+                const sShapePos = this.group.position;
+                const sShapeHardMargin = 50; // Extra margin beyond fishArena for hard clamp
+                const sShapeHardMinX = -sShapeAquarium.width / 2 + sShapeHardMargin;
+                const sShapeHardMaxX = sShapeAquarium.width / 2 - sShapeHardMargin;
+                const sShapeHardMinY = sShapeAquarium.floorY + sShapeHardMargin;
+                const sShapeHardMaxY = sShapeAquarium.floorY + sShapeAquarium.height - sShapeHardMargin;
+                const sShapeHardMinZ = -sShapeAquarium.depth / 2 + sShapeHardMargin;
+                const sShapeHardMaxZ = sShapeAquarium.depth / 2 - sShapeHardMargin;
+                
+                if (sShapePos.x < sShapeHardMinX) {
+                    sShapePos.x = sShapeHardMinX;
+                    if (this.velocity.x < 0) this.velocity.x *= -0.3;
+                } else if (sShapePos.x > sShapeHardMaxX) {
+                    sShapePos.x = sShapeHardMaxX;
+                    if (this.velocity.x > 0) this.velocity.x *= -0.3;
+                }
+                if (sShapePos.y < sShapeHardMinY) {
+                    sShapePos.y = sShapeHardMinY;
+                    if (this.velocity.y < 0) this.velocity.y *= -0.3;
+                } else if (sShapePos.y > sShapeHardMaxY) {
+                    sShapePos.y = sShapeHardMaxY;
+                    if (this.velocity.y > 0) this.velocity.y *= -0.3;
+                }
+                if (sShapePos.z < sShapeHardMinZ) {
+                    sShapePos.z = sShapeHardMinZ;
+                    if (this.velocity.z < 0) this.velocity.z *= -0.3;
+                } else if (sShapePos.z > sShapeHardMaxZ) {
+                    sShapePos.z = sShapeHardMaxZ;
+                    if (this.velocity.z > 0) this.velocity.z *= -0.3;
+                }
                 break;
                 
             case 'synchronizedFast':
