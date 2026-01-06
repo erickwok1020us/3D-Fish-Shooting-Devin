@@ -4577,6 +4577,8 @@ const muzzleFlashTemp = {
 
 // Spawn muzzle flash effect at cannon muzzle
 // IMPROVED: Ring follows barrel direction (like collar around barrel), not bullet direction
+// FIX: In FPS mode, use bullet direction instead of barrel direction because the cannon
+// model orientation may not match the camera/aim direction in FPS view
 function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
     if (!config) return;
@@ -4584,7 +4586,15 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     // Get barrel forward direction from cannonMuzzle's world orientation
     // This ensures ring "wraps around" the barrel regardless of where bullets go
     let barrelDirection = direction;  // Fallback to bullet direction
-    if (cannonMuzzle) {
+    
+    // FIX: In FPS mode, always use bullet direction for muzzle flash ring orientation
+    // This ensures the ring faces the correct direction (toward where bullets go)
+    // In third-person mode, use barrel direction for visual accuracy
+    if (gameState.viewMode === 'fps') {
+        // FPS mode: Use bullet direction (matches crosshair/aim direction)
+        barrelDirection = direction;
+    } else if (cannonMuzzle) {
+        // Third-person mode: Use barrel direction (collar around barrel)
         cannonMuzzle.getWorldQuaternion(muzzleFlashTemp.worldQuat);
         muzzleFlashTemp.barrelForward.copy(muzzleFlashTemp.localForward)
             .applyQuaternion(muzzleFlashTemp.worldQuat);
@@ -9561,12 +9571,14 @@ class Fish {
             this.velocity.multiplyScalar(maxSpeed / currentSpeedFinal);
         }
         
-        // FIX: MINIMUM SPEED ENFORCEMENT for burstAttack/burstSprint fish (sharks, marlin, etc.)
+        // FIX: MINIMUM SPEED ENFORCEMENT for predator fish (sharks, marlin, hammerhead, etc.)
         // This ensures large predators always maintain forward momentum even when other forces
         // (boundary, turn-rate limiter, boids) would slow them down to a stop.
         // Applied AFTER all other velocity modifications to guarantee minimum movement.
         // Note: 'pattern' variable is already declared earlier in this function (line ~9240)
-        if ((pattern === 'burstAttack' || pattern === 'burstSprint') &&
+        // FIX: Added 'sShape' pattern (hammerhead) - was missing minimum speed enforcement
+        // which caused hammerhead to be almost stationary while other fish moved normally
+        if ((pattern === 'burstAttack' || pattern === 'burstSprint' || pattern === 'sShape') &&
             this.patternState.phase !== 'stop') {
             const minSpeed = this.config.speedMin * 0.4; // 40% of speedMin as absolute minimum
             const currentSpeedAfterClamp = this.velocity.length();
@@ -9576,10 +9588,16 @@ class Fish {
                     // Scale up velocity in current direction to reach minimum speed
                     this.velocity.multiplyScalar(minSpeed / currentSpeedAfterClamp);
                 } else {
-                    // Velocity too low to determine direction - pick random direction
-                    const randomAngle = Math.random() * Math.PI * 2;
-                    this.velocity.x = Math.cos(randomAngle) * minSpeed;
-                    this.velocity.z = Math.sin(randomAngle) * minSpeed;
+                    // Velocity too low to determine direction - use patrolAngle for sShape
+                    // or random direction for other patterns
+                    let targetAngle;
+                    if (pattern === 'sShape' && this.patternState.patrolAngle !== undefined) {
+                        targetAngle = this.patternState.patrolAngle;
+                    } else {
+                        targetAngle = Math.random() * Math.PI * 2;
+                    }
+                    this.velocity.x = Math.cos(targetAngle) * minSpeed;
+                    this.velocity.z = Math.sin(targetAngle) * minSpeed;
                     // Keep Y velocity for vertical movement
                 }
             }
