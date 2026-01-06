@@ -7927,6 +7927,38 @@ class Fish {
             }
             
             if (glbModel && this.group) {
+                // MEMORY LEAK FIX: Clean up existing GLB wrapper before creating new one
+                // This prevents accumulation of orphaned wrappers when fish is recycled
+                // and tryLoadGLBModel is called multiple times
+                if (this.glbCorrectionWrapper) {
+                    // Remove old wrapper from group
+                    this.group.remove(this.glbCorrectionWrapper);
+                    
+                    // Clean up old AnimationMixer if exists
+                    if (this.glbMixer && this.glbModelRoot) {
+                        this.glbMixer.stopAllAction();
+                        this.glbMixer.uncacheRoot(this.glbModelRoot);
+                    }
+                    
+                    // Dispose old GLB geometries (but not shared materials)
+                    if (this.glbMeshes) {
+                        this.glbMeshes.forEach(mesh => {
+                            if (mesh.geometry) mesh.geometry.dispose();
+                        });
+                    }
+                    
+                    // Clear references
+                    this.glbCorrectionWrapper = null;
+                    this.glbPitchWrapper = null;
+                    this.glbModelRoot = null;
+                    this.glbMeshes = null;
+                    this.glbMixer = null;
+                    this.glbAction = null;
+                    this.glbLoaded = false;
+                    
+                    console.log(`[FISH-GLB] Cleaned up old GLB wrapper for ${form}`);
+                }
+                
                 // Store reference to procedural mesh children for removal
                 const proceduralChildren = [...this.group.children];
                 
@@ -9127,6 +9159,14 @@ class Fish {
         // DEBUG: Track spawns
         glbSwapStats.totalSpawned++;
         updateGlbDebugDisplay();
+        
+        // MEMORY LEAK FIX: Cancel any pending respawn timer from previous lifecycle
+        // This is critical when a fish is reused from freeFish pool before its respawn timer fires
+        // Without this, the old timer would still fire and cause duplicate spawn attempts
+        if (this.respawnTimerId) {
+            clearTimeout(this.respawnTimerId);
+            this.respawnTimerId = null;
+        }
         
         this.group.position.copy(position);
         this.hp = this.config.hp;
@@ -10359,9 +10399,22 @@ class Fish {
         this.isActive = false;
         this.group.visible = false;
         
-        // Stop GLB animation when fish dies (for pooling/recycling)
+        // MEMORY LEAK FIX: Cancel any pending respawn timer to prevent duplicate spawns
+        // This is critical because die() pushes to freeFish AND schedules respawn,
+        // which can cause the same fish instance to be spawned multiple times
+        if (this.respawnTimerId) {
+            clearTimeout(this.respawnTimerId);
+            this.respawnTimerId = null;
+        }
+        
+        // MEMORY LEAK FIX: Properly cleanup AnimationMixer to prevent accumulation
+        // stopAllAction() alone is not enough - we need uncacheRoot() to release references
         if (this.glbMixer) {
             this.glbMixer.stopAllAction();
+            if (this.glbModelRoot) {
+                this.glbMixer.uncacheRoot(this.glbModelRoot);
+            }
+            // Don't null the mixer here - we'll reuse it on respawn if GLB is already loaded
         }
         
         // PERFORMANCE: Return fish to free-list for O(1) reuse (Boss Mode optimization)
@@ -10453,8 +10506,13 @@ class Fish {
             }
         }
         
-        // Respawn after delay
-        setTimeout(() => this.respawn(), 2000 + Math.random() * 3000);
+        // MEMORY LEAK FIX: Store respawn timer ID so it can be cancelled if fish is reused
+        // This prevents duplicate spawns when die() pushes to freeFish and the fish is
+        // reused by updateDynamicFishSpawn() before the respawn timer fires
+        this.respawnTimerId = setTimeout(() => {
+            this.respawnTimerId = null;
+            this.respawn();
+        }, 2000 + Math.random() * 3000);
     }
     
     // Phase 2: Trigger special ability when fish dies
@@ -10687,7 +10745,7 @@ function spawnInitialFish() {
 const FISH_SPAWN_CONFIG = {
     targetCount: 80,        // Target number of fish on screen
     minCount: 60,           // Minimum fish count before emergency spawn
-    maxCount: 120,          // Maximum fish count - HARD CAP to prevent performance issues
+    maxCount: 100,          // Maximum fish count - HARD CAP to prevent performance issues (reduced from 120 for memory optimization)
     normalSpawnInterval: 1.0,    // Normal spawn interval (seconds)
     emergencySpawnInterval: 0.3, // Emergency spawn interval when fish < minCount
     maintainSpawnInterval: 2.0   // Slow spawn when at target
