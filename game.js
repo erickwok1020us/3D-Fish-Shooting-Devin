@@ -1582,18 +1582,35 @@ function createSciFiRingTexture() {
 function updateSciFiBaseRing(time) {
     if (!cannonBaseRingCore || !cannonBaseRingGlow) return;
     
-    // Slow rotation for tech feel (core rotates one way, glow rotates opposite)
-    const rotationSpeed = 0.15;  // Radians per second
+    const rotationSpeed = 0.15;
     cannonBaseRingCore.rotation.z = time * rotationSpeed;
-    cannonBaseRingGlow.rotation.z = -time * rotationSpeed * 0.7;  // Slower, opposite direction
+    cannonBaseRingGlow.rotation.z = -time * rotationSpeed * 0.7;
     
-    // Gentle opacity pulse for "powered" energy effect
-    const pulseSpeed = 2.0;  // Cycles per second
+    const pulseSpeed = 2.0;
     const corePulse = 0.85 + 0.15 * Math.sin(time * pulseSpeed);
-    const glowPulse = 0.30 + 0.15 * Math.sin(time * pulseSpeed + Math.PI * 0.5);  // Phase offset
+    const glowPulse = 0.30 + 0.15 * Math.sin(time * pulseSpeed + Math.PI * 0.5);
     
     cannonBaseRingCore.material.opacity = 0.9 * corePulse;
     cannonBaseRingGlow.material.opacity = glowPulse;
+}
+
+function updateStaticCannonRings(time) {
+    for (let i = 0; i < staticCannonRings.length; i++) {
+        const rings = staticCannonRings[i];
+        if (!rings.core || !rings.glow) continue;
+        
+        const phaseOffset = i * Math.PI * 0.5;
+        const rotationSpeed = 0.15;
+        rings.core.rotation.z = time * rotationSpeed + phaseOffset;
+        rings.glow.rotation.z = -time * rotationSpeed * 0.7 + phaseOffset;
+        
+        const pulseSpeed = 2.0;
+        const corePulse = 0.85 + 0.15 * Math.sin(time * pulseSpeed + phaseOffset);
+        const glowPulse = 0.30 + 0.15 * Math.sin(time * pulseSpeed + Math.PI * 0.5 + phaseOffset);
+        
+        rings.core.material.opacity = 0.9 * corePulse;
+        rings.glow.material.opacity = glowPulse;
+    }
 }
 
 // Debug flag for shooting logs (set to false for production)
@@ -6944,12 +6961,12 @@ let cannonPitchGroup = null;
 
 // Static decorative cannons for 4-player layout
 let staticCannons = [];
+let staticCannonRings = [];
 
 // Create a static decorative cannon (no functionality, just visual)
 function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '1x') {
     const staticCannonGroup = new THREE.Group();
     
-    // Platform base (same as player cannon but slightly different color)
     const platformGeometry = new THREE.CylinderGeometry(50, 60, 15, 16);
     const platformMaterial = new THREE.MeshBasicMaterial({
         color: 0x556688
@@ -6958,7 +6975,6 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
     platform.position.y = 5;
     staticCannonGroup.add(platform);
     
-    // Glowing ring with weapon-specific color
     const weaponColors = {
         '1x': 0x66ff66,
         '3x': 0xffaa00,
@@ -6966,14 +6982,54 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
         '8x': 0xff44ff
     };
     const ringColor = weaponColors[weaponKey] || 0x3399bb;
-    const ringGeometry = new THREE.TorusGeometry(65, 6, 8, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-        color: ringColor
+    
+    if (!cannonBaseRingSegmentTexture) {
+        cannonBaseRingSegmentTexture = createSciFiRingTexture();
+    }
+    
+    const coreRingGeometry = new THREE.RingGeometry(50, 72, 64);
+    const coreRingMaterial = new THREE.MeshBasicMaterial({
+        color: ringColor,
+        map: cannonBaseRingSegmentTexture,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false
     });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 2;
-    staticCannonGroup.add(ring);
+    const coreRing = new THREE.Mesh(coreRingGeometry, coreRingMaterial);
+    coreRing.rotation.x = -Math.PI / 2;
+    coreRing.position.y = 3;
+    coreRing.renderOrder = 1;
+    staticCannonGroup.add(coreRing);
+    
+    const glowRingGeometry = new THREE.RingGeometry(45, 80, 64);
+    const glowRingMaterial = new THREE.MeshBasicMaterial({
+        color: ringColor,
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const glowRing = new THREE.Mesh(glowRingGeometry, glowRingMaterial);
+    glowRing.rotation.x = -Math.PI / 2;
+    glowRing.position.y = 2;
+    glowRing.renderOrder = 0;
+    staticCannonGroup.add(glowRing);
+    
+    const innerDiskGeometry = new THREE.CircleGeometry(44.5, 64);
+    const innerDiskMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        side: THREE.DoubleSide,
+        depthWrite: true
+    });
+    const innerDisk = new THREE.Mesh(innerDiskGeometry, innerDiskMaterial);
+    innerDisk.rotation.x = -Math.PI / 2;
+    innerDisk.position.y = 12.5;
+    innerDisk.renderOrder = 2;
+    staticCannonGroup.add(innerDisk);
+    
+    staticCannonRings.push({ core: coreRing, glow: glowRing });
     
     // Create barrel group for weapon model
     const barrelGroup = new THREE.Group();
@@ -13097,7 +13153,8 @@ function animate() {
     updateFPSCameraRecoil();
     
     // Update sci-fi base ring animation (rotation + pulse)
-    updateSciFiBaseRing(currentTime / 1000);  // Convert to seconds
+    updateSciFiBaseRing(currentTime / 1000);
+    updateStaticCannonRings(currentTime / 1000);
     
     // Update floating underwater particles for dynamic atmosphere
     updateUnderwaterParticles(deltaTime);
