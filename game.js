@@ -1461,7 +1461,9 @@ const aimTempVectors = {
     muzzlePos: new THREE.Vector3(),
     targetPoint: new THREE.Vector3(),
     direction: new THREE.Vector3(),
-    rayDirection: new THREE.Vector3()
+    rayDirection: new THREE.Vector3(),
+    parallaxHitPoint: new THREE.Vector3(),
+    parallaxScreenPos: new THREE.Vector3()
 };
 
 // PERFORMANCE: Throttle state for aimCannon - limits calls to once per animation frame
@@ -6944,57 +6946,90 @@ let cannonPitchGroup = null;
 let staticCannons = [];
 
 // Create a static decorative cannon (no functionality, just visual)
-function createStaticCannon(position, rotationY, color = 0x888888) {
+function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '1x') {
     const staticCannonGroup = new THREE.Group();
     
     // Platform base (same as player cannon but slightly different color)
     const platformGeometry = new THREE.CylinderGeometry(50, 60, 15, 16);
     const platformMaterial = new THREE.MeshBasicMaterial({
-        color: 0x556688  // Slightly darker blue for static cannons
+        color: 0x556688
     });
     const platform = new THREE.Mesh(platformGeometry, platformMaterial);
     platform.position.y = 5;
     staticCannonGroup.add(platform);
     
-    // Glowing ring (dimmer for static cannons)
+    // Glowing ring with weapon-specific color
+    const weaponColors = {
+        '1x': 0x66ff66,
+        '3x': 0xffaa00,
+        '5x': 0x00aaff,
+        '8x': 0xff44ff
+    };
+    const ringColor = weaponColors[weaponKey] || 0x3399bb;
     const ringGeometry = new THREE.TorusGeometry(65, 6, 8, 32);
     const ringMaterial = new THREE.MeshBasicMaterial({
-        color: 0x3399bb  // Dimmer cyan for static cannons
+        color: ringColor
     });
     const ring = new THREE.Mesh(ringGeometry, ringMaterial);
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 2;
     staticCannonGroup.add(ring);
     
-    // Static cannon barrel (simple cylinder)
+    // Create barrel group for weapon model
     const barrelGroup = new THREE.Group();
     barrelGroup.position.y = 30;
     
-    // Main barrel
-    const barrelGeometry = new THREE.CylinderGeometry(8, 12, 50, 8);
-    const barrelMaterial = new THREE.MeshBasicMaterial({
-        color: color  // Custom color per cannon position
-    });
-    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.z = 25;
-    barrelGroup.add(barrel);
+    // Try to load GLB weapon model, fallback to simple geometry
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    if (glbConfig && weaponGLBState.cannonCache.has(weaponKey)) {
+        const cachedModel = weaponGLBState.cannonCache.get(weaponKey);
+        if (cachedModel) {
+            const clonedModel = cachedModel.clone();
+            clonedModel.position.set(0, 20, 0);
+            clonedModel.scale.setScalar(glbConfig.scale);
+            if (glbConfig.cannonRotationFix) {
+                clonedModel.rotation.copy(glbConfig.cannonRotationFix);
+            }
+            barrelGroup.add(clonedModel);
+        }
+    } else {
+        // Fallback: Simple cylinder barrel with weapon-specific size
+        const barrelSizes = { '1x': 8, '3x': 10, '5x': 12, '8x': 15 };
+        const barrelSize = barrelSizes[weaponKey] || 8;
+        const barrelGeometry = new THREE.CylinderGeometry(barrelSize, barrelSize * 1.5, 50, 8);
+        const barrelMaterial = new THREE.MeshBasicMaterial({ color: ringColor });
+        const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.z = 25;
+        barrelGroup.add(barrel);
+        
+        // Barrel base/housing
+        const housingGeometry = new THREE.SphereGeometry(18, 8, 8);
+        const housingMaterial = new THREE.MeshBasicMaterial({ color: 0x445566 });
+        const housing = new THREE.Mesh(housingGeometry, housingMaterial);
+        barrelGroup.add(housing);
+        
+        // Async load GLB model and replace fallback when ready
+        loadWeaponGLB(weaponKey, 'cannon').then(model => {
+            if (model && barrelGroup.parent) {
+                barrelGroup.clear();
+                const clonedModel = model.clone();
+                clonedModel.position.set(0, 20, 0);
+                clonedModel.scale.setScalar(glbConfig.scale);
+                if (glbConfig.cannonRotationFix) {
+                    clonedModel.rotation.copy(glbConfig.cannonRotationFix);
+                }
+                barrelGroup.add(clonedModel);
+            }
+        }).catch(() => {});
+    }
     
-    // Barrel base/housing
-    const housingGeometry = new THREE.SphereGeometry(18, 8, 8);
-    const housingMaterial = new THREE.MeshBasicMaterial({
-        color: 0x445566
-    });
-    const housing = new THREE.Mesh(housingGeometry, housingMaterial);
-    barrelGroup.add(housing);
-    
-    // Add barrel to cannon group
     staticCannonGroup.add(barrelGroup);
     
     // Position and rotate the cannon
     staticCannonGroup.position.copy(position);
     staticCannonGroup.rotation.y = rotationY;
-    staticCannonGroup.scale.set(1.0, 1.0, 1.0);  // Slightly smaller than player cannon
+    staticCannonGroup.scale.set(1.0, 1.0, 1.0);
     
     scene.add(staticCannonGroup);
     staticCannons.push(staticCannonGroup);
@@ -7014,35 +7049,32 @@ const CANNON_BASE_Y = -337.5;  // 3/4 depth, closer to floor
 
 // Create all 4 cannons (1 player + 3 static)
 function createAllCannons() {
-    // Use CANNON_BASE_Y for water middle position
     const cannonY = CANNON_BASE_Y;
     
-    // 4 cannon positions at 90-degree intervals on the platform EDGE
-    // Platform is rectangular, so X and Z distances differ
-    // 12 o'clock = player (bottom of screen, Z negative) - created by createCannon()
-    // 3 o'clock = right side (X positive)
-    // 6 o'clock = top of screen (Z positive)
-    // 9 o'clock = left side (X negative)
+    const weaponTypes = ['1x', '3x', '5x', '8x'];
+    function getRandomWeapon() {
+        return weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
+    }
     
-    // Static cannon at 3 o'clock (X positive, facing left toward center)
     createStaticCannon(
         new THREE.Vector3(CANNON_RING_RADIUS_X, cannonY, 0),
-        -Math.PI / 2,  // Rotate to face center (left)
-        0x99aa88  // Greenish tint
+        -Math.PI / 2,
+        0x99aa88,
+        getRandomWeapon()
     );
     
-    // Static cannon at 6 o'clock (Z positive, facing down toward center)
     createStaticCannon(
         new THREE.Vector3(0, cannonY, CANNON_RING_RADIUS_Z),
-        Math.PI,  // Rotate to face center (down)
-        0xaa8899  // Pinkish tint
+        Math.PI,
+        0xaa8899,
+        getRandomWeapon()
     );
     
-    // Static cannon at 9 o'clock (X negative, facing right toward center)
     createStaticCannon(
         new THREE.Vector3(-CANNON_RING_RADIUS_X, cannonY, 0),
-        Math.PI / 2,  // Rotate to face center (right)
-        0x8899aa  // Bluish tint
+        Math.PI / 2,
+        0x8899aa,
+        getRandomWeapon()
     );
 }
 
@@ -7521,6 +7553,64 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     return result;
 }
 
+// PARALLAX COMPENSATION: Calculate where the crosshair should be displayed in 3rd person mode
+// to accurately show where bullets will actually hit
+// Returns {x, y} screen coordinates for the crosshair, or null if compensation not possible
+function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
+    if (!camera || !cannonMuzzle) return null;
+    
+    // Get the aim direction (same as what fireBullet uses)
+    const direction = getAimDirectionFromMouse(mouseX, mouseY, aimTempVectors.direction);
+    
+    // Get muzzle position
+    cannonMuzzle.getWorldPosition(aimTempVectors.muzzlePos);
+    const muzzlePos = aimTempVectors.muzzlePos;
+    
+    // Calculate where the bullet would hit at a typical fish distance
+    // Fish swim around Y=0 (center of aquarium), so we intersect with Y=0 plane
+    // Ray equation: P(t) = muzzlePos + direction * t
+    // Plane equation: Y = 0
+    // Solve: muzzlePos.y + direction.y * t = 0 => t = -muzzlePos.y / direction.y
+    
+    let hitPoint = aimTempVectors.parallaxHitPoint;
+    
+    if (Math.abs(direction.y) > 0.001) {
+        const t = -muzzlePos.y / direction.y;
+        if (t > 0 && t < 3000) {
+            hitPoint.set(
+                muzzlePos.x + direction.x * t,
+                0,
+                muzzlePos.z + direction.z * t
+            );
+        } else {
+            // Use a fixed distance if intersection is invalid
+            hitPoint.copy(muzzlePos).addScaledVector(direction, 500);
+        }
+    } else {
+        // Direction is nearly horizontal, use a fixed distance
+        hitPoint.copy(muzzlePos).addScaledVector(direction, 500);
+    }
+    
+    // Project the hit point back to screen coordinates
+    const screenPos = aimTempVectors.parallaxScreenPos;
+    screenPos.copy(hitPoint);
+    screenPos.project(camera);
+    
+    // Check if the point is in front of the camera
+    if (screenPos.z > 1) return null;
+    
+    // Convert from NDC to screen coordinates
+    const screenX = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+    const screenY = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+    
+    // Clamp to screen bounds with some margin
+    const margin = 50;
+    const clampedX = Math.max(margin, Math.min(window.innerWidth - margin, screenX));
+    const clampedY = Math.max(margin, Math.min(window.innerHeight - margin, screenY));
+    
+    return { x: clampedX, y: clampedY };
+}
+
 // PERFORMANCE: Throttled version of aimCannon - stores mouse position and processes once per frame
 // This prevents excessive calls on every mouse move event in third-person mode
 function aimCannonThrottled(targetX, targetY) {
@@ -7552,7 +7642,11 @@ function aimCannon(targetX, targetY) {
     
     // Calculate yaw and pitch from direction
     const yaw = Math.atan2(direction.x, direction.z);
-    const pitch = Math.asin(direction.y);
+    // FIX: Clamp direction.y to [-1, 1] to prevent NaN from Math.asin due to floating point errors
+    // Without this clamp, extreme angles can cause direction.y to slightly exceed [-1, 1],
+    // resulting in NaN pitch, which pollutes cannon rotation matrix and causes "air wall" bug
+    const clampedDirY = Math.max(-1, Math.min(1, direction.y));
+    const pitch = Math.asin(clampedDirY);
     
     // FPS mode: Limited to ±90° yaw (180° total) - cannon can only face outward
     // 3RD PERSON mode: Unlimited 360° rotation
@@ -11184,6 +11278,15 @@ class Bullet {
         // Check boundaries - very lenient to allow bullets to reach fish
         const { width, height, depth, floorY } = CONFIG.aquarium;
         const pos = this.group.position;
+        
+        // FIX: NaN protection - if position is NaN, immediately deactivate
+        // NaN comparisons always return false, so bullets with NaN positions would never deactivate
+        // This prevents bullet pool exhaustion from "ghost bullets" that never get recycled
+        if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y) || !Number.isFinite(pos.z)) {
+            this.deactivate();
+            return;
+        }
+        
         // Allow bullets to travel within aquarium bounds with generous margins
         if (pos.y < floorY - 100 || pos.y > floorY + height + 200 ||
             pos.z > depth + 500 || pos.z < -1200 ||
@@ -12222,9 +12325,17 @@ function setupEventListeners() {
         // Issue #16: Update crosshair position based on view mode
         const crosshair = document.getElementById('crosshair');
         if (crosshair) {
-            // 3RD PERSON MODE: Crosshair follows mouse
-            crosshair.style.left = e.clientX + 'px';
-            crosshair.style.top = e.clientY + 'px';
+            // 3RD PERSON MODE: Use parallax compensation to show where bullets will actually hit
+            // This compensates for the offset between camera position and muzzle position
+            const compensatedPos = getParallaxCompensatedCrosshairPosition(e.clientX, e.clientY);
+            if (compensatedPos) {
+                crosshair.style.left = compensatedPos.x + 'px';
+                crosshair.style.top = compensatedPos.y + 'px';
+            } else {
+                // Fallback to mouse position if compensation fails
+                crosshair.style.left = e.clientX + 'px';
+                crosshair.style.top = e.clientY + 'px';
+            }
         }
     });
     
