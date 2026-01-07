@@ -946,6 +946,188 @@ function updatePerfDisplay() {
     `;
 }
 
+function analyzeSceneTriangles() {
+    if (!scene) {
+        console.log('[TRI-ANALYSIS] Scene not available');
+        return;
+    }
+    
+    const stats = {
+        total: 0,
+        byCategory: {
+            map: { triangles: 0, meshes: 0, objects: [] },
+            fish: { triangles: 0, meshes: 0, byForm: {} },
+            weapon: { triangles: 0, meshes: 0, objects: [] },
+            panorama: { triangles: 0, meshes: 0, objects: [] },
+            ui: { triangles: 0, meshes: 0, objects: [] },
+            other: { triangles: 0, meshes: 0, objects: [] }
+        },
+        topContributors: [],
+        geometryReuse: new Map()
+    };
+    
+    function getTriangleCount(geometry) {
+        if (!geometry) return 0;
+        if (geometry.index) {
+            return geometry.index.count / 3;
+        } else if (geometry.attributes && geometry.attributes.position) {
+            return geometry.attributes.position.count / 3;
+        }
+        return 0;
+    }
+    
+    function categorizeObject(obj) {
+        const name = (obj.name || '').toLowerCase();
+        const parentNames = [];
+        let parent = obj.parent;
+        while (parent) {
+            if (parent.name) parentNames.push(parent.name.toLowerCase());
+            parent = parent.parent;
+        }
+        const allNames = [name, ...parentNames].join(' ');
+        
+        if (allNames.includes('fish') || allNames.includes('sardine') || allNames.includes('shark') || 
+            allNames.includes('whale') || allNames.includes('tuna') || allNames.includes('manta') ||
+            allNames.includes('barracuda') || allNames.includes('grouper') || allNames.includes('clown') ||
+            allNames.includes('angel') || allNames.includes('tang') || allNames.includes('lion') ||
+            allNames.includes('parrot') || allNames.includes('puffer') || allNames.includes('seahorse') ||
+            allNames.includes('anchovy') || allNames.includes('damsel') || allNames.includes('marlin') ||
+            allNames.includes('dolphin') || allNames.includes('flying') || allNames.includes('hammerhead') ||
+            allNames.includes('killer')) {
+            return 'fish';
+        }
+        if (allNames.includes('map') || allNames.includes('coral') || allNames.includes('rock') || 
+            allNames.includes('sand') || allNames.includes('terrain') || allNames.includes('decoration') ||
+            allNames.includes('plant') || allNames.includes('seaweed') || allNames.includes('shell') ||
+            allNames.includes('chest') || allNames.includes('anchor') || allNames.includes('barrel')) {
+            return 'map';
+        }
+        if (allNames.includes('cannon') || allNames.includes('weapon') || allNames.includes('gun') ||
+            allNames.includes('bullet') || allNames.includes('muzzle')) {
+            return 'weapon';
+        }
+        if (allNames.includes('sky') || allNames.includes('panorama') || allNames.includes('background') ||
+            allNames.includes('sphere') && obj.geometry && obj.geometry.parameters && obj.geometry.parameters.radius > 1000) {
+            return 'panorama';
+        }
+        if (allNames.includes('ui') || allNames.includes('crosshair') || allNames.includes('hud')) {
+            return 'ui';
+        }
+        return 'other';
+    }
+    
+    scene.traverse((obj) => {
+        if (obj.isMesh || obj.isSkinnedMesh) {
+            const triangles = getTriangleCount(obj.geometry);
+            const category = categorizeObject(obj);
+            
+            stats.total += triangles;
+            stats.byCategory[category].triangles += triangles;
+            stats.byCategory[category].meshes++;
+            
+            if (category === 'fish') {
+                let fishForm = 'unknown';
+                let parent = obj.parent;
+                while (parent) {
+                    if (parent.userData && parent.userData.fishForm) {
+                        fishForm = parent.userData.fishForm;
+                        break;
+                    }
+                    if (parent.name && parent.name.includes('fish_')) {
+                        fishForm = parent.name.split('_')[1] || 'unknown';
+                        break;
+                    }
+                    parent = parent.parent;
+                }
+                if (!stats.byCategory.fish.byForm[fishForm]) {
+                    stats.byCategory.fish.byForm[fishForm] = { triangles: 0, count: 0 };
+                }
+                stats.byCategory.fish.byForm[fishForm].triangles += triangles;
+                stats.byCategory.fish.byForm[fishForm].count++;
+            }
+            
+            const geoId = obj.geometry ? obj.geometry.uuid : 'none';
+            if (!stats.geometryReuse.has(geoId)) {
+                stats.geometryReuse.set(geoId, { triangles, uses: 0, category });
+            }
+            stats.geometryReuse.get(geoId).uses++;
+            
+            if (triangles > 10000) {
+                stats.topContributors.push({
+                    name: obj.name || 'unnamed',
+                    type: obj.isSkinnedMesh ? 'SkinnedMesh' : 'Mesh',
+                    triangles,
+                    category,
+                    visible: obj.visible,
+                    frustumCulled: obj.frustumCulled,
+                    geoId: geoId.substring(0, 8)
+                });
+            }
+            
+            if (category !== 'fish' && triangles > 0) {
+                stats.byCategory[category].objects.push({
+                    name: obj.name || 'unnamed',
+                    triangles,
+                    visible: obj.visible
+                });
+            }
+        }
+    });
+    
+    stats.topContributors.sort((a, b) => b.triangles - a.triangles);
+    stats.topContributors = stats.topContributors.slice(0, 20);
+    
+    for (const cat of Object.keys(stats.byCategory)) {
+        if (stats.byCategory[cat].objects) {
+            stats.byCategory[cat].objects.sort((a, b) => b.triangles - a.triangles);
+            stats.byCategory[cat].objects = stats.byCategory[cat].objects.slice(0, 10);
+        }
+    }
+    
+    console.log('='.repeat(60));
+    console.log('[TRI-ANALYSIS] Scene Triangle Analysis Report');
+    console.log('='.repeat(60));
+    console.log(`Total Scene Triangles: ${stats.total.toLocaleString()}`);
+    console.log(`Renderer Triangles: ${renderer ? renderer.info.render.triangles.toLocaleString() : 'N/A'}`);
+    console.log('');
+    console.log('--- BY CATEGORY ---');
+    for (const [cat, data] of Object.entries(stats.byCategory)) {
+        const pct = stats.total > 0 ? ((data.triangles / stats.total) * 100).toFixed(1) : 0;
+        console.log(`${cat.toUpperCase()}: ${data.triangles.toLocaleString()} triangles (${pct}%), ${data.meshes} meshes`);
+    }
+    console.log('');
+    console.log('--- FISH BY FORM ---');
+    const fishForms = Object.entries(stats.byCategory.fish.byForm).sort((a, b) => b[1].triangles - a[1].triangles);
+    for (const [form, data] of fishForms) {
+        const avgTri = data.count > 0 ? Math.round(data.triangles / data.count) : 0;
+        console.log(`  ${form}: ${data.triangles.toLocaleString()} total, ${data.count} fish, ~${avgTri.toLocaleString()} avg/fish`);
+    }
+    console.log('');
+    console.log('--- TOP 20 TRIANGLE CONTRIBUTORS ---');
+    for (const obj of stats.topContributors) {
+        console.log(`  ${obj.name}: ${obj.triangles.toLocaleString()} (${obj.category}, ${obj.type}, vis=${obj.visible})`);
+    }
+    console.log('');
+    console.log('--- MAP OBJECTS (Top 10) ---');
+    for (const obj of stats.byCategory.map.objects) {
+        console.log(`  ${obj.name}: ${obj.triangles.toLocaleString()} (vis=${obj.visible})`);
+    }
+    console.log('');
+    console.log('--- GEOMETRY REUSE ---');
+    const highReuseGeos = Array.from(stats.geometryReuse.entries())
+        .filter(([id, data]) => data.uses > 1 && data.triangles > 1000)
+        .sort((a, b) => b[1].triangles * b[1].uses - a[1].triangles * a[1].uses)
+        .slice(0, 10);
+    for (const [id, data] of highReuseGeos) {
+        console.log(`  Geo ${id.substring(0, 8)}: ${data.triangles.toLocaleString()} tri x ${data.uses} uses = ${(data.triangles * data.uses).toLocaleString()} total (${data.category})`);
+    }
+    console.log('='.repeat(60));
+    
+    return stats;
+}
+
+window.analyzeSceneTriangles = analyzeSceneTriangles;
+
 function resetGlbSwapStats() {
     glbSwapStats.totalSpawned = 0;
     glbSwapStats.tryLoadCalled = 0;
