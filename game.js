@@ -1723,41 +1723,44 @@ async function loadWeaponGLB(weaponKey, type) {
             (gltf) => {
                 const model = gltf.scene;
                 
-                // Count meshes and collect debug info
                 let meshCount = 0;
                 let hasSkinnedMesh = false;
+                const lightsToRemove = [];
                 model.traverse((child) => {
                     if (child.isMesh) {
                         meshCount++;
                         child.castShadow = true;
                         child.receiveShadow = true;
-                        child.frustumCulled = false; // Prevent culling issues
+                        child.frustumCulled = false;
                         
-                        // Force materials to be visible and adjust for cartoon style
                         if (child.material) {
-                            // Make materials visible regardless of original settings
                             child.material.transparent = false;
                             child.material.opacity = 1;
                             child.material.visible = true;
                             child.material.side = THREE.DoubleSide;
                             
-                            // CARTOON STYLE FIX: Reduce metalness and increase roughness
-                            // This removes the mirror-like specular highlights that don't fit low-poly cartoon style
                             if (child.material.metalness !== undefined) {
-                                child.material.metalness = 0.1; // Low metalness for matte look
+                                child.material.metalness = 0.1;
                             }
                             if (child.material.roughness !== undefined) {
-                                child.material.roughness = 0.8; // High roughness to reduce reflections
+                                child.material.roughness = 0.8;
                             }
                             
-                            // Add subtle emissive to ensure visibility in dark scenes
                             if (child.material.emissive) {
-                                child.material.emissive.setHex(0x111111); // Reduced from 0x222222
-                                child.material.emissiveIntensity = 0.2; // Reduced from 0.3
+                                child.material.emissive.setHex(0x111111);
+                                child.material.emissiveIntensity = 0.2;
                             }
                         }
                     }
                     if (child.isSkinnedMesh) hasSkinnedMesh = true;
+                    if (child.isLight) {
+                        lightsToRemove.push(child);
+                        console.log(`[WEAPON-GLB] Removing embedded light from ${weaponKey} ${type}: ${child.type}`);
+                    }
+                });
+                
+                lightsToRemove.forEach(light => {
+                    if (light.parent) light.parent.remove(light);
                 });
                 
                 // Calculate bounding box and center
@@ -12392,8 +12395,14 @@ function setupEventListeners() {
         
         const crosshair = document.getElementById('crosshair');
         if (crosshair) {
-            crosshair.style.left = e.clientX + 'px';
-            crosshair.style.top = e.clientY + 'px';
+            const compensatedPos = getParallaxCompensatedCrosshairPosition(e.clientX, e.clientY);
+            if (compensatedPos) {
+                crosshair.style.left = compensatedPos.x + 'px';
+                crosshair.style.top = compensatedPos.y + 'px';
+            } else {
+                crosshair.style.left = e.clientX + 'px';
+                crosshair.style.top = e.clientY + 'px';
+            }
         }
     });
     
