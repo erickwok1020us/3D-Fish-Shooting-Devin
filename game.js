@@ -69,9 +69,31 @@ function initVideoBackground() {
     if (video) {
         videoBackgroundElement = video;
         video.style.display = 'block';
+        
+        // Set video properties programmatically (some browsers need this)
+        video.muted = true;
+        video.playsInline = true;
+        video.autoplay = true;
+        video.loop = true;
+        
+        // Load the video first, then play
+        video.load();
+        
+        // Wait for video to be ready before playing
+        video.addEventListener('canplaythrough', function onCanPlay() {
+            video.removeEventListener('canplaythrough', onCanPlay);
+            video.play().then(() => {
+                console.log('[VIDEO-BG] Video playing successfully');
+            }).catch(e => {
+                console.log('[VIDEO-BG] Autoplay blocked, will play on user interaction:', e.message);
+            });
+        }, { once: true });
+        
+        // Also try to play immediately (for browsers that support it)
         video.play().catch(e => {
-            console.log('[VIDEO-BG] Autoplay blocked, will play on user interaction');
+            console.log('[VIDEO-BG] Initial autoplay blocked, waiting for canplaythrough or user interaction');
         });
+        
         console.log('[VIDEO-BG] Video background initialized');
     }
 }
@@ -133,7 +155,13 @@ function handleUserInteractionForAudio() {
     // Also try to play video if it was blocked
     const video = document.getElementById('video-background');
     if (video && video.paused && video.style.display !== 'none') {
-        video.play().catch(() => {});
+        // Ensure video is loaded before playing
+        if (video.readyState < 3) {
+            video.load();
+        }
+        video.play().then(() => {
+            console.log('[VIDEO-BG] Video started after user interaction');
+        }).catch(() => {});
     }
 }
 
