@@ -6887,53 +6887,72 @@ function createLights() {
     
     console.log(`[LIGHTS] Creating lights for ${quality} quality`);
     
-    // Ambient light - slightly brighter for low quality to compensate for fewer lights
-    const ambientIntensity = quality === 'low' ? 0.5 : 0.3;
+    const ambientIntensity = quality === 'low' ? 0.6 : 0.5;
     const ambientLight = new THREE.AmbientLight(0xffffff, ambientIntensity);
     scene.add(ambientLight);
     
-    // Main tank light (from above) - always present
-    const tankLight = new THREE.SpotLight(0xaaddff, 2.0, 1500, Math.PI / 3, 0.3, 1);
+    const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x001530, quality === 'low' ? 0.5 : 0.6);
+    scene.add(hemiLight);
+    
+    const sunLight = new THREE.DirectionalLight(0xaaddff, quality === 'low' ? 0.5 : 0.7);
+    sunLight.position.set(width * 0.3, floorY + height + 500, -depth * 0.3);
+    sunLight.target.position.set(0, 0, 0);
+    sunLight.castShadow = shadowsEnabled;
+    if (shadowsEnabled) {
+        sunLight.shadow.camera.near = 100;
+        sunLight.shadow.camera.far = 2000;
+        sunLight.shadow.camera.left = -width;
+        sunLight.shadow.camera.right = width;
+        sunLight.shadow.camera.top = height;
+        sunLight.shadow.camera.bottom = -height;
+        sunLight.shadow.mapSize.width = PERFORMANCE_CONFIG.shadowMap[quality] || 1024;
+        sunLight.shadow.mapSize.height = PERFORMANCE_CONFIG.shadowMap[quality] || 1024;
+    }
+    scene.add(sunLight);
+    scene.add(sunLight.target);
+    
+    const tankLight = new THREE.SpotLight(0xaaddff, 1.5, 1500, Math.PI / 3, 0.3, 1);
     tankLight.position.set(0, floorY + height + 400, 0);
     tankLight.target.position.set(0, floorY + height / 2, 0);
-    tankLight.castShadow = shadowsEnabled;
-    if (shadowsEnabled) {
-        // Optimize shadow camera bounds for better shadow quality
-        tankLight.shadow.camera.near = 100;
-        tankLight.shadow.camera.far = 1200;
-        tankLight.shadow.mapSize.width = PERFORMANCE_CONFIG.shadowMap[quality] || 1024;
-        tankLight.shadow.mapSize.height = PERFORMANCE_CONFIG.shadowMap[quality] || 1024;
-    }
+    tankLight.castShadow = false;
     scene.add(tankLight);
     scene.add(tankLight.target);
     
-    // Additional lights only for medium and high quality
     if (quality !== 'low') {
-        // Side lights for better fish visibility
-        const leftLight = new THREE.SpotLight(0xffffff, 0.8, 1200, Math.PI / 4, 0.5, 1);
+        const upperLight1 = new THREE.PointLight(0xaaddff, 1.2, 800);
+        upperLight1.position.set(-width * 0.4, floorY + height * 0.7, -depth * 0.3);
+        scene.add(upperLight1);
+        
+        const upperLight2 = new THREE.PointLight(0xaaddff, 1.2, 800);
+        upperLight2.position.set(width * 0.4, floorY + height * 0.7, depth * 0.3);
+        scene.add(upperLight2);
+        
+        const leftLight = new THREE.SpotLight(0xffffff, 0.6, 1200, Math.PI / 4, 0.5, 1);
         leftLight.position.set(-width * 0.8, floorY + height / 2, 0);
         leftLight.target.position.set(0, floorY + height / 2, 0);
         scene.add(leftLight);
         scene.add(leftLight.target);
         
-        // Right light only for high quality
         if (quality === 'high') {
-            const rightLight = new THREE.SpotLight(0xffffff, 0.8, 1200, Math.PI / 4, 0.5, 1);
+            const rightLight = new THREE.SpotLight(0xffffff, 0.6, 1200, Math.PI / 4, 0.5, 1);
             rightLight.position.set(width * 0.8, floorY + height / 2, 0);
             rightLight.target.position.set(0, floorY + height / 2, 0);
             scene.add(rightLight);
             scene.add(rightLight.target);
             
-            // Front light only for high quality
-            const frontLight = new THREE.SpotLight(0xffffff, 0.6, 1500, Math.PI / 4, 0.5, 1);
+            const frontLight = new THREE.SpotLight(0xffffff, 0.5, 1500, Math.PI / 4, 0.5, 1);
             frontLight.position.set(0, 100, -900);
             frontLight.target.position.set(0, floorY + height / 2, 0);
             scene.add(frontLight);
             scene.add(frontLight.target);
+            
+            const upperLight3 = new THREE.PointLight(0x88ccff, 1.0, 600);
+            upperLight3.position.set(0, floorY + height * 0.8, 0);
+            scene.add(upperLight3);
         }
     }
     
-    console.log(`[LIGHTS] Created ${quality === 'low' ? 2 : (quality === 'medium' ? 3 : 5)} lights`);
+    console.log(`[LIGHTS] Created enhanced lighting for ${quality} quality`);
 }
 
 // ==================== CANNON ====================
@@ -7553,24 +7572,19 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     return result;
 }
 
-// PARALLAX COMPENSATION: Calculate where the crosshair should be displayed in 3rd person mode
-// to accurately show where bullets will actually hit
-// Returns {x, y} screen coordinates for the crosshair, or null if compensation not possible
 function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
     if (!camera || !cannonMuzzle) return null;
     
-    // Get the aim direction (same as what fireBullet uses)
     const direction = getAimDirectionFromMouse(mouseX, mouseY, aimTempVectors.direction);
+    if (!direction || !Number.isFinite(direction.x) || !Number.isFinite(direction.y) || !Number.isFinite(direction.z)) {
+        return null;
+    }
     
-    // Get muzzle position
     cannonMuzzle.getWorldPosition(aimTempVectors.muzzlePos);
     const muzzlePos = aimTempVectors.muzzlePos;
-    
-    // Calculate where the bullet would hit at a typical fish distance
-    // Fish swim around Y=0 (center of aquarium), so we intersect with Y=0 plane
-    // Ray equation: P(t) = muzzlePos + direction * t
-    // Plane equation: Y = 0
-    // Solve: muzzlePos.y + direction.y * t = 0 => t = -muzzlePos.y / direction.y
+    if (!Number.isFinite(muzzlePos.x) || !Number.isFinite(muzzlePos.y) || !Number.isFinite(muzzlePos.z)) {
+        return null;
+    }
     
     let hitPoint = aimTempVectors.parallaxHitPoint;
     
@@ -7583,27 +7597,33 @@ function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
                 muzzlePos.z + direction.z * t
             );
         } else {
-            // Use a fixed distance if intersection is invalid
             hitPoint.copy(muzzlePos).addScaledVector(direction, 500);
         }
     } else {
-        // Direction is nearly horizontal, use a fixed distance
         hitPoint.copy(muzzlePos).addScaledVector(direction, 500);
     }
     
-    // Project the hit point back to screen coordinates
+    if (!Number.isFinite(hitPoint.x) || !Number.isFinite(hitPoint.y) || !Number.isFinite(hitPoint.z)) {
+        return null;
+    }
+    
     const screenPos = aimTempVectors.parallaxScreenPos;
     screenPos.copy(hitPoint);
     screenPos.project(camera);
     
-    // Check if the point is in front of the camera
-    if (screenPos.z > 1) return null;
+    if (!Number.isFinite(screenPos.x) || !Number.isFinite(screenPos.y) || !Number.isFinite(screenPos.z)) {
+        return null;
+    }
     
-    // Convert from NDC to screen coordinates
+    if (screenPos.z < -1 || screenPos.z > 1) return null;
+    
     const screenX = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
     const screenY = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
     
-    // Clamp to screen bounds with some margin
+    if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+        return null;
+    }
+    
     const margin = 50;
     const clampedX = Math.max(margin, Math.min(window.innerWidth - margin, screenX));
     const clampedY = Math.max(margin, Math.min(window.innerHeight - margin, screenY));
