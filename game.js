@@ -7638,9 +7638,9 @@ function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
     }
     
     let hitPoint = aimTempVectors.parallaxHitPoint;
-    let useFixedDistance = false;
+    let useWaterSurface = false;
     
-    if (Math.abs(direction.y) > 0.001) {
+    if (direction.y < -0.01) {
         const t = -muzzlePos.y / direction.y;
         if (t > 0 && t < 3000) {
             hitPoint.set(
@@ -7648,15 +7648,12 @@ function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
                 0,
                 muzzlePos.z + direction.z * t
             );
-        } else {
-            useFixedDistance = true;
+            useWaterSurface = true;
         }
-    } else {
-        useFixedDistance = true;
     }
     
-    if (useFixedDistance) {
-        hitPoint.copy(muzzlePos).addScaledVector(direction, 800);
+    if (!useWaterSurface) {
+        return null;
     }
     
     if (!Number.isFinite(hitPoint.x) || !Number.isFinite(hitPoint.y) || !Number.isFinite(hitPoint.z)) {
