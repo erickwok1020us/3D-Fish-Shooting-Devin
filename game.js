@@ -1128,6 +1128,79 @@ function analyzeSceneTriangles() {
 
 window.analyzeSceneTriangles = analyzeSceneTriangles;
 
+// Analyze weapon GLB triangle counts for performance optimization
+function analyzeWeaponGLBTriangles() {
+    console.log('='.repeat(60));
+    console.log('[WEAPON-GLB-ANALYSIS] Weapon GLB Triangle Count Report');
+    console.log('='.repeat(60));
+    
+    const triangleCounts = weaponGLBState.triangleCounts;
+    
+    if (triangleCounts.size === 0) {
+        console.log('No weapon GLB models loaded yet. Try switching weapons or wait for models to load.');
+        console.log('='.repeat(60));
+        return null;
+    }
+    
+    const byType = { cannon: [], bullet: [], hitEffect: [] };
+    let grandTotal = 0;
+    
+    for (const [key, data] of triangleCounts) {
+        byType[data.type].push(data);
+        grandTotal += data.triangles;
+    }
+    
+    console.log('');
+    console.log('--- CANNON MODELS ---');
+    let cannonTotal = 0;
+    for (const data of byType.cannon) {
+        console.log(`  ${data.weaponKey}: ${data.triangles.toLocaleString()} triangles, ${data.vertices.toLocaleString()} vertices, ${data.meshes} meshes`);
+        cannonTotal += data.triangles;
+    }
+    console.log(`  SUBTOTAL: ${cannonTotal.toLocaleString()} triangles`);
+    
+    console.log('');
+    console.log('--- BULLET MODELS ---');
+    let bulletTotal = 0;
+    for (const data of byType.bullet) {
+        console.log(`  ${data.weaponKey}: ${data.triangles.toLocaleString()} triangles, ${data.vertices.toLocaleString()} vertices, ${data.meshes} meshes`);
+        bulletTotal += data.triangles;
+    }
+    console.log(`  SUBTOTAL: ${bulletTotal.toLocaleString()} triangles`);
+    
+    console.log('');
+    console.log('--- HIT EFFECT MODELS ---');
+    let hitEffectTotal = 0;
+    for (const data of byType.hitEffect) {
+        console.log(`  ${data.weaponKey}: ${data.triangles.toLocaleString()} triangles, ${data.vertices.toLocaleString()} vertices, ${data.meshes} meshes`);
+        hitEffectTotal += data.triangles;
+    }
+    console.log(`  SUBTOTAL: ${hitEffectTotal.toLocaleString()} triangles`);
+    
+    console.log('');
+    console.log('--- MULTIPLAYER IMPACT ESTIMATE ---');
+    console.log(`  4 cannons (worst case all different): ${(cannonTotal).toLocaleString()} triangles`);
+    console.log(`  10 bullets per player x 4 players: ${(bulletTotal * 10).toLocaleString()} triangles (if all weapons active)`);
+    console.log(`  5 hit effects per player x 4 players: ${(hitEffectTotal * 5).toLocaleString()} triangles (if all weapons active)`);
+    
+    console.log('');
+    console.log('--- SUMMARY ---');
+    console.log(`  Total unique GLB triangles loaded: ${grandTotal.toLocaleString()}`);
+    console.log(`  Static cannons (3): ${(cannonTotal * 3 / byType.cannon.length || 0).toLocaleString()} triangles (avg per cannon x 3)`);
+    
+    console.log('='.repeat(60));
+    
+    return {
+        byType,
+        cannonTotal,
+        bulletTotal,
+        hitEffectTotal,
+        grandTotal
+    };
+}
+
+window.analyzeWeaponGLBTriangles = analyzeWeaponGLBTriangles;
+
 function resetGlbSwapStats() {
     glbSwapStats.totalSpawned = 0;
     glbSwapStats.tryLoadCalled = 0;
@@ -1568,7 +1641,9 @@ const weaponGLBState = {
     // Pre-cloned bullet models ready for immediate use (no async needed)
     bulletModelPool: new Map(),  // Map<weaponKey, THREE.Group[]>
     // PERFORMANCE: Pre-cloned hit effect models for instant spawning (no clone on hit)
-    hitEffectPool: new Map()     // Map<weaponKey, {model, materials, inUse}[]>
+    hitEffectPool: new Map(),     // Map<weaponKey, {model, materials, inUse}[]>
+    // Triangle count tracking for performance analysis
+    triangleCounts: new Map()    // Map<"weaponKey_type", {triangles, meshes, vertices}>
 };
 
 // Temp vectors for bullet calculations - reused to avoid per-frame allocations
@@ -1907,6 +1982,8 @@ async function loadWeaponGLB(weaponKey, type) {
                 
                 let meshCount = 0;
                 let hasSkinnedMesh = false;
+                let totalTriangles = 0;
+                let totalVertices = 0;
                 const lightsToRemove = [];
                 model.traverse((child) => {
                     if (child.isMesh) {
@@ -1914,6 +1991,18 @@ async function loadWeaponGLB(weaponKey, type) {
                         child.castShadow = true;
                         child.receiveShadow = true;
                         child.frustumCulled = false;
+                        
+                        // Count triangles and vertices for performance analysis
+                        if (child.geometry) {
+                            if (child.geometry.index) {
+                                totalTriangles += child.geometry.index.count / 3;
+                            } else if (child.geometry.attributes && child.geometry.attributes.position) {
+                                totalTriangles += child.geometry.attributes.position.count / 3;
+                            }
+                            if (child.geometry.attributes && child.geometry.attributes.position) {
+                                totalVertices += child.geometry.attributes.position.count;
+                            }
+                        }
                         
                         if (child.material) {
                             child.material.transparent = false;
@@ -1940,6 +2029,16 @@ async function loadWeaponGLB(weaponKey, type) {
                         console.log(`[WEAPON-GLB] Removing embedded light from ${weaponKey} ${type}: ${child.type}`);
                     }
                 });
+                
+                // Store triangle count for performance analysis
+                weaponGLBState.triangleCounts.set(cacheKey, {
+                    triangles: totalTriangles,
+                    vertices: totalVertices,
+                    meshes: meshCount,
+                    weaponKey: weaponKey,
+                    type: type
+                });
+                console.log(`[WEAPON-GLB-TRIANGLES] ${weaponKey} ${type}: ${totalTriangles.toLocaleString()} triangles, ${totalVertices.toLocaleString()} vertices, ${meshCount} meshes`);
                 
                 lightsToRemove.forEach(light => {
                     if (light.parent) light.parent.remove(light);
