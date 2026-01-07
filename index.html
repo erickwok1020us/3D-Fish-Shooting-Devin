@@ -533,6 +533,18 @@
             100% { opacity: 0; transform: translateY(-80px) scale(1.5); }
         }
         
+        /* Video Background for Home/Loading screens */
+        #video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 999;
+            pointer-events: none;
+        }
+        
         /* Loading Screen */
         #loading-screen {
             position: fixed;
@@ -540,7 +552,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(180deg, #001428, #002850);
+            background: transparent;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -733,7 +745,7 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: linear-gradient(135deg, #0a1628 0%, #1a2a4a 50%, #0d1f3c 100%);
+            background: transparent;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1117,6 +1129,11 @@
     </style>
 </head>
 <body>
+    <!-- Video Background for Home/Loading screens -->
+    <video id="video-background" autoplay loop muted playsinline>
+        <source src="https://pub-3d74cf37da084a90bc2767b00792a554.r2.dev/Loading%20video.mp4" type="video/mp4">
+    </video>
+    
     <!-- Loading Screen -->
     <div id="loading-screen">
         <h1>Fish Shooter 3D</h1>

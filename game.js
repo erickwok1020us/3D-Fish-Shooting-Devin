@@ -46,6 +46,111 @@ let panoramaSkySphere = null;  // Sky-sphere mesh for panorama
 let underwaterParticleSystem = null;
 let underwaterParticles = [];
 
+// ==================== VIDEO BACKGROUND SYSTEM ====================
+// Video background for home page and loading screen
+// Stops and hides when transitioning to game scene
+let videoBackgroundElement = null;
+
+// Stop and hide video background when entering game
+function stopVideoBackground() {
+    const video = document.getElementById('video-background');
+    if (video) {
+        console.log('[VIDEO-BG] Stopping video background');
+        video.pause();
+        video.style.display = 'none';
+        video.src = ''; // Release video resource
+        videoBackgroundElement = null;
+    }
+}
+
+// Initialize video background (called on page load)
+function initVideoBackground() {
+    const video = document.getElementById('video-background');
+    if (video) {
+        videoBackgroundElement = video;
+        video.style.display = 'block';
+        video.play().catch(e => {
+            console.log('[VIDEO-BG] Autoplay blocked, will play on user interaction');
+        });
+        console.log('[VIDEO-BG] Video background initialized');
+    }
+}
+
+// ==================== EARLY AUDIO INITIALIZATION ====================
+// Start background music from home page (before game scene loads)
+let earlyAudioInitialized = false;
+
+function initEarlyAudio() {
+    if (earlyAudioInitialized) return;
+    earlyAudioInitialized = true;
+    
+    console.log('[AUDIO] Initializing early audio for home page...');
+    
+    // Initialize audio context if not already done
+    if (!audioContext) {
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create audio bus system
+            masterGain = audioContext.createGain();
+            masterGain.gain.value = 0.8;
+            masterGain.connect(audioContext.destination);
+            
+            sfxGain = audioContext.createGain();
+            sfxGain.gain.value = 1.0;
+            sfxGain.connect(masterGain);
+            
+            musicGain = audioContext.createGain();
+            musicGain.gain.value = 0.4;
+            musicGain.connect(masterGain);
+            
+            ambientGain = audioContext.createGain();
+            ambientGain.gain.value = 0.3;
+            ambientGain.connect(masterGain);
+            
+            console.log('[AUDIO] Audio context created for early init');
+        } catch (e) {
+            console.warn('[AUDIO] Web Audio API not supported for early init');
+            return;
+        }
+    }
+    
+    // Preload and start background music
+    preloadAllAudio().then(() => {
+        console.log('[AUDIO] Audio preloaded, starting background music from home page');
+        startBackgroundMusicMP3();
+    });
+}
+
+// Handle user interaction to resume audio context (required by browsers)
+function handleUserInteractionForAudio() {
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+            console.log('[AUDIO] Audio context resumed after user interaction');
+        });
+    }
+    
+    // Also try to play video if it was blocked
+    const video = document.getElementById('video-background');
+    if (video && video.paused && video.style.display !== 'none') {
+        video.play().catch(() => {});
+    }
+}
+
+// Initialize early audio and video on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('[INIT] Page loaded, initializing video background and early audio');
+    initVideoBackground();
+    
+    // Add click listener to handle audio context resume
+    document.addEventListener('click', handleUserInteractionForAudio, { once: true });
+    document.addEventListener('touchstart', handleUserInteractionForAudio, { once: true });
+    document.addEventListener('keydown', handleUserInteractionForAudio, { once: true });
+    
+    // Try to init early audio (may be blocked until user interaction)
+    initEarlyAudio();
+});
+
 // Load and create sky-sphere panorama background
 // Uses inverted sphere mesh for full control over positioning and animation
 // 8K HD Quality: Applies anisotropic filtering and mipmaps for maximum sharpness
@@ -4080,6 +4185,14 @@ function stopBossMusicMP3() {
 }
 
 function initAudio() {
+    // Skip if audio was already initialized from home page (early audio init)
+    if (earlyAudioInitialized && audioContext) {
+        console.log('[AUDIO] Audio already initialized from home page, skipping re-init');
+        // Just start ambient sounds if not already playing
+        startAmbientSounds();
+        return;
+    }
+    
     try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
@@ -6642,6 +6755,9 @@ function initGameScene() {
 window.startSinglePlayerGame = function() {
     console.log('Starting single player game...');
     
+    // Stop video background when entering game
+    stopVideoBackground();
+    
     // Show game container
     const gameContainer = document.getElementById('game-container');
     if (gameContainer) {
@@ -6666,6 +6782,9 @@ window.startSinglePlayerGame = function() {
 // Start multiplayer game - called from lobby
 window.startMultiplayerGame = function(manager) {
     console.log('Starting multiplayer game...');
+    
+    // Stop video background when entering game
+    stopVideoBackground();
     
     // Show game container
     const gameContainer = document.getElementById('game-container');
