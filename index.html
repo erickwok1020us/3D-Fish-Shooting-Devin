@@ -534,6 +534,8 @@
         }
         
         /* Video Background for Home/Loading screens */
+        /* Video is BEHIND the lobby UI (z-index 999 < lobby's 1000) */
+        /* Lobby has transparent background so video shows through */
         #video-background {
             position: fixed;
             top: 0;
@@ -541,9 +543,8 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            z-index: 1001;
+            z-index: 999;
             pointer-events: none;
-            background: #000;
         }
         
         /* Loading Screen */
