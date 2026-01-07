@@ -16,7 +16,8 @@
             overflow: hidden;
             background: #000;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            cursor: crosshair;
+            /* Issue: Removed cursor: crosshair to prevent duplicate crosshair in 3rd person mode */
+            /* Custom #crosshair element handles all crosshair display */
         }
         
         #game-container {
