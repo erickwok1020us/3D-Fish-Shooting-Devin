@@ -6981,9 +6981,9 @@ function updateStaticCannonRings(time) {
 function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '1x') {
     const staticCannonGroup = new THREE.Group();
     
-    const platformGeometry = new THREE.CylinderGeometry(50, 60, 15, 16);
+    const platformGeometry = new THREE.CylinderGeometry(60, 70, 18, 16);
     const platformMaterial = new THREE.MeshBasicMaterial({
-        color: 0x556688
+        color: 0x6699bb
     });
     const platform = new THREE.Mesh(platformGeometry, platformMaterial);
     platform.position.y = 5;
@@ -7001,7 +7001,7 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
         cannonBaseRingSegmentTexture = createSciFiRingTexture();
     }
     
-    const coreRingGeometry = new THREE.RingGeometry(50, 72, 64);
+    const coreRingGeometry = new THREE.RingGeometry(60, 85, 64);
     const coreRingMaterial = new THREE.MeshBasicMaterial({
         color: ringColor,
         map: cannonBaseRingSegmentTexture,
@@ -7016,7 +7016,7 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
     coreRing.renderOrder = 1;
     staticCannonGroup.add(coreRing);
     
-    const glowRingGeometry = new THREE.RingGeometry(45, 80, 64);
+    const glowRingGeometry = new THREE.RingGeometry(55, 95, 64);
     const glowRingMaterial = new THREE.MeshBasicMaterial({
         color: ringColor,
         transparent: true,
@@ -7031,7 +7031,7 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
     glowRing.renderOrder = 0;
     staticCannonGroup.add(glowRing);
     
-    const innerDiskGeometry = new THREE.CircleGeometry(44.5, 64);
+    const innerDiskGeometry = new THREE.CircleGeometry(54.5, 64);
     const innerDiskMaterial = new THREE.MeshBasicMaterial({
         color: 0x000000,
         side: THREE.DoubleSide,
@@ -7039,7 +7039,7 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
     });
     const innerDisk = new THREE.Mesh(innerDiskGeometry, innerDiskMaterial);
     innerDisk.rotation.x = -Math.PI / 2;
-    innerDisk.position.y = 12.5;
+    innerDisk.position.y = 14.5;
     innerDisk.renderOrder = 2;
     staticCannonGroup.add(innerDisk);
     
@@ -7638,6 +7638,7 @@ function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
     }
     
     let hitPoint = aimTempVectors.parallaxHitPoint;
+    let useFixedDistance = false;
     
     if (Math.abs(direction.y) > 0.001) {
         const t = -muzzlePos.y / direction.y;
@@ -7648,10 +7649,14 @@ function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
                 muzzlePos.z + direction.z * t
             );
         } else {
-            hitPoint.copy(muzzlePos).addScaledVector(direction, 500);
+            useFixedDistance = true;
         }
     } else {
-        hitPoint.copy(muzzlePos).addScaledVector(direction, 500);
+        useFixedDistance = true;
+    }
+    
+    if (useFixedDistance) {
+        hitPoint.copy(muzzlePos).addScaledVector(direction, 800);
     }
     
     if (!Number.isFinite(hitPoint.x) || !Number.isFinite(hitPoint.y) || !Number.isFinite(hitPoint.z)) {
@@ -7675,11 +7680,7 @@ function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
         return null;
     }
     
-    const margin = 50;
-    const clampedX = Math.max(margin, Math.min(window.innerWidth - margin, screenX));
-    const clampedY = Math.max(margin, Math.min(window.innerHeight - margin, screenY));
-    
-    return { x: clampedX, y: clampedY };
+    return { x: screenX, y: screenY };
 }
 
 // PERFORMANCE: Throttled version of aimCannon - stores mouse position and processes once per frame
