@@ -6783,8 +6783,8 @@ function initGameScene() {
 window.startSinglePlayerGame = function() {
     console.log('Starting single player game...');
     
-    // Stop video background when entering game
-    stopVideoBackground();
+    // NOTE: Video background continues playing during loading
+    // It will be stopped when map loading completes (in loadMap3D callback)
     
     // Show game container
     const gameContainer = document.getElementById('game-container');
@@ -6811,8 +6811,8 @@ window.startSinglePlayerGame = function() {
 window.startMultiplayerGame = function(manager) {
     console.log('Starting multiplayer game...');
     
-    // Stop video background when entering game
-    stopVideoBackground();
+    // NOTE: Video background continues playing during loading
+    // It will be stopped when map loading completes (in loadMap3D callback)
     
     // Show game container
     const gameContainer = document.getElementById('game-container');
@@ -7032,6 +7032,9 @@ function loadMap3D(onComplete) {
             
             console.log('[PRELOAD] All resources loaded, entering game');
             
+            // Stop video background when entering game scene
+            stopVideoBackground();
+            
             // Hide loading overlay
             overlay.style.display = 'none';
             
@@ -7057,6 +7060,9 @@ function loadMap3D(onComplete) {
             // Still wait for weapons even if map fails
             await weaponPreloadPromise;
             clearInterval(weaponProgressInterval);
+            
+            // Stop video background when entering game scene
+            stopVideoBackground();
             
             overlay.style.display = 'none';
             // Fall back to procedural aquarium
