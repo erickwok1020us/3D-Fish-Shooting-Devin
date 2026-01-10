@@ -6786,12 +6786,6 @@ window.startSinglePlayerGame = function() {
     // NOTE: Video background continues playing during loading
     // It will be stopped when map loading completes (in loadMap3D callback)
     
-    // Show game container
-    const gameContainer = document.getElementById('game-container');
-    if (gameContainer) {
-        gameContainer.style.display = 'block';
-    }
-    
     // Mark that we're now in the game scene (not lobby)
     gameState.isInGameScene = true;
     
@@ -6813,12 +6807,6 @@ window.startMultiplayerGame = function(manager) {
     
     // NOTE: Video background continues playing during loading
     // It will be stopped when map loading completes (in loadMap3D callback)
-    
-    // Show game container
-    const gameContainer = document.getElementById('game-container');
-    if (gameContainer) {
-        gameContainer.style.display = 'block';
-    }
     
     // Store multiplayer reference
     window.multiplayer = manager;
@@ -7034,6 +7022,12 @@ function loadMap3D(onComplete) {
             
             // Stop video background when entering game scene
             stopVideoBackground();
+            
+            // Show game container now that we're ready to render
+            const gameContainer = document.getElementById('game-container');
+            if (gameContainer) {
+                gameContainer.style.display = 'block';
+            }
             
             // Hide loading overlay
             overlay.style.display = 'none';

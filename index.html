@@ -20,10 +20,13 @@
             /* Custom #crosshair element handles all crosshair display */
         }
         
+        /* Game container hidden by default to prevent flash on page load */
+        /* Will be shown when game scene is ready (after map loading completes) */
         #game-container {
             width: 100vw;
             height: 100vh;
             position: relative;
+            display: none;
         }
         
         /* FPS mode: Hide mouse cursor (only crosshair visible) */
