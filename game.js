@@ -6786,6 +6786,10 @@ window.startSinglePlayerGame = function() {
     // NOTE: Video background continues playing during loading
     // It will be stopped when map loading completes (in loadMap3D callback)
     
+    // Hide lobby immediately so video shows through loading overlay
+    const lobby = document.getElementById('multiplayer-lobby');
+    if (lobby) lobby.style.display = 'none';
+    
     // Mark that we're now in the game scene (not lobby)
     gameState.isInGameScene = true;
     
