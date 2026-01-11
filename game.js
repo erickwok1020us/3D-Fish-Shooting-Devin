@@ -6971,8 +6971,12 @@ function loadMap3D(onComplete) {
     const percent = document.getElementById('map-loading-percent');
     const sizeInfo = document.getElementById('map-loading-size');
     
-    // Show loading overlay
-    overlay.style.display = 'flex';
+    // Show loading overlay (ensure it shows video through and is above everything)
+    if (overlay) {
+        overlay.style.display = 'flex';
+        overlay.style.background = 'rgba(0, 20, 40, 0.35)';
+        overlay.style.zIndex = '9999';
+    }
     
     // PRELOAD FIX: Start weapon preloading in parallel with map loading
     const weaponPreloadPromise = preloadAllWeaponsSync();
