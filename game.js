@@ -1084,7 +1084,8 @@ function calculateTrianglesByCategory() {
             result.scene += triangles;
             
             // Subcategorize scene
-            if (allNames.includes('map') || allNames.includes('coral') || allNames.includes('rock') || 
+            // Check userData.isMap first (set when map GLB is loaded), then fall back to name matching
+            if (obj.userData?.isMap || allNames.includes('map') || allNames.includes('coral') || allNames.includes('rock') || 
                 allNames.includes('sand') || allNames.includes('terrain') || allNames.includes('decoration') ||
                 allNames.includes('plant') || allNames.includes('seaweed') || allNames.includes('shell') ||
                 allNames.includes('chest') || allNames.includes('anchor') || allNames.includes('barrel') ||
@@ -3751,6 +3752,9 @@ function setupMapMaterialsWithQuality(mapScene) {
     
     mapScene.traverse((obj) => {
         if (!obj.isMesh) return;
+        
+        // Mark this mesh as part of the map for triangle categorization
+        obj.userData.isMap = true;
         
         // Quality-dependent shadow settings
         if (quality === 'high') {
