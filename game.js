@@ -1897,7 +1897,11 @@ const weaponGLBState = {
     // PERFORMANCE: Pre-cloned hit effect models for instant spawning (no clone on hit)
     hitEffectPool: new Map(),     // Map<weaponKey, {model, materials, inUse}[]>
     // Triangle count tracking for performance analysis
-    triangleCounts: new Map()    // Map<"weaponKey_type", {triangles, meshes, vertices}>
+    triangleCounts: new Map(),    // Map<"weaponKey_type", {triangles, meshes, vertices}>
+    // PERFORMANCE: Pre-cloned cannon models for instant weapon switching (no clone/dispose on switch)
+    preClonedCannons: new Map(),  // Map<weaponKey, THREE.Group> - pre-cloned and added to scene
+    currentWeaponKey: null,       // Track current weapon for show/hide switching
+    shadersWarmedUp: false        // Track if shaders have been warmed up
 };
 
 // Temp vectors for bullet calculations - reused to avoid per-frame allocations
@@ -2413,8 +2417,80 @@ async function preloadWeaponGLB(weaponKey) {
     // PERFORMANCE: Pre-clone hit effect models (avoids clone on every hit)
     await preloadHitEffectPool(weaponKey);
     
+    // PERFORMANCE: Pre-clone cannon model for instant weapon switching (no clone/dispose on switch)
+    await preCloneCannonForInstantSwitch(weaponKey);
+    
     weaponGLBState.preloadedWeapons.add(weaponKey);
     console.log(`[WEAPON-GLB] Preloaded weapon: ${weaponKey}`);
+}
+
+// PERFORMANCE: Pre-clone cannon model and add to scene (hidden) for instant weapon switching
+// This eliminates the clone() and dispose() overhead during weapon switch
+async function preCloneCannonForInstantSwitch(weaponKey) {
+    if (weaponGLBState.preClonedCannons.has(weaponKey)) {
+        return; // Already pre-cloned
+    }
+    
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    if (!glbConfig) return;
+    
+    const cannonCacheKey = `${weaponKey}_cannon`;
+    if (!weaponGLBState.cannonCache.has(cannonCacheKey)) {
+        console.warn(`[WEAPON-GLB] Cannot pre-clone cannon for ${weaponKey}: not in cache`);
+        return;
+    }
+    
+    // Clone the cannon model
+    const cannonModel = weaponGLBState.cannonCache.get(cannonCacheKey).clone();
+    
+    // Apply scale and position from config
+    const scale = glbConfig.scale;
+    cannonModel.scale.set(scale, scale, scale);
+    cannonModel.position.set(0, 20, 0);
+    
+    // Start hidden - will be shown when weapon is selected
+    cannonModel.visible = false;
+    
+    // Store reference
+    weaponGLBState.preClonedCannons.set(weaponKey, cannonModel);
+    
+    console.log(`[WEAPON-GLB] Pre-cloned cannon for instant switch: ${weaponKey}`);
+}
+
+// PERFORMANCE: Warm up shaders by rendering each pre-cloned weapon once
+// This compiles shaders ahead of time to avoid stutter on first weapon switch
+function warmUpWeaponShaders() {
+    if (weaponGLBState.shadersWarmedUp || !renderer || !scene || !camera) {
+        return;
+    }
+    
+    console.log('[WEAPON-GLB] Warming up weapon shaders...');
+    
+    // Temporarily show all pre-cloned cannons to compile their shaders
+    const visibilityState = new Map();
+    
+    weaponGLBState.preClonedCannons.forEach((cannon, weaponKey) => {
+        visibilityState.set(weaponKey, cannon.visible);
+        cannon.visible = true;
+        
+        // Add to scene temporarily if not already added
+        if (cannonBodyGroup && !cannonBodyGroup.children.includes(cannon)) {
+            cannonBodyGroup.add(cannon);
+        }
+    });
+    
+    // Render one frame to compile shaders
+    if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
+    
+    // Restore visibility state
+    weaponGLBState.preClonedCannons.forEach((cannon, weaponKey) => {
+        cannon.visible = visibilityState.get(weaponKey);
+    });
+    
+    weaponGLBState.shadersWarmedUp = true;
+    console.log('[WEAPON-GLB] Shader warmup complete');
 }
 
 // Get a pre-cloned bullet model from the pool (synchronous, no async needed)
@@ -2591,11 +2667,20 @@ async function preloadHitEffectPool(weaponKey) {
 async function preloadAllWeapons() {
     console.log('[WEAPON-GLB] Starting preload of all weapons...');
     
+    // PERFORMANCE: Preload all weapons synchronously (not with setTimeout delays)
+    // This ensures all weapons are ready before the game starts, eliminating first-switch lag
     await preloadWeaponGLB('1x');
+    await preloadWeaponGLB('3x');
+    await preloadWeaponGLB('5x');
+    await preloadWeaponGLB('8x');
     
-    setTimeout(() => preloadWeaponGLB('3x'), 1000);
-    setTimeout(() => preloadWeaponGLB('5x'), 3000);
-    setTimeout(() => preloadWeaponGLB('8x'), 6000);
+    console.log('[WEAPON-GLB] All weapons preloaded, warming up shaders...');
+    
+    // PERFORMANCE: Warm up shaders after all weapons are preloaded
+    // This compiles shaders ahead of time to avoid stutter on first weapon switch
+    // Note: warmUpWeaponShaders() needs renderer/scene/camera to be ready
+    // It will be called again from init() if not ready here
+    warmUpWeaponShaders();
 }
 
 function getWeaponGLBStats() {
@@ -7872,15 +7957,51 @@ function disposeMaterial(material) {
 }
 
 async function buildCannonGeometryForWeapon(weaponKey) {
-    // Clear existing cannon body - PERFORMANCE FIX: Use proper recursive disposal
+    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    
+    // PERFORMANCE OPTIMIZATION: Use pre-cloned cannons with show/hide instead of clone/dispose
+    // This eliminates the main source of weapon switching lag
+    if (weaponGLBState.enabled && glbConfig && weaponGLBState.preClonedCannons.has(weaponKey)) {
+        // Hide current weapon (if any)
+        if (weaponGLBState.currentWeaponKey && weaponGLBState.preClonedCannons.has(weaponGLBState.currentWeaponKey)) {
+            const currentCannon = weaponGLBState.preClonedCannons.get(weaponGLBState.currentWeaponKey);
+            currentCannon.visible = false;
+        }
+        
+        // Show the new weapon
+        const newCannon = weaponGLBState.preClonedCannons.get(weaponKey);
+        
+        // Add to scene if not already added
+        if (!cannonBodyGroup.children.includes(newCannon)) {
+            cannonBodyGroup.add(newCannon);
+        }
+        
+        newCannon.visible = true;
+        cannonBarrel = newCannon;
+        weaponGLBState.currentWeaponModel = newCannon;
+        weaponGLBState.currentWeaponKey = weaponKey;
+        
+        // Update muzzle position based on GLB config
+        if (cannonMuzzle && glbConfig.muzzleOffset) {
+            cannonMuzzle.position.copy(glbConfig.muzzleOffset);
+        }
+        
+        console.log(`[WEAPON-GLB] Instant switch to pre-cloned cannon: ${weaponKey}`);
+        return; // Successfully used pre-cloned cannon, skip other paths
+    }
+    
+    // FALLBACK: Clear existing cannon body if not using pre-cloned system
+    // This path is only used if pre-cloning failed or for procedural weapons
     while (cannonBodyGroup.children.length > 0) {
         const child = cannonBodyGroup.children[0];
-        disposeObject3D(child);
+        // Don't dispose pre-cloned cannons
+        if (!Array.from(weaponGLBState.preClonedCannons.values()).includes(child)) {
+            disposeObject3D(child);
+        }
         cannonBodyGroup.remove(child);
     }
     
     const weapon = CONFIG.weapons[weaponKey];
-    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     
     // FIX: Check cache synchronously first to avoid stutter on weapon switch
     // The await causes microtask delay even when model is cached
@@ -7902,6 +8023,7 @@ async function buildCannonGeometryForWeapon(weaponKey) {
                     cannonMuzzle.position.copy(glbConfig.muzzleOffset);
                 }
                 weaponGLBState.currentWeaponModel = cannonModel;
+                weaponGLBState.currentWeaponKey = weaponKey;
                 console.log(`[WEAPON-GLB] Using cached GLB cannon for ${weaponKey} (sync)`);
                 return; // Successfully used cached GLB, skip procedural
             }
@@ -7939,6 +8061,7 @@ async function buildCannonGeometryForWeapon(weaponKey) {
                 
                 // Store current weapon model reference
                 weaponGLBState.currentWeaponModel = cannonModel;
+                weaponGLBState.currentWeaponKey = weaponKey;
                 
                 return; // Successfully loaded GLB, skip procedural
             }
