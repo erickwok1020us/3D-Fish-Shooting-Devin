@@ -809,7 +809,7 @@ const gameState = {
     mouseX: window.innerWidth / 2,
     mouseY: window.innerHeight / 2,
     // Camera view mode: 'third-person' or 'fps'
-    viewMode: 'third-person',
+    viewMode: 'fps',
     // Camera rotation state - horizontal (yaw) and vertical (pitch)
     cameraYaw: 0,
     cameraPitch: 0,
@@ -1008,6 +1008,31 @@ let perfDisplayData = {
     lastUpdate: 0
 };
 
+// Lightweight triangles counter for a group (approximate GPU load)
+function countTrianglesInGroup(root) {
+    if (!root) return 0;
+    let total = 0;
+    root.traverseVisible(obj => {
+        const geom = obj.geometry;
+        if (!geom) return;
+        if (!(obj.isMesh || obj.isSkinnedMesh || obj.isInstancedMesh)) return;
+        let count = 0;
+        if (geom.drawRange && typeof geom.drawRange.count === 'number' && geom.drawRange.count > 0) {
+            count = geom.drawRange.count;
+        } else if (geom.index) {
+            count = geom.index.count;
+        } else if (geom.attributes && geom.attributes.position) {
+            count = geom.attributes.position.count;
+        }
+        let tri = Math.floor(count / 3);
+        if (obj.isInstancedMesh && typeof obj.count === 'number' && obj.count > 1) {
+            tri *= obj.count;
+        }
+        total += tri;
+    });
+    return total;
+}
+
 function updatePerfDisplay() {
     const perfDiv = createPerfDisplay();
     const now = performance.now();
@@ -1029,6 +1054,13 @@ function updatePerfDisplay() {
     const triangles = renderer ? renderer.info.render.triangles : 0;
     const textures = renderer ? renderer.info.memory.textures : 0;
     const geometries = renderer ? renderer.info.memory.geometries : 0;
+    
+    // GPU triangles breakdown (approximate): 固定場景 / 魚類 / 炮臺(含子彈)
+    const fishTriangles = countTrianglesInGroup(typeof fishGroup !== 'undefined' ? fishGroup : null);
+    const cannonTriangles =
+        countTrianglesInGroup(typeof cannonGroup !== 'undefined' ? cannonGroup : null) +
+        countTrianglesInGroup(typeof bulletGroup !== 'undefined' ? bulletGroup : null);
+    const sceneTriangles = Math.max(0, triangles - (fishTriangles + cannonTriangles));
     
     // Count fish with animations (check for glbAction which is the actual animation action)
     let fishWithAnimations = 0;
@@ -1067,7 +1099,7 @@ function updatePerfDisplay() {
         <div style="color: ${fpsColor}; font-size: 16px; font-weight: bold;">FPS: ${avgFps}</div>
         <div style="margin-top: 6px; color: #888;">--- GPU ---</div>
         <div style="color: ${drawCallColor};">Draw Calls: ${drawCalls}</div>
-        <div style="color: ${triColor};">Triangles: ${triangles.toLocaleString()}</div>
+        <div style="color: ${triColor};">Triangles: ${triangles.toLocaleString()} <span style=\"opacity:0.85\">(固定場景 ${sceneTriangles.toLocaleString()} | 魚類 ${fishTriangles.toLocaleString()} | 炮臺+子彈 ${cannonTriangles.toLocaleString()})</span></div>
         <div>Textures: ${textures}</div>
         <div>Geometries: ${geometries}</div>
         <div style="margin-top: 6px; color: #888;">--- CPU ---</div>
@@ -6764,9 +6796,24 @@ function initGameScene() {
         gameState.isLoading = false;
         lastTime = performance.now();
         
-        // Issue 1 Fix: Use dedicated reset function on init
-        // This sets the canonical 3RD PERSON camera position with absolute values
-        resetThirdPersonCamera();
+        // Issue 1 Fix: Use dedicated reset function on init (3rd person) or set FPS default up-look
+        // This sets the canonical camera position based on current view mode
+        if (gameState.viewMode === 'fps') {
+            // Initialize FPS default up-look to see most fish
+            gameState.fpsYaw = 0;
+            gameState.fpsPitch = 35 * (Math.PI / 180);
+            if (typeof cannonGroup !== 'undefined' && cannonGroup) {
+                cannonGroup.rotation.y = 0;
+            }
+            if (typeof cannonPitchGroup !== 'undefined' && cannonPitchGroup) {
+                cannonPitchGroup.rotation.x = -gameState.fpsPitch;
+            }
+            const crosshair = document.getElementById('crosshair');
+            if (crosshair) crosshair.classList.add('fps-mode');
+            updateFPSCamera();
+        } else {
+            resetThirdPersonCamera();
+        }
         
         // Apply RTP labels to weapon buttons if enabled
         applyRtpLabels();
