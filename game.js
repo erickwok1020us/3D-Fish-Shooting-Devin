@@ -1027,9 +1027,16 @@ function getTriangleCountFromGeometry(geometry) {
     return 0;
 }
 
-// Calculate triangles by category: Scene, Fish, Cannon (including bullets)
+// Calculate triangles by category with detailed subcategories
 function calculateTrianglesByCategory() {
-    const result = { scene: 0, fish: 0, cannon: 0 };
+    const result = { 
+        scene: 0, 
+        fish: 0, 
+        cannon: 0,
+        // Detailed subcategories
+        sceneDetail: { map: 0, panorama: 0, particles: 0, ui: 0, other: 0 },
+        cannonDetail: { turret: 0, bullets: 0, hitEffects: 0 }
+    };
     if (!scene) return result;
     
     scene.traverse((obj) => {
@@ -1054,16 +1061,48 @@ function calculateTrianglesByCategory() {
             obj.userData?.isFish || obj.userData?.fishId !== undefined) {
             result.fish += triangles;
         }
-        // Categorize: Cannon (including bullets and hit effects)
+        // Categorize: Cannon (including bullets and hit effects) with subcategories
         else if (allNames.includes('cannon') || allNames.includes('weapon') || 
                  allNames.includes('bullet') || allNames.includes('muzzle') ||
                  allNames.includes('hiteffect') || allNames.includes('projectile') ||
-                 obj.userData?.isBullet || obj.userData?.isWeapon) {
+                 obj.userData?.isBullet || obj.userData?.isWeapon || obj.userData?.isHitEffect) {
             result.cannon += triangles;
+            
+            // Subcategorize cannon
+            if (allNames.includes('bullet') || allNames.includes('projectile') || obj.userData?.isBullet) {
+                result.cannonDetail.bullets += triangles;
+            } else if (allNames.includes('hiteffect') || allNames.includes('hit_effect') || 
+                       allNames.includes('splash') || obj.userData?.isHitEffect) {
+                result.cannonDetail.hitEffects += triangles;
+            } else {
+                // Turret (cannon/weapon body)
+                result.cannonDetail.turret += triangles;
+            }
         }
-        // Categorize: Scene (map, panorama, particles, UI, other)
+        // Categorize: Scene (map, panorama, particles, UI, other) with subcategories
         else {
             result.scene += triangles;
+            
+            // Subcategorize scene
+            if (allNames.includes('map') || allNames.includes('coral') || allNames.includes('rock') || 
+                allNames.includes('sand') || allNames.includes('terrain') || allNames.includes('decoration') ||
+                allNames.includes('plant') || allNames.includes('seaweed') || allNames.includes('shell') ||
+                allNames.includes('chest') || allNames.includes('anchor') || allNames.includes('barrel') ||
+                allNames.includes('floor') || allNames.includes('wall')) {
+                result.sceneDetail.map += triangles;
+            } else if (allNames.includes('sky') || allNames.includes('panorama') || allNames.includes('background') ||
+                       (allNames.includes('sphere') && obj.geometry && obj.geometry.parameters && 
+                        obj.geometry.parameters.radius > 1000)) {
+                result.sceneDetail.panorama += triangles;
+            } else if (allNames.includes('particle') || allNames.includes('bubble') || 
+                       allNames.includes('dust') || allNames.includes('sparkle')) {
+                result.sceneDetail.particles += triangles;
+            } else if (allNames.includes('ui') || allNames.includes('crosshair') || allNames.includes('hud') ||
+                       allNames.includes('cursor') || allNames.includes('reticle')) {
+                result.sceneDetail.ui += triangles;
+            } else {
+                result.sceneDetail.other += triangles;
+            }
         }
     });
     
@@ -1128,6 +1167,10 @@ function updatePerfDisplay() {
     if (triangles > 1000000) triColor = '#ffff00';
     if (triangles > 3000000) triColor = '#ff0000';
     
+    // Get subcategory details
+    const sceneDetail = triByCategory.sceneDetail || { map: 0, panorama: 0, particles: 0, ui: 0, other: 0 };
+    const cannonDetail = triByCategory.cannonDetail || { turret: 0, bullets: 0, hitEffects: 0 };
+    
     perfDiv.innerHTML = `
         <div style="color: #00ffff; font-weight: bold; border-bottom: 1px solid #00ffff; padding-bottom: 4px; margin-bottom: 4px;">Performance Monitor</div>
         <div style="color: ${fpsColor}; font-size: 16px; font-weight: bold;">FPS: ${avgFps}</div>
@@ -1135,8 +1178,16 @@ function updatePerfDisplay() {
         <div style="color: ${drawCallColor};">Draw Calls: ${drawCalls}</div>
         <div style="color: ${triColor};">Triangles: ${triangles.toLocaleString()}</div>
         <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Scene: ${triByCategory.scene.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Map: ${sceneDetail.map.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Panorama: ${sceneDetail.panorama.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Particles: ${sceneDetail.particles.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">UI: ${sceneDetail.ui.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Other: ${sceneDetail.other.toLocaleString()}</div>
         <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Fish: ${triByCategory.fish.toLocaleString()}</div>
         <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Cannon: ${triByCategory.cannon.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Turret: ${cannonDetail.turret.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Bullets: ${cannonDetail.bullets.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">HitEffects: ${cannonDetail.hitEffects.toLocaleString()}</div>
         <div>Textures: ${textures}</div>
         <div>Geometries: ${geometries}</div>
         <div style="margin-top: 6px; color: #888;">--- CPU ---</div>
