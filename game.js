@@ -1783,8 +1783,8 @@ const WEAPON_GLB_CONFIG = {
         },
         '3x': {
             cannon: '3x 武器模組',
-            bullet: '3X 子彈模組',
-            hitEffect: '3X 擊中特效',
+            bullet: '3x 子彈模組',
+            hitEffect: '3x 擊中特效',
             scale: 1.0,
             bulletScale: 0.6,
             hitEffectScale: 1.2,
