@@ -1035,9 +1035,22 @@ function calculateTrianglesByCategory() {
         cannon: 0,
         // Detailed subcategories
         sceneDetail: { map: 0, panorama: 0, particles: 0, ui: 0, other: 0 },
-        cannonDetail: { turret: 0, bullets: 0, hitEffects: 0 }
+        cannonDetail: { turret: 0, bullets: 0, hitEffects: 0 },
+        // Fish statistics
+        fishStats: {
+            count: 0,
+            perFishTriangles: [],  // Array of {form, triangles} for each fish
+            byForm: {},            // Triangles by fish form
+            highest: { form: '', triangles: 0 },
+            lowest: { form: '', triangles: Infinity },
+            avg: 0,
+            median: 0
+        }
     };
     if (!scene) return result;
+    
+    // Track triangles per fish instance (by parent group)
+    const fishTrianglesByGroup = new Map();
     
     scene.traverse((obj) => {
         if (!obj.isMesh || !obj.visible) return;
@@ -1047,19 +1060,53 @@ function calculateTrianglesByCategory() {
         
         const name = (obj.name || '').toLowerCase();
         
-        // Check parent hierarchy for categorization
+        // Check parent hierarchy for categorization and userData
         let parent = obj.parent;
         let parentNames = [];
+        let parentIsFish = false;
+        let fishForm = obj.userData?.fishForm || '';
+        let fishGroup = null;
+        
         while (parent) {
             if (parent.name) parentNames.push(parent.name.toLowerCase());
+            // Check if any parent has isFish userData
+            if (parent.userData?.isFish) {
+                parentIsFish = true;
+                if (!fishForm && parent.userData?.fishForm) {
+                    fishForm = parent.userData.fishForm;
+                }
+            }
+            // Find the fish group (top-level group for this fish)
+            if (parent.userData?.fishForm && !fishGroup) {
+                fishGroup = parent;
+                fishForm = parent.userData.fishForm;
+            }
             parent = parent.parent;
         }
         const allNames = [name, ...parentNames].join(' ');
         
-        // Categorize: Fish
-        if (allNames.includes('fish') || allNames.includes('glbmodel') || 
-            obj.userData?.isFish || obj.userData?.fishId !== undefined) {
+        // Categorize: Fish - check both direct userData and parent hierarchy
+        const isFish = allNames.includes('fish') || allNames.includes('glbmodel') || 
+            obj.userData?.isFish || obj.userData?.fishId !== undefined || parentIsFish;
+        
+        if (isFish) {
             result.fish += triangles;
+            
+            // Track per-fish triangles using the fish group as key
+            if (fishGroup) {
+                if (!fishTrianglesByGroup.has(fishGroup)) {
+                    fishTrianglesByGroup.set(fishGroup, { form: fishForm, triangles: 0 });
+                }
+                fishTrianglesByGroup.get(fishGroup).triangles += triangles;
+            }
+            
+            // Track by form
+            if (fishForm) {
+                if (!result.fishStats.byForm[fishForm]) {
+                    result.fishStats.byForm[fishForm] = { triangles: 0, count: 0 };
+                }
+                result.fishStats.byForm[fishForm].triangles += triangles;
+            }
         }
         // Categorize: Cannon (including bullets and hit effects) with subcategories
         else if (allNames.includes('cannon') || allNames.includes('weapon') || 
@@ -1106,6 +1153,40 @@ function calculateTrianglesByCategory() {
             }
         }
     });
+    
+    // Calculate fish statistics from collected data
+    if (fishTrianglesByGroup.size > 0) {
+        const fishData = Array.from(fishTrianglesByGroup.values());
+        result.fishStats.count = fishData.length;
+        result.fishStats.perFishTriangles = fishData;
+        
+        // Calculate per-form counts
+        fishData.forEach(fd => {
+            if (fd.form && result.fishStats.byForm[fd.form]) {
+                result.fishStats.byForm[fd.form].count++;
+            }
+        });
+        
+        // Sort by triangles to find highest/lowest
+        const sortedByTriangles = [...fishData].sort((a, b) => b.triangles - a.triangles);
+        
+        if (sortedByTriangles.length > 0) {
+            result.fishStats.highest = sortedByTriangles[0];
+            result.fishStats.lowest = sortedByTriangles[sortedByTriangles.length - 1];
+            
+            // Calculate average
+            const totalTriangles = fishData.reduce((sum, fd) => sum + fd.triangles, 0);
+            result.fishStats.avg = Math.round(totalTriangles / fishData.length);
+            
+            // Calculate median
+            const midIndex = Math.floor(sortedByTriangles.length / 2);
+            if (sortedByTriangles.length % 2 === 0) {
+                result.fishStats.median = Math.round((sortedByTriangles[midIndex - 1].triangles + sortedByTriangles[midIndex].triangles) / 2);
+            } else {
+                result.fishStats.median = sortedByTriangles[midIndex].triangles;
+            }
+        }
+    }
     
     return result;
 }
@@ -1171,6 +1252,16 @@ function updatePerfDisplay() {
     // Get subcategory details
     const sceneDetail = triByCategory.sceneDetail || { map: 0, panorama: 0, particles: 0, ui: 0, other: 0 };
     const cannonDetail = triByCategory.cannonDetail || { turret: 0, bullets: 0, hitEffects: 0 };
+    const fishStats = triByCategory.fishStats || { count: 0, avg: 0, median: 0, highest: { form: '', triangles: 0 }, lowest: { form: '', triangles: 0 } };
+    
+    // Format fish stats for display
+    const fishStatsHtml = fishStats.count > 0 ? `
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Count: ${fishStats.count} fish</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Avg/fish: ${fishStats.avg.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Median: ${fishStats.median.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Highest: ${fishStats.highest.triangles.toLocaleString()} (${fishStats.highest.form || '?'})</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Lowest: ${fishStats.lowest.triangles.toLocaleString()} (${fishStats.lowest.form || '?'})</div>
+    ` : '';
     
     perfDiv.innerHTML = `
         <div style="color: #00ffff; font-weight: bold; border-bottom: 1px solid #00ffff; padding-bottom: 4px; margin-bottom: 4px;">Performance Monitor</div>
@@ -1185,6 +1276,7 @@ function updatePerfDisplay() {
         <div style="margin-left: 20px; color: #777; font-size: 10px;">UI: ${sceneDetail.ui.toLocaleString()}</div>
         <div style="margin-left: 20px; color: #777; font-size: 10px;">Other: ${sceneDetail.other.toLocaleString()}</div>
         <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Fish: ${triByCategory.fish.toLocaleString()}</div>
+        ${fishStatsHtml}
         <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Cannon: ${triByCategory.cannon.toLocaleString()}</div>
         <div style="margin-left: 20px; color: #777; font-size: 10px;">Turret: ${cannonDetail.turret.toLocaleString()}</div>
         <div style="margin-left: 20px; color: #777; font-size: 10px;">Bullets: ${cannonDetail.bullets.toLocaleString()}</div>
@@ -8601,6 +8693,10 @@ class Fish {
         const secondaryColor = this.config.secondaryColor || color;
         const form = this.config.form || 'standard';
         
+        // Mark fish group for Performance Monitor triangle categorization
+        this.group.userData.isFish = true;
+        this.group.userData.fishForm = form;
+        
         // FIX: Reset GLB state when form changes (e.g., Boss fish using recycled pool fish)
         // This ensures the new form's GLB model will be loaded in spawn()
         // Without this fix, Boss fish like ALPHA ORCA would show geometry instead of GLB
@@ -8879,6 +8975,9 @@ class Fish {
                 glbModel.traverse((child) => {
                     if (child.isMesh) {
                         this.glbMeshes.push(child);
+                        // Mark mesh as fish for Performance Monitor triangle categorization
+                        child.userData.isFish = true;
+                        child.userData.fishForm = form;
                         // Apply shadow settings to GLB meshes
                         const isBossFish = this.tier >= 5 || BOSS_ONLY_SPECIES.includes(this.config.species);
                         child.castShadow = isBossFish;
