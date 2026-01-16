@@ -1263,12 +1263,16 @@ function updatePerfDisplay() {
         <div style="margin-left: 20px; color: #777; font-size: 10px;">Lowest: ${fishStats.lowest.triangles.toLocaleString()} (${fishStats.lowest.form || '?'})</div>
     ` : '';
     
+    // Calculate scene total (all triangles in scene graph)
+    const sceneTotal = triByCategory.scene + triByCategory.fish + triByCategory.cannon;
+    
     perfDiv.innerHTML = `
         <div style="color: #00ffff; font-weight: bold; border-bottom: 1px solid #00ffff; padding-bottom: 4px; margin-bottom: 4px;">Performance Monitor</div>
         <div style="color: ${fpsColor}; font-size: 16px; font-weight: bold;">FPS: ${avgFps}</div>
         <div style="margin-top: 6px; color: #888;">--- GPU ---</div>
         <div style="color: ${drawCallColor};">Draw Calls: ${drawCalls}</div>
-        <div style="color: ${triColor};">Triangles: ${triangles.toLocaleString()}</div>
+        <div style="color: ${triColor};">Rendered Tri: ${triangles.toLocaleString()}</div>
+        <div style="margin-left: 10px; color: #777; font-size: 10px;">Scene Total: ${sceneTotal.toLocaleString()}</div>
         <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Scene: ${triByCategory.scene.toLocaleString()}</div>
         <div style="margin-left: 20px; color: #777; font-size: 10px;">Map: ${sceneDetail.map.toLocaleString()}</div>
         <div style="margin-left: 20px; color: #777; font-size: 10px;">Panorama: ${sceneDetail.panorama.toLocaleString()}</div>
