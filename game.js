@@ -1134,13 +1134,13 @@ function updatePerfDisplay() {
         <div style="margin-top: 6px; color: #888;">--- GPU ---</div>
         <div style="color: ${drawCallColor};">Draw Calls: ${drawCalls}</div>
         <div style="color: ${triColor};">Triangles: ${triangles.toLocaleString()}</div>
-        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Scene: ${triByCategory.scene.toLocaleString()}</div>
-        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Fish: ${triByCategory.fish.toLocaleString()}</div>
-        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Cannon: ${triByCategory.cannon.toLocaleString()}</div>
+        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">固定場景: ${triByCategory.scene.toLocaleString()}</div>
+        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">魚類: ${triByCategory.fish.toLocaleString()}</div>
+        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">炮臺(含子彈): ${triByCategory.cannon.toLocaleString()}</div>
         <div>Textures: ${textures}</div>
         <div>Geometries: ${geometries}</div>
         <div style="margin-top: 6px; color: #888;">--- CPU ---</div>
-        <div>Fish: ${activeFish.length} / ${maxFishCount}</div>
+        <div>魚類: ${activeFish.length} / ${maxFishCount}</div>
         <div>GLB Mixers: ${fishWithMixers}</div>
         <div>Animated: ${fishWithAnimations}</div>
         <div>Bullets: ${activeBullets.length}</div>
