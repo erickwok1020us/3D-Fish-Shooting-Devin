@@ -809,7 +809,8 @@ const gameState = {
     mouseX: window.innerWidth / 2,
     mouseY: window.innerHeight / 2,
     // Camera view mode: 'third-person' or 'fps'
-    viewMode: 'third-person',
+    // Default to FPS mode with 35 degree upward angle for best fish viewing
+    viewMode: 'fps',
     // Camera rotation state - horizontal (yaw) and vertical (pitch)
     cameraYaw: 0,
     cameraPitch: 0,
@@ -818,8 +819,9 @@ const gameState = {
     maxCameraYaw: Math.PI / 6,    // ±30° horizontal (10 o'clock to 2 o'clock)
     maxCameraPitch: Math.PI / 9,  // ±20° vertical (up/down)
     // FPS mode camera state
+    // Initial pitch set to 35 degrees upward (0.611 radians) for optimal fish viewing
     fpsYaw: 0,
-    fpsPitch: 0,
+    fpsPitch: 35 * (Math.PI / 180),  // 35 degrees upward
     // FPS Sensitivity Level (1-10, where 10=100%, 5=50% default)
     fpsSensitivityLevel: 5,  // Default to level 5 (50%)
     // Right-click drag camera rotation
@@ -1005,8 +1007,68 @@ function createPerfDisplay() {
 let perfDisplayData = {
     fps: 0,
     fpsHistory: [],
-    lastUpdate: 0
+    lastUpdate: 0,
+    // Cached triangle counts by category (updated every 500ms)
+    trianglesByCategory: {
+        scene: 0,      // Map + Panorama + UI + Other
+        fish: 0,       // All fish meshes
+        cannon: 0      // Cannon + Bullets + Hit effects
+    }
 };
+
+// Helper function to get triangle count from geometry
+function getTriangleCountFromGeometry(geometry) {
+    if (!geometry) return 0;
+    if (geometry.index) {
+        return geometry.index.count / 3;
+    } else if (geometry.attributes && geometry.attributes.position) {
+        return geometry.attributes.position.count / 3;
+    }
+    return 0;
+}
+
+// Calculate triangles by category: Scene, Fish, Cannon (including bullets)
+function calculateTrianglesByCategory() {
+    const result = { scene: 0, fish: 0, cannon: 0 };
+    if (!scene) return result;
+    
+    scene.traverse((obj) => {
+        if (!obj.isMesh || !obj.visible) return;
+        
+        const triangles = getTriangleCountFromGeometry(obj.geometry);
+        if (triangles === 0) return;
+        
+        const name = (obj.name || '').toLowerCase();
+        
+        // Check parent hierarchy for categorization
+        let parent = obj.parent;
+        let parentNames = [];
+        while (parent) {
+            if (parent.name) parentNames.push(parent.name.toLowerCase());
+            parent = parent.parent;
+        }
+        const allNames = [name, ...parentNames].join(' ');
+        
+        // Categorize: Fish
+        if (allNames.includes('fish') || allNames.includes('glbmodel') || 
+            obj.userData?.isFish || obj.userData?.fishId !== undefined) {
+            result.fish += triangles;
+        }
+        // Categorize: Cannon (including bullets and hit effects)
+        else if (allNames.includes('cannon') || allNames.includes('weapon') || 
+                 allNames.includes('bullet') || allNames.includes('muzzle') ||
+                 allNames.includes('hiteffect') || allNames.includes('projectile') ||
+                 obj.userData?.isBullet || obj.userData?.isWeapon) {
+            result.cannon += triangles;
+        }
+        // Categorize: Scene (map, panorama, particles, UI, other)
+        else {
+            result.scene += triangles;
+        }
+    });
+    
+    return result;
+}
 
 function updatePerfDisplay() {
     const perfDiv = createPerfDisplay();
@@ -1029,6 +1091,10 @@ function updatePerfDisplay() {
     const triangles = renderer ? renderer.info.render.triangles : 0;
     const textures = renderer ? renderer.info.memory.textures : 0;
     const geometries = renderer ? renderer.info.memory.geometries : 0;
+    
+    // Calculate triangles by category (Scene/Fish/Cannon)
+    const triByCategory = calculateTrianglesByCategory();
+    perfDisplayData.trianglesByCategory = triByCategory;
     
     // Count fish with animations (check for glbAction which is the actual animation action)
     let fishWithAnimations = 0;
@@ -1068,6 +1134,9 @@ function updatePerfDisplay() {
         <div style="margin-top: 6px; color: #888;">--- GPU ---</div>
         <div style="color: ${drawCallColor};">Draw Calls: ${drawCalls}</div>
         <div style="color: ${triColor};">Triangles: ${triangles.toLocaleString()}</div>
+        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Scene: ${triByCategory.scene.toLocaleString()}</div>
+        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Fish: ${triByCategory.fish.toLocaleString()}</div>
+        <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Cannon: ${triByCategory.cannon.toLocaleString()}</div>
         <div>Textures: ${textures}</div>
         <div>Geometries: ${geometries}</div>
         <div style="margin-top: 6px; color: #888;">--- CPU ---</div>
@@ -6764,9 +6833,13 @@ function initGameScene() {
         gameState.isLoading = false;
         lastTime = performance.now();
         
-        // Issue 1 Fix: Use dedicated reset function on init
-        // This sets the canonical 3RD PERSON camera position with absolute values
-        resetThirdPersonCamera();
+        // Initialize camera based on default view mode
+        // Default is now FPS mode with 35 degree upward angle for optimal fish viewing
+        if (gameState.viewMode === 'fps') {
+            initFPSMode();
+        } else {
+            resetThirdPersonCamera();
+        }
         
         // Apply RTP labels to weapon buttons if enabled
         applyRtpLabels();
@@ -13222,6 +13295,56 @@ function updateCameraRotation() {
     // This keeps cannon and blue platform visible at bottom of screen
     const lookAtY = cannonY + 150;  // -270: between cannon and center
     camera.lookAt(0, lookAtY, 180);  // Look toward center of tank
+}
+
+// Initialize FPS mode with 35 degree upward angle for optimal fish viewing
+// Called on game init when viewMode is 'fps'
+function initFPSMode() {
+    const crosshair = document.getElementById('crosshair');
+    
+    // Set up cannon for FPS mode
+    if (cannonGroup) {
+        cannonGroup.visible = true;
+        cannonGroup.scale.set(1.5, 1.5, 1.5);
+        cannonGroup.children.forEach(child => {
+            if (child.isLight) child.visible = false;
+        });
+        cannonGroup.rotation.y = 0;
+    }
+    
+    // Set initial pitch to 35 degrees upward (from gameState)
+    // cannonPitchGroup.rotation.x is negative of the actual pitch angle
+    if (cannonPitchGroup) {
+        cannonPitchGroup.rotation.x = -gameState.fpsPitch;  // -35 degrees
+    }
+    
+    // Hide mouse cursor in FPS mode
+    const container = document.getElementById('game-container');
+    if (container) container.classList.add('fps-hide-cursor');
+    
+    // Request Pointer Lock
+    if (container && container.requestPointerLock) {
+        container.requestPointerLock();
+    }
+    
+    // Reset FPS mouse tracking
+    gameState.lastFPSMouseX = null;
+    gameState.lastFPSMouseY = null;
+    
+    // Wider FOV in FPS mode
+    if (camera) {
+        camera.fov = 75;
+        camera.updateProjectionMatrix();
+    }
+    
+    // FPS MODE: Add CSS class to center crosshair
+    if (crosshair) crosshair.classList.add('fps-mode');
+    
+    // Update camera position
+    updateFPSCamera();
+    
+    // Update view mode button
+    updateViewModeButton();
 }
 
 // Issue 1 Fix: Dedicated reset function for 3RD PERSON camera
