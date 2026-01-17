@@ -2790,6 +2790,221 @@ function getWeaponGLBStats() {
     };
 }
 
+// ==================== ENHANCED HIT EFFECT PARTICLE SYSTEM ====================
+// Configuration for particle burst effects that spawn alongside GLB hit effects
+const HIT_PARTICLE_CONFIG = {
+    // Particle counts per weapon tier (more particles = more impressive)
+    particleCount: {
+        '1x': 20,
+        '3x': 35,
+        '5x': 50,
+        '8x': 80
+    },
+    // Base colors for each weapon (RGB values 0-1)
+    colors: {
+        '1x': { r: 0.3, g: 0.8, b: 1.0 },   // Cyan/light blue
+        '3x': { r: 0.2, g: 1.0, b: 0.5 },   // Green/teal
+        '5x': { r: 1.0, g: 0.6, b: 0.1 },   // Orange/gold
+        '8x': { r: 1.0, g: 0.2, b: 0.4 }    // Red/pink
+    },
+    // Particle size range (scaled for game world)
+    sizeMin: 15,
+    sizeMax: 40,
+    // Particle speed range
+    speedMin: 80,
+    speedMax: 200,
+    // Particle lifetime in seconds
+    lifetime: 0.6,
+    // Gravity effect (negative = upward float for underwater feel)
+    gravity: -30,
+    // Enable bloom glow effect
+    bloomEnabled: true,
+    // Bloom intensity multiplier
+    bloomIntensity: 1.5
+};
+
+// Pre-created particle geometry and materials for pooling
+let hitParticlePool = null;
+let hitParticleMaterials = {};
+
+// Initialize hit particle pool (called during game init)
+function initHitParticlePool() {
+    // Create shared geometry for all particles (simple plane)
+    const particleGeo = new THREE.PlaneGeometry(1, 1);
+    
+    // Create materials for each weapon type with additive blending for glow
+    for (const weaponKey of Object.keys(HIT_PARTICLE_CONFIG.colors)) {
+        const color = HIT_PARTICLE_CONFIG.colors[weaponKey];
+        hitParticleMaterials[weaponKey] = new THREE.MeshBasicMaterial({
+            color: new THREE.Color(color.r, color.g, color.b),
+            transparent: true,
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+    }
+    
+    // Create particle pool
+    hitParticlePool = {
+        geometry: particleGeo,
+        materials: hitParticleMaterials,
+        activeParticles: []
+    };
+    
+    console.log('[HIT-VFX] Particle pool initialized');
+}
+
+// Spawn particle burst at hit location
+function spawnHitParticleBurst(weaponKey, hitPos, bulletDirection) {
+    if (!hitParticlePool) return;
+    
+    const config = HIT_PARTICLE_CONFIG;
+    const particleCount = config.particleCount[weaponKey] || 20;
+    const material = hitParticleMaterials[weaponKey];
+    if (!material) return;
+    
+    // Create particle group for this burst
+    const particles = [];
+    const baseDir = bulletDirection ? bulletDirection.clone().normalize() : new THREE.Vector3(0, 1, 0);
+    
+    for (let i = 0; i < particleCount; i++) {
+        // Create particle mesh
+        const size = config.sizeMin + Math.random() * (config.sizeMax - config.sizeMin);
+        const particle = new THREE.Mesh(hitParticlePool.geometry, material.clone());
+        particle.scale.set(size, size, size);
+        particle.position.copy(hitPos);
+        
+        // Random velocity in hemisphere around bullet direction
+        const speed = config.speedMin + Math.random() * (config.speedMax - config.speedMin);
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI * 0.6; // Hemisphere spread
+        
+        // Create velocity vector
+        const velocity = new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta),
+            Math.sin(phi) * Math.sin(theta),
+            Math.cos(phi)
+        );
+        
+        // Rotate velocity to align with bullet direction
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), baseDir);
+        velocity.applyQuaternion(quaternion);
+        velocity.multiplyScalar(speed);
+        
+        // Store velocity and initial data
+        particle.userData.velocity = velocity;
+        particle.userData.initialSize = size;
+        particle.userData.lifetime = config.lifetime * (0.7 + Math.random() * 0.6); // Vary lifetime
+        
+        scene.add(particle);
+        particles.push(particle);
+    }
+    
+    // Register with VFX manager for animation
+    addVfxEffect({
+        type: 'hitParticleBurst',
+        particles: particles,
+        duration: config.lifetime * 1000 * 1.3, // Convert to ms with buffer
+        gravity: config.gravity,
+        
+        update(dt, elapsed) {
+            const progress = elapsed / this.duration;
+            let anyAlive = false;
+            
+            for (const particle of this.particles) {
+                if (!particle.userData.velocity) continue;
+                
+                const particleProgress = elapsed / (particle.userData.lifetime * 1000);
+                if (particleProgress >= 1) {
+                    particle.visible = false;
+                    continue;
+                }
+                
+                anyAlive = true;
+                
+                // Update position with velocity and gravity
+                particle.position.addScaledVector(particle.userData.velocity, dt);
+                particle.userData.velocity.y += this.gravity * dt;
+                
+                // Fade out and shrink
+                const fadeProgress = Math.max(0, particleProgress - 0.3) / 0.7;
+                particle.material.opacity = 1 - fadeProgress;
+                
+                const shrinkProgress = Math.max(0, particleProgress - 0.5) / 0.5;
+                const currentSize = particle.userData.initialSize * (1 - shrinkProgress * 0.5);
+                particle.scale.set(currentSize, currentSize, currentSize);
+                
+                // Billboard effect - face camera
+                if (camera) {
+                    particle.lookAt(camera.position);
+                }
+            }
+            
+            return anyAlive && progress < 1;
+        },
+        
+        cleanup() {
+            for (const particle of this.particles) {
+                scene.remove(particle);
+                particle.material.dispose();
+            }
+            this.particles.length = 0;
+        }
+    });
+}
+
+// ==================== BLOOM POST-PROCESSING SYSTEM ====================
+// Selective bloom for hit effects to create glow without affecting entire scene
+let bloomComposer = null;
+let bloomPass = null;
+let renderScene = null;
+let bloomEnabled = false;
+
+// Initialize bloom post-processing (called after renderer is created)
+function initBloomPostProcessing() {
+    // Check if Three.js post-processing modules are available
+    if (typeof THREE.EffectComposer === 'undefined' || 
+        typeof THREE.UnrealBloomPass === 'undefined' ||
+        typeof THREE.RenderPass === 'undefined') {
+        console.log('[BLOOM] Post-processing modules not available, skipping bloom setup');
+        return false;
+    }
+    
+    try {
+        // Create render pass
+        renderScene = new THREE.RenderPass(scene, camera);
+        
+        // Create bloom pass with subtle settings
+        bloomPass = new THREE.UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            0.8,    // Bloom strength
+            0.4,    // Bloom radius
+            0.85    // Bloom threshold (only bright things bloom)
+        );
+        
+        // Create effect composer
+        bloomComposer = new THREE.EffectComposer(renderer);
+        bloomComposer.addPass(renderScene);
+        bloomComposer.addPass(bloomPass);
+        
+        bloomEnabled = true;
+        console.log('[BLOOM] Post-processing initialized successfully');
+        return true;
+    } catch (e) {
+        console.warn('[BLOOM] Failed to initialize post-processing:', e);
+        return false;
+    }
+}
+
+// Update bloom composer on window resize
+function updateBloomSize() {
+    if (bloomComposer && bloomEnabled) {
+        bloomComposer.setSize(window.innerWidth, window.innerHeight);
+    }
+}
+
 // ==================== PERFORMANCE OPTIMIZATION CONFIG ====================
 const PERFORMANCE_CONFIG = {
     // Graphics quality presets (low/medium/high)
@@ -5850,9 +6065,14 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
 // Spawn GLB hit effect model - REFACTORED to use VFX manager
 // PERFORMANCE: Synchronous hit effect spawning using pre-cloned pool
 // Eliminates: async/await, model.clone(), material.clone(), traverse(), disposeObject3D()
+// ENHANCED: Now also spawns particle burst for more impressive visual effects
 function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!glbConfig) return false;
+    
+    // ENHANCED: Spawn particle burst alongside GLB hit effect
+    // This creates the glowing, dynamic particle explosion effect
+    spawnHitParticleBurst(weaponKey, hitPos, bulletDirection);
     
     // Get pre-cloned hit effect from pool (synchronous, no async needed)
     const poolItem = getHitEffectFromPool(weaponKey);
@@ -12612,6 +12832,9 @@ function createParticleSystems() {
         particlePool.push(particle);
         freeParticles.push(particle);  // PERFORMANCE: All particles start in free-list
     }
+    
+    // ENHANCED: Initialize hit effect particle pool for glowing burst effects
+    initHitParticlePool();
     
     // Bubble system
     createBubbleSystem();
