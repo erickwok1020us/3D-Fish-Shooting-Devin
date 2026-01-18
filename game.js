@@ -14149,13 +14149,15 @@ function toggleViewMode() {
                 if (child.isLight) child.visible = false;
             });
         }
-        // Initialize FPS yaw/pitch to CENTER position (0, 0)
-        // User requested: "一開始是在正中間的位置"
+        // Initialize FPS yaw/pitch to show cannon at bottom of screen
+        // User requested: cannon should be visible in initial FPS view
+        // Negative pitch = looking down, which shows cannon at bottom
+        const FPS_INITIAL_PITCH = -15 * (Math.PI / 180);  // -15 degrees (look slightly down to see cannon)
         gameState.fpsYaw = 0;
-        gameState.fpsPitch = 0;
-        // Apply initial rotation to cannon (center position)
+        gameState.fpsPitch = FPS_INITIAL_PITCH;
+        // Apply initial rotation to cannon (center yaw, slight downward pitch)
         if (cannonGroup) cannonGroup.rotation.y = 0;
-        if (cannonPitchGroup) cannonPitchGroup.rotation.x = 0;
+        if (cannonPitchGroup) cannonPitchGroup.rotation.x = -FPS_INITIAL_PITCH;  // Negative because rotation.x is inverted
         // Hide mouse cursor in FPS mode (only crosshair visible)
         const container = document.getElementById('game-container');
         if (container) container.classList.add('fps-hide-cursor');
