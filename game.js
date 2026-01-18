@@ -14152,7 +14152,7 @@ function toggleViewMode() {
         // Initialize FPS yaw/pitch to show cannon at bottom of screen
         // User requested: cannon should be visible in initial FPS view
         // Negative pitch = looking down, which shows cannon at bottom
-        const FPS_INITIAL_PITCH = -15 * (Math.PI / 180);  // -15 degrees (look slightly down to see cannon)
+        const FPS_INITIAL_PITCH = -30 * (Math.PI / 180);  // -30 degrees (look down more to clearly see cannon)
         gameState.fpsYaw = 0;
         gameState.fpsPitch = FPS_INITIAL_PITCH;
         // Apply initial rotation to cannon (center yaw, slight downward pitch)
