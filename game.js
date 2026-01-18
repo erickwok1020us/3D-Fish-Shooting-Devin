@@ -8551,6 +8551,18 @@ function autoAimAtNearestFish() {
 }
 
 // Aim cannon at specific fish - Issue #2: 360° rotation support
+// SMOOTH AUTO-AIM: State for smooth cannon rotation during auto-attack
+// This prevents the "screen cutting" feeling when switching between targets
+const smoothAutoAimState = {
+    targetYaw: 0,
+    targetPitch: 0,
+    currentYaw: 0,
+    currentPitch: 0,
+    initialized: false,
+    // Smooth factor: higher = faster transition (8 = ~125ms to reach target)
+    smoothSpeed: 8.0
+};
+
 function aimCannonAtFish(fish) {
     if (!fish) return;
     
@@ -8584,11 +8596,47 @@ function aimCannonAtFish(fish) {
     }
     const clampedPitch = Math.max(minPitch, Math.min(maxPitch, pitch));
     
-    // Issue #10: Apply rotation to cannon group (yaw) and PITCH GROUP (pitch)
-    cannonGroup.rotation.y = clampedYaw;  // Clamped to ±90° in FPS mode
-    if (cannonPitchGroup) {
-        // Issue #10: Rotate pitch group so barrel AND muzzle move together
-        cannonPitchGroup.rotation.x = -clampedPitch;
+    // SMOOTH AUTO-AIM: Use smooth interpolation when in auto-shoot mode
+    // This creates a cinematic camera follow effect instead of instant jumps
+    if (gameState.autoShoot) {
+        // Initialize current values on first call
+        if (!smoothAutoAimState.initialized) {
+            smoothAutoAimState.currentYaw = cannonGroup.rotation.y;
+            smoothAutoAimState.currentPitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+            smoothAutoAimState.initialized = true;
+        }
+        
+        // Set target values
+        smoothAutoAimState.targetYaw = clampedYaw;
+        smoothAutoAimState.targetPitch = clampedPitch;
+        
+        // Smooth interpolation using exponential decay (frame-rate independent approximation)
+        // Using a fixed deltaTime estimate since we don't have access to actual deltaTime here
+        const dt = 1/60; // Assume 60fps
+        const smoothFactor = 1 - Math.exp(-smoothAutoAimState.smoothSpeed * dt);
+        
+        // Handle yaw wrapping for smooth rotation across -PI/PI boundary
+        let yawDiff = smoothAutoAimState.targetYaw - smoothAutoAimState.currentYaw;
+        if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
+        if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
+        
+        smoothAutoAimState.currentYaw += yawDiff * smoothFactor;
+        smoothAutoAimState.currentPitch += (smoothAutoAimState.targetPitch - smoothAutoAimState.currentPitch) * smoothFactor;
+        
+        // Apply smoothed rotation
+        cannonGroup.rotation.y = smoothAutoAimState.currentYaw;
+        if (cannonPitchGroup) {
+            cannonPitchGroup.rotation.x = -smoothAutoAimState.currentPitch;
+        }
+    } else {
+        // Manual aiming: instant rotation (no smoothing)
+        // Also reset smooth state so next auto-aim starts fresh
+        smoothAutoAimState.initialized = false;
+        
+        cannonGroup.rotation.y = clampedYaw;
+        if (cannonPitchGroup) {
+            cannonPitchGroup.rotation.x = -clampedPitch;
+        }
     }
     
     return dir;
@@ -13879,15 +13927,17 @@ function updateFPSCamera() {
     const muzzleWorldPos = new THREE.Vector3();
     cannonMuzzle.getWorldPosition(muzzleWorldPos);
     
-    // Get per-weapon camera offsets from config (or use defaults)
-    const weaponKey = gameState.currentWeapon || '1x';
-    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
-    const cameraBackDist = (glbConfig && glbConfig.fpsCameraBackDist) || FPS_CAMERA_BACK_DIST_DEFAULT;
-    const cameraUpOffset = (glbConfig && glbConfig.fpsCameraUpOffset) || FPS_CAMERA_UP_OFFSET_DEFAULT;
+    // FIXED CAMERA DISTANCE: Use consistent camera offsets for all weapons
+    // Previously, each weapon had different fpsCameraBackDist/fpsCameraUpOffset values
+    // which caused the camera to jump closer/farther when switching weapons.
+    // Now we use fixed values so weapon switching has NO effect on camera position.
+    // This provides a smoother, more consistent gameplay experience.
+    const cameraBackDist = FPS_CAMERA_BACK_DIST_DEFAULT;  // 120 - fixed for all weapons
+    const cameraUpOffset = FPS_CAMERA_UP_OFFSET_DEFAULT;  // 40 - fixed for all weapons
     
     // Calculate camera offset in world space - CS:GO style FPS view
     // Camera positioned BEHIND the cannon body so barrel is visible in front
-    // Using per-weapon offsets for proper framing with different GLB model sizes
+    // Using FIXED offsets so weapon switching doesn't affect camera distance
     const backwardDir = forward.clone().negate();
     const upOffset = new THREE.Vector3(0, cameraUpOffset, 0);   // Height above muzzle
     const backOffset = backwardDir.multiplyScalar(cameraBackDist);  // Distance behind muzzle
