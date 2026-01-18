@@ -13903,11 +13903,9 @@ const FPS_PITCH_MIN = -47.5 * (Math.PI / 180);  // -47.5° (look down)
 const FPS_PITCH_MAX = 47.5 * (Math.PI / 180);   // +47.5° (look up) - total 95° vertical
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
-// FIXED v3: Use per-weapon camera offsets from WEAPON_GLB_CONFIG
-// Each weapon has different size/scale, so camera offsets must be adjusted accordingly
-// Smooth camera transitions (from PR #178) prevent jarring jumps when switching weapons
-const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default fallback (used if weapon config not found)
-const FPS_CAMERA_UP_OFFSET_DEFAULT = 25;    // Default fallback (used if weapon config not found)
+// These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
+const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
+const FPS_CAMERA_UP_OFFSET_DEFAULT = 40;    // Default height above muzzle (increased for GLB models)
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
@@ -13942,28 +13940,25 @@ function updateFPSCamera() {
         Math.cos(pitch) * Math.cos(yaw)
     );
     
-    // FIXED v3: Use cannon base position for camera positioning
-    // This prevents camera height from accumulating when switching weapons rapidly
-    // Different weapons have different muzzle offsets, but the cannon base is always the same
-    const cannonBasePos = new THREE.Vector3();
-    cannonGroup.getWorldPosition(cannonBasePos);
+    // Get muzzle position in world space
+    const muzzlePos = new THREE.Vector3();
+    cannonMuzzle.getWorldPosition(muzzlePos);
     
-    // FIXED v3: Use per-weapon camera offsets from WEAPON_GLB_CONFIG
+    // Use per-weapon camera offsets from WEAPON_GLB_CONFIG
     // Each weapon has different size/scale, so camera offsets must be adjusted accordingly
-    // This ensures the camera is positioned correctly for each weapon's size
+    // Smooth camera transitions (from PR #178) prevent jarring jumps when switching weapons
     const currentWeaponKey = weaponGLBState.currentWeaponKey || '1x';
     const weaponConfig = WEAPON_GLB_CONFIG.weapons[currentWeaponKey];
     const cameraBackDist = weaponConfig?.fpsCameraBackDist || FPS_CAMERA_BACK_DIST_DEFAULT;
     const cameraUpOffset = weaponConfig?.fpsCameraUpOffset || FPS_CAMERA_UP_OFFSET_DEFAULT;
     
     // Calculate camera offset in world space - CS:GO style FPS view
-    // Camera positioned BEHIND the cannon body so barrel is visible in front
-    // Using cannon base position (not muzzle) ensures consistent camera position
+    // Camera positioned BEHIND the muzzle so barrel is visible in front
     const backwardDir = forward.clone().negate();
-    const upOffset = new THREE.Vector3(0, cameraUpOffset, 0);   // Height above cannon base
-    const backOffset = backwardDir.multiplyScalar(cameraBackDist);  // Distance behind cannon base
+    const upOffset = new THREE.Vector3(0, cameraUpOffset, 0);   // Height above muzzle
+    const backOffset = backwardDir.multiplyScalar(cameraBackDist);  // Distance behind muzzle
     
-    camera.position.copy(cannonBasePos).add(backOffset).add(upOffset);
+    camera.position.copy(muzzlePos).add(backOffset).add(upOffset);
     
     // Always keep camera upright in world space (locked to world Y axis)
     // This MUST be set before lookAt() to prevent roll
