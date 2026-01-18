@@ -4114,10 +4114,12 @@ const WEAPON_VFX_CONFIG = {
 const FIRE_PARTICLE_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     textures: {
-        noise1: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%88.jpg',      // Noise/cloud for distortion
-        noise2: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%882.jpg',     // Turbulence noise
-        glow: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%883.jpg',       // Glow/vignette
-        flame: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%884.jpg'       // Flame sprite shape
+        // PNG textures with alpha channel for proper transparency
+        // New descriptive file names from Unity asset extraction
+        mainTex: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%88%20MainTex.png',           // Main flame texture with alpha
+        dissolve: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%88%20Dissolve%20Texture.png', // Dissolve effect texture
+        distortion: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%88%20Distortion%20Texture.png', // Distortion effect texture
+        mask: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%88%20mask.png'                  // Alpha mask for soft edges
     },
     trail: {
         spawnRate: 0.015,         // Spawn particle every 15ms (more frequent)
@@ -4142,10 +4144,10 @@ const FIRE_PARTICLE_CONFIG = {
 
 // Fire particle texture cache
 const fireParticleTextures = {
-    noise1: null,
-    noise2: null,
-    glow: null,
-    flame: null,
+    mainTex: null,      // Main flame texture with alpha
+    dissolve: null,     // Dissolve effect texture
+    distortion: null,   // Distortion effect texture
+    mask: null,         // Alpha mask for soft edges
     loaded: false,
     loading: false
 };
@@ -4189,10 +4191,10 @@ async function loadFireParticleTextures() {
         };
         
         await Promise.all([
-            loadTexture('noise1'),
-            loadTexture('noise2'),
-            loadTexture('glow'),
-            loadTexture('flame')
+            loadTexture('mainTex'),
+            loadTexture('dissolve'),
+            loadTexture('distortion'),
+            loadTexture('mask')
         ]);
         
         fireParticleTextures.loaded = true;
@@ -4214,12 +4216,13 @@ function initFireParticlePool() {
     // Create shared geometry (plane for billboard particles)
     fireParticlePool.geometry = new THREE.PlaneGeometry(1, 1);
     
-    // Create material using flame texture with additive blending
-    const flameTexture = fireParticleTextures.flame;
-    const glowTexture = fireParticleTextures.glow;
+    // Create material using mainTex (flame shape) with alpha channel
+    // mainTex has the actual flame shape with proper alpha transparency
+    const mainTexture = fireParticleTextures.mainTex;
+    const fallbackTexture = fireParticleTextures.mask || fireParticleTextures.dissolve;
     
-    // Use glow texture if flame not available, or create procedural
-    const texture = flameTexture || glowTexture;
+    // Use mainTex as primary (has proper alpha for fire effect)
+    const texture = mainTexture || fallbackTexture;
     
     fireParticlePool.material = new THREE.MeshBasicMaterial({
         map: texture,
