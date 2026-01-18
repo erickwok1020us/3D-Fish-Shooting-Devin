@@ -11480,6 +11480,17 @@ class Fish {
             this.glbAction = null;
         }
         
+        // FREEZE BUG FIX: Remove fish from activeFish array on death
+        // Previously, dead fish remained in activeFish with isActive=false ("zombie" entries)
+        // Over 30+ minutes of gameplay, these zombie entries accumulated and caused:
+        // 1. Array corruption when fish were reused from freeFish
+        // 2. Fish appearing frozen because they were in activeFish but not being updated
+        // 3. Memory leaks from growing activeFish array
+        const activeIndex = activeFish.indexOf(this);
+        if (activeIndex !== -1) {
+            activeFish.splice(activeIndex, 1);
+        }
+        
         // PERFORMANCE: Return fish to free-list for O(1) reuse (Boss Mode optimization)
         // POOL CORRUPTION FIX: Check if already in freeFish to prevent duplicates
         if (!freeFish.includes(this)) {
@@ -11703,6 +11714,18 @@ class Fish {
     }
     
     respawn() {
+        // RACE CONDITION FIX: Check if fish is already active before respawning
+        // This handles the case where:
+        // 1. Fish dies → pushed to freeFish, respawn timer scheduled
+        // 2. Fish is popped from freeFish and reused (e.g., Boss Mode swarm)
+        // 3. Respawn timer fires but fish is already active from step 2
+        // Without this check, the fish would be respawned to a random position
+        // while it's already being used elsewhere, causing visual glitches
+        if (this.isActive) {
+            console.warn('[FISH] respawn() called on already-active fish, skipping (race condition)');
+            return;
+        }
+        
         // Issue #1: Respawn fish in full 3D space around cannon (immersive 360°)
         const position = getRandomFishPositionIn3DSpace();
         this.spawn(position);
