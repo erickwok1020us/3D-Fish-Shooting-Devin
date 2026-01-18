@@ -8058,19 +8058,23 @@ async function buildCannonGeometryForWeapon(weaponKey) {
     // PERFORMANCE OPTIMIZATION: Use pre-cloned cannons with show/hide instead of clone/dispose
     // This eliminates the main source of weapon switching lag
     if (weaponGLBState.enabled && glbConfig && weaponGLBState.preClonedCannons.has(weaponKey)) {
-        // Hide current weapon (if any)
-        if (weaponGLBState.currentWeaponKey && weaponGLBState.preClonedCannons.has(weaponGLBState.currentWeaponKey)) {
-            const currentCannon = weaponGLBState.preClonedCannons.get(weaponGLBState.currentWeaponKey);
-            currentCannon.visible = false;
-        }
+        // DEFENSIVE FIX: First, hide ALL pre-cloned cannons to ensure clean state
+        // This prevents race conditions during rapid weapon switching where multiple
+        // cannons could end up visible or all cannons could end up hidden
+        weaponGLBState.preClonedCannons.forEach((cannon, key) => {
+            cannon.visible = false;
+        });
         
         // Show the new weapon
         const newCannon = weaponGLBState.preClonedCannons.get(weaponKey);
         
-        // Add to scene if not already added
-        if (!cannonBodyGroup.children.includes(newCannon)) {
-            cannonBodyGroup.add(newCannon);
-        }
+        // DEFENSIVE FIX: Ensure ALL pre-cloned cannons are added to cannonBodyGroup
+        // This prevents issues where cannons might be removed during rapid switching
+        weaponGLBState.preClonedCannons.forEach((cannon, key) => {
+            if (!cannonBodyGroup.children.includes(cannon)) {
+                cannonBodyGroup.add(cannon);
+            }
+        });
         
         newCannon.visible = true;
         cannonBarrel = newCannon;
@@ -8081,6 +8085,11 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         if (cannonMuzzle && glbConfig.muzzleOffset) {
             cannonMuzzle.position.copy(glbConfig.muzzleOffset);
         }
+        
+        // DEFENSIVE FIX: Ensure cannonGroup hierarchy is visible
+        if (cannonGroup) cannonGroup.visible = true;
+        if (cannonPitchGroup) cannonPitchGroup.visible = true;
+        if (cannonBodyGroup) cannonBodyGroup.visible = true;
         
         console.log(`[WEAPON-GLB] Instant switch to pre-cloned cannon: ${weaponKey}`);
         return; // Successfully used pre-cloned cannon, skip other paths
