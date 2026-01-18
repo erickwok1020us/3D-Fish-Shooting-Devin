@@ -8687,6 +8687,27 @@ class Fish {
     }
     
     createMesh() {
+        // FIX: Clean up old group before creating new one (prevents orphaned groups in scene)
+        // This is critical for fish recycling during Boss Mode swarm spawns
+        // Without this fix, old groups remain in fishGroup causing memory leaks and rendering issues
+        if (this.group && this.group.parent) {
+            // Clean up old GLB wrapper if it exists
+            if (this.glbCorrectionWrapper) {
+                this.group.remove(this.glbCorrectionWrapper);
+                // Clean up old AnimationMixer if exists
+                if (this.glbMixer && this.glbModelRoot) {
+                    this.glbMixer.stopAllAction();
+                    this.glbMixer.uncacheRoot(this.glbModelRoot);
+                }
+            }
+            // Remove old group from parent (fishGroup)
+            this.group.parent.remove(this.group);
+            // Dispose procedural mesh geometries (but NOT materials - they're cached)
+            this.group.children.forEach(child => {
+                if (child.geometry) child.geometry.dispose();
+            });
+        }
+        
         this.group = new THREE.Group();
         
         // Apply global scale multiplier to procedural meshes (same as GLB models)
