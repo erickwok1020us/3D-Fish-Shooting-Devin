@@ -14149,10 +14149,9 @@ function toggleViewMode() {
                 if (child.isLight) child.visible = false;
             });
         }
-        // Initialize FPS yaw/pitch to show cannon at bottom of screen
-        // User requested: cannon should be visible in initial FPS view
-        // Negative pitch = looking down, which shows cannon at bottom
-        const FPS_INITIAL_PITCH = -30 * (Math.PI / 180);  // -30 degrees (look down more to clearly see cannon)
+        // Initialize FPS yaw/pitch - cannon should be visible when looking straight ahead
+        // Camera is now positioned BELOW muzzle level, so cannon is visible at pitch=0
+        const FPS_INITIAL_PITCH = 0;  // Look straight ahead - cannon visible at bottom of screen
         gameState.fpsYaw = 0;
         gameState.fpsPitch = FPS_INITIAL_PITCH;
         // Apply initial rotation to cannon (center yaw, slight downward pitch)
@@ -14232,7 +14231,7 @@ const FPS_PITCH_MAX = 47.5 * (Math.PI / 180);   // +47.5Â° (look up) - total 95Â
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
 const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
-const FPS_CAMERA_UP_OFFSET_DEFAULT = 40;    // Default height above muzzle (increased for GLB models)
+const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
