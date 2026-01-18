@@ -13940,15 +13940,26 @@ function updateFPSCamera() {
         Math.cos(pitch) * Math.cos(yaw)
     );
     
-    // Get muzzle position in world space
+    // FIX: Reset muzzle position to the correct value for the current weapon
+    // This prevents camera height accumulation when rapidly switching weapons
+    // The muzzle position might get corrupted during weapon switching, so we reset it here
+    const currentWeaponKey = weaponGLBState.currentWeaponKey || '1x';
+    const weaponConfig = WEAPON_GLB_CONFIG.weapons[currentWeaponKey];
+    if (cannonMuzzle && weaponConfig?.muzzleOffset) {
+        // Reset muzzle to the correct position for this weapon
+        cannonMuzzle.position.set(
+            weaponConfig.muzzleOffset.x,
+            weaponConfig.muzzleOffset.y,
+            weaponConfig.muzzleOffset.z
+        );
+    }
+    
+    // Get muzzle position in world space (now guaranteed to be correct)
     const muzzlePos = new THREE.Vector3();
     cannonMuzzle.getWorldPosition(muzzlePos);
     
     // Use per-weapon camera offsets from WEAPON_GLB_CONFIG
     // Each weapon has different size/scale, so camera offsets must be adjusted accordingly
-    // Smooth camera transitions (from PR #178) prevent jarring jumps when switching weapons
-    const currentWeaponKey = weaponGLBState.currentWeaponKey || '1x';
-    const weaponConfig = WEAPON_GLB_CONFIG.weapons[currentWeaponKey];
     const cameraBackDist = weaponConfig?.fpsCameraBackDist || FPS_CAMERA_BACK_DIST_DEFAULT;
     const cameraUpOffset = weaponConfig?.fpsCameraUpOffset || FPS_CAMERA_UP_OFFSET_DEFAULT;
     
