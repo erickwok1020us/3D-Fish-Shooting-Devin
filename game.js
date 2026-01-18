@@ -10500,6 +10500,20 @@ class Fish {
         this.isFrozen = false;
         this.group.visible = true;
         
+        // FISH RESPAWN FIX: Re-add fish group to fishGroup if it was removed
+        // This fixes the bug where fish become invisible after Boss Mode ends.
+        // endBossEvent() removes boss fish groups from fishGroup, but when the
+        // respawn timer fires, spawn() didn't re-add them, causing fish to be
+        // "active" in activeFish but not visible in the scene.
+        if (!this.group.parent && typeof fishGroup !== 'undefined') {
+            fishGroup.add(this.group);
+        }
+        
+        // FISH RESPAWN FIX: Clear isBoss flag when spawning
+        // This ensures fish that were used as boss fish during Boss Mode
+        // are treated as normal fish when they respawn after Boss Mode ends.
+        this.isBoss = false;
+        
         // FIX: Reset lastPosition on spawn to prevent stuck fish detection from using stale data
         // This is critical for pooled fish reuse - without this, the first frame's displacement
         // calculation would use the old fish's last position, potentially triggering false stuck detection
