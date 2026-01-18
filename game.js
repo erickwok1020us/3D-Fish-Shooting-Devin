@@ -12064,6 +12064,9 @@ class Bullet {
         // This enables accurate swept collision detection to prevent tunneling
         this.lastPosition = new THREE.Vector3();
         
+        // AIR WALL FIX: Store bullet origin (muzzle position) to prevent hitting fish too close to cannon
+        this.origin = new THREE.Vector3();
+        
         this.createMesh();
     }
     
@@ -12144,6 +12147,8 @@ class Bullet {
         this.group.position.copy(origin);
         // COLLISION OPTIMIZATION: Initialize lastPosition for segment-sphere collision
         this.lastPosition.copy(origin);
+        // AIR WALL FIX: Store origin (muzzle position) to prevent hitting fish too close to cannon
+        this.origin.copy(origin);
         this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
         // Issue #4: Add upward arc for grenades
@@ -12256,6 +12261,18 @@ class Bullet {
             
             const fishPos = fish.group.position;
             const fishRadius = fish.boundingRadius;
+            
+            // AIR WALL FIX: Skip fish that are too close to the bullet's origin (muzzle)
+            // This prevents the "air wall" effect where bullets hit fish that are:
+            // 1. Behind the player's view in FPS mode
+            // 2. Swimming very close to the cannon
+            // 3. Large fish whose bounding radius extends near the muzzle
+            // Minimum distance = 80 units (slightly larger than biggest fish radius ~112)
+            const distFromOriginSq = fishPos.distanceToSquared(this.origin);
+            const minHitDistanceSq = 80 * 80;  // 80 units minimum distance
+            if (distFromOriginSq < minHitDistanceSq) {
+                continue;  // Skip fish too close to muzzle
+            }
             
             // COLLISION OPTIMIZATION: Use segment-sphere collision for accurate hit detection
             // This replaces the old point-sphere + 100 buffer approach which caused:
