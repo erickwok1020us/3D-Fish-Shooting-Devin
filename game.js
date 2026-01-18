@@ -1925,9 +1925,10 @@ const WEAPON_GLB_CONFIG = {
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            // FIXED: Camera was too high - lowered fpsCameraUpOffset from 40 to 25
-            fpsCameraBackDist: 120,
-            fpsCameraUpOffset: 25
+            // FPS Camera: Position high above weapon for clear view when aiming down
+            // Much higher upOffset to prevent cannon blocking view at low angles
+            fpsCameraBackDist: 40,
+            fpsCameraUpOffset: 120
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -1943,8 +1944,10 @@ const WEAPON_GLB_CONFIG = {
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 45
+            // FPS Camera: Position high above weapon for clear view when aiming down
+            // Much higher upOffset to prevent cannon blocking view at low angles
+            fpsCameraBackDist: 40,
+            fpsCameraUpOffset: 180
         },
         '5x': {
             cannon: '5x 武器模組',
@@ -1958,8 +1961,10 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 200,
-            fpsCameraUpOffset: 70
+            // FPS Camera: Position high above weapon for clear view when aiming down
+            // Much higher upOffset to prevent cannon blocking view at low angles
+            fpsCameraBackDist: 60,
+            fpsCameraUpOffset: 250
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -1972,10 +1977,10 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            // FIXED v2: Camera was still inside weapon - increased fpsCameraUpOffset from 80 to 150
-            // Also increased fpsCameraBackDist from 250 to 300 for better view
-            fpsCameraBackDist: 300,
-            fpsCameraUpOffset: 150
+            // FPS Camera: Position high above weapon for clear view when aiming down
+            // Much higher upOffset to prevent cannon blocking view at low angles
+            fpsCameraBackDist: 100,
+            fpsCameraUpOffset: 350
         }
     }
 };
