@@ -4104,6 +4104,299 @@ const WEAPON_VFX_CONFIG = {
     // Note: 20x weapon removed per latest specification
 };
 
+// ==================== 3X WEAPON FIRE PARTICLE SYSTEM ====================
+// Uses Unity-extracted textures for fire trail and hit effects
+const FIRE_PARTICLE_CONFIG = {
+    baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
+    textures: {
+        noise1: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%88.jpg',      // Noise/cloud for distortion
+        noise2: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%882.jpg',     // Turbulence noise
+        glow: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%883.jpg',       // Glow/vignette
+        flame: '3x%20%E6%AD%A6%E5%99%A8%E6%96%B0%E7%89%B9%E6%95%884.jpg'       // Flame sprite shape
+    },
+    trail: {
+        spawnRate: 0.015,         // Spawn particle every 15ms (more frequent)
+        particleCount: 20,        // Max particles per bullet trail
+        particleSize: 25,         // Base particle size (larger for visibility)
+        particleLife: 0.5,        // Particle lifetime in seconds
+        colors: {
+            start: 0xffaa00,      // Orange-yellow (fire core)
+            mid: 0xff6600,        // Orange (fire body)
+            end: 0xff2200         // Red-orange (fire tail)
+        },
+        fadeSpeed: 2.0,           // How fast particles fade
+        shrinkSpeed: 1.2          // How fast particles shrink
+    },
+    hit: {
+        burstCount: 25,           // Particles in hit burst
+        burstSize: 30,            // Size of burst particles (larger)
+        burstLife: 0.7,           // Burst particle lifetime
+        burstSpeed: 120           // Burst particle speed
+    }
+};
+
+// Fire particle texture cache
+const fireParticleTextures = {
+    noise1: null,
+    noise2: null,
+    glow: null,
+    flame: null,
+    loaded: false,
+    loading: false
+};
+
+// Fire particle pool for 3x weapon trail
+const fireParticlePool = {
+    particles: [],
+    activeCount: 0,
+    maxParticles: 100,
+    geometry: null,
+    material: null,
+    initialized: false
+};
+
+// Load fire particle textures
+async function loadFireParticleTextures() {
+    if (fireParticleTextures.loaded || fireParticleTextures.loading) return;
+    fireParticleTextures.loading = true;
+    
+    const textureLoader = new THREE.TextureLoader();
+    const config = FIRE_PARTICLE_CONFIG;
+    
+    try {
+        const loadTexture = (key) => {
+            return new Promise((resolve, reject) => {
+                const url = config.baseUrl + config.textures[key];
+                textureLoader.load(url, 
+                    (texture) => {
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        fireParticleTextures[key] = texture;
+                        resolve(texture);
+                    },
+                    undefined,
+                    (error) => {
+                        console.warn(`[FIRE-VFX] Failed to load texture ${key}:`, error);
+                        resolve(null);
+                    }
+                );
+            });
+        };
+        
+        await Promise.all([
+            loadTexture('noise1'),
+            loadTexture('noise2'),
+            loadTexture('glow'),
+            loadTexture('flame')
+        ]);
+        
+        fireParticleTextures.loaded = true;
+        console.log('[FIRE-VFX] Fire particle textures loaded');
+        
+        // Initialize fire particle pool after textures are loaded
+        initFireParticlePool();
+    } catch (error) {
+        console.error('[FIRE-VFX] Error loading fire particle textures:', error);
+    }
+    
+    fireParticleTextures.loading = false;
+}
+
+// Initialize fire particle pool
+function initFireParticlePool() {
+    if (fireParticlePool.initialized) return;
+    
+    // Create shared geometry (plane for billboard particles)
+    fireParticlePool.geometry = new THREE.PlaneGeometry(1, 1);
+    
+    // Create material using flame texture with additive blending
+    const flameTexture = fireParticleTextures.flame;
+    const glowTexture = fireParticleTextures.glow;
+    
+    // Use glow texture if flame not available, or create procedural
+    const texture = flameTexture || glowTexture;
+    
+    fireParticlePool.material = new THREE.MeshBasicMaterial({
+        map: texture,
+        color: FIRE_PARTICLE_CONFIG.trail.colors.start,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+    
+    // Pre-create particle pool
+    for (let i = 0; i < fireParticlePool.maxParticles; i++) {
+        const particle = {
+            mesh: new THREE.Mesh(
+                fireParticlePool.geometry,
+                fireParticlePool.material.clone()
+            ),
+            velocity: new THREE.Vector3(),
+            life: 0,
+            maxLife: 0,
+            size: 0,
+            active: false
+        };
+        particle.mesh.visible = false;
+        fireParticlePool.particles.push(particle);
+    }
+    
+    fireParticlePool.initialized = true;
+    console.log('[FIRE-VFX] Fire particle pool initialized with', fireParticlePool.maxParticles, 'particles');
+}
+
+// Get an inactive fire particle from pool
+function getFireParticle() {
+    for (const particle of fireParticlePool.particles) {
+        if (!particle.active) {
+            return particle;
+        }
+    }
+    return null; // Pool exhausted
+}
+
+// Spawn fire trail particle at position
+function spawnFireTrailParticle(position, bulletVelocity) {
+    if (!fireParticlePool.initialized) return;
+    
+    const particle = getFireParticle();
+    if (!particle) return;
+    
+    const config = FIRE_PARTICLE_CONFIG.trail;
+    
+    // Activate particle
+    particle.active = true;
+    particle.life = config.particleLife;
+    particle.maxLife = config.particleLife;
+    particle.size = config.particleSize * (0.8 + Math.random() * 0.4);
+    
+    // Position at bullet location with slight random offset
+    particle.mesh.position.copy(position);
+    particle.mesh.position.x += (Math.random() - 0.5) * 5;
+    particle.mesh.position.y += (Math.random() - 0.5) * 5;
+    particle.mesh.position.z += (Math.random() - 0.5) * 5;
+    
+    // Velocity - opposite to bullet direction with some spread
+    particle.velocity.copy(bulletVelocity).normalize().multiplyScalar(-30);
+    particle.velocity.x += (Math.random() - 0.5) * 20;
+    particle.velocity.y += (Math.random() - 0.5) * 20 + 10; // Slight upward drift
+    particle.velocity.z += (Math.random() - 0.5) * 20;
+    
+    // Set initial scale and color
+    particle.mesh.scale.set(particle.size, particle.size, 1);
+    particle.mesh.material.color.setHex(config.colors.start);
+    particle.mesh.material.opacity = 1.0;
+    particle.mesh.visible = true;
+    
+    // Add to scene if not already
+    if (!particle.mesh.parent) {
+        scene.add(particle.mesh);
+    }
+    
+    fireParticlePool.activeCount++;
+}
+
+// Spawn fire burst for hit effect
+function spawnFireHitBurst(position) {
+    if (!fireParticlePool.initialized) return;
+    
+    const config = FIRE_PARTICLE_CONFIG.hit;
+    
+    for (let i = 0; i < config.burstCount; i++) {
+        const particle = getFireParticle();
+        if (!particle) break;
+        
+        // Activate particle
+        particle.active = true;
+        particle.life = config.burstLife * (0.7 + Math.random() * 0.6);
+        particle.maxLife = particle.life;
+        particle.size = config.burstSize * (0.6 + Math.random() * 0.8);
+        
+        // Position at hit location
+        particle.mesh.position.copy(position);
+        
+        // Random spherical velocity for burst
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        const speed = config.burstSpeed * (0.5 + Math.random() * 0.5);
+        
+        particle.velocity.set(
+            Math.sin(phi) * Math.cos(theta) * speed,
+            Math.sin(phi) * Math.sin(theta) * speed + 50, // Upward bias
+            Math.cos(phi) * speed
+        );
+        
+        // Set initial scale and color
+        particle.mesh.scale.set(particle.size, particle.size, 1);
+        particle.mesh.material.color.setHex(FIRE_PARTICLE_CONFIG.trail.colors.start);
+        particle.mesh.material.opacity = 1.0;
+        particle.mesh.visible = true;
+        
+        // Add to scene if not already
+        if (!particle.mesh.parent) {
+            scene.add(particle.mesh);
+        }
+        
+        fireParticlePool.activeCount++;
+    }
+}
+
+// Update all active fire particles (called from main animate loop)
+function updateFireParticles(deltaTime) {
+    if (!fireParticlePool.initialized) return;
+    
+    const config = FIRE_PARTICLE_CONFIG.trail;
+    
+    for (const particle of fireParticlePool.particles) {
+        if (!particle.active) continue;
+        
+        // Update life
+        particle.life -= deltaTime;
+        
+        if (particle.life <= 0) {
+            // Deactivate particle
+            particle.active = false;
+            particle.mesh.visible = false;
+            fireParticlePool.activeCount--;
+            continue;
+        }
+        
+        // Calculate life progress (0 = just spawned, 1 = about to die)
+        const lifeProgress = 1 - (particle.life / particle.maxLife);
+        
+        // Update position
+        particle.mesh.position.x += particle.velocity.x * deltaTime;
+        particle.mesh.position.y += particle.velocity.y * deltaTime;
+        particle.mesh.position.z += particle.velocity.z * deltaTime;
+        
+        // Slow down velocity (drag)
+        particle.velocity.multiplyScalar(0.95);
+        
+        // Update scale (shrink over time)
+        const scale = particle.size * (1 - lifeProgress * config.shrinkSpeed * 0.5);
+        particle.mesh.scale.set(Math.max(0.1, scale), Math.max(0.1, scale), 1);
+        
+        // Update opacity (fade out)
+        particle.mesh.material.opacity = Math.max(0, 1 - lifeProgress * config.fadeSpeed * 0.5);
+        
+        // Update color (orange -> red gradient)
+        if (lifeProgress < 0.3) {
+            particle.mesh.material.color.setHex(config.colors.start);
+        } else if (lifeProgress < 0.6) {
+            particle.mesh.material.color.setHex(config.colors.mid);
+        } else {
+            particle.mesh.material.color.setHex(config.colors.end);
+        }
+        
+        // Billboard - always face camera
+        if (camera) {
+            particle.mesh.quaternion.copy(camera.quaternion);
+        }
+    }
+}
+
 // VFX state tracking
 const vfxState = {
     chargeTimer: 0,
@@ -5795,6 +6088,10 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
             if (weaponKey === '5x' || weaponKey === '8x') {
                 triggerScreenShakeWithStrength(weaponKey === '8x' ? 3 : 1);
             }
+            // 3X WEAPON: Add fire particle burst on hit for extra visual impact
+            if (weaponKey === '3x' && fireParticlePool.initialized) {
+                spawnFireHitBurst(hitPos);
+            }
             return;
         }
     }
@@ -5807,9 +6104,13 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         createHitParticles(hitPos, config.hitColor, 8);
         
     } else if (weaponKey === '3x') {
-        // Medium green energy explosion + electric chain effect + water ripples
+        // Medium fire explosion + fire particle burst
         spawnExpandingRing(hitPos, config.hitColor, 15, 50, 0.4);
         spawnWaterSplash(hitPos, 35);
+        // Fire particle burst for 3x weapon
+        if (fireParticlePool.initialized) {
+            spawnFireHitBurst(hitPos);
+        }
         // Electric arc effects around impact
         for (let i = 0; i < 4; i++) {
             const angle = (i / 4) * Math.PI * 2;
@@ -6927,6 +7228,10 @@ async function init() {
         // Load 3x weapon
         updateProgress(40, 'Loading 3x weapon...');
         await preloadWeaponGLB('3x');
+        
+        // Load 3x weapon fire particle textures
+        updateProgress(45, 'Loading 3x fire effects...');
+        await loadFireParticleTextures();
         
         // Load 5x weapon
         updateProgress(60, 'Loading 5x weapon...');
@@ -12223,6 +12528,18 @@ class Bullet {
         bulletTempVectors.velocityScaled.copy(this.velocity).multiplyScalar(deltaTime);
         this.group.position.add(bulletTempVectors.velocityScaled);
         
+        // 3X WEAPON FIRE TRAIL: Spawn fire particles behind the bullet
+        if (this.weaponKey === '3x' && fireParticlePool.initialized) {
+            // Throttle particle spawning based on spawn rate
+            if (!this.lastFireParticleTime) this.lastFireParticleTime = 0;
+            this.lastFireParticleTime += deltaTime;
+            
+            if (this.lastFireParticleTime >= FIRE_PARTICLE_CONFIG.trail.spawnRate) {
+                spawnFireTrailParticle(this.group.position, this.velocity);
+                this.lastFireParticleTime = 0;
+            }
+        }
+        
         // Check boundaries - very lenient to allow bullets to reach fish
         const { width, height, depth, floorY } = CONFIG.aquarium;
         const pos = this.group.position;
@@ -14274,6 +14591,9 @@ function animate() {
     // VFX MANAGER: Update all centralized visual effects (PERFORMANCE FIX)
     // This replaces individual requestAnimationFrame loops in each effect function
     updateVfxEffects(deltaTime, performance.now());
+    
+    // 3X WEAPON FIRE PARTICLES: Update fire trail particles
+    updateFireParticles(deltaTime);
     
     // COMBO SYSTEM: Update combo timer
     updateComboTimer(deltaTime);
