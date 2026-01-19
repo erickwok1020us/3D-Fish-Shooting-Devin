@@ -1913,6 +1913,7 @@ const WEAPON_GLB_CONFIG = {
     weapons: {
         '1x': {
             cannon: '1x 武器模組',
+            cannonNonPlayer: '1x 武器模組(非玩家)',  // Low-poly version for other players (~5k triangles)
             bullet: '1x 子彈模組',
             hitEffect: '1x 擊中特效',
             scale: 0.8,
@@ -1931,6 +1932,7 @@ const WEAPON_GLB_CONFIG = {
         },
         '3x': {
             cannon: '3x 武器模組',
+            cannonNonPlayer: '3x 武器模組(非玩家)',  // Low-poly version for other players (~5k triangles)
             bullet: '3x 子彈模組',
             hitEffect: '3x 擊中特效',
             scale: 1.0,
@@ -1949,6 +1951,7 @@ const WEAPON_GLB_CONFIG = {
         },
         '5x': {
             cannon: '5x 武器模組',
+            cannonNonPlayer: '5x 武器模組(非玩家)',  // Low-poly version for other players (~5k triangles)
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
             scale: 1.2,
@@ -1965,6 +1968,7 @@ const WEAPON_GLB_CONFIG = {
         },
         '8x': {
             cannon: '8x 武器模組',
+            cannonNonPlayer: '8x 武器模組(非玩家).glb',  // Low-poly version for other players (~5k triangles) - Note: filename has .glb suffix
             bullet: '8x 子彈模組',
             hitEffect: '8x 擊中特效',
             scale: 1.5,
@@ -2292,6 +2296,12 @@ async function loadWeaponGLB(weaponKey, type) {
             filename = config.cannon;
             cache = weaponGLBState.cannonCache;
             break;
+        case 'cannonNonPlayer':
+            // Low-poly cannon for non-player (other players in multiplayer)
+            // Falls back to regular cannon if non-player version not available
+            filename = config.cannonNonPlayer || config.cannon;
+            cache = weaponGLBState.cannonCache;
+            break;
         case 'bullet':
             filename = config.bullet;
             cache = weaponGLBState.bulletCache;
@@ -2449,7 +2459,7 @@ async function loadWeaponGLB(weaponKey, type) {
                 // This is applied AFTER centering so it doesn't affect bounding box calculations
                 const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
                 if (glbConfig) {
-                    if (type === 'cannon' && glbConfig.cannonRotationFix) {
+                    if ((type === 'cannon' || type === 'cannonNonPlayer') && glbConfig.cannonRotationFix) {
                         wrapper.rotation.copy(glbConfig.cannonRotationFix);
                         console.log(`[WEAPON-GLB] Applied cannon rotation fix for ${weaponKey}: y=${(glbConfig.cannonRotationFix.y * 180 / Math.PI).toFixed(1)}°`);
                     } else if (type === 'bullet' && glbConfig.bulletRotationFix) {
@@ -2519,6 +2529,28 @@ async function preloadWeaponGLB(weaponKey) {
     
     weaponGLBState.preloadedWeapons.add(weaponKey);
     console.log(`[WEAPON-GLB] Preloaded weapon: ${weaponKey}`);
+}
+
+// Preload non-player (low-poly) cannon models for multiplayer
+// These are optimized versions (~5k triangles) for other players' cannons
+async function preloadNonPlayerCannons() {
+    console.log('[WEAPON-GLB] Preloading non-player cannon models for multiplayer...');
+    const weaponKeys = ['1x', '3x', '5x', '8x'];
+    
+    await Promise.all(weaponKeys.map(async (weaponKey) => {
+        const model = await loadWeaponGLB(weaponKey, 'cannonNonPlayer');
+        if (model) {
+            console.log(`[WEAPON-GLB] Preloaded non-player cannon for ${weaponKey}`);
+        }
+    }));
+    
+    console.log('[WEAPON-GLB] Non-player cannon preloading complete');
+}
+
+// Get a non-player cannon model for multiplayer (returns cloned model)
+async function getNonPlayerCannonModel(weaponKey) {
+    const model = await loadWeaponGLB(weaponKey, 'cannonNonPlayer');
+    return model;
 }
 
 // PERFORMANCE: Pre-clone cannon model and add to scene (hidden) for instant weapon switching
