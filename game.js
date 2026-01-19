@@ -1913,7 +1913,7 @@ const WEAPON_GLB_CONFIG = {
     weapons: {
         '1x': {
             cannon: '1x 武器模組',
-            cannonNonPlayer: '1x 武器模組(非玩家)',  // Low-poly version for other players (~5k triangles)
+            cannonNonPlayer: '1x 武器模組(非玩家).glb',  // Low-poly version for other players (~3k triangles)
             bullet: '1x 子彈模組',
             hitEffect: '1x 擊中特效',
             scale: 0.8,
@@ -1932,7 +1932,7 @@ const WEAPON_GLB_CONFIG = {
         },
         '3x': {
             cannon: '3x 武器模組',
-            cannonNonPlayer: '3x 武器模組(非玩家)',  // Low-poly version for other players (~5k triangles)
+            cannonNonPlayer: '3x 武器模組(非玩家).glb',  // Low-poly version for other players (~3k triangles)
             bullet: '3x 子彈模組',
             hitEffect: '3x 擊中特效',
             scale: 1.0,
@@ -1951,7 +1951,7 @@ const WEAPON_GLB_CONFIG = {
         },
         '5x': {
             cannon: '5x 武器模組',
-            cannonNonPlayer: '5x 武器模組(非玩家)',  // Low-poly version for other players (~5k triangles)
+            cannonNonPlayer: '5x 武器模組(非玩家).glb',  // Low-poly version for other players (~3k triangles)
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
             scale: 1.2,
@@ -1968,7 +1968,7 @@ const WEAPON_GLB_CONFIG = {
         },
         '8x': {
             cannon: '8x 武器模組',
-            cannonNonPlayer: '8x 武器模組(非玩家).glb',  // Low-poly version for other players (~5k triangles) - Note: filename has .glb suffix
+            cannonNonPlayer: '8x 武器模組(非玩家).glb.glb',  // Low-poly version for other players (~3k triangles) - Note: R2 filename has double .glb suffix
             bullet: '8x 子彈模組',
             hitEffect: '8x 擊中特效',
             scale: 1.5,
@@ -14197,7 +14197,8 @@ function toggleViewMode() {
         }
         // Initialize FPS yaw/pitch - cannon should be visible when looking straight ahead
         // Camera is now positioned BELOW muzzle level, so cannon is visible at pitch=0
-        const FPS_INITIAL_PITCH = 0;  // Look straight ahead - cannon visible at bottom of screen
+        // Initial pitch set to 10 degrees downward for better fish viewing
+        const FPS_INITIAL_PITCH = 10 * Math.PI / 180;  // 10 degrees down - better view of fish swimming area
         gameState.fpsYaw = 0;
         gameState.fpsPitch = FPS_INITIAL_PITCH;
         // Apply initial rotation to cannon (center yaw, slight downward pitch)
