@@ -1035,7 +1035,7 @@ function calculateTrianglesByCategory() {
         cannon: 0,
         // Detailed subcategories
         sceneDetail: { map: 0, panorama: 0, particles: 0, ui: 0, other: 0 },
-        cannonDetail: { turret: 0, bullets: 0, hitEffects: 0 },
+        cannonDetail: { playerTurret: 0, nonPlayerTurret: 0, bullets: 0, hitEffects: 0 },
         // Fish statistics
         fishStats: {
             count: 0,
@@ -1122,8 +1122,13 @@ function calculateTrianglesByCategory() {
                        allNames.includes('splash') || obj.userData?.isHitEffect) {
                 result.cannonDetail.hitEffects += triangles;
             } else {
-                // Turret (cannon/weapon body)
-                result.cannonDetail.turret += triangles;
+                // Turret (cannon/weapon body) - distinguish player vs non-player
+                // Non-player turrets have "nonplayer" or "非玩家" in their name/parent names
+                if (allNames.includes('nonplayer') || allNames.includes('非玩家')) {
+                    result.cannonDetail.nonPlayerTurret += triangles;
+                } else {
+                    result.cannonDetail.playerTurret += triangles;
+                }
             }
         }
         // Categorize: Scene (map, panorama, particles, UI, other) with subcategories
@@ -1251,7 +1256,7 @@ function updatePerfDisplay() {
     
     // Get subcategory details
     const sceneDetail = triByCategory.sceneDetail || { map: 0, panorama: 0, particles: 0, ui: 0, other: 0 };
-    const cannonDetail = triByCategory.cannonDetail || { turret: 0, bullets: 0, hitEffects: 0 };
+    const cannonDetail = triByCategory.cannonDetail || { playerTurret: 0, nonPlayerTurret: 0, bullets: 0, hitEffects: 0 };
     const fishStats = triByCategory.fishStats || { count: 0, avg: 0, median: 0, highest: { form: '', triangles: 0 }, lowest: { form: '', triangles: 0 } };
     
     // Format fish stats for display
@@ -1282,7 +1287,8 @@ function updatePerfDisplay() {
         <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Fish: ${triByCategory.fish.toLocaleString()}</div>
         ${fishStatsHtml}
         <div style="margin-left: 10px; color: #aaa; font-size: 11px;">Cannon: ${triByCategory.cannon.toLocaleString()}</div>
-        <div style="margin-left: 20px; color: #777; font-size: 10px;">Turret: ${cannonDetail.turret.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Player Turret: ${cannonDetail.playerTurret.toLocaleString()}</div>
+        <div style="margin-left: 20px; color: #777; font-size: 10px;">Non-Player Turret: ${cannonDetail.nonPlayerTurret.toLocaleString()}</div>
         <div style="margin-left: 20px; color: #777; font-size: 10px;">Bullets: ${cannonDetail.bullets.toLocaleString()}</div>
         <div style="margin-left: 20px; color: #777; font-size: 10px;">HitEffects: ${cannonDetail.hitEffects.toLocaleString()}</div>
         <div>Textures: ${textures}</div>
