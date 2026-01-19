@@ -13678,15 +13678,21 @@ function setupEventListeners() {
     // Reset cannon to center position when mouse re-enters the game window
     // This provides a better user experience - no need to drag all the way back from extreme positions
     container.addEventListener('mouseenter', () => {
-        // Reset cannon rotation to center (yaw = 0, pitch = default 35°)
+        // Reset cannon rotation to center (yaw = 0, pitch = 0° - same as initial FPS view)
+        const defaultPitch = CONFIG.camera.defaultFPSPitch || 0;
+        
         if (cannonGroup) {
             cannonGroup.rotation.y = 0; // Center yaw
         }
         if (cannonPitchGroup) {
             // Reset to default pitch (0° - looking straight ahead horizontally)
-            const defaultPitch = CONFIG.camera.defaultFPSPitch || 0;
             cannonPitchGroup.rotation.x = -defaultPitch;
         }
+        
+        // IMPORTANT: Also update gameState to match the cannon rotation
+        // This ensures consistency between initial view and reset view
+        gameState.fpsYaw = 0;
+        gameState.fpsPitch = defaultPitch;
         
         // Reset FPS mouse tracking
         gameState.lastFPSMouseX = null;
