@@ -8127,10 +8127,14 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
     const barrelGroup = new THREE.Group();
     barrelGroup.position.y = 30;
     
-    // Try to load GLB weapon model, fallback to simple geometry
+    // Try to load LOW-POLY GLB weapon model for non-player cannons (~3k triangles instead of ~500k)
+    // This significantly reduces GPU load when displaying multiple cannons
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
-    if (glbConfig && weaponGLBState.cannonCache.has(weaponKey)) {
-        const cachedModel = weaponGLBState.cannonCache.get(weaponKey);
+    const nonPlayerCacheKey = `${weaponKey}_cannonNonPlayer`;
+    
+    if (glbConfig && weaponGLBState.cannonCache.has(nonPlayerCacheKey)) {
+        // Use cached low-poly non-player cannon model
+        const cachedModel = weaponGLBState.cannonCache.get(nonPlayerCacheKey);
         if (cachedModel) {
             const clonedModel = cachedModel.clone();
             clonedModel.position.set(0, 20, 0);
@@ -8157,8 +8161,8 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
         const housing = new THREE.Mesh(housingGeometry, housingMaterial);
         barrelGroup.add(housing);
         
-        // Async load GLB model and replace fallback when ready
-        loadWeaponGLB(weaponKey, 'cannon').then(model => {
+        // Async load LOW-POLY non-player cannon model and replace fallback when ready
+        loadWeaponGLB(weaponKey, 'cannonNonPlayer').then(model => {
             if (model && barrelGroup.parent) {
                 barrelGroup.clear();
                 const clonedModel = model.clone();
