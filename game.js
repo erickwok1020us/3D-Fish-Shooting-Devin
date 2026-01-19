@@ -13683,8 +13683,9 @@ function setupEventListeners() {
             cannonGroup.rotation.y = 0; // Center yaw
         }
         if (cannonPitchGroup) {
-            // Reset to default pitch (35° up, stored as -pitch in rotation.x)
-            const defaultPitch = CONFIG.camera.defaultFPSPitch || (35 * Math.PI / 180);
+            // Reset to default pitch (5° down, stored as -pitch in rotation.x)
+            // Negative pitch = look down, so we use -5 degrees
+            const defaultPitch = CONFIG.camera.defaultFPSPitch || (-5 * Math.PI / 180);
             cannonPitchGroup.rotation.x = -defaultPitch;
         }
         
@@ -14197,8 +14198,8 @@ function toggleViewMode() {
         }
         // Initialize FPS yaw/pitch - cannon should be visible when looking straight ahead
         // Camera is now positioned BELOW muzzle level, so cannon is visible at pitch=0
-        // Initial pitch set to 30 degrees downward for better fish viewing (negative = look down)
-        const FPS_INITIAL_PITCH = -30 * Math.PI / 180;  // 30 degrees down - negative value looks DOWN
+        // Initial pitch set to 5 degrees downward - just enough to see cannon muzzle (negative = look down)
+        const FPS_INITIAL_PITCH = -5 * Math.PI / 180;  // 5 degrees down - cannon muzzle visible at bottom
         gameState.fpsYaw = 0;
         gameState.fpsPitch = FPS_INITIAL_PITCH;
         // Apply initial rotation to cannon (center yaw, slight downward pitch)
