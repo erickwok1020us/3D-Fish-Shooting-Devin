@@ -4459,46 +4459,45 @@ const LIGHTNING_SPEAR_CONFIG = {
         boltGlow: 0x88ddff,   // Bolt glow
         boltOuter: 0x4488ff   // Bolt outer
     },
-    // Core sizes (volumetric layers) - DRAMATICALLY INCREASED to match game world scale
-    // Game world: 1800x900x1200 units, fish: 20-50 units, so effect needs to be 5-15 units
+    // Core sizes (volumetric layers)
     coreSizes: {
-        layer1: 1.5,    // Bright white core (visible at game scale)
-        layer2: 2.5,    // Cyan layer
-        layer3: 4.0,    // Blue layer
-        layer4: 6.0,    // Outer glow
-        layer5: 10.0    // Massive aura (comparable to small fish)
+        layer1: 0.04,   // Scaled down for game (original: 0.08)
+        layer2: 0.075,  // (original: 0.15)
+        layer3: 0.125,  // (original: 0.25)
+        layer4: 0.2,    // (original: 0.4)
+        layer5: 0.35    // (original: 0.7)
     },
-    // Trail settings - DRAMATICALLY INCREASED for game world scale
+    // Trail settings
     trail: {
-        outerRadius: 3.0,   // Visible trail width
-        outerLength: 15.0,  // Long energy trail
-        innerRadius: 1.5,   // Inner trail width
-        innerLength: 10.0   // Inner trail length
+        outerRadius: 0.2,
+        outerLength: 1.25,
+        innerRadius: 0.1,
+        innerLength: 0.9
     },
-    // Bolt settings - DRAMATICALLY INCREASED for game world scale
+    // Bolt settings
     bolts: {
-        mainCount: { min: 8, max: 12 },      // Main bolts
+        mainCount: { min: 8, max: 12 },      // Main bolts (reduced for performance)
         secondaryCount: { min: 12, max: 18 }, // Secondary bolts
         microCount: { min: 20, max: 30 },     // Micro bolts
         regenerateInterval: 3,                // Frames between bolt regeneration
-        mainLength: { min: 8, max: 15 },      // Long main bolts (visible at game scale)
-        secondaryLength: { min: 4, max: 8 },  // Medium secondary bolts
-        microLength: { min: 2, max: 4 }       // Small micro bolts
+        mainLength: { min: 0.4, max: 0.8 },
+        secondaryLength: { min: 0.25, max: 0.5 },
+        microLength: { min: 0.15, max: 0.35 }
     },
-    // Light settings - DRAMATICALLY INCREASED for game world scale
+    // Light settings
     lights: {
-        primaryIntensity: 50,    // Bright primary light
-        primaryDistance: 100,    // Large light radius
-        secondaryIntensity: 25,  // Secondary light
-        secondaryDistance: 50    // Secondary light radius
+        primaryIntensity: 4,
+        primaryDistance: 15,
+        secondaryIntensity: 2,
+        secondaryDistance: 8
     },
-    // Spark particle settings - DRAMATICALLY INCREASED for game world scale
+    // Spark particle settings
     sparks: {
-        poolSize: 1000,        // GPU particle pool size
-        trailSpawnRate: 8,     // Sparks per frame during flight
-        burstCount: 60,        // Sparks on fire
-        particleSize: 1.5,     // Visible spark size at game scale
-        lifetime: 1.2,
+        poolSize: 1000,        // GPU particle pool size (reduced from 2000 for performance)
+        trailSpawnRate: 6,     // Sparks per frame during flight
+        burstCount: 40,        // Sparks on fire
+        particleSize: 0.04,
+        lifetime: 1.0,
         drag: 0.96,
         fadeRate: 0.02
     },
