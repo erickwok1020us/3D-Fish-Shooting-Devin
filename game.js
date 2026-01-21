@@ -4459,45 +4459,45 @@ const LIGHTNING_SPEAR_CONFIG = {
         boltGlow: 0x88ddff,   // Bolt glow
         boltOuter: 0x4488ff   // Bolt outer
     },
-    // Core sizes (volumetric layers)
+    // Core sizes (volumetric layers) - INCREASED 3-4x for visibility
     coreSizes: {
-        layer1: 0.04,   // Scaled down for game (original: 0.08)
-        layer2: 0.075,  // (original: 0.15)
-        layer3: 0.125,  // (original: 0.25)
-        layer4: 0.2,    // (original: 0.4)
-        layer5: 0.35    // (original: 0.7)
+        layer1: 0.15,   // Bright white core (was 0.04)
+        layer2: 0.25,   // Cyan layer (was 0.075)
+        layer3: 0.4,    // Blue layer (was 0.125)
+        layer4: 0.6,    // Outer glow (was 0.2)
+        layer5: 1.0     // Massive aura (was 0.35)
     },
-    // Trail settings
+    // Trail settings - INCREASED for visibility
     trail: {
-        outerRadius: 0.2,
-        outerLength: 1.25,
-        innerRadius: 0.1,
-        innerLength: 0.9
+        outerRadius: 0.5,   // (was 0.2)
+        outerLength: 3.0,   // (was 1.25)
+        innerRadius: 0.3,   // (was 0.1)
+        innerLength: 2.0    // (was 0.9)
     },
-    // Bolt settings
+    // Bolt settings - INCREASED lengths for visibility
     bolts: {
         mainCount: { min: 8, max: 12 },      // Main bolts (reduced for performance)
         secondaryCount: { min: 12, max: 18 }, // Secondary bolts
         microCount: { min: 20, max: 30 },     // Micro bolts
         regenerateInterval: 3,                // Frames between bolt regeneration
-        mainLength: { min: 0.4, max: 0.8 },
-        secondaryLength: { min: 0.25, max: 0.5 },
-        microLength: { min: 0.15, max: 0.35 }
+        mainLength: { min: 1.5, max: 3.0 },       // (was 0.4-0.8)
+        secondaryLength: { min: 0.8, max: 1.5 },  // (was 0.25-0.5)
+        microLength: { min: 0.4, max: 0.8 }       // (was 0.15-0.35)
     },
-    // Light settings
+    // Light settings - INCREASED intensity for visibility
     lights: {
-        primaryIntensity: 4,
-        primaryDistance: 15,
-        secondaryIntensity: 2,
-        secondaryDistance: 8
+        primaryIntensity: 10,    // (was 4)
+        primaryDistance: 30,     // (was 15)
+        secondaryIntensity: 5,   // (was 2)
+        secondaryDistance: 15    // (was 8)
     },
-    // Spark particle settings
+    // Spark particle settings - INCREASED size for visibility
     sparks: {
         poolSize: 1000,        // GPU particle pool size (reduced from 2000 for performance)
-        trailSpawnRate: 6,     // Sparks per frame during flight
-        burstCount: 40,        // Sparks on fire
-        particleSize: 0.04,
-        lifetime: 1.0,
+        trailSpawnRate: 8,     // Sparks per frame during flight (was 6)
+        burstCount: 60,        // Sparks on fire (was 40)
+        particleSize: 0.15,    // (was 0.04)
+        lifetime: 1.2,         // (was 1.0)
         drag: 0.96,
         fadeRate: 0.02
     },
@@ -9258,7 +9258,7 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     // PERFORMANCE: Use output vector if provided, otherwise use temp vector
     const result = outDirection || aimTempVectors.direction;
     
-    // FIX: Use a far point along the ray direction as the target
+    // FIX: Use a point along the ray direction as the target
     // This is the most robust approach - it guarantees the bullet direction
     // matches where the user clicked on screen, regardless of muzzle position
     // 
@@ -9267,9 +9267,12 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     //   the direction (targetPoint - muzzlePos) becomes opposite to rayDir
     // - This caused bullets to shoot 180 degrees opposite to where user clicked
     //
-    // New approach: Always use a point far along the ray direction
+    // New approach: Always use a point along the ray direction
     // Then ensure the final direction aligns with rayDir (dot product check)
-    const targetDistance = 2000;
+    // 
+    // ADJUSTED: Reduced from 2000 to 120 so crosshair center is at fish pool center
+    // This makes the bullet reach the crosshair center faster and feels more responsive
+    const targetDistance = 120;
     aimTempVectors.targetPoint.copy(rayOrigin).addScaledVector(rayDir, targetDistance);
     
     // Calculate direction from muzzle to target point
@@ -14269,33 +14272,16 @@ function setupEventListeners() {
         }
     });
     
-    // Reset cannon to center position when mouse re-enters the game window
-    // This provides a better user experience - no need to drag all the way back from extreme positions
+    // When mouse re-enters the game window, DON'T reset cannon position
+    // Reason: We cannot move the user's physical mouse cursor, so resetting the cannon
+    // creates a disconnect - the crosshair resets to center but the mouse is still at the edge
+    // This causes the mouse to immediately leave the window when moved slightly
+    // Instead, just reset the mouse tracking so the next movement doesn't cause a large jump
     container.addEventListener('mouseenter', () => {
-        // Reset cannon rotation to center (yaw = 0, pitch = 0° - same as initial FPS view)
-        const defaultPitch = CONFIG.camera.defaultFPSPitch || 0;
-        
-        if (cannonGroup) {
-            cannonGroup.rotation.y = 0; // Center yaw
-        }
-        if (cannonPitchGroup) {
-            // Reset to default pitch (0° - looking straight ahead horizontally)
-            cannonPitchGroup.rotation.x = -defaultPitch;
-        }
-        
-        // IMPORTANT: Also update gameState to match the cannon rotation
-        // This ensures consistency between initial view and reset view
-        gameState.fpsYaw = 0;
-        gameState.fpsPitch = defaultPitch;
-        
-        // Reset FPS mouse tracking
+        // Only reset FPS mouse tracking to prevent large rotation jumps
+        // The cannon stays where it was, maintaining consistency with mouse position
         gameState.lastFPSMouseX = null;
         gameState.lastFPSMouseY = null;
-        
-        // Update camera to follow the reset cannon position
-        if (gameState.viewMode === 'fps') {
-            updateFPSCamera();
-        }
     });
     
     // Left click to shoot
