@@ -4459,45 +4459,46 @@ const LIGHTNING_SPEAR_CONFIG = {
         boltGlow: 0x88ddff,   // Bolt glow
         boltOuter: 0x4488ff   // Bolt outer
     },
-    // Core sizes (volumetric layers) - INCREASED 3-4x for visibility
+    // Core sizes (volumetric layers) - DRAMATICALLY INCREASED to match game world scale
+    // Game world: 1800x900x1200 units, fish: 20-50 units, so effect needs to be 5-15 units
     coreSizes: {
-        layer1: 0.15,   // Bright white core (was 0.04)
-        layer2: 0.25,   // Cyan layer (was 0.075)
-        layer3: 0.4,    // Blue layer (was 0.125)
-        layer4: 0.6,    // Outer glow (was 0.2)
-        layer5: 1.0     // Massive aura (was 0.35)
+        layer1: 1.5,    // Bright white core (visible at game scale)
+        layer2: 2.5,    // Cyan layer
+        layer3: 4.0,    // Blue layer
+        layer4: 6.0,    // Outer glow
+        layer5: 10.0    // Massive aura (comparable to small fish)
     },
-    // Trail settings - INCREASED for visibility
+    // Trail settings - DRAMATICALLY INCREASED for game world scale
     trail: {
-        outerRadius: 0.5,   // (was 0.2)
-        outerLength: 3.0,   // (was 1.25)
-        innerRadius: 0.3,   // (was 0.1)
-        innerLength: 2.0    // (was 0.9)
+        outerRadius: 3.0,   // Visible trail width
+        outerLength: 15.0,  // Long energy trail
+        innerRadius: 1.5,   // Inner trail width
+        innerLength: 10.0   // Inner trail length
     },
-    // Bolt settings - INCREASED lengths for visibility
+    // Bolt settings - DRAMATICALLY INCREASED for game world scale
     bolts: {
-        mainCount: { min: 8, max: 12 },      // Main bolts (reduced for performance)
+        mainCount: { min: 8, max: 12 },      // Main bolts
         secondaryCount: { min: 12, max: 18 }, // Secondary bolts
         microCount: { min: 20, max: 30 },     // Micro bolts
         regenerateInterval: 3,                // Frames between bolt regeneration
-        mainLength: { min: 1.5, max: 3.0 },       // (was 0.4-0.8)
-        secondaryLength: { min: 0.8, max: 1.5 },  // (was 0.25-0.5)
-        microLength: { min: 0.4, max: 0.8 }       // (was 0.15-0.35)
+        mainLength: { min: 8, max: 15 },      // Long main bolts (visible at game scale)
+        secondaryLength: { min: 4, max: 8 },  // Medium secondary bolts
+        microLength: { min: 2, max: 4 }       // Small micro bolts
     },
-    // Light settings - INCREASED intensity for visibility
+    // Light settings - DRAMATICALLY INCREASED for game world scale
     lights: {
-        primaryIntensity: 10,    // (was 4)
-        primaryDistance: 30,     // (was 15)
-        secondaryIntensity: 5,   // (was 2)
-        secondaryDistance: 15    // (was 8)
+        primaryIntensity: 50,    // Bright primary light
+        primaryDistance: 100,    // Large light radius
+        secondaryIntensity: 25,  // Secondary light
+        secondaryDistance: 50    // Secondary light radius
     },
-    // Spark particle settings - INCREASED size for visibility
+    // Spark particle settings - DRAMATICALLY INCREASED for game world scale
     sparks: {
-        poolSize: 1000,        // GPU particle pool size (reduced from 2000 for performance)
-        trailSpawnRate: 8,     // Sparks per frame during flight (was 6)
-        burstCount: 60,        // Sparks on fire (was 40)
-        particleSize: 0.15,    // (was 0.04)
-        lifetime: 1.2,         // (was 1.0)
+        poolSize: 1000,        // GPU particle pool size
+        trailSpawnRate: 8,     // Sparks per frame during flight
+        burstCount: 60,        // Sparks on fire
+        particleSize: 1.5,     // Visible spark size at game scale
+        lifetime: 1.2,
         drag: 0.96,
         fadeRate: 0.02
     },
@@ -9258,21 +9259,34 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     // PERFORMANCE: Use output vector if provided, otherwise use temp vector
     const result = outDirection || aimTempVectors.direction;
     
-    // FIX: Use a point along the ray direction as the target
-    // This is the most robust approach - it guarantees the bullet direction
-    // matches where the user clicked on screen, regardless of muzzle position
+    // FIX: Use ray-plane intersection at Y=0 (fish plane) for accurate crosshair convergence
+    // This ensures the bullet trajectory converges with the crosshair exactly where fish swim
     // 
-    // Previous approach (ray-plane intersection at Y=0) failed because:
-    // - When the intersection point is BEHIND the muzzle (tIntersect < tMuzzle),
-    //   the direction (targetPoint - muzzlePos) becomes opposite to rayDir
-    // - This caused bullets to shoot 180 degrees opposite to where user clicked
+    // Ray equation: P(t) = rayOrigin + rayDir * t
+    // Fish plane equation: Y = 0
+    // Solve: rayOrigin.y + rayDir.y * t = 0 => t = -rayOrigin.y / rayDir.y
     //
-    // New approach: Always use a point along the ray direction
-    // Then ensure the final direction aligns with rayDir (dot product check)
-    // 
-    // ADJUSTED: Reduced from 2000 to 120 so crosshair center is at fish pool center
-    // This makes the bullet reach the crosshair center faster and feels more responsive
-    const targetDistance = 120;
+    // Edge cases handled:
+    // - If ray is pointing downward (rayDir.y <= 0), use fallback distance
+    // - If intersection is behind camera (t <= 0), use fallback distance
+    // - Clamp t to reasonable range to avoid extreme values
+    
+    let targetDistance;
+    if (rayDir.y > 0.001) {
+        // Ray is pointing upward toward fish plane
+        const t = -rayOrigin.y / rayDir.y;
+        if (t > 10 && t < 2000) {
+            // Valid intersection within reasonable range
+            targetDistance = t;
+        } else {
+            // Intersection too close or too far, use fallback
+            targetDistance = 400;
+        }
+    } else {
+        // Ray is pointing downward or horizontal, use fallback
+        targetDistance = 400;
+    }
+    
     aimTempVectors.targetPoint.copy(rayOrigin).addScaledVector(rayDir, targetDistance);
     
     // Calculate direction from muzzle to target point
