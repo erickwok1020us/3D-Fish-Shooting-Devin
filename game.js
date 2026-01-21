@@ -9259,22 +9259,34 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     // PERFORMANCE: Use output vector if provided, otherwise use temp vector
     const result = outDirection || aimTempVectors.direction;
     
-    // FIX: Use a point along the ray direction as the target
-    // This is the most robust approach - it guarantees the bullet direction
-    // matches where the user clicked on screen, regardless of muzzle position
+    // FIX: Use ray-plane intersection at Y=0 (fish plane) for accurate crosshair convergence
+    // This ensures the bullet trajectory converges with the crosshair exactly where fish swim
     // 
-    // Previous approach (ray-plane intersection at Y=0) failed because:
-    // - When the intersection point is BEHIND the muzzle (tIntersect < tMuzzle),
-    //   the direction (targetPoint - muzzlePos) becomes opposite to rayDir
-    // - This caused bullets to shoot 180 degrees opposite to where user clicked
+    // Ray equation: P(t) = rayOrigin + rayDir * t
+    // Fish plane equation: Y = 0
+    // Solve: rayOrigin.y + rayDir.y * t = 0 => t = -rayOrigin.y / rayDir.y
     //
-    // New approach: Always use a point along the ray direction
-    // Then ensure the final direction aligns with rayDir (dot product check)
-    // 
-    // ADJUSTED: Set to 600 so bullet trajectory converges with crosshair at fish plane
-    // Camera is at Y=-380, fish swim at Y=0, so typical distance to fish is ~400-600 units
-    // Using 600 ensures bullet visually hits where crosshair is pointing at fish depth
-    const targetDistance = 600;
+    // Edge cases handled:
+    // - If ray is pointing downward (rayDir.y <= 0), use fallback distance
+    // - If intersection is behind camera (t <= 0), use fallback distance
+    // - Clamp t to reasonable range to avoid extreme values
+    
+    let targetDistance;
+    if (rayDir.y > 0.001) {
+        // Ray is pointing upward toward fish plane
+        const t = -rayOrigin.y / rayDir.y;
+        if (t > 10 && t < 2000) {
+            // Valid intersection within reasonable range
+            targetDistance = t;
+        } else {
+            // Intersection too close or too far, use fallback
+            targetDistance = 400;
+        }
+    } else {
+        // Ray is pointing downward or horizontal, use fallback
+        targetDistance = 400;
+    }
+    
     aimTempVectors.targetPoint.copy(rayOrigin).addScaledVector(rayDir, targetDistance);
     
     // Calculate direction from muzzle to target point
