@@ -4439,6 +4439,537 @@ function updateFireParticles(deltaTime) {
     }
 }
 
+// ==================== LIGHTNING SPEAR VFX SYSTEM (5x Weapon) ====================
+// AAA quality Elden Ring-style lightning effect with GPU particles, HDR glow, recursive bolts
+
+// Lightning Spear Configuration
+const LIGHTNING_SPEAR_CONFIG = {
+    // Core colors (volumetric energy core)
+    colors: {
+        core1: 0xffffff,      // Ultra bright white core
+        core2: 0x88ffff,      // Intense cyan
+        core3: 0x44aaff,      // Electric blue
+        core4: 0x2266dd,      // Outer glow
+        core5: 0x1144aa,      // Massive aura
+        trail: 0x2255cc,      // Energy trail
+        innerTrail: 0x55aaff, // Inner trail
+        light: 0x88ccff,      // Primary light
+        light2: 0xaaddff,     // Secondary light
+        bolt: 0xffffff,       // Bolt core
+        boltGlow: 0x88ddff,   // Bolt glow
+        boltOuter: 0x4488ff   // Bolt outer
+    },
+    // Core sizes (volumetric layers)
+    coreSizes: {
+        layer1: 0.04,   // Scaled down for game (original: 0.08)
+        layer2: 0.075,  // (original: 0.15)
+        layer3: 0.125,  // (original: 0.25)
+        layer4: 0.2,    // (original: 0.4)
+        layer5: 0.35    // (original: 0.7)
+    },
+    // Trail settings
+    trail: {
+        outerRadius: 0.2,
+        outerLength: 1.25,
+        innerRadius: 0.1,
+        innerLength: 0.9
+    },
+    // Bolt settings
+    bolts: {
+        mainCount: { min: 8, max: 12 },      // Main bolts (reduced for performance)
+        secondaryCount: { min: 12, max: 18 }, // Secondary bolts
+        microCount: { min: 20, max: 30 },     // Micro bolts
+        regenerateInterval: 3,                // Frames between bolt regeneration
+        mainLength: { min: 0.4, max: 0.8 },
+        secondaryLength: { min: 0.25, max: 0.5 },
+        microLength: { min: 0.15, max: 0.35 }
+    },
+    // Light settings
+    lights: {
+        primaryIntensity: 4,
+        primaryDistance: 15,
+        secondaryIntensity: 2,
+        secondaryDistance: 8
+    },
+    // Spark particle settings
+    sparks: {
+        poolSize: 1000,        // GPU particle pool size (reduced from 2000 for performance)
+        trailSpawnRate: 6,     // Sparks per frame during flight
+        burstCount: 40,        // Sparks on fire
+        particleSize: 0.04,
+        lifetime: 1.0,
+        drag: 0.96,
+        fadeRate: 0.02
+    },
+    // Animation settings
+    animation: {
+        coreFlickerSpeed: 25,
+        boltRotationSpeed: 0.15,
+        lightFlickerRange: 4
+    }
+};
+
+// Lightning Spear spark particle pool (GPU-style)
+const lightningSparkPool = {
+    points: null,
+    geometry: null,
+    material: null,
+    positions: null,
+    velocities: null,
+    lifetimes: null,
+    colors: null,
+    sparkIndex: 0,
+    initialized: false
+};
+
+// Active lightning spear effects
+const activeLightningSpears = [];
+
+// Initialize lightning spark particle pool
+function initLightningSparkPool() {
+    if (lightningSparkPool.initialized) return;
+    
+    const count = LIGHTNING_SPEAR_CONFIG.sparks.poolSize;
+    
+    lightningSparkPool.geometry = new THREE.BufferGeometry();
+    lightningSparkPool.positions = new Float32Array(count * 3);
+    lightningSparkPool.velocities = new Float32Array(count * 3);
+    lightningSparkPool.lifetimes = new Float32Array(count);
+    lightningSparkPool.colors = new Float32Array(count * 3);
+    
+    // Initialize all particles off-screen
+    for (let i = 0; i < count; i++) {
+        lightningSparkPool.positions[i * 3] = 0;
+        lightningSparkPool.positions[i * 3 + 1] = -1000;
+        lightningSparkPool.positions[i * 3 + 2] = 0;
+        lightningSparkPool.lifetimes[i] = 0;
+        lightningSparkPool.colors[i * 3] = 0.5;
+        lightningSparkPool.colors[i * 3 + 1] = 0.8;
+        lightningSparkPool.colors[i * 3 + 2] = 1.0;
+    }
+    
+    lightningSparkPool.geometry.setAttribute('position', 
+        new THREE.BufferAttribute(lightningSparkPool.positions, 3));
+    lightningSparkPool.geometry.setAttribute('color', 
+        new THREE.BufferAttribute(lightningSparkPool.colors, 3));
+    
+    lightningSparkPool.material = new THREE.PointsMaterial({
+        size: LIGHTNING_SPEAR_CONFIG.sparks.particleSize,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    
+    lightningSparkPool.points = new THREE.Points(
+        lightningSparkPool.geometry, 
+        lightningSparkPool.material
+    );
+    
+    lightningSparkPool.initialized = true;
+    console.log('[LIGHTNING-VFX] Spark pool initialized with', count, 'particles');
+}
+
+// Spawn a single lightning spark
+function spawnLightningSpark(x, y, z, vx, vy, vz, r, g, b) {
+    if (!lightningSparkPool.initialized) return;
+    
+    const i = lightningSparkPool.sparkIndex % LIGHTNING_SPEAR_CONFIG.sparks.poolSize;
+    lightningSparkPool.positions[i * 3] = x;
+    lightningSparkPool.positions[i * 3 + 1] = y;
+    lightningSparkPool.positions[i * 3 + 2] = z;
+    lightningSparkPool.velocities[i * 3] = vx;
+    lightningSparkPool.velocities[i * 3 + 1] = vy;
+    lightningSparkPool.velocities[i * 3 + 2] = vz;
+    lightningSparkPool.lifetimes[i] = LIGHTNING_SPEAR_CONFIG.sparks.lifetime;
+    lightningSparkPool.colors[i * 3] = r;
+    lightningSparkPool.colors[i * 3 + 1] = g;
+    lightningSparkPool.colors[i * 3 + 2] = b;
+    lightningSparkPool.sparkIndex++;
+}
+
+// Generate a jagged bolt path
+function generateLightningBoltPath(angle, length, jitter) {
+    const points = [];
+    const segments = 8; // Reduced from 12 for performance
+    for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const r = t * length;
+        let x = Math.cos(angle) * r;
+        let y = Math.sin(angle) * r;
+        let z = 0;
+        if (i > 0 && i < segments) {
+            const perpX = -Math.sin(angle);
+            const perpY = Math.cos(angle);
+            const offset = (Math.random() - 0.5) * jitter * (1 - t * 0.3);
+            x += perpX * offset;
+            y += perpY * offset;
+            z += (Math.random() - 0.5) * jitter * 0.5;
+        }
+        points.push(new THREE.Vector3(x, y, z));
+    }
+    return points;
+}
+
+// Create a simple bolt line
+function createSimpleLightningBolt(angle, length, jitter) {
+    const points = generateLightningBoltPath(angle, length, jitter);
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({
+        color: LIGHTNING_SPEAR_CONFIG.colors.boltGlow,
+        transparent: true,
+        opacity: 0.5 + Math.random() * 0.3
+    });
+    return new THREE.Line(geo, mat);
+}
+
+// Create a recursive bolt with branches
+function createRecursiveLightningBolt(angle, length, depth, jitter) {
+    const group = new THREE.Group();
+    const points = generateLightningBoltPath(angle, length, jitter);
+    
+    // Core bright line
+    const coreGeo = new THREE.BufferGeometry().setFromPoints(points);
+    const coreMat = new THREE.LineBasicMaterial({
+        color: LIGHTNING_SPEAR_CONFIG.colors.bolt,
+        transparent: true,
+        opacity: 0.95
+    });
+    group.add(new THREE.Line(coreGeo.clone(), coreMat));
+    
+    // Cyan glow
+    const glowMat = new THREE.LineBasicMaterial({
+        color: LIGHTNING_SPEAR_CONFIG.colors.boltGlow,
+        transparent: true,
+        opacity: 0.7
+    });
+    const glow = new THREE.Line(coreGeo.clone(), glowMat);
+    glow.scale.setScalar(1.3);
+    group.add(glow);
+    
+    // Blue outer
+    const outerMat = new THREE.LineBasicMaterial({
+        color: LIGHTNING_SPEAR_CONFIG.colors.boltOuter,
+        transparent: true,
+        opacity: 0.4
+    });
+    const outer = new THREE.Line(coreGeo.clone(), outerMat);
+    outer.scale.setScalar(1.6);
+    group.add(outer);
+    
+    // Recursive branches (reduced for performance)
+    if (depth > 0 && Math.random() > 0.5) {
+        const branchIdx = Math.floor(points.length * (0.3 + Math.random() * 0.5));
+        const branchStart = points[Math.min(branchIdx, points.length - 1)];
+        const branchAngle = angle + (Math.random() - 0.5) * 1.5;
+        const branchLen = length * (0.3 + Math.random() * 0.3);
+        const branch = createRecursiveLightningBolt(branchAngle, branchLen, depth - 1, jitter * 0.8);
+        branch.position.copy(branchStart);
+        group.add(branch);
+    }
+    
+    return group;
+}
+
+// Clear all bolts from a container
+function clearLightningBolts(container) {
+    while (container.children.length > 0) {
+        const child = container.children[0];
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+        container.remove(child);
+    }
+}
+
+// Regenerate all bolts for a lightning spear
+function regenerateLightningBolts(spear) {
+    const config = LIGHTNING_SPEAR_CONFIG.bolts;
+    
+    clearLightningBolts(spear.boltsContainer);
+    clearLightningBolts(spear.secondaryBolts);
+    clearLightningBolts(spear.microBolts);
+    
+    // Main bolts
+    const mainCount = config.mainCount.min + Math.floor(Math.random() * (config.mainCount.max - config.mainCount.min));
+    for (let i = 0; i < mainCount; i++) {
+        const angle = (i / mainCount) * Math.PI * 2 + Math.random() * 0.3;
+        const length = config.mainLength.min + Math.random() * (config.mainLength.max - config.mainLength.min);
+        const bolt = createRecursiveLightningBolt(angle, length, 2, 0.15);
+        spear.boltsContainer.add(bolt);
+    }
+    
+    // Secondary bolts
+    const secCount = config.secondaryCount.min + Math.floor(Math.random() * (config.secondaryCount.max - config.secondaryCount.min));
+    for (let i = 0; i < secCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const length = config.secondaryLength.min + Math.random() * (config.secondaryLength.max - config.secondaryLength.min);
+        const bolt = createRecursiveLightningBolt(angle, length, 1, 0.1);
+        spear.secondaryBolts.add(bolt);
+    }
+    
+    // Micro bolts
+    const microCount = config.microCount.min + Math.floor(Math.random() * (config.microCount.max - config.microCount.min));
+    for (let i = 0; i < microCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const length = config.microLength.min + Math.random() * (config.microLength.max - config.microLength.min);
+        const bolt = createSimpleLightningBolt(angle, length, 0.05);
+        spear.microBolts.add(bolt);
+    }
+}
+
+// Create a lightning spear visual effect group
+function createLightningSpearVisual() {
+    const group = new THREE.Group();
+    const config = LIGHTNING_SPEAR_CONFIG;
+    
+    // === VOLUMETRIC ENERGY CORE (5 layers) ===
+    // Layer 1: Ultra bright white core
+    const core1Geo = new THREE.SphereGeometry(config.coreSizes.layer1, 16, 16);
+    const core1Mat = new THREE.MeshBasicMaterial({ color: config.colors.core1 });
+    group.core1 = new THREE.Mesh(core1Geo, core1Mat);
+    group.add(group.core1);
+    
+    // Layer 2: Intense cyan
+    const core2Geo = new THREE.SphereGeometry(config.coreSizes.layer2, 16, 16);
+    const core2Mat = new THREE.MeshBasicMaterial({
+        color: config.colors.core2, transparent: true, opacity: 0.95
+    });
+    group.core2 = new THREE.Mesh(core2Geo, core2Mat);
+    group.add(group.core2);
+    
+    // Layer 3: Electric blue
+    const core3Geo = new THREE.SphereGeometry(config.coreSizes.layer3, 16, 16);
+    const core3Mat = new THREE.MeshBasicMaterial({
+        color: config.colors.core3, transparent: true, opacity: 0.7
+    });
+    group.core3 = new THREE.Mesh(core3Geo, core3Mat);
+    group.add(group.core3);
+    
+    // Layer 4: Outer glow
+    const core4Geo = new THREE.SphereGeometry(config.coreSizes.layer4, 16, 16);
+    const core4Mat = new THREE.MeshBasicMaterial({
+        color: config.colors.core4, transparent: true, opacity: 0.4
+    });
+    group.core4 = new THREE.Mesh(core4Geo, core4Mat);
+    group.add(group.core4);
+    
+    // Layer 5: Massive aura
+    const core5Geo = new THREE.SphereGeometry(config.coreSizes.layer5, 16, 16);
+    const core5Mat = new THREE.MeshBasicMaterial({
+        color: config.colors.core5, transparent: true, opacity: 0.15
+    });
+    group.core5 = new THREE.Mesh(core5Geo, core5Mat);
+    group.add(group.core5);
+    
+    // === LIGHTNING BOLTS CONTAINERS ===
+    group.boltsContainer = new THREE.Group();
+    group.add(group.boltsContainer);
+    
+    group.secondaryBolts = new THREE.Group();
+    group.add(group.secondaryBolts);
+    
+    group.microBolts = new THREE.Group();
+    group.add(group.microBolts);
+    
+    // Initial bolt generation
+    regenerateLightningBolts(group);
+    
+    // === ENERGY TRAIL ===
+    const trailGeo = new THREE.ConeGeometry(config.trail.outerRadius, config.trail.outerLength, 8);
+    const trailMat = new THREE.MeshBasicMaterial({
+        color: config.colors.trail, transparent: true, opacity: 0.3
+    });
+    const trail = new THREE.Mesh(trailGeo, trailMat);
+    trail.rotation.x = Math.PI / 2;
+    trail.position.z = config.trail.outerLength * 0.6;
+    group.trail = trail;
+    group.add(trail);
+    
+    // Inner trail
+    const innerTrailGeo = new THREE.ConeGeometry(config.trail.innerRadius, config.trail.innerLength, 8);
+    const innerTrailMat = new THREE.MeshBasicMaterial({
+        color: config.colors.innerTrail, transparent: true, opacity: 0.5
+    });
+    const innerTrail = new THREE.Mesh(innerTrailGeo, innerTrailMat);
+    innerTrail.rotation.x = Math.PI / 2;
+    innerTrail.position.z = config.trail.innerLength * 0.5;
+    group.add(innerTrail);
+    
+    // === POINT LIGHTS ===
+    const light = new THREE.PointLight(config.colors.light, config.lights.primaryIntensity, config.lights.primaryDistance);
+    group.light = light;
+    group.add(light);
+    
+    const light2 = new THREE.PointLight(config.colors.light2, config.lights.secondaryIntensity, config.lights.secondaryDistance);
+    light2.position.z = -0.25;
+    group.light2 = light2;
+    group.add(light2);
+    
+    // Animation state
+    group.boltTimer = 0;
+    group.phase = Math.random() * Math.PI * 2;
+    group.globalTime = 0;
+    
+    return group;
+}
+
+// Update lightning spear animation
+function updateLightningSpearVisual(spear, deltaTime) {
+    const config = LIGHTNING_SPEAR_CONFIG;
+    spear.globalTime += deltaTime;
+    
+    // === RAPID BOLT REGENERATION (AAA flicker) ===
+    spear.boltTimer++;
+    if (spear.boltTimer >= config.bolts.regenerateInterval) {
+        regenerateLightningBolts(spear);
+        spear.boltTimer = 0;
+    }
+    
+    // === VOLUMETRIC CORE PULSING ===
+    const t = spear.globalTime;
+    const p1 = Math.sin(t * config.animation.coreFlickerSpeed + spear.phase);
+    const p2 = Math.sin(t * 18 + spear.phase * 1.3);
+    const p3 = Math.sin(t * 12 + spear.phase * 0.7);
+    
+    spear.core1.scale.setScalar(1 + p1 * 0.4);
+    spear.core2.scale.setScalar(1 + p2 * 0.3);
+    spear.core2.material.opacity = 0.8 + p1 * 0.15;
+    spear.core3.scale.setScalar(1 + p3 * 0.2);
+    spear.core4.scale.setScalar(1 + p1 * 0.15);
+    spear.core5.scale.setScalar(1 + p2 * 0.1);
+    
+    // === BOLT CONTAINER ROTATION ===
+    spear.boltsContainer.rotation.z += config.animation.boltRotationSpeed;
+    spear.boltsContainer.rotation.x = p1 * 0.2;
+    spear.boltsContainer.rotation.y = p2 * 0.15;
+    
+    spear.secondaryBolts.rotation.z -= 0.1;
+    spear.secondaryBolts.rotation.x = p2 * 0.15;
+    
+    spear.microBolts.rotation.z += 0.2;
+    spear.microBolts.rotation.y = p3 * 0.1;
+    
+    // === LIGHT FLICKER ===
+    spear.light.intensity = config.lights.primaryIntensity + p1 * config.animation.lightFlickerRange + Math.random() * 2;
+    spear.light2.intensity = config.lights.secondaryIntensity + p2 * 2;
+}
+
+// Spawn spark trail behind a moving lightning spear
+function spawnLightningSparkTrail(position, velocity) {
+    const config = LIGHTNING_SPEAR_CONFIG.sparks;
+    const spread = 0.08;
+    const colors = [
+        [1, 1, 1],
+        [0.6, 0.9, 1],
+        [0.4, 0.7, 1],
+        [0.3, 0.5, 0.9]
+    ];
+    
+    for (let s = 0; s < config.trailSpawnRate; s++) {
+        const c = colors[Math.floor(Math.random() * colors.length)];
+        spawnLightningSpark(
+            position.x + (Math.random() - 0.5) * 0.15,
+            position.y + (Math.random() - 0.5) * 0.15,
+            position.z + (Math.random() - 0.5) * 0.15,
+            -velocity.x * 0.003 + (Math.random() - 0.5) * spread,
+            -velocity.y * 0.003 + (Math.random() - 0.5) * spread,
+            -velocity.z * 0.003 + (Math.random() - 0.5) * spread,
+            c[0], c[1], c[2]
+        );
+    }
+}
+
+// Spawn burst of sparks (on fire or impact)
+function spawnLightningSparkBurst(position, direction, count) {
+    const spread = 0.2;
+    for (let i = 0; i < count; i++) {
+        spawnLightningSpark(
+            position.x, position.y, position.z,
+            direction.x * 0.15 + (Math.random() - 0.5) * spread,
+            direction.y * 0.15 + (Math.random() - 0.5) * spread,
+            direction.z * 0.15 + (Math.random() - 0.5) * spread,
+            0.8 + Math.random() * 0.2,
+            0.9 + Math.random() * 0.1,
+            1.0
+        );
+    }
+}
+
+// Update all lightning spark particles (called from main animate loop)
+function updateLightningSparkParticles(deltaTime) {
+    if (!lightningSparkPool.initialized) return;
+    
+    const config = LIGHTNING_SPEAR_CONFIG.sparks;
+    const count = config.poolSize;
+    
+    for (let i = 0; i < count; i++) {
+        if (lightningSparkPool.lifetimes[i] > 0) {
+            // Update position
+            lightningSparkPool.positions[i * 3] += lightningSparkPool.velocities[i * 3];
+            lightningSparkPool.positions[i * 3 + 1] += lightningSparkPool.velocities[i * 3 + 1];
+            lightningSparkPool.positions[i * 3 + 2] += lightningSparkPool.velocities[i * 3 + 2];
+            
+            // Apply drag
+            lightningSparkPool.velocities[i * 3] *= config.drag;
+            lightningSparkPool.velocities[i * 3 + 1] *= config.drag;
+            lightningSparkPool.velocities[i * 3 + 2] *= config.drag;
+            
+            // Fade lifetime
+            lightningSparkPool.lifetimes[i] -= config.fadeRate;
+            
+            // Fade colors
+            lightningSparkPool.colors[i * 3] *= 0.98;
+            lightningSparkPool.colors[i * 3 + 1] *= 0.99;
+            
+            // Move off-screen when dead
+            if (lightningSparkPool.lifetimes[i] <= 0) {
+                lightningSparkPool.positions[i * 3 + 1] = -1000;
+            }
+        }
+    }
+    
+    // Mark buffers for update
+    lightningSparkPool.geometry.attributes.position.needsUpdate = true;
+    lightningSparkPool.geometry.attributes.color.needsUpdate = true;
+}
+
+// Dispose of a lightning spear visual
+function disposeLightningSpearVisual(spear) {
+    // Dispose core geometries and materials
+    if (spear.core1) {
+        spear.core1.geometry.dispose();
+        spear.core1.material.dispose();
+    }
+    if (spear.core2) {
+        spear.core2.geometry.dispose();
+        spear.core2.material.dispose();
+    }
+    if (spear.core3) {
+        spear.core3.geometry.dispose();
+        spear.core3.material.dispose();
+    }
+    if (spear.core4) {
+        spear.core4.geometry.dispose();
+        spear.core4.material.dispose();
+    }
+    if (spear.core5) {
+        spear.core5.geometry.dispose();
+        spear.core5.material.dispose();
+    }
+    
+    // Dispose trail
+    if (spear.trail) {
+        spear.trail.geometry.dispose();
+        spear.trail.material.dispose();
+    }
+    
+    // Clear bolt containers
+    clearLightningBolts(spear.boltsContainer);
+    clearLightningBolts(spear.secondaryBolts);
+    clearLightningBolts(spear.microBolts);
+}
+
 // VFX state tracking
 const vfxState = {
     chargeTimer: 0,
@@ -7276,8 +7807,16 @@ async function init() {
         await loadFireParticleTextures();
         
         // Load 5x weapon
-        updateProgress(60, 'Loading 5x weapon...');
+        updateProgress(55, 'Loading 5x weapon...');
         await preloadWeaponGLB('5x');
+        
+        // Initialize 5x weapon lightning spear spark pool
+        updateProgress(60, 'Loading 5x lightning effects...');
+        initLightningSparkPool();
+        if (lightningSparkPool.points && scene) {
+            scene.add(lightningSparkPool.points);
+            console.log('[LIGHTNING-VFX] Spark pool added to scene');
+        }
         
         // Load 8x weapon
         updateProgress(80, 'Loading 8x weapon...');
@@ -12432,6 +12971,10 @@ class Bullet {
         // AIR WALL FIX: Store bullet origin (muzzle position) to prevent hitting fish too close to cannon
         this.origin = new THREE.Vector3();
         
+        // LIGHTNING SPEAR VFX: Visual effect for 5x weapon (chain lightning)
+        this.lightningSpearVisual = null;
+        this.useLightningSpear = false;
+        
         this.createMesh();
     }
     
@@ -12560,6 +13103,34 @@ class Bullet {
         if (this.useGLB && glbConfig && glbConfig.bulletRotationFix) {
             this.glbModel.rotation.copy(glbConfig.bulletRotationFix);
         }
+        
+        // LIGHTNING SPEAR VFX: Create lightning spear visual for 5x weapon (chain lightning)
+        if (weaponKey === '5x' && lightningSparkPool.initialized) {
+            // Clean up any existing lightning spear visual
+            if (this.lightningSpearVisual) {
+                this.group.remove(this.lightningSpearVisual);
+                disposeLightningSpearVisual(this.lightningSpearVisual);
+            }
+            
+            // Create new lightning spear visual
+            this.lightningSpearVisual = createLightningSpearVisual();
+            this.group.add(this.lightningSpearVisual);
+            this.useLightningSpear = true;
+            
+            // Hide the GLB/procedural bullet since we're using lightning spear visual
+            if (this.glbModel) this.glbModel.visible = false;
+            this.proceduralGroup.visible = false;
+            
+            // Spawn initial burst of sparks at muzzle
+            spawnLightningSparkBurst(origin, direction, LIGHTNING_SPEAR_CONFIG.sparks.burstCount);
+        } else {
+            this.useLightningSpear = false;
+            if (this.lightningSpearVisual) {
+                this.group.remove(this.lightningSpearVisual);
+                disposeLightningSpearVisual(this.lightningSpearVisual);
+                this.lightningSpearVisual = null;
+            }
+        }
     }
     
     update(deltaTime) {
@@ -12598,6 +13169,15 @@ class Bullet {
                 spawnFireTrailParticle(this.group.position, this.velocity);
                 this.lastFireParticleTime = 0;
             }
+        }
+        
+        // 5X WEAPON LIGHTNING SPEAR: Update lightning spear visual and spawn spark trail
+        if (this.useLightningSpear && this.lightningSpearVisual && lightningSparkPool.initialized) {
+            // Update lightning spear animation (bolt regeneration, core pulsing, light flicker)
+            updateLightningSpearVisual(this.lightningSpearVisual, deltaTime);
+            
+            // Spawn spark trail behind the bullet
+            spawnLightningSparkTrail(this.group.position, this.velocity);
         }
         
         // Check boundaries - very lenient to allow bullets to reach fish
@@ -12726,6 +13306,14 @@ class Bullet {
             returnBulletModelToPool(this.weaponKey, this.glbModel);
             this.glbModel = null;
             this.useGLB = false;
+        }
+        
+        // LIGHTNING SPEAR VFX: Clean up lightning spear visual
+        if (this.useLightningSpear && this.lightningSpearVisual) {
+            this.group.remove(this.lightningSpearVisual);
+            disposeLightningSpearVisual(this.lightningSpearVisual);
+            this.lightningSpearVisual = null;
+            this.useLightningSpear = false;
         }
         
         // PERFORMANCE: Return bullet to free-list for O(1) reuse
@@ -14662,6 +15250,9 @@ function animate() {
     
     // 3X WEAPON FIRE PARTICLES: Update fire trail particles
     updateFireParticles(deltaTime);
+    
+    // 5X WEAPON LIGHTNING SPEAR: Update lightning spark particles
+    updateLightningSparkParticles(deltaTime);
     
     // COMBO SYSTEM: Update combo timer
     updateComboTimer(deltaTime);
