@@ -9271,9 +9271,10 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     // New approach: Always use a point along the ray direction
     // Then ensure the final direction aligns with rayDir (dot product check)
     // 
-    // ADJUSTED: Reduced from 2000 to 120 so crosshair center is at fish pool center
-    // This makes the bullet reach the crosshair center faster and feels more responsive
-    const targetDistance = 120;
+    // ADJUSTED: Set to 600 so bullet trajectory converges with crosshair at fish plane
+    // Camera is at Y=-380, fish swim at Y=0, so typical distance to fish is ~400-600 units
+    // Using 600 ensures bullet visually hits where crosshair is pointing at fish depth
+    const targetDistance = 600;
     aimTempVectors.targetPoint.copy(rayOrigin).addScaledVector(rayDir, targetDistance);
     
     // Calculate direction from muzzle to target point
