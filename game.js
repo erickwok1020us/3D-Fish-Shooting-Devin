@@ -7104,9 +7104,11 @@ function playWeaponSwitchAnimation(weaponKey) {
     }, 100);
     
     // Spawn ring effect at cannon base
+    // PERFORMANCE FIX: Use pooled ring instead of creating new geometry/material each time
+    // This eliminates GC stutter on weapon switching
     const basePos = cannonGroup.position.clone();
     basePos.y += 30;
-    spawnExpandingRing(basePos, config.ringColor, 30, 60, 0.3);
+    spawnExpandingRingOptimized(basePos, config.ringColor, 30, 60, 0.3);
 }
 
 // Cannon charge effect (for 5x and 8x weapons)
