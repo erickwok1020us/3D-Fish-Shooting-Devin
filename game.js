@@ -14272,14 +14272,22 @@ function setupEventListeners() {
         }
     });
     
-    // When mouse re-enters the game window, DON'T reset cannon position
-    // Reason: We cannot move the user's physical mouse cursor, so resetting the cannon
-    // creates a disconnect - the crosshair resets to center but the mouse is still at the edge
-    // This causes the mouse to immediately leave the window when moved slightly
-    // Instead, just reset the mouse tracking so the next movement doesn't cause a large jump
+    // When mouse re-enters the game window in FPS mode:
+    // 1. Reset cannon to center (user's preference)
+    // 2. Reset FPS mouse tracking
+    // 3. The Pointer Lock will be re-requested on next click (see mousedown handler)
+    // This prevents the mouse from immediately leaving the window when moved
     container.addEventListener('mouseenter', () => {
-        // Only reset FPS mouse tracking to prevent large rotation jumps
-        // The cannon stays where it was, maintaining consistency with mouse position
+        if (gameState.viewMode === 'fps') {
+            // Reset cannon to center position
+            if (cannonGroup) cannonGroup.rotation.y = 0;
+            if (cannonPitchGroup) cannonPitchGroup.rotation.x = 0;
+            gameState.fpsYaw = 0;
+            gameState.fpsPitch = 0;
+            // Update camera to match new cannon position
+            updateFPSCamera();
+        }
+        // Reset FPS mouse tracking to prevent large rotation jumps
         gameState.lastFPSMouseX = null;
         gameState.lastFPSMouseY = null;
     });
@@ -14293,6 +14301,14 @@ function setupEventListeners() {
             e.target.closest('#auto-shoot-btn') ||
             e.target.closest('#settings-container')) {
             return;
+        }
+        
+        // FPS MODE: Re-request Pointer Lock if it was lost (e.g., user pressed Escape)
+        // This prevents the mouse from leaving the window when moved
+        if (gameState.viewMode === 'fps' && document.pointerLockElement !== container) {
+            if (container.requestPointerLock) {
+                container.requestPointerLock();
+            }
         }
         
         fireBullet(e.clientX, e.clientY);
