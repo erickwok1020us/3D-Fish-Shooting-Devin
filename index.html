@@ -24,6 +24,8 @@
             width: 100vw;
             height: 100vh;
             position: relative;
+            /* FIX: Hide game container by default to prevent flash on page load */
+            display: none;
         }
         
         /* FPS mode: Hide mouse cursor (only crosshair visible) */
@@ -590,14 +592,15 @@
             font-size: 14px;
         }
         
-        /* Map Loading Overlay - fully opaque to hide game scene during loading */
+        /* Map Loading Overlay - transparent background to show video behind */
         #map-loading-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(180deg, #001428, #002850);
+            /* FIX: Use transparent background so video shows through like home page */
+            background: transparent;
             display: none;
             flex-direction: column;
             align-items: center;
@@ -1170,7 +1173,7 @@
             
             <!-- Main Menu -->
             <div id="lobby-main-menu">
-                <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="20" value="Player">
+                <!-- FIX: Removed player name input - API will provide player name -->
                 
                 <button id="btn-single-player" class="lobby-btn primary">
                     <span class="btn-icon">&#x1F3AE;</span>
@@ -1409,7 +1412,8 @@
             const joinRoomPanel = document.getElementById('join-room-panel');
             const roomLobbyPanel = document.getElementById('room-lobby-panel');
             const lobbyError = document.getElementById('lobby-error');
-            const playerNameInput = document.getElementById('player-name-input');
+            // FIX: Player name input removed - API will provide player name
+            // const playerNameInput = document.getElementById('player-name-input');
             const roomCodeInput = document.getElementById('room-code-input');
             const roomCodeDisplay = document.getElementById('room-code-display');
             const playersList = document.getElementById('players-list');
@@ -1561,7 +1565,8 @@
                         showError('Not connected to server');
                         return;
                     }
-                    const playerName = playerNameInput.value.trim() || 'Player';
+                    // FIX: Use default player name - API will provide actual name
+                    const playerName = 'Player';
                     
                     // Hide lobby, show game container
                     lobbyScreen.style.display = 'none';
@@ -1582,7 +1587,8 @@
                         showError('Not connected to server');
                         return;
                     }
-                    const playerName = playerNameInput.value.trim() || 'Player';
+                    // FIX: Use default player name - API will provide actual name
+                    const playerName = 'Player';
                     multiplayer.createRoom(playerName, true);
                 });
                 
@@ -1604,7 +1610,8 @@
                         showError('Not connected to server');
                         return;
                     }
-                    const playerName = playerNameInput.value.trim() || 'Player';
+                    // FIX: Use default player name - API will provide actual name
+                    const playerName = 'Player';
                     multiplayer.joinRoom(roomCode, playerName);
                 });
                 
