@@ -6122,12 +6122,13 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     if (!config) return;
     
     // Try to spawn GLB hit effect first
-    if (weaponGLBState.enabled && glbConfig) {
+    // FIX: Skip GLB hit effect for 5x weapon - the model contains large yellow spheres that user doesn't want
+    if (weaponGLBState.enabled && glbConfig && weaponKey !== '5x') {
         const glbSpawned = await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection);
         if (glbSpawned) {
             // GLB effect spawned, still add some procedural effects for extra visual impact
-            if (weaponKey === '5x' || weaponKey === '8x') {
-                triggerScreenShakeWithStrength(weaponKey === '8x' ? 3 : 1);
+            if (weaponKey === '8x') {
+                triggerScreenShakeWithStrength(3);
             }
             // 3X WEAPON: Add fire particle burst on hit for extra visual impact
             if (weaponKey === '3x' && fireParticlePool.initialized) {
@@ -6163,13 +6164,11 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         createHitParticles(hitPos, config.hitColor, 12);
         
     } else if (weaponKey === '5x') {
-        // FIX: Remove ring effects for 5x hit (keep water splash, shockwave, particles)
+        // FIX: Remove ALL yellow/golden effects for 5x hit (user feedback: too distracting)
+        // Keep only water splash and screen shake - no golden shockwave, no golden particles, no golden screen flash
         spawnWaterSplash(hitPos, 50);
-        // Screen edge flash
-        triggerScreenFlash(config.hitColor, 100, 0.2);
-        // Golden shockwave
-        spawnShockwave(hitPos, config.hitColor, 100);
-        createHitParticles(hitPos, config.hitColor, 20);
+        // Use white particles instead of golden
+        createHitParticles(hitPos, 0xffffff, 15);
         // Slight screen shake
         triggerScreenShakeWithStrength(1);
         
