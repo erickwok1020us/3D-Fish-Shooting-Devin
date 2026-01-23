@@ -2072,8 +2072,46 @@ const fireBulletTempVectors = {
     muzzlePos: new THREE.Vector3(),
     // PERFORMANCE: Additional temp vectors for multiplayer mode (avoids new Vector3() per shot)
     multiplayerMuzzlePos: new THREE.Vector3(),
-    multiplayerDir: new THREE.Vector3()
+    multiplayerDir: new THREE.Vector3(),
+    // ACCURATE AIMING: Temp vectors for target point calculation
+    targetPoint: new THREE.Vector3()
 };
+
+// ACCURATE AIMING: Constants for parabolic trajectory (8x weapon)
+const GRENADE_GRAVITY = 400;  // Same as in Bullet.update()
+
+// ACCURATE AIMING: Calculate compensated velocity for parabolic trajectory
+// Given start position, target position, and gravity, calculate initial velocity
+// that will make the projectile land exactly on the target
+// Physics: x(t) = x0 + vx*t, y(t) = y0 + vy*t - 0.5*g*t², z(t) = z0 + vz*t
+function calculateParabolicVelocity(startPos, targetPos, baseSpeed, outVelocity) {
+    // Calculate horizontal distance
+    const dx = targetPos.x - startPos.x;
+    const dy = targetPos.y - startPos.y;
+    const dz = targetPos.z - startPos.z;
+    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+    
+    // Calculate flight time based on horizontal distance and base speed
+    // T = horizontalDist / horizontalSpeed
+    // We want consistent horizontal speed for predictable gameplay
+    const T = horizontalDist / baseSpeed;
+    
+    // Prevent division by zero for very close targets
+    if (T < 0.01) {
+        // Target is very close, just use straight line
+        outVelocity.set(dx, dy, dz).normalize().multiplyScalar(baseSpeed);
+        return;
+    }
+    
+    // Calculate velocity components
+    // vx = dx / T, vz = dz / T (horizontal components)
+    // vy = dy / T + 0.5 * g * T (vertical component with gravity compensation)
+    const vx = dx / T;
+    const vz = dz / T;
+    const vy = dy / T + 0.5 * GRENADE_GRAVITY * T;
+    
+    outVelocity.set(vx, vy, vz);
+}
 
 // PERFORMANCE: Temp vectors for getAimDirectionFromMouse - reused to avoid per-call allocations
 // This is critical for third-person mode where aimCannon is called on every mouse move
@@ -8786,6 +8824,59 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     return result;
 }
 
+// ACCURATE AIMING: Get both direction and target point for accurate bullet trajectory
+// Returns { direction: Vector3, targetPoint: Vector3 }
+// For 8x weapon, we need the target point to calculate parabolic velocity
+function getAimDirectionAndTarget(targetX, targetY, outDirection, outTargetPoint) {
+    // Convert screen coordinates to normalized device coordinates
+    aimTempVectors.mouseNDC.set(
+        (targetX / window.innerWidth) * 2 - 1,
+        -(targetY / window.innerHeight) * 2 + 1
+    );
+    
+    // Use raycaster to get direction from camera through mouse point
+    raycaster.setFromCamera(aimTempVectors.mouseNDC, camera);
+    
+    // Get cannon muzzle position
+    cannonMuzzle.getWorldPosition(aimTempVectors.muzzlePos);
+    
+    const rayDir = raycaster.ray.direction;
+    const rayOrigin = raycaster.ray.origin;
+    
+    // Use output vectors if provided, otherwise use temp vectors
+    const resultDir = outDirection || aimTempVectors.direction;
+    const resultTarget = outTargetPoint || aimTempVectors.targetPoint;
+    
+    // Calculate intersection with fish plane (Y=0)
+    let targetDistance;
+    if (rayDir.y > 0.001) {
+        const t = -rayOrigin.y / rayDir.y;
+        if (t > 10 && t < 2000) {
+            targetDistance = t;
+        } else {
+            targetDistance = 400;
+        }
+    } else {
+        targetDistance = 400;
+    }
+    
+    // Calculate target point
+    resultTarget.copy(rayOrigin).addScaledVector(rayDir, targetDistance);
+    
+    // Calculate direction from muzzle to target point
+    resultDir.copy(resultTarget).sub(aimTempVectors.muzzlePos).normalize();
+    
+    // Ensure direction aligns with ray direction
+    const dotWithRay = resultDir.dot(rayDir);
+    if (dotWithRay < 0) {
+        resultDir.copy(rayDir);
+        // Also update target point to be along ray direction
+        resultTarget.copy(aimTempVectors.muzzlePos).addScaledVector(rayDir, 400);
+    }
+    
+    return { direction: resultDir, targetPoint: resultTarget };
+}
+
 function getParallaxCompensatedCrosshairPosition(mouseX, mouseY) {
     if (!camera || !cannonMuzzle) return null;
     
@@ -12540,7 +12631,8 @@ class Bullet {
     }
     
     // PERFORMANCE: Synchronous fire() - no async/await, uses pre-cached models
-    fire(origin, direction, weaponKey) {
+    // ACCURATE AIMING: Optional targetPoint parameter for 8x parabolic trajectory
+    fire(origin, direction, weaponKey, targetPoint) {
         this.weaponKey = weaponKey;
         const weapon = CONFIG.weapons[weaponKey];
         const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
@@ -12551,11 +12643,20 @@ class Bullet {
         this.lastPosition.copy(origin);
         // AIR WALL FIX: Store origin (muzzle position) to prevent hitting fish too close to cannon
         this.origin.copy(origin);
-        this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
-        // Issue #4: Add upward arc for grenades
-        if (this.isGrenade) {
-            this.velocity.y += 200;
+        // ACCURATE AIMING: For 8x weapon with parabolic trajectory, calculate compensated velocity
+        // This ensures the grenade lands exactly where the crosshair points
+        if (this.isGrenade && targetPoint) {
+            // Use physics-based velocity calculation for accurate parabolic trajectory
+            calculateParabolicVelocity(origin, targetPoint, weapon.speed, this.velocity);
+        } else {
+            // Standard straight-line velocity for other weapons
+            this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
+            
+            // Legacy: Add upward arc for grenades without target point (fallback)
+            if (this.isGrenade) {
+                this.velocity.y += 200;
+            }
         }
         
         this.lifetime = 4;
@@ -12786,13 +12887,15 @@ function createBulletPool() {
 
 // Helper function to spawn a bullet in a specific direction
 // PERFORMANCE: Uses free-list for O(1) lookup instead of O(n) .find() scan
-function spawnBulletFromDirection(origin, direction, weaponKey) {
+// ACCURATE AIMING: Optional targetPoint parameter for 8x parabolic trajectory
+function spawnBulletFromDirection(origin, direction, weaponKey, targetPoint) {
     // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
     const bullet = freeBullets.pop();
     if (!bullet) return null;
     
     // No need to clone - Bullet.fire() uses copy() internally
-    bullet.fire(origin, direction, weaponKey);
+    // ACCURATE AIMING: Pass targetPoint for 8x weapon parabolic trajectory
+    bullet.fire(origin, direction, weaponKey, targetPoint);
     activeBullets.push(bullet);
     return bullet;
 }
@@ -12902,11 +13005,10 @@ function fireBullet(targetX, targetY) {
     // Track last weapon used for reward calculation
     gameState.lastWeaponKey = weaponKey;
     
-    // Issue #9: Use SAME direction calculation as cannon aiming for perfect alignment
-    // This ensures bullets go exactly where the cannon barrel points
-    // Issue #16 CORRECTION: All weapons have 100% accuracy - point-and-click shooting
-    // FPS MODE FIX: In FPS mode, bullets go toward screen center (where crosshair is)
-    // In 3RD PERSON mode, bullets go where you click
+    // ACCURATE AIMING: Use getAimDirectionAndTarget to get both direction and target point
+    // This ensures bullets hit exactly where the crosshair points
+    // FPS MODE: Fire toward screen center (where crosshair is)
+    // THIRD-PERSON MODE: Fire where you click
     let aimX = targetX;
     let aimY = targetY;
     if (gameState.viewMode === 'fps') {
@@ -12914,7 +13016,11 @@ function fireBullet(targetX, targetY) {
         aimX = window.innerWidth / 2;
         aimY = window.innerHeight / 2;
     }
-    const direction = getAimDirectionFromMouse(aimX, aimY);
+    
+    // Get both direction and target point for accurate aiming
+    const aimResult = getAimDirectionAndTarget(aimX, aimY, fireBulletTempVectors.multiplayerDir, fireBulletTempVectors.targetPoint);
+    const direction = aimResult.direction;
+    const targetPoint = aimResult.targetPoint;
     
     // PERFORMANCE: Use temp vector instead of creating new Vector3
     cannonMuzzle.getWorldPosition(fireBulletTempVectors.muzzlePos);
@@ -12937,8 +13043,12 @@ function fireBullet(targetX, targetY) {
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
         
+    } else if (weapon.type === 'aoe') {
+        // ACCURATE AIMING: 8x weapon uses parabolic trajectory with compensated velocity
+        // Pass target point so bullet can calculate the correct initial velocity
+        spawnBulletFromDirection(muzzlePos, direction, weaponKey, targetPoint);
     } else {
-        // Single bullet for projectile, chain, and aoe types
+        // Single bullet for projectile and chain types (1x, 5x)
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
     
