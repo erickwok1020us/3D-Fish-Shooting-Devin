@@ -1932,9 +1932,9 @@ const WEAPON_GLB_CONFIG = {
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            // FPS Camera: Camera above muzzle so cannon is visible at bottom of screen
-            fpsCameraBackDist: 80,
-            fpsCameraUpOffset: 80
+            // FPS Camera: Lower camera position so cannon muzzle is visible when looking straight
+            fpsCameraBackDist: 95,
+            fpsCameraUpOffset: 65
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -1951,30 +1951,29 @@ const WEAPON_GLB_CONFIG = {
             // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            // FPS Camera: Camera above muzzle so cannon is visible at bottom of screen
-            fpsCameraBackDist: 90,
-            fpsCameraUpOffset: 90
+            // FPS Camera: Lower camera position so cannon muzzle is visible when looking straight
+            fpsCameraBackDist: 105,
+            fpsCameraUpOffset: 70
         },
         '5x': {
             cannon: '5x 武器模組',
-            cannonNonPlayer: '5x 武器模組(非玩家).glb',  // Low-poly version for other players (~3k triangles)
+            cannonNonPlayer: '5x 武器模組(非玩家).glb',
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
             scale: 1.2,
             bulletScale: 0.7,
             hitEffectScale: 1.5,
             muzzleOffset: new THREE.Vector3(0, 25, 70),
-            // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            // FPS Camera: Camera above muzzle so cannon is visible at bottom of screen
-            fpsCameraBackDist: 120,
-            fpsCameraUpOffset: 100
+            // FPS Camera: Lower camera position so cannon muzzle is visible when looking straight
+            fpsCameraBackDist: 130,
+            fpsCameraUpOffset: 80
         },
         '8x': {
             cannon: '8x 武器模組',
-            cannonNonPlayer: '8x 武器模組(非玩家).glb.glb',  // Low-poly version for other players (~3k triangles) - Note: R2 filename has double .glb suffix
+            cannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
             bullet: '8x 子彈模組',
             hitEffect: '8x 擊中特效',
             scale: 1.5,
@@ -1984,9 +1983,9 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            // FPS Camera: Camera above muzzle so cannon is visible at bottom of screen
-            fpsCameraBackDist: 180,
-            fpsCameraUpOffset: 120
+            // FPS Camera: Lower camera position so cannon muzzle is visible when looking straight
+            fpsCameraBackDist: 190,
+            fpsCameraUpOffset: 100
         }
     }
 };
@@ -6164,9 +6163,7 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         createHitParticles(hitPos, config.hitColor, 12);
         
     } else if (weaponKey === '5x') {
-        // Large golden thunder explosion
-        spawnExpandingRing(hitPos, config.hitColor, 25, 80, 0.5);
-        spawnExpandingRing(hitPos, 0xffffaa, 20, 60, 0.4);
+        // FIX: Remove ring effects for 5x hit (keep water splash, shockwave, particles)
         spawnWaterSplash(hitPos, 50);
         // Screen edge flash
         triggerScreenFlash(config.hitColor, 100, 0.2);
