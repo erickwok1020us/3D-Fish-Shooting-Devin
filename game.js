@@ -7440,14 +7440,11 @@ function initGameScene() {
 window.startSinglePlayerGame = function() {
     console.log('Starting single player game...');
     
-    // Stop video background when entering game
-    stopVideoBackground();
+    // FIX: Don't stop video background here - keep it visible during map loading
+    // Video will be stopped after map loading completes in loadMap3D()
     
-    // Show game container
-    const gameContainer = document.getElementById('game-container');
-    if (gameContainer) {
-        gameContainer.style.display = 'block';
-    }
+    // FIX: Don't show game container yet - wait until map loading is complete
+    // This prevents the game screen flash during loading
     
     // Mark that we're now in the game scene (not lobby)
     gameState.isInGameScene = true;
@@ -7468,14 +7465,11 @@ window.startSinglePlayerGame = function() {
 window.startMultiplayerGame = function(manager) {
     console.log('Starting multiplayer game...');
     
-    // Stop video background when entering game
-    stopVideoBackground();
+    // FIX: Don't stop video background here - keep it visible during map loading
+    // Video will be stopped after map loading completes in loadMap3D()
     
-    // Show game container
-    const gameContainer = document.getElementById('game-container');
-    if (gameContainer) {
-        gameContainer.style.display = 'block';
-    }
+    // FIX: Don't show game container yet - wait until map loading is complete
+    // This prevents the game screen flash during loading
     
     // Store multiplayer reference
     window.multiplayer = manager;
@@ -7689,6 +7683,14 @@ function loadMap3D(onComplete) {
             
             console.log('[PRELOAD] All resources loaded, entering game');
             
+            // FIX: Stop video background and show game container AFTER loading is complete
+            // This ensures smooth transition without game screen flash
+            stopVideoBackground();
+            const gameContainer = document.getElementById('game-container');
+            if (gameContainer) {
+                gameContainer.style.display = 'block';
+            }
+            
             // Hide loading overlay
             overlay.style.display = 'none';
             
@@ -7714,6 +7716,13 @@ function loadMap3D(onComplete) {
             // Still wait for weapons even if map fails
             await weaponPreloadPromise;
             clearInterval(weaponProgressInterval);
+            
+            // FIX: Stop video background and show game container even on error
+            stopVideoBackground();
+            const gameContainer = document.getElementById('game-container');
+            if (gameContainer) {
+                gameContainer.style.display = 'block';
+            }
             
             overlay.style.display = 'none';
             // Fall back to procedural aquarium
