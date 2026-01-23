@@ -5676,10 +5676,9 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 6);
         
     } else if (weaponKey === '5x') {
-        // PERFORMANCE: Simplified 5x muzzle flash - single ring + lightning
-        // REDUCED SIZE: 16->42 instead of 20->60 (user feedback: too big)
+        // FIX: Removed muzzle flash ring for 5x weapon (user feedback: too distracting)
+        // Keep lightning burst and particles only
         // PERFORMANCE: Reduced lightning burst count from 4 to 2 to reduce stutter
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 16, 42, 0.4, barrelDirection);
         spawnLightningBurst(muzzlePos, config.muzzleColor, 2);
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 8);
         
@@ -7075,6 +7074,9 @@ function applyExplosionKnockback(center, radius, strength) {
     }
 }
 
+// FIX: Track weapon switch animation state to prevent scale accumulation
+let weaponSwitchAnimationId = 0;
+
 // Weapon switch animation
 function playWeaponSwitchAnimation(weaponKey) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
@@ -7091,16 +7093,28 @@ function playWeaponSwitchAnimation(weaponKey) {
         cannonBaseRingGlow.material.color.setHex(config.ringColor);
     }
     
+    // FIX: Cancel any previous animation by incrementing the animation ID
+    // This prevents scale accumulation when rapidly switching weapons
+    weaponSwitchAnimationId++;
+    const currentAnimationId = weaponSwitchAnimationId;
+    
+    // FIX: Use fixed base scale (1, 1, 1) instead of cloning current scale
+    // This prevents scale accumulation when rapidly switching weapons
+    const baseScale = 1.0;
+    
     // Cannon transformation animation (slight bounce)
-    const originalScale = cannonGroup.scale.clone();
     cannonGroup.scale.set(
-        originalScale.x * 0.9,
-        originalScale.y * 1.1,
-        originalScale.z * 0.9
+        baseScale * 0.9,
+        baseScale * 1.1,
+        baseScale * 0.9
     );
     
     setTimeout(() => {
-        cannonGroup.scale.copy(originalScale);
+        // FIX: Only restore scale if this is still the current animation
+        // This prevents old animations from overwriting newer ones
+        if (currentAnimationId === weaponSwitchAnimationId && cannonGroup) {
+            cannonGroup.scale.set(baseScale, baseScale, baseScale);
+        }
     }, 100);
     
     // Spawn ring effect at cannon base
