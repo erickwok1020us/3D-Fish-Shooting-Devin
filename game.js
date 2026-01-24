@@ -6841,12 +6841,8 @@ function spawnCoinBurst(position, count) {
                     // No spin - coin should always show the $ symbol face towards player
                     if (camera) {
                         // Make the coin look at the camera
+                        // The Coin.glb model is flat in XY plane, lookAt alone shows the face correctly
                         this.mesh.lookAt(camera.position);
-                        
-                        // The coin model is flat in XY plane (Z is thickness ~1.42)
-                        // After lookAt, the coin's -Z axis points to camera
-                        // Rotate 90 degrees around X to show the flat face (not the thin edge)
-                        this.mesh.rotateX(Math.PI / 2);
                         
                         // Distance-based scaling: coins get larger as they approach the camera
                         // This creates a natural perspective effect where coins flying towards the player grow
@@ -6920,12 +6916,15 @@ function spawnCoinBurst(position, count) {
                     this.material.opacity = Math.max(0, 1 - this.elapsedTime * 1.5);
                     
                     // Distance-based scaling: coins get larger as they approach the camera
+                    // Note: Cylinder geometry is 32 units diameter, GLB is 1.91 units
+                    // Scale factor for cylinder to match GLB: 200 * (1.91/32) = ~12
                     if (camera) {
                         const distance = this.mesh.position.distanceTo(camera.position);
                         const maxDistance = 800;
                         const minDistance = 200;
-                        const minScale = COIN_GLB_CONFIG.scale * 0.5;
-                        const maxScale = COIN_GLB_CONFIG.scale;
+                        const cylinderScale = 12;  // Adjusted for cylinder geometry size
+                        const minScale = cylinderScale * 0.5;
+                        const maxScale = cylinderScale;
                         const t = Math.max(0, Math.min(1, (maxDistance - distance) / (maxDistance - minDistance)));
                         const scale = minScale + t * (maxScale - minScale);
                         this.mesh.scale.setScalar(scale);
@@ -6978,12 +6977,15 @@ function spawnCoinBurst(position, count) {
                 this.material.opacity = Math.max(0, 1 - this.elapsedTime * 1.5);
                 
                 // Distance-based scaling: coins get larger as they approach the camera
+                // Note: Pooled coins use cylinder geometry (32 units diameter)
+                // Scale factor for cylinder to match GLB: 200 * (1.91/32) = ~12
                 if (camera) {
                     const distance = this.mesh.position.distanceTo(camera.position);
                     const maxDistance = 800;
                     const minDistance = 200;
-                    const minScale = COIN_GLB_CONFIG.scale * 0.5;
-                    const maxScale = COIN_GLB_CONFIG.scale;
+                    const cylinderScale = 12;  // Adjusted for cylinder geometry size
+                    const minScale = cylinderScale * 0.5;
+                    const maxScale = cylinderScale;
                     const t = Math.max(0, Math.min(1, (maxDistance - distance) / (maxDistance - minDistance)));
                     const scale = minScale + t * (maxScale - minScale);
                     this.mesh.scale.setScalar(scale);
@@ -7123,13 +7125,18 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                 // Trail follows with delay
                 this.trail.position.lerp(this.coin.position, 0.3);
                 
-                // Scale up as it gets closer (magnetic effect)
-                const scale = 1 + t * 0.5;
-                this.coin.scale.setScalar(scale);
+                // Billboard effect: make coin always face the camera
+                // The Coin.glb model is flat in XY plane, so lookAt alone should show the face
+                if (camera) {
+                    this.coin.lookAt(camera.position);
+                }
                 
-                // Spin the coin
-                this.coin.rotation.x += this.spinSpeedX * dt;
-                this.coin.rotation.y += this.spinSpeedY * dt;
+                // Scale up as it gets closer (magnetic effect)
+                // Use a smaller scale for flying coins (30-45) since they're reward indicators
+                // The Coin.glb model is ~2 units, so scale 30 = ~60 units wide
+                const baseScale = 30;
+                const scale = baseScale * (1 + t * 0.5);
+                this.coin.scale.setScalar(scale);
                 
                 // Fade trail
                 this.trailMaterial.opacity = 0.6 * (1 - t);
