@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 50,  // Scale factor for the coin model (further reduced per user request)
+    scale: 15,  // Scale factor for the coin model (reduced to match small fish size per user request)
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
@@ -2088,13 +2088,12 @@ function createCoinModelClone() {
             child.material = child.material.clone();
             child.material.side = THREE.DoubleSide;
             
-            // IMPORTANT: Do NOT override material.color - let the GLB's original texture show
-            // The user has uploaded a new Coin.glb with correct gold color
-            // Only add subtle emissive for underwater visibility without washing out texture
+            // CASINO GAME OPTIMIZATION: Use strong bright gold emissive to ensure consistent
+            // coin appearance regardless of scene lighting or camera angle (FPS vs 3rd person)
+            // This makes coins "pop" visually as reward feedback, which is important for casino games
             if (child.material.emissive) {
-                // Use very subtle emissive to help visibility without overriding texture
-                child.material.emissive = new THREE.Color(0x332200);  // Very subtle warm glow
-                child.material.emissiveIntensity = 0.3;  // Low intensity to preserve texture details
+                child.material.emissive = new THREE.Color(0xffcc00);  // Bright gold emissive
+                child.material.emissiveIntensity = 0.6;  // Strong enough to override lighting variations
             }
         }
     });
