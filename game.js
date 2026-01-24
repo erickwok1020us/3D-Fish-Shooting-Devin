@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 8,  // Scale factor for the coin model
+    scale: 15,  // Scale factor for the coin model (increased for visibility)
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
@@ -2067,12 +2067,16 @@ function cloneCoinModel() {
         if (child.isMesh && child.material) {
             child.material = child.material.clone();
             // Adjust material for better visibility in underwater scene
-            // MeshStandardMaterial with metalness=1 and roughness=1 looks dark without environment maps
+            // Keep original texture but enhance visibility with subtle emissive glow
             if (child.material.isMeshStandardMaterial) {
-                child.material.metalness = 0.8;
-                child.material.roughness = 0.3;
+                // Reduce metalness for better light reflection without environment map
+                child.material.metalness = 0.5;
+                child.material.roughness = 0.4;
+                // Add subtle gold emissive glow for visibility
                 child.material.emissive = new THREE.Color(0xffd700);
-                child.material.emissiveIntensity = 0.3;
+                child.material.emissiveIntensity = 0.15;
+                // Ensure texture is visible
+                child.material.needsUpdate = true;
             }
         }
     });
@@ -3609,64 +3613,17 @@ function updateComboTimer(deltaTime) {
     }
 }
 
-// Show combo notification
+// Show combo notification - DISABLED: notifications hidden per user request
+// The combo system still tracks kills internally but no longer shows visual notifications
 function showComboNotification(tierName, bonus) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 30%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 48px;
-        font-weight: bold;
-        color: #ffdd00;
-        text-shadow: 0 0 20px #ff8800, 0 0 40px #ff4400, 2px 2px 4px #000;
-        z-index: 1000;
-        pointer-events: none;
-        animation: comboPopIn 0.3s ease-out, comboFadeOut 0.5s ease-in ${COMBO_CONFIG.displayDuration - 0.5}s forwards;
-    `;
-    notification.textContent = `${tierName} +${Math.round(bonus * 100)}%`;
-    document.body.appendChild(notification);
-    
-    // Add animation styles if not already present
-    if (!document.getElementById('combo-animation-styles')) {
-        const style = document.createElement('style');
-        style.id = 'combo-animation-styles';
-        style.textContent = `
-            @keyframes comboPopIn {
-                0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-                100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-            }
-            @keyframes comboFadeOut {
-                0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-                100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2) translateY(-30px); }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-    
-    setTimeout(() => notification.remove(), COMBO_CONFIG.displayDuration * 1000);
+    // Combo notifications disabled - return early without showing anything
+    return;
 }
 
-// Show combo end notification
+// Show combo end notification - DISABLED: notifications hidden per user request
 function showComboEndNotification(finalCount) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 35%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 24px;
-        color: #aaaaaa;
-        text-shadow: 1px 1px 2px #000;
-        z-index: 1000;
-        pointer-events: none;
-        opacity: 0.8;
-        animation: comboFadeOut 1s ease-in forwards;
-    `;
-    notification.textContent = `Combo ended: ${finalCount} kills`;
-    document.body.appendChild(notification);
-    setTimeout(() => notification.remove(), 1000);
+    // Combo end notifications disabled - return early without showing anything
+    return;
 }
 
 // ==================== PERFORMANCE OPTIMIZATION FUNCTIONS ====================
