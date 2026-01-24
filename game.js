@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 200,  // Scale factor for the coin model (significantly increased for visibility)
+    scale: 100,  // Scale factor for the coin model (reduced for reasonable size)
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
@@ -2070,10 +2070,11 @@ function cloneCoinModel() {
             child.material = child.material.clone();
             child.material.side = THREE.DoubleSide;
             // Add emissive to ensure visibility in underwater low-light conditions
-            // This creates a subtle gold glow so the coin is always visible
-            if (child.material.emissive) {
-                child.material.emissive = new THREE.Color(0xffd700);  // Gold emissive
-                child.material.emissiveIntensity = 0.5;  // Moderate glow for visibility
+            // Use emissiveMap to preserve texture details ($ symbol, coin pattern)
+            if (child.material.emissive && child.material.map) {
+                child.material.emissiveMap = child.material.map;  // Use texture for emissive glow
+                child.material.emissive = new THREE.Color(0xffffff);  // White to show texture colors
+                child.material.emissiveIntensity = 0.3;  // Lower intensity to preserve texture details
             }
         }
     });
@@ -7128,9 +7129,9 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                 }
                 
                 // Scale up as it gets closer (magnetic effect)
-                // Use a smaller scale for flying coins (30-45) since they're reward indicators
-                // The Coin.glb model is ~2 units, so scale 30 = ~60 units wide
-                const baseScale = 30;
+                // Use a reasonable scale for flying coins (15-22.5) for good visibility without being too large
+                // The Coin.glb model is ~2 units, so scale 15 = ~30 units wide
+                const baseScale = 15;
                 const scale = baseScale * (1 + t * 0.5);
                 this.coin.scale.setScalar(scale);
                 
