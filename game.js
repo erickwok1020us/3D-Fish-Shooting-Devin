@@ -7682,6 +7682,12 @@ function loadMap3D(onComplete) {
     // Show loading overlay
     overlay.style.display = 'flex';
     
+    // Hide the initial loading screen to prevent overlap
+    const initialLoadingScreen = document.getElementById('loading-screen');
+    if (initialLoadingScreen) {
+        initialLoadingScreen.style.display = 'none';
+    }
+    
     // PRELOAD FIX: Start weapon preloading in parallel with map loading
     const weaponPreloadPromise = preloadAllWeaponsSync();
     
