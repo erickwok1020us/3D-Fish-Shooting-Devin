@@ -6902,11 +6902,8 @@ function spawnCoinBurst(position, count) {
                 
                 cleanup() {
                     particleGroup.remove(this.mesh);
-                    this.mesh.traverse((child) => {
-                        if (child.isMesh && child.material) {
-                            child.material.dispose();
-                        }
-                    });
+                    // Return GLB coin model to pool for reuse (avoids stutter from cloning)
+                    returnCoinModelToPool(this.mesh);
                 }
             });
             continue;
@@ -7193,11 +7190,8 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                 if (this.coin) {
                     particleGroup.remove(this.coin);
                     if (this.isGLBCoin) {
-                        this.coin.traverse((child) => {
-                            if (child.isMesh && child.material) {
-                                child.material.dispose();
-                            }
-                        });
+                        // Return GLB coin model to pool for reuse (avoids stutter from cloning)
+                        returnCoinModelToPool(this.coin);
                     } else if (this.coinMaterial) {
                         this.coinMaterial.dispose();
                     }
