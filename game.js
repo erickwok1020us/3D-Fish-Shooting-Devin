@@ -2060,25 +2060,94 @@ async function loadCoinGLB() {
 }
 
 // Clone coin model for use in effects
-function cloneCoinModel() {
+// Pre-cloned coin model pool to avoid cloning on every spawn (reduces stutter)
+const coinModelPool = {
+    models: [],
+    maxSize: 60,  // Increased from 30: Boss death (30) + flying coins (15) + buffer
+    initialized: false
+};
+
+function initCoinModelPool() {
+    if (coinModelPool.initialized || !coinGLBState.model) return;
+    for (let i = 0; i < coinModelPool.maxSize; i++) {
+        const clone = createCoinModelClone();
+        if (clone) {
+            clone.visible = false;
+            coinModelPool.models.push(clone);
+        }
+    }
+    coinModelPool.initialized = true;
+}
+
+function createCoinModelClone() {
     if (!coinGLBState.model) return null;
     const clone = coinGLBState.model.clone();
     clone.traverse((child) => {
         if (child.isMesh && child.material) {
             // Clone the original material to preserve PBR properties (metalness, roughness)
-            // This keeps the golden metallic appearance from the Coin.glb model
             child.material = child.material.clone();
             child.material.side = THREE.DoubleSide;
-            // Add emissive to ensure visibility in underwater low-light conditions
+            // Add bright gold emissive for visibility in underwater low-light conditions
             // Use emissiveMap to preserve texture details ($ symbol, coin pattern)
             if (child.material.emissive && child.material.map) {
                 child.material.emissiveMap = child.material.map;  // Use texture for emissive glow
-                child.material.emissive = new THREE.Color(0xffffff);  // White to show texture colors
-                child.material.emissiveIntensity = 0.3;  // Lower intensity to preserve texture details
+                child.material.emissive = new THREE.Color(0xffdd44);  // Bright gold tint
+                child.material.emissiveIntensity = 0.6;  // Higher intensity for brighter gold
             }
         }
     });
     return clone;
+}
+
+function getCoinModelFromPool() {
+    // Try to get from pool first
+    for (let i = 0; i < coinModelPool.models.length; i++) {
+        if (!coinModelPool.models[i].visible) {
+            coinModelPool.models[i].visible = true;
+            return coinModelPool.models[i];
+        }
+    }
+    // Pool exhausted, create new one (fallback)
+    return createCoinModelClone();
+}
+
+function returnCoinModelToPool(model) {
+    if (!model) return;
+    model.visible = false;
+    // Reset position and scale
+    model.position.set(0, 0, 0);
+    model.scale.set(1, 1, 1);
+}
+
+function cloneCoinModel() {
+    // Use pooled model for better performance
+    return getCoinModelFromPool();
+}
+
+// Warm up coin shaders by rendering once off-screen (forces GPU shader compilation)
+function warmUpCoinShaders() {
+    if (!coinModelPool.initialized || coinModelPool.models.length === 0) return;
+    if (!scene || !camera || !renderer) return;
+    
+    // Get a coin from pool, position it off-screen, render once, then return
+    const coin = coinModelPool.models[0];
+    const originalVisible = coin.visible;
+    const originalPosition = coin.position.clone();
+    
+    // Position far off-screen but in frustum
+    coin.position.set(0, 0, -10000);
+    coin.visible = true;
+    scene.add(coin);
+    
+    // Render one frame to compile shaders
+    renderer.render(scene, camera);
+    
+    // Restore original state
+    scene.remove(coin);
+    coin.position.copy(originalPosition);
+    coin.visible = originalVisible;
+    
+    console.log('[PRELOAD] Coin shaders warmed up');
 }
 
 // Temp vectors for bullet calculations - reused to avoid per-frame allocations
@@ -6859,11 +6928,8 @@ function spawnCoinBurst(position, count) {
                 
                 cleanup() {
                     particleGroup.remove(this.mesh);
-                    this.mesh.traverse((child) => {
-                        if (child.isMesh && child.material) {
-                            child.material.dispose();
-                        }
-                    });
+                    // Return GLB coin model to pool for reuse (avoids stutter from cloning)
+                    returnCoinModelToPool(this.mesh);
                 }
             });
             continue;
@@ -7150,11 +7216,8 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                 if (this.coin) {
                     particleGroup.remove(this.coin);
                     if (this.isGLBCoin) {
-                        this.coin.traverse((child) => {
-                            if (child.isMesh && child.material) {
-                                child.material.dispose();
-                            }
-                        });
+                        // Return GLB coin model to pool for reuse (avoids stutter from cloning)
+                        returnCoinModelToPool(this.coin);
                     } else if (this.coinMaterial) {
                         this.coinMaterial.dispose();
                     }
@@ -7169,41 +7232,77 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
 }
 
 // Issue #16: Score pop effect when coins arrive at cannon
-function spawnScorePopEffect() {
-    // Create a DOM element for the pop effect at cannon location (bottom-center)
-    const pop = document.createElement('div');
-    pop.style.cssText = `
-        position: fixed;
-        bottom: 80px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 60px;
-        height: 60px;
-        background: radial-gradient(circle, rgba(255, 215, 0, 0.9), rgba(255, 200, 0, 0.5), transparent);
-        border-radius: 50%;
-        pointer-events: none;
-        z-index: 1000;
-        animation: scorePop 0.4s ease-out forwards;
-    `;
-    document.body.appendChild(pop);
+// PERFORMANCE: Pre-created DOM element pool to avoid createElement during gameplay
+const scorePopPool = {
+    elements: [],
+    poolSize: 20,
+    freeList: [],
+    initialized: false
+};
+
+function initScorePopPool() {
+    if (scorePopPool.initialized) return;
     
-    // Add animation keyframes if not already added
+    // Add animation keyframes first
     if (!document.getElementById('score-pop-style')) {
         const style = document.createElement('style');
         style.id = 'score-pop-style';
         style.textContent = `
             @keyframes scorePop {
-                0% { transform: scale(0.5); opacity: 1; }
-                100% { transform: scale(2); opacity: 0; }
+                0% { transform: translateX(-50%) scale(0.5); opacity: 1; }
+                100% { transform: translateX(-50%) scale(2); opacity: 0; }
             }
         `;
         document.head.appendChild(style);
     }
     
-    // Remove after animation
+    // Pre-create DOM elements
+    for (let i = 0; i < scorePopPool.poolSize; i++) {
+        const pop = document.createElement('div');
+        pop.style.cssText = `
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle, rgba(255, 215, 0, 0.9), rgba(255, 200, 0, 0.5), transparent);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        `;
+        pop.dataset.poolIndex = i;
+        document.body.appendChild(pop);
+        scorePopPool.elements.push(pop);
+        scorePopPool.freeList.push(i);
+    }
+    
+    scorePopPool.initialized = true;
+    console.log('[PRELOAD] Score pop DOM pool initialized (20 elements)');
+}
+
+function spawnScorePopEffect() {
+    // Initialize pool on first use if not already done
+    if (!scorePopPool.initialized) initScorePopPool();
+    
+    // Get element from pool
+    if (scorePopPool.freeList.length === 0) return; // Pool exhausted, skip effect
+    
+    const idx = scorePopPool.freeList.pop();
+    const pop = scorePopPool.elements[idx];
+    
+    // Show and animate
+    pop.style.display = 'block';
+    pop.style.animation = 'none';
+    pop.offsetHeight; // Force reflow
+    pop.style.animation = 'scorePop 0.4s ease-out forwards';
+    
+    // Return to pool after animation
     setTimeout(() => {
-        document.body.removeChild(pop);
-    }, 300);
+        pop.style.display = 'none';
+        scorePopPool.freeList.push(idx);
+    }, 400);
 }
 
 // Issue #16: Boss death spectacular effect - REFACTORED to use VFX manager
@@ -7546,6 +7645,10 @@ async function init() {
         updateProgress(90, 'Loading coin model...');
         await loadCoinGLB();
         
+        // Pre-initialize coin model pool to avoid stutter on first coin spawn
+        updateProgress(95, 'Initializing coin pool...');
+        initCoinModelPool();
+        
         updateProgress(100, 'Ready!');
         console.log('[PRELOAD] All GLB models preloaded successfully');
     } catch (error) {
@@ -7693,7 +7796,13 @@ function initGameScene() {
     // Audio GainNode pool (used by all weapons)
     initAudioGainPool();
     
-    console.log('[PRELOAD] All effect pools pre-initialized (VFX geometry, muzzle flash, coin, effect, fireball, lightning arc, audio)');
+    // Score pop DOM element pool (used when coins arrive at cannon)
+    initScorePopPool();
+    
+    // Warm up coin shaders (forces GPU shader compilation during load)
+    warmUpCoinShaders();
+    
+    console.log('[PRELOAD] All effect pools pre-initialized (VFX geometry, muzzle flash, coin, effect, fireball, lightning arc, audio, score pop, coin shaders)');
     
     updateLoadingProgress(95, 'Setting up controls...');
     setupEventListeners();
