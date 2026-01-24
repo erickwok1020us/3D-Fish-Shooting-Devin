@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 6,  // Scale factor for the coin model (40% of original 15)
+    scale: 7,  // Scale factor for the coin model (47% of original 15)
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
@@ -2088,12 +2088,11 @@ function createCoinModelClone() {
             child.material = child.material.clone();
             child.material.side = THREE.DoubleSide;
             
-            // CASINO GAME OPTIMIZATION: Use strong bright gold emissive to ensure consistent
-            // coin appearance regardless of scene lighting or camera angle (FPS vs 3rd person)
-            // This makes coins "pop" visually as reward feedback, which is important for casino games
+            // CASINO GAME OPTIMIZATION: Use subtle gold emissive to enhance coin visibility
+            // while preserving texture details from the GLB model
             if (child.material.emissive) {
                 child.material.emissive = new THREE.Color(0xffcc00);  // Bright gold emissive
-                child.material.emissiveIntensity = 0.6;  // Strong enough to override lighting variations
+                child.material.emissiveIntensity = 0.25;  // Reduced to show texture details
             }
         }
     });
@@ -7291,7 +7290,7 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
             targetX: targetX,
             targetY: targetY,
             targetZ: targetZ,
-            duration: (0.6 + Math.random() * 0.2) * 1000, // Convert to ms
+            duration: (0.8 + Math.random() * 0.2) * 1000, // Convert to ms (0.8-1.0s for more ceremonial feel)
             elapsedSinceStart: 0,
             spinSpeedX: 18,
             spinSpeedY: 12,
