@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 8,  // Scale factor for the coin model
+    scale: 25,  // Scale factor for the coin model (increased for better visibility)
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
