@@ -12877,16 +12877,24 @@ class Bullet {
             const fishPos = fish.group.position;
             const fishRadius = fish.boundingRadius;
             
-            // AIR WALL FIX: Skip fish that are too close to the bullet's origin (muzzle)
+            // AIR WALL FIX v2: Skip fish whose bounding sphere EDGE is too close to the muzzle
+            // Previous fix checked fish CENTER distance, but large fish (e.g., Blue Whale with
+            // boundingRadius=336 after 3x scale) could still have their bounding sphere extend
+            // to the muzzle even if their center was 80+ units away.
+            // 
+            // New approach: Check distance to fish's bounding sphere EDGE, not center
+            // distToFishEdge = distFromOrigin - fishRadius
+            // If the edge is within minHitDistance, skip this fish
+            //
             // This prevents the "air wall" effect where bullets hit fish that are:
             // 1. Behind the player's view in FPS mode
             // 2. Swimming very close to the cannon
             // 3. Large fish whose bounding radius extends near the muzzle
-            // Minimum distance = 80 units (slightly larger than biggest fish radius ~112)
-            const distFromOriginSq = fishPos.distanceToSquared(this.origin);
-            const minHitDistanceSq = 80 * 80;  // 80 units minimum distance
-            if (distFromOriginSq < minHitDistanceSq) {
-                continue;  // Skip fish too close to muzzle
+            const distFromOrigin = fishPos.distanceTo(this.origin);
+            const distToFishEdge = distFromOrigin - fishRadius;
+            const minHitDistance = 50;  // Minimum distance to fish's bounding sphere edge
+            if (distToFishEdge < minHitDistance) {
+                continue;  // Skip fish whose bounding sphere is too close to muzzle
             }
             
             // COLLISION OPTIMIZATION: Use segment-sphere collision for accurate hit detection
