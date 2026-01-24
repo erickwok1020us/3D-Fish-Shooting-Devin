@@ -2010,6 +2010,67 @@ const weaponGLBState = {
     shadersWarmedUp: false        // Track if shaders have been warmed up
 };
 
+// ==================== COIN GLB MODEL SYSTEM ====================
+// Uses Coin.glb from R2 for coin drop effects instead of procedural geometry
+const COIN_GLB_CONFIG = {
+    baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
+    filename: 'Coin.glb',
+    scale: 8,  // Scale factor for the coin model
+    rotationSpeed: 12  // Rotation speed for spinning animation
+};
+
+const coinGLBState = {
+    model: null,
+    loaded: false,
+    loading: false,
+    loadPromise: null
+};
+
+// Load Coin GLB model
+async function loadCoinGLB() {
+    if (coinGLBState.loaded || coinGLBState.loading) {
+        return coinGLBState.loadPromise;
+    }
+    
+    coinGLBState.loading = true;
+    
+    coinGLBState.loadPromise = new Promise((resolve, reject) => {
+        const loader = new THREE.GLTFLoader();
+        const url = COIN_GLB_CONFIG.baseUrl + COIN_GLB_CONFIG.filename;
+        
+        loader.load(url,
+            (gltf) => {
+                coinGLBState.model = gltf.scene;
+                coinGLBState.model.scale.setScalar(COIN_GLB_CONFIG.scale);
+                coinGLBState.loaded = true;
+                coinGLBState.loading = false;
+                console.log('[COIN-GLB] Coin model loaded successfully');
+                resolve(coinGLBState.model);
+            },
+            undefined,
+            (error) => {
+                console.warn('[COIN-GLB] Failed to load Coin.glb:', error);
+                coinGLBState.loading = false;
+                resolve(null);
+            }
+        );
+    });
+    
+    return coinGLBState.loadPromise;
+}
+
+// Clone coin model for use in effects
+function cloneCoinModel() {
+    if (!coinGLBState.model) return null;
+    const clone = coinGLBState.model.clone();
+    clone.traverse((child) => {
+        if (child.isMesh && child.material) {
+            child.material = child.material.clone();
+        }
+    });
+    return clone;
+}
+
 // Temp vectors for bullet calculations - reused to avoid per-frame allocations
 const bulletTempVectors = {
     lookTarget: new THREE.Vector3(),
@@ -6220,10 +6281,10 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
             if (weaponKey === '5x' || weaponKey === '8x') {
                 triggerScreenShakeWithStrength(weaponKey === '8x' ? 3 : 1);
             }
-            // 3X WEAPON: Add fire particle burst on hit for extra visual impact
-            if (weaponKey === '3x' && fireParticlePool.initialized) {
-                spawnFireHitBurst(hitPos);
-            }
+            // 3X WEAPON: Fire particle burst DISABLED - using original 3x bullet GLB model
+            // if (weaponKey === '3x' && fireParticlePool.initialized) {
+            //     spawnFireHitBurst(hitPos);
+            // }
             return;
         }
     }
@@ -6237,14 +6298,14 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         createHitParticles(hitPos, config.hitColor, 8);
         
     } else if (weaponKey === '3x') {
-        // Medium fire explosion + fire particle burst
+        // Medium fire explosion - fire particle burst DISABLED (using original 3x bullet GLB model)
         // PERFORMANCE: Use optimized ring function with pooled geometry/material
         spawnExpandingRingOptimized(hitPos, config.hitColor, 15, 50, 0.4);
         spawnWaterSplash(hitPos, 35);
-        // Fire particle burst for 3x weapon
-        if (fireParticlePool.initialized) {
-            spawnFireHitBurst(hitPos);
-        }
+        // Fire particle burst DISABLED - using original 3x bullet GLB model
+        // if (fireParticlePool.initialized) {
+        //     spawnFireHitBurst(hitPos);
+        // }
         // Electric arc effects around impact
         for (let i = 0; i < 4; i++) {
             const angle = (i / 4) * Math.PI * 2;
@@ -6771,12 +6832,62 @@ function spawnFishDeathEffect(position, fishSize, color) {
 }
 
 // Issue #16: Spawn gold coins burst from fish death - REFACTORED to use VFX manager
-// PERFORMANCE: Uses coin pool to avoid creating/destroying materials per coin
+// PERFORMANCE: Uses Coin.glb model if available, otherwise falls back to coin pool
 function spawnCoinBurst(position, count) {
     if (!particleGroup) return;
     
+    const useCoinGLB = coinGLBState.loaded && coinGLBState.model;
+    
     for (let i = 0; i < count; i++) {
-        // OPTIMIZATION 1: Get coin from pool instead of creating new
+        // Use Coin.glb model if available
+        if (useCoinGLB) {
+            const coinModel = cloneCoinModel();
+            if (!coinModel) continue;
+            
+            coinModel.position.copy(position);
+            
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 200,
+                Math.random() * 150 + 50,
+                (Math.random() - 0.5) * 200
+            );
+            
+            particleGroup.add(coinModel);
+            
+            addVfxEffect({
+                type: 'coinBurstGLB',
+                mesh: coinModel,
+                velocity: velocity,
+                elapsedTime: 0,
+                gravity: 300,
+                spinSpeed: COIN_GLB_CONFIG.rotationSpeed,
+                isGLBCoin: true,
+                
+                update(dt, elapsed) {
+                    this.elapsedTime += dt;
+                    this.mesh.position.x += this.velocity.x * dt;
+                    this.mesh.position.y += this.velocity.y * dt;
+                    this.mesh.position.z += this.velocity.z * dt;
+                    this.velocity.y -= this.gravity * dt;
+                    this.mesh.rotation.y += this.spinSpeed * dt;
+                    const scale = Math.max(0.1, 1 - this.elapsedTime);
+                    this.mesh.scale.setScalar(COIN_GLB_CONFIG.scale * scale);
+                    return this.elapsedTime < 1.0;
+                },
+                
+                cleanup() {
+                    particleGroup.remove(this.mesh);
+                    this.mesh.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            child.material.dispose();
+                        }
+                    });
+                }
+            });
+            continue;
+        }
+        
+        // Fallback: Get coin from pool instead of creating new
         const coinItem = getCoinFromPool();
         if (!coinItem) {
             // Pool exhausted - fallback to old method for remaining coins
@@ -6884,15 +6995,16 @@ function spawnCoinBurst(position, count) {
 }
 
 // Issue #16: Coin fly animation to cannon muzzle - REFACTORED to use VFX manager
-// PERFORMANCE: Uses cached geometry, temp vectors for position calculations
+// PERFORMANCE: Uses Coin.glb model or cached geometry as fallback
 function spawnCoinFlyToScore(startPosition, coinCount, reward) {
     // FIX: Changed from undefined 'cannon' to 'cannonMuzzle' which is the actual gun barrel tip
     if (!particleGroup || !cannonMuzzle) return;
     
-    // PERFORMANCE: Use cached geometry
+    // PERFORMANCE: Use Coin.glb model if loaded, otherwise fallback to cached geometry
+    const useCoinGLB = coinGLBState.loaded && coinGLBState.model;
     const cachedCoinGeometry = vfxGeometryCache.coinSphere;
     const cachedTrailGeometry = vfxGeometryCache.smallSphere;
-    if (!cachedCoinGeometry || !cachedTrailGeometry) return;
+    if (!useCoinGLB && (!cachedCoinGeometry || !cachedTrailGeometry)) return;
     
     // Get cannon muzzle position as target (where the gun barrel points)
     // PERFORMANCE: Reuse temp vector instead of creating new Vector3
@@ -6936,13 +7048,22 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                 if (!this.started) {
                     if (elapsed < this.delayMs) return true;
                     
-                    // PERFORMANCE: Use cached geometry, only create material per coin
-                    this.coinMaterial = new THREE.MeshBasicMaterial({
-                        color: 0xffd700,
-                        transparent: true,
-                        opacity: 1
-                    });
-                    this.coin = new THREE.Mesh(cachedCoinGeometry, this.coinMaterial);
+                    // Use Coin.glb model if available, otherwise fallback to procedural geometry
+                    if (useCoinGLB) {
+                        this.coin = cloneCoinModel();
+                        if (!this.coin) {
+                            return false;
+                        }
+                        this.isGLBCoin = true;
+                    } else {
+                        this.coinMaterial = new THREE.MeshBasicMaterial({
+                            color: 0xffd700,
+                            transparent: true,
+                            opacity: 1
+                        });
+                        this.coin = new THREE.Mesh(cachedCoinGeometry, this.coinMaterial);
+                        this.isGLBCoin = false;
+                    }
                     
                     // Start position with slight random offset
                     const offsetX = (Math.random() - 0.5) * 50;
@@ -7013,8 +7134,15 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
             cleanup() {
                 if (this.coin) {
                     particleGroup.remove(this.coin);
-                    // PERFORMANCE: Only dispose material, geometry is cached
-                    this.coinMaterial.dispose();
+                    if (this.isGLBCoin) {
+                        this.coin.traverse((child) => {
+                            if (child.isMesh && child.material) {
+                                child.material.dispose();
+                            }
+                        });
+                    } else if (this.coinMaterial) {
+                        this.coinMaterial.dispose();
+                    }
                 }
                 if (this.trail) {
                     particleGroup.remove(this.trail);
@@ -7387,9 +7515,9 @@ async function init() {
         updateProgress(40, 'Loading 3x weapon...');
         await preloadWeaponGLB('3x');
         
-        // Load 3x weapon fire particle textures
-        updateProgress(45, 'Loading 3x fire effects...');
-        await loadFireParticleTextures();
+        // 3x weapon fire particle textures DISABLED - using original 3x bullet GLB model
+        // updateProgress(45, 'Loading 3x fire effects...');
+        // await loadFireParticleTextures();
         
         // Load 5x weapon
         updateProgress(55, 'Loading 5x weapon...');
@@ -7398,6 +7526,10 @@ async function init() {
         // Load 8x weapon
         updateProgress(80, 'Loading 8x weapon...');
         await preloadWeaponGLB('8x');
+        
+        // Load Coin.glb model for coin drop effects
+        updateProgress(90, 'Loading coin model...');
+        await loadCoinGLB();
         
         updateProgress(100, 'Ready!');
         console.log('[PRELOAD] All GLB models preloaded successfully');
@@ -12830,17 +12962,16 @@ class Bullet {
         bulletTempVectors.velocityScaled.copy(this.velocity).multiplyScalar(deltaTime);
         this.group.position.add(bulletTempVectors.velocityScaled);
         
-        // 3X WEAPON FIRE TRAIL: Spawn fire particles behind the bullet
-        if (this.weaponKey === '3x' && fireParticlePool.initialized) {
-            // Throttle particle spawning based on spawn rate
-            if (!this.lastFireParticleTime) this.lastFireParticleTime = 0;
-            this.lastFireParticleTime += deltaTime;
-            
-            if (this.lastFireParticleTime >= FIRE_PARTICLE_CONFIG.trail.spawnRate) {
-                spawnFireTrailParticle(this.group.position, this.velocity);
-                this.lastFireParticleTime = 0;
-            }
-        }
+        // 3X WEAPON FIRE TRAIL: DISABLED - Using original 3x bullet GLB model without fire particle effects
+        // The fire particle system using Dissolve/Distortion textures has been removed per user request
+        // if (this.weaponKey === '3x' && fireParticlePool.initialized) {
+        //     if (!this.lastFireParticleTime) this.lastFireParticleTime = 0;
+        //     this.lastFireParticleTime += deltaTime;
+        //     if (this.lastFireParticleTime >= FIRE_PARTICLE_CONFIG.trail.spawnRate) {
+        //         spawnFireTrailParticle(this.group.position, this.velocity);
+        //         this.lastFireParticleTime = 0;
+        //     }
+        // }
         
         // Check boundaries - very lenient to allow bullets to reach fish
         const { width, height, depth, floorY } = CONFIG.aquarium;
