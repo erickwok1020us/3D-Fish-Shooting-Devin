@@ -2066,6 +2066,14 @@ function cloneCoinModel() {
     clone.traverse((child) => {
         if (child.isMesh && child.material) {
             child.material = child.material.clone();
+            // Adjust material for better visibility in underwater scene
+            // MeshStandardMaterial with metalness=1 and roughness=1 looks dark without environment maps
+            if (child.material.isMeshStandardMaterial) {
+                child.material.metalness = 0.8;
+                child.material.roughness = 0.3;
+                child.material.emissive = new THREE.Color(0xffd700);
+                child.material.emissiveIntensity = 0.3;
+            }
         }
     });
     return clone;
