@@ -6847,10 +6847,20 @@ function spawnCoinBurst(position, count) {
                         // After lookAt, the coin's -Z axis points to camera
                         // Rotate 90 degrees around X to show the flat face (not the thin edge)
                         this.mesh.rotateX(Math.PI / 2);
+                        
+                        // Distance-based scaling: coins get larger as they approach the camera
+                        // This creates a natural perspective effect where coins flying towards the player grow
+                        const distance = this.mesh.position.distanceTo(camera.position);
+                        const maxDistance = 500;  // Far distance - coin at minimum scale
+                        const minDistance = 50;   // Near distance (gun) - coin at maximum scale
+                        const minScale = COIN_GLB_CONFIG.scale * 0.3;  // 30% at far distance
+                        const maxScale = COIN_GLB_CONFIG.scale;        // 100% at near distance
+                        
+                        // Linear interpolation: closer = larger
+                        const t = Math.max(0, Math.min(1, (maxDistance - distance) / (maxDistance - minDistance)));
+                        const scale = minScale + t * (maxScale - minScale);
+                        this.mesh.scale.setScalar(scale);
                     }
-                    
-                    const scale = Math.max(0.1, 1 - this.elapsedTime);
-                    this.mesh.scale.setScalar(COIN_GLB_CONFIG.scale * scale);
                     return this.elapsedTime < 1.0;
                 },
                 
@@ -6908,7 +6918,18 @@ function spawnCoinBurst(position, count) {
                     this.velocity.y -= this.gravity * dt;
                     this.mesh.rotation.z += this.spinSpeed * dt;
                     this.material.opacity = Math.max(0, 1 - this.elapsedTime * 1.5);
-                    this.mesh.scale.setScalar(Math.max(0.1, 1 - this.elapsedTime));
+                    
+                    // Distance-based scaling: coins get larger as they approach the camera
+                    if (camera) {
+                        const distance = this.mesh.position.distanceTo(camera.position);
+                        const maxDistance = 500;
+                        const minDistance = 50;
+                        const minScale = COIN_GLB_CONFIG.scale * 0.3;
+                        const maxScale = COIN_GLB_CONFIG.scale;
+                        const t = Math.max(0, Math.min(1, (maxDistance - distance) / (maxDistance - minDistance)));
+                        const scale = minScale + t * (maxScale - minScale);
+                        this.mesh.scale.setScalar(scale);
+                    }
                     return this.elapsedTime < 1.0 && this.material.opacity > 0;
                 },
                 
@@ -6955,7 +6976,18 @@ function spawnCoinBurst(position, count) {
                 // Spin and fade
                 this.mesh.rotation.z += this.spinSpeed * dt;
                 this.material.opacity = Math.max(0, 1 - this.elapsedTime * 1.5);
-                this.mesh.scale.setScalar(Math.max(0.1, 1 - this.elapsedTime));
+                
+                // Distance-based scaling: coins get larger as they approach the camera
+                if (camera) {
+                    const distance = this.mesh.position.distanceTo(camera.position);
+                    const maxDistance = 500;
+                    const minDistance = 50;
+                    const minScale = COIN_GLB_CONFIG.scale * 0.3;
+                    const maxScale = COIN_GLB_CONFIG.scale;
+                    const t = Math.max(0, Math.min(1, (maxDistance - distance) / (maxDistance - minDistance)));
+                    const scale = minScale + t * (maxScale - minScale);
+                    this.mesh.scale.setScalar(scale);
+                }
                 
                 return this.elapsedTime < 1.0 && this.material.opacity > 0;
             },
