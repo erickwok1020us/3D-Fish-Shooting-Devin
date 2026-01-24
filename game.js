@@ -2060,25 +2060,68 @@ async function loadCoinGLB() {
 }
 
 // Clone coin model for use in effects
-function cloneCoinModel() {
+// Pre-cloned coin model pool to avoid cloning on every spawn (reduces stutter)
+const coinModelPool = {
+    models: [],
+    maxSize: 30,
+    initialized: false
+};
+
+function initCoinModelPool() {
+    if (coinModelPool.initialized || !coinGLBState.model) return;
+    for (let i = 0; i < coinModelPool.maxSize; i++) {
+        const clone = createCoinModelClone();
+        if (clone) {
+            clone.visible = false;
+            coinModelPool.models.push(clone);
+        }
+    }
+    coinModelPool.initialized = true;
+}
+
+function createCoinModelClone() {
     if (!coinGLBState.model) return null;
     const clone = coinGLBState.model.clone();
     clone.traverse((child) => {
         if (child.isMesh && child.material) {
             // Clone the original material to preserve PBR properties (metalness, roughness)
-            // This keeps the golden metallic appearance from the Coin.glb model
             child.material = child.material.clone();
             child.material.side = THREE.DoubleSide;
-            // Add emissive to ensure visibility in underwater low-light conditions
+            // Add bright gold emissive for visibility in underwater low-light conditions
             // Use emissiveMap to preserve texture details ($ symbol, coin pattern)
             if (child.material.emissive && child.material.map) {
                 child.material.emissiveMap = child.material.map;  // Use texture for emissive glow
-                child.material.emissive = new THREE.Color(0xffffff);  // White to show texture colors
-                child.material.emissiveIntensity = 0.3;  // Lower intensity to preserve texture details
+                child.material.emissive = new THREE.Color(0xffdd44);  // Bright gold tint
+                child.material.emissiveIntensity = 0.6;  // Higher intensity for brighter gold
             }
         }
     });
     return clone;
+}
+
+function getCoinModelFromPool() {
+    // Try to get from pool first
+    for (let i = 0; i < coinModelPool.models.length; i++) {
+        if (!coinModelPool.models[i].visible) {
+            coinModelPool.models[i].visible = true;
+            return coinModelPool.models[i];
+        }
+    }
+    // Pool exhausted, create new one (fallback)
+    return createCoinModelClone();
+}
+
+function returnCoinModelToPool(model) {
+    if (!model) return;
+    model.visible = false;
+    // Reset position and scale
+    model.position.set(0, 0, 0);
+    model.scale.set(1, 1, 1);
+}
+
+function cloneCoinModel() {
+    // Use pooled model for better performance
+    return getCoinModelFromPool();
 }
 
 // Temp vectors for bullet calculations - reused to avoid per-frame allocations
@@ -7545,6 +7588,10 @@ async function init() {
         // Load Coin.glb model for coin drop effects
         updateProgress(90, 'Loading coin model...');
         await loadCoinGLB();
+        
+        // Pre-initialize coin model pool to avoid stutter on first coin spawn
+        updateProgress(95, 'Initializing coin pool...');
+        initCoinModelPool();
         
         updateProgress(100, 'Ready!');
         console.log('[PRELOAD] All GLB models preloaded successfully');
