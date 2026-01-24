@@ -6826,7 +6826,6 @@ function spawnWaterColumn(position, height) {
     }
 }
 
-<<<<<<< HEAD
 // ============================================================================
 // PUBG-STYLE SMOKE EFFECT SYSTEM FOR FISH DEATH
 // Procedural particle-based smoke effect with radial expansion
