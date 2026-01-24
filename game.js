@@ -6837,23 +6837,16 @@ function spawnCoinBurst(position, count) {
                     this.mesh.position.z += this.velocity.z * dt;
                     this.velocity.y -= this.gravity * dt;
                     
-                    // Billboard effect: make coin always face the camera
+                    // Billboard effect: make coin always face the camera with front face visible
+                    // No spin - coin should always show the $ symbol face towards player
                     if (camera) {
-                        // Use lookAt to make coin face camera, then apply spin
-                        // The coin model is flat in XY plane (Z is thickness ~1.42)
-                        // We need to rotate it so the flat face points towards camera
-                        
-                        // First, make the coin look at the camera
+                        // Make the coin look at the camera
                         this.mesh.lookAt(camera.position);
                         
-                        // After lookAt, the coin's Z axis points to camera
-                        // But the coin is flat in XY, so we need to rotate 90 degrees around X
-                        // to make the flat face visible (instead of the thin edge)
+                        // The coin model is flat in XY plane (Z is thickness ~1.42)
+                        // After lookAt, the coin's -Z axis points to camera
+                        // Rotate 90 degrees around X to show the flat face (not the thin edge)
                         this.mesh.rotateX(Math.PI / 2);
-                        
-                        // Apply spin around the local Y axis (which now points towards camera)
-                        this.spinAngle += this.spinSpeed * dt;
-                        this.mesh.rotateY(this.spinAngle);
                     }
                     
                     const scale = Math.max(0.1, 1 - this.elapsedTime);
