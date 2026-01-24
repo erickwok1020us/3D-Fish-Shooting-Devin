@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 100,  // Scale factor for the coin model (reduced for reasonable size)
+    scale: 50,  // Scale factor for the coin model (further reduced per user request)
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
@@ -7129,9 +7129,9 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                 }
                 
                 // Scale up as it gets closer (magnetic effect)
-                // Use a reasonable scale for flying coins (15-22.5) for good visibility without being too large
-                // The Coin.glb model is ~2 units, so scale 15 = ~30 units wide
-                const baseScale = 15;
+                // Use a reasonable scale for flying coins (7.5-11.25) for good visibility without being too large
+                // The Coin.glb model is ~2 units, so scale 7.5 = ~15 units wide
+                const baseScale = 7.5;
                 const scale = baseScale * (1 + t * 0.5);
                 this.coin.scale.setScalar(scale);
                 
