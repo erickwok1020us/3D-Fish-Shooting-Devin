@@ -577,11 +577,25 @@
             align-items: center;
         }
         
-        #loading-screen h1 {
-            color: #00bfff;
-            font-size: 48px;
+        #loading-screen .game-title-img {
+            max-width: 380px;
+            width: 100%;
+            height: auto;
             margin-bottom: 30px;
-            text-shadow: 0 0 20px rgba(0, 191, 255, 0.5);
+            animation: titleShake 0.5s ease-in-out infinite;
+        }
+        
+        @keyframes titleShake {
+            0%, 100% { transform: translateX(0) rotate(0deg); }
+            10% { transform: translateX(-2px) rotate(-0.5deg); }
+            20% { transform: translateX(2px) rotate(0.5deg); }
+            30% { transform: translateX(-2px) rotate(-0.5deg); }
+            40% { transform: translateX(2px) rotate(0.5deg); }
+            50% { transform: translateX(-1px) rotate(-0.25deg); }
+            60% { transform: translateX(1px) rotate(0.25deg); }
+            70% { transform: translateX(-1px) rotate(-0.25deg); }
+            80% { transform: translateX(1px) rotate(0.25deg); }
+            90% { transform: translateX(0) rotate(0deg); }
         }
         
         #loading-bar {
@@ -795,10 +809,14 @@
         
         .lobby-title {
             text-align: center;
-            font-size: 36px;
-            color: #00ffff;
-            text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
             margin-bottom: 5px;
+        }
+        
+        .lobby-title .game-title-img {
+            max-width: 320px;
+            width: 100%;
+            height: auto;
+            animation: titleShake 0.5s ease-in-out infinite;
         }
         
         .lobby-subtitle {
@@ -1168,7 +1186,7 @@
     <!-- Loading Screen -->
     <div id="loading-screen">
         <div class="loading-container">
-            <h1>Fish Shooter 3D</h1>
+            <img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img">
             <div id="loading-bar">
                 <div id="loading-progress"></div>
             </div>
@@ -1192,7 +1210,7 @@
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
         <div class="lobby-container">
-            <h1 class="lobby-title">Fish Shooter 3D</h1>
+            <h1 class="lobby-title"><img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img"></h1>
             <h2 class="lobby-subtitle">Multiplayer</h2>
             
             <!-- Connection Status -->
