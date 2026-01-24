@@ -4772,7 +4772,52 @@ async function preloadAllAudio() {
     console.log('[AUDIO] All sound effects preloaded');
 }
 
+// ==================== AUDIO GAIN NODE POOL ====================
+// PERFORMANCE FIX: Pre-create GainNodes to avoid per-shot allocation
+// BufferSource must be created per-shot (Web Audio limitation), but GainNode can be pooled
+const AUDIO_GAIN_POOL_SIZE = 16;  // Max concurrent sounds
+const audioGainPool = {
+    nodes: [],
+    freeList: [],
+    initialized: false
+};
+
+function initAudioGainPool() {
+    if (audioGainPool.initialized || !audioContext || !sfxGain) return;
+    
+    for (let i = 0; i < AUDIO_GAIN_POOL_SIZE; i++) {
+        const gainNode = audioContext.createGain();
+        gainNode.connect(sfxGain);
+        audioGainPool.nodes.push(gainNode);
+        audioGainPool.freeList.push(gainNode);
+    }
+    
+    audioGainPool.initialized = true;
+}
+
+function getGainNodeFromPool() {
+    if (!audioGainPool.initialized) initAudioGainPool();
+    
+    // If pool is exhausted, create a new node (graceful degradation)
+    if (audioGainPool.freeList.length === 0) {
+        const gainNode = audioContext.createGain();
+        gainNode.connect(sfxGain);
+        return gainNode;
+    }
+    
+    return audioGainPool.freeList.pop();
+}
+
+function returnGainNodeToPool(gainNode) {
+    // Only return pooled nodes (check if it's in our pool)
+    if (audioGainPool.nodes.includes(gainNode)) {
+        audioGainPool.freeList.push(gainNode);
+    }
+    // Non-pooled nodes will be garbage collected
+}
+
 // Play MP3 sound effect (one-shot)
+// PERFORMANCE: Uses pooled GainNodes to reduce per-shot allocations
 function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
     if (!audioContext || !sfxGain) return;
     
@@ -4786,16 +4831,24 @@ function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
         return null;
     }
     
+    // BufferSource must be created per-shot (Web Audio limitation - can only start once)
     const source = audioContext.createBufferSource();
     source.buffer = buffer;
     
-    const gainNode = audioContext.createGain();
+    // PERFORMANCE: Get GainNode from pool instead of creating new one
+    const gainNode = getGainNodeFromPool();
     const baseVolume = AUDIO_CONFIG.volumes[soundKey] || 0.5;
     gainNode.gain.value = baseVolume * volumeMultiplier;
     
     source.connect(gainNode);
-    gainNode.connect(sfxGain);
+    // Note: gainNode is already connected to sfxGain in pool initialization
     source.start(0);
+    
+    // Return gain node to pool when sound finishes
+    source.onended = () => {
+        source.disconnect();
+        returnGainNodeToPool(gainNode);
+    };
     
     return source;
 }
@@ -7116,8 +7169,9 @@ function applyExplosionKnockback(center, radius, strength) {
 // FIX: Track weapon switch animation state to prevent scale accumulation
 let weaponSwitchAnimationId = 0;
 
-// PERFORMANCE: Temp vector for weapon switch animation to avoid per-switch allocation
+// PERFORMANCE: Temp vectors for weapon switch animation to avoid per-switch allocation
 const weaponSwitchTempPos = new THREE.Vector3();
+const weaponSwitchTempDir = new THREE.Vector3();
 
 // Weapon switch animation
 function playWeaponSwitchAnimation(weaponKey) {
@@ -7159,12 +7213,15 @@ function playWeaponSwitchAnimation(weaponKey) {
         }
     }, 100);
     
-    // Spawn ring effect at cannon base
+    // VISUAL FIX: Replace large ring effect with subtle particle burst
+    // User feedback: rings don't fit with game's visual style
     // PERFORMANCE: Use temp vector instead of clone() to avoid per-switch allocation
     weaponSwitchTempPos.copy(cannonGroup.position);
     weaponSwitchTempPos.y += 30;
-    // PERFORMANCE: Use optimized ring function with pooled geometry/material
-    spawnExpandingRingOptimized(weaponSwitchTempPos, config.ringColor, 30, 60, 0.3);
+    // Spawn upward particle burst instead of expanding ring
+    // Uses existing pooled particle system for high performance
+    weaponSwitchTempDir.set(0, 1, 0); // Upward direction
+    spawnMuzzleParticles(weaponSwitchTempPos, weaponSwitchTempDir, config.ringColor, 12);
 }
 
 // Cannon charge effect (for 5x and 8x weapons)
@@ -13420,129 +13477,253 @@ function getLightningSharedGeometries() {
     return lightningSharedGeometries;
 }
 
-// Spawn lightning arc visual between two points - Issue #3 & #15: Enhanced visuals with golden chain lightning
-// PERFORMANCE OPTIMIZED: Reduced segments (16->8), sparks (8->4), shared geometry, temp vectors
-function spawnLightningArc(startPos, endPos, color) {
+// ==================== LIGHTNING ARC POOL SYSTEM ====================
+// PERFORMANCE FIX: Pool lightning arcs to avoid per-shot geometry/material allocations
+// This eliminates GC pressure that causes micro-stutter when firing 5x weapon
+
+const LIGHTNING_ARC_POOL_SIZE = 8;  // Max concurrent lightning arcs
+const lightningArcPool = {
+    items: [],
+    freeList: [],
+    initialized: false
+};
+
+// Pre-allocated Vector3 array for lightning points (9 points per arc, 8 segments)
+const LIGHTNING_SEGMENTS = 8;
+const lightningPointsPool = [];
+for (let i = 0; i < LIGHTNING_ARC_POOL_SIZE; i++) {
     const points = [];
-    const segments = 8;  // PERFORMANCE: Reduced from 16 to 8 segments
-    const tv = lightningArcTempVectors;
+    for (let j = 0; j <= LIGHTNING_SEGMENTS; j++) {
+        points.push(new THREE.Vector3());
+    }
+    lightningPointsPool.push(points);
+}
+
+function initLightningArcPool() {
+    if (lightningArcPool.initialized) return;
     
-    // Use temp vector for direction calculation
+    const sharedGeo = getLightningSharedGeometries();
+    
+    for (let i = 0; i < LIGHTNING_ARC_POOL_SIZE; i++) {
+        // Create geometry with placeholder positions (will be updated per-use)
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array((LIGHTNING_SEGMENTS + 1) * 3);
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        
+        // Pre-create materials (will be reused)
+        const mainMaterial = new THREE.LineBasicMaterial({
+            color: 0xffffcc,
+            linewidth: 3,
+            transparent: true,
+            opacity: 1
+        });
+        const glowMaterial = new THREE.LineBasicMaterial({
+            color: 0xffdd00,
+            linewidth: 6,
+            transparent: true,
+            opacity: 0.8
+        });
+        const flashMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffee00,
+            transparent: true,
+            opacity: 1.0
+        });
+        
+        // Create meshes
+        const mainLine = new THREE.Line(geometry, mainMaterial);
+        const glowLine = new THREE.Line(geometry, glowMaterial);
+        const flash = new THREE.Mesh(sharedGeo.flash, flashMaterial);
+        
+        // Create spark group with pre-allocated sparks
+        const sparkGroup = new THREE.Group();
+        for (let j = 0; j < 4; j++) {
+            const sparkMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffdd00,
+                transparent: true,
+                opacity: 0.9
+            });
+            const spark = new THREE.Mesh(sharedGeo.spark, sparkMaterial);
+            spark.visible = false;
+            sparkGroup.add(spark);
+        }
+        
+        // Initially hidden
+        mainLine.visible = false;
+        glowLine.visible = false;
+        flash.visible = false;
+        sparkGroup.visible = false;
+        
+        const arcItem = {
+            index: i,
+            geometry: geometry,
+            mainLine: mainLine,
+            glowLine: glowLine,
+            mainMaterial: mainMaterial,
+            glowMaterial: glowMaterial,
+            flash: flash,
+            flashMaterial: flashMaterial,
+            sparkGroup: sparkGroup,
+            inUse: false,
+            opacity: 1,
+            fadeStartTime: 0
+        };
+        
+        lightningArcPool.items.push(arcItem);
+        lightningArcPool.freeList.push(arcItem);
+    }
+    
+    lightningArcPool.initialized = true;
+}
+
+function getLightningArcFromPool() {
+    if (!lightningArcPool.initialized) initLightningArcPool();
+    
+    const item = lightningArcPool.freeList.pop();
+    if (!item) return null;  // Pool exhausted
+    
+    item.inUse = true;
+    return item;
+}
+
+function returnLightningArcToPool(item) {
+    if (!item || !item.inUse) return;
+    
+    // Hide all components
+    item.mainLine.visible = false;
+    item.glowLine.visible = false;
+    item.flash.visible = false;
+    item.sparkGroup.visible = false;
+    
+    // Remove from scene if added
+    if (item.mainLine.parent) scene.remove(item.mainLine);
+    if (item.glowLine.parent) scene.remove(item.glowLine);
+    if (item.flash.parent) scene.remove(item.flash);
+    if (item.sparkGroup.parent) scene.remove(item.sparkGroup);
+    
+    // Reset state
+    item.inUse = false;
+    item.opacity = 1;
+    
+    // Return to free list
+    lightningArcPool.freeList.push(item);
+}
+
+// Active lightning arcs being animated
+const activeLightningArcs = [];
+
+// Update lightning arc animations (called from main game loop)
+function updateLightningArcs(deltaTime) {
+    const fadeSpeed = 4.8;  // Opacity units per second (was 0.04 per frame at 60fps)
+    
+    for (let i = activeLightningArcs.length - 1; i >= 0; i--) {
+        const item = activeLightningArcs[i];
+        
+        item.opacity -= fadeSpeed * deltaTime;
+        
+        if (item.opacity <= 0) {
+            // Animation complete, return to pool
+            returnLightningArcToPool(item);
+            activeLightningArcs.splice(i, 1);
+        } else {
+            // Update opacities
+            item.mainMaterial.opacity = item.opacity;
+            item.glowMaterial.opacity = item.opacity * 0.7;
+            item.flashMaterial.opacity = item.opacity * 0.9;
+            item.flash.scale.setScalar(1 + (1 - item.opacity) * 3);
+            
+            // Update sparks
+            item.sparkGroup.children.forEach(spark => {
+                spark.material.opacity = item.opacity * 0.8;
+                spark.scale.setScalar(1 + (1 - item.opacity) * 2);
+            });
+        }
+    }
+}
+
+// Spawn lightning arc visual between two points - POOLED VERSION
+// PERFORMANCE: Uses pre-allocated geometry/materials to avoid GC pressure
+function spawnLightningArc(startPos, endPos, color) {
+    const item = getLightningArcFromPool();
+    if (!item) {
+        // Pool exhausted, skip this arc (graceful degradation)
+        return;
+    }
+    
+    const tv = lightningArcTempVectors;
+    const points = lightningPointsPool[item.index];
+    
+    // Calculate direction
     tv.direction.copy(endPos).sub(startPos);
     const length = tv.direction.length();
     tv.direction.normalize();
     
-    // Create jagged lightning path with more dramatic zigzag
-    for (let i = 0; i <= segments; i++) {
-        const t = i / segments;
-        // PERFORMANCE: Create new Vector3 only for points array (required for BufferGeometry)
-        const point = new THREE.Vector3();
+    // Update points in pre-allocated array
+    for (let i = 0; i <= LIGHTNING_SEGMENTS; i++) {
+        const t = i / LIGHTNING_SEGMENTS;
+        const point = points[i];
         point.copy(startPos);
         point.x += tv.direction.x * length * t;
         point.y += tv.direction.y * length * t;
         point.z += tv.direction.z * length * t;
         
-        // Add random offset for middle segments (not start/end) - larger offsets
-        if (i > 0 && i < segments) {
-            const jitter = 70 * (1 - Math.abs(t - 0.5) * 2);  // More jitter in middle
+        // Add random offset for middle segments
+        if (i > 0 && i < LIGHTNING_SEGMENTS) {
+            const jitter = 70 * (1 - Math.abs(t - 0.5) * 2);
             point.x += (Math.random() - 0.5) * jitter;
             point.y += (Math.random() - 0.5) * jitter;
             point.z += (Math.random() - 0.5) * jitter;
         }
-        
-        points.push(point);
     }
     
-    // Issue #15: Create main lightning bolt with bright golden-white core
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({
-        color: 0xffffcc,  // Very bright golden-white core
-        linewidth: 3,
-        transparent: true,
-        opacity: 1
-    });
+    // Update geometry buffer directly (no new allocation)
+    const positions = item.geometry.attributes.position.array;
+    for (let i = 0; i <= LIGHTNING_SEGMENTS; i++) {
+        positions[i * 3] = points[i].x;
+        positions[i * 3 + 1] = points[i].y;
+        positions[i * 3 + 2] = points[i].z;
+    }
+    item.geometry.attributes.position.needsUpdate = true;
+    item.geometry.computeBoundingSphere();
     
-    const lightning = new THREE.Line(geometry, material);
-    scene.add(lightning);
+    // Reset materials
+    item.mainMaterial.opacity = 1;
+    item.glowMaterial.opacity = 0.8;
+    item.flashMaterial.opacity = 1.0;
     
-    // Issue #15: Create golden glow effect - PERFORMANCE: Share same geometry (no clone)
-    const glowMaterial = new THREE.LineBasicMaterial({
-        color: 0xffdd00,  // Golden glow
-        linewidth: 6,
-        transparent: true,
-        opacity: 0.8
-    });
-    const glowLightning = new THREE.Line(geometry, glowMaterial);  // PERFORMANCE: No clone
-    scene.add(glowLightning);
+    // Position flash at end point
+    item.flash.position.copy(endPos);
+    item.flash.scale.setScalar(1);
     
-    // PERFORMANCE: Removed third outer glow line to reduce object count
-    
-    // Issue #15: Add larger golden flash at hit point - PERFORMANCE: Use shared geometry
-    const sharedGeo = getLightningSharedGeometries();
-    const flashMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffee00,  // Bright golden flash
-        transparent: true,
-        opacity: 1.0
-    });
-    const flash = new THREE.Mesh(sharedGeo.flash, flashMaterial);
-    flash.position.copy(endPos);
-    scene.add(flash);
-    
-    // Issue #15: Add golden spark particles - PERFORMANCE: Reduced from 8 to 4 sparks
-    const sparkGroup = new THREE.Group();
-    for (let i = 0; i < 4; i++) {  // PERFORMANCE: Reduced from 8 to 4
-        const sparkMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffdd00,
-            transparent: true,
-            opacity: 0.9
-        });
-        const spark = new THREE.Mesh(sharedGeo.spark, sparkMaterial);  // PERFORMANCE: Shared geometry
+    // Position sparks along the arc
+    item.sparkGroup.children.forEach((spark, idx) => {
         const t = Math.random();
-        // PERFORMANCE: Use temp vector for lerp calculation
         tv.sparkPos.copy(startPos).lerp(endPos, t);
         spark.position.copy(tv.sparkPos);
         spark.position.x += (Math.random() - 0.5) * 30;
         spark.position.y += (Math.random() - 0.5) * 30;
         spark.position.z += (Math.random() - 0.5) * 30;
-        sparkGroup.add(spark);
-    }
-    scene.add(sparkGroup);
+        spark.material.opacity = 0.9;
+        spark.scale.setScalar(1);
+        spark.visible = true;
+    });
     
-    // Issue #15: Faster fade out for better performance (300ms instead of 400ms)
-    let opacity = 1;
-    const fadeSpeed = 0.04;  // PERFORMANCE: Faster fade (was 0.025)
-    const fadeOut = () => {
-        opacity -= fadeSpeed;
-        material.opacity = opacity;
-        glowMaterial.opacity = opacity * 0.7;
-        flashMaterial.opacity = opacity * 0.9;
-        flash.scale.setScalar(1 + (1 - opacity) * 3);  // Expand flash more
-        
-        // Fade sparks
-        sparkGroup.children.forEach(spark => {
-            spark.material.opacity = opacity * 0.8;
-            spark.scale.setScalar(1 + (1 - opacity) * 2);
-        });
-        
-        if (opacity > 0) {
-            requestAnimationFrame(fadeOut);
-        } else {
-            scene.remove(lightning);
-            scene.remove(glowLightning);
-            scene.remove(flash);
-            scene.remove(sparkGroup);
-            geometry.dispose();
-            material.dispose();
-            glowMaterial.dispose();
-            // PERFORMANCE: Don't dispose shared geometries (flash, spark)
-            flashMaterial.dispose();
-            sparkGroup.children.forEach(spark => {
-                // PERFORMANCE: Only dispose material, geometry is shared
-                spark.material.dispose();
-            });
-        }
-    };
-    setTimeout(fadeOut, 60);  // PERFORMANCE: Faster start (was 80ms)
+    // Show all components
+    item.mainLine.visible = true;
+    item.glowLine.visible = true;
+    item.flash.visible = true;
+    item.sparkGroup.visible = true;
+    
+    // Add to scene
+    scene.add(item.mainLine);
+    scene.add(item.glowLine);
+    scene.add(item.flash);
+    scene.add(item.sparkGroup);
+    
+    // Reset animation state
+    item.opacity = 1;
+    
+    // Add to active list for animation
+    activeLightningArcs.push(item);
 }
 
 // AOE Explosion Effect (8x weapon)
@@ -14823,6 +15004,10 @@ function animate() {
     
     // 3X WEAPON FIRE PARTICLES: Update fire trail particles
     updateFireParticles(deltaTime);
+    
+    // LIGHTNING ARC POOL: Update pooled lightning arc animations
+    // PERFORMANCE FIX: Replaces per-arc requestAnimationFrame loops
+    updateLightningArcs(deltaTime);
     
     // COMBO SYSTEM: Update combo timer
     updateComboTimer(deltaTime);
