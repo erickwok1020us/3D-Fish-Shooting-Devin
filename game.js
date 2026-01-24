@@ -2087,12 +2087,29 @@ function createCoinModelClone() {
             // Clone the original material to preserve PBR properties (metalness, roughness)
             child.material = child.material.clone();
             child.material.side = THREE.DoubleSide;
-            // Add bright gold emissive for visibility in underwater low-light conditions
-            // Use emissiveMap to preserve texture details ($ symbol, coin pattern)
-            if (child.material.emissive && child.material.map) {
-                child.material.emissiveMap = child.material.map;  // Use texture for emissive glow
-                child.material.emissive = new THREE.Color(0xffdd44);  // Bright gold tint
-                child.material.emissiveIntensity = 0.6;  // Higher intensity for brighter gold
+            
+            // FIX: The Coin.glb texture is orange/copper colored. To make it appear gold:
+            // 1. Tint the base color towards bright gold (this multiplies with texture)
+            // 2. Use strong emissive to add golden glow
+            // 3. Increase metalness for shiny gold appearance
+            
+            // Shift the base color towards bright gold (this tints the texture)
+            child.material.color = new THREE.Color(0xffee88);  // Bright yellow-gold tint
+            
+            // Add strong golden emissive glow
+            if (child.material.emissive) {
+                child.material.emissive = new THREE.Color(0xffd700);  // Pure gold emissive
+                child.material.emissiveIntensity = 0.8;  // Strong glow to shift color
+                // Use texture as emissive map to preserve $ symbol detail
+                if (child.material.map) {
+                    child.material.emissiveMap = child.material.map;
+                }
+            }
+            
+            // Increase metalness for shiny gold coin look
+            if (child.material.metalness !== undefined) {
+                child.material.metalness = 0.9;
+                child.material.roughness = 0.2;
             }
         }
     });
