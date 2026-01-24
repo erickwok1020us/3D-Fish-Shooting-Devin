@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 15,  // Scale factor for the coin model (increased for visibility)
+    scale: 8,  // Scale factor for the coin model
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
@@ -2065,19 +2065,20 @@ function cloneCoinModel() {
     const clone = coinGLBState.model.clone();
     clone.traverse((child) => {
         if (child.isMesh && child.material) {
-            child.material = child.material.clone();
-            // Adjust material for better visibility in underwater scene
-            // Keep original texture but enhance visibility with subtle emissive glow
-            if (child.material.isMeshStandardMaterial) {
-                // Reduce metalness for better light reflection without environment map
-                child.material.metalness = 0.5;
-                child.material.roughness = 0.4;
-                // Add subtle gold emissive glow for visibility
-                child.material.emissive = new THREE.Color(0xffd700);
-                child.material.emissiveIntensity = 0.15;
-                // Ensure texture is visible
-                child.material.needsUpdate = true;
+            const originalMaterial = child.material;
+            // Use MeshBasicMaterial to directly show texture without lighting calculations
+            // This ensures the coin texture is visible regardless of scene lighting
+            const basicMaterial = new THREE.MeshBasicMaterial({
+                map: originalMaterial.map,
+                color: 0xffd700,  // Gold color as base
+                side: THREE.DoubleSide,
+                transparent: false
+            });
+            // If original has a texture, use it; otherwise use gold color
+            if (originalMaterial.map) {
+                basicMaterial.color.setHex(0xffffff);  // White to show texture colors
             }
+            child.material = basicMaterial;
         }
     });
     return clone;
@@ -6827,6 +6828,7 @@ function spawnCoinBurst(position, count) {
                 gravity: 300,
                 spinSpeed: COIN_GLB_CONFIG.rotationSpeed,
                 isGLBCoin: true,
+                spinAngle: Math.random() * Math.PI * 2,
                 
                 update(dt, elapsed) {
                     this.elapsedTime += dt;
@@ -6834,7 +6836,26 @@ function spawnCoinBurst(position, count) {
                     this.mesh.position.y += this.velocity.y * dt;
                     this.mesh.position.z += this.velocity.z * dt;
                     this.velocity.y -= this.gravity * dt;
-                    this.mesh.rotation.y += this.spinSpeed * dt;
+                    
+                    // Billboard effect: make coin always face the camera
+                    if (camera) {
+                        // Use lookAt to make coin face camera, then apply spin
+                        // The coin model is flat in XY plane (Z is thickness ~1.42)
+                        // We need to rotate it so the flat face points towards camera
+                        
+                        // First, make the coin look at the camera
+                        this.mesh.lookAt(camera.position);
+                        
+                        // After lookAt, the coin's Z axis points to camera
+                        // But the coin is flat in XY, so we need to rotate 90 degrees around X
+                        // to make the flat face visible (instead of the thin edge)
+                        this.mesh.rotateX(Math.PI / 2);
+                        
+                        // Apply spin around the local Y axis (which now points towards camera)
+                        this.spinAngle += this.spinSpeed * dt;
+                        this.mesh.rotateY(this.spinAngle);
+                    }
+                    
                     const scale = Math.max(0.1, 1 - this.elapsedTime);
                     this.mesh.scale.setScalar(COIN_GLB_CONFIG.scale * scale);
                     return this.elapsedTime < 1.0;
