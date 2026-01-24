@@ -7124,18 +7124,9 @@ function playWeaponSwitchAnimation(weaponKey) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
     if (!config || !cannonGroup) return;
     
-    // Store current weapon ring color for defensive checks in updateSciFiBaseRing()
-    currentRingColor = config.ringColor;
+    // REMOVED: Base ring color update (rings removed per user feedback)
     
-    // Animate base ring color change - update BOTH core and glow layers
-    if (cannonBaseRingCore && cannonBaseRingCore.material) {
-        cannonBaseRingCore.material.color.setHex(config.ringColor);
-    }
-    if (cannonBaseRingGlow && cannonBaseRingGlow.material) {
-        cannonBaseRingGlow.material.color.setHex(config.ringColor);
-    }
-    
-    // FIX: Cancel any previous animation by incrementing the animation ID
+    // FIX: Cancel any previous animationby incrementing the animation ID
     // This prevents scale accumulation when rapidly switching weapons
     weaponSwitchAnimationId++;
     const currentAnimationId = weaponSwitchAnimationId;
@@ -8326,67 +8317,9 @@ function createCannon() {
     platform.position.y = 5;
     cannonGroup.add(platform);
     
-    // SCI-FI DUAL-LAYER BASE RING - Futuristic energy ring with segments
-    // Layer 1: Core ring with segmented texture pattern
-    if (!cannonBaseRingSegmentTexture) {
-        cannonBaseRingSegmentTexture = createSciFiRingTexture();
-    }
-    
-    // Use RingGeometry for flat sci-fi look (better texture mapping than torus)
-    const coreRingGeometry = new THREE.RingGeometry(60, 85, 64);
-    const coreRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0x44ddff,  // Bright cyan - weapon color
-        map: cannonBaseRingSegmentTexture,
-        transparent: true,
-        opacity: 0.9,
-        side: THREE.DoubleSide,
-        depthWrite: false
-    });
-    cannonBaseRingCore = new THREE.Mesh(coreRingGeometry, coreRingMaterial);
-    cannonBaseRingCore.name = 'cannonBaseRingCore';
-    cannonBaseRingCore.rotation.x = -Math.PI / 2;  // Lay flat
-    cannonBaseRingCore.position.y = 3;
-    cannonBaseRingCore.renderOrder = 1;
-    cannonGroup.add(cannonBaseRingCore);
-    
-    // Layer 2: Outer glow ring (larger, additive blending for energy effect)
-    const glowRingGeometry = new THREE.RingGeometry(55, 95, 64);
-    const glowRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0x44ddff,  // Same color, will glow
-        transparent: true,
-        opacity: 0.35,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-    });
-    cannonBaseRingGlow = new THREE.Mesh(glowRingGeometry, glowRingMaterial);
-    cannonBaseRingGlow.name = 'cannonBaseRingGlow';
-    cannonBaseRingGlow.rotation.x = -Math.PI / 2;  // Lay flat
-    cannonBaseRingGlow.position.y = 2;
-    cannonBaseRingGlow.renderOrder = 0;
-    cannonGroup.add(cannonBaseRingGlow);
-    
-    // Layer 3: Black inner disk to cover gray platform area (radius 54.5 to avoid Z-fighting with glow ring inner radius 55)
-    // NOTE: Platform is at y=5 with height 18, so top is at y=14. Disk must be ABOVE platform to cover it
-    // IMPORTANT: depthWrite must be true so the disk properly occludes the platform behind it
-    const innerDiskGeometry = new THREE.CircleGeometry(54.5, 64);
-    const innerDiskMaterial = new THREE.MeshBasicMaterial({
-        color: 0x000000,  // Pure black
-        side: THREE.DoubleSide,
-        depthWrite: true  // Must be true to occlude platform behind it
-    });
-    cannonBaseRingInnerDisk = new THREE.Mesh(innerDiskGeometry, innerDiskMaterial);
-    cannonBaseRingInnerDisk.name = 'cannonBaseRingInnerDisk';
-    cannonBaseRingInnerDisk.rotation.x = -Math.PI / 2;  // Lay flat
-    cannonBaseRingInnerDisk.position.y = 14.5;  // Above platform top (y=14) to cover gray area
-    cannonBaseRingInnerDisk.renderOrder = 2;  // Render after rings (core=1, glow=0) to ensure it's on top
-    cannonGroup.add(cannonBaseRingInnerDisk);
-    
-    // Debug logging for sci-fi ring verification
-    console.log('[CANNON] Sci-fi ring created: core=' + (cannonBaseRingCore ? 'OK' : 'FAIL') + 
-                ', glow=' + (cannonBaseRingGlow ? 'OK' : 'FAIL') + 
-                ', innerDisk=' + (cannonBaseRingInnerDisk ? 'OK' : 'FAIL'));
-    console.log('[CANNON] cannonGroup children count:', cannonGroup.children.length);
+    // REMOVED: Sci-fi base ring effects (user feedback: too distracting in FPS view)
+    // The ring color changed based on weapon and created large visible halos
+    console.log('[CANNON] Base ring effects removed (user feedback)');
     
     // Issue #10: Create pitch group - this rotates for vertical aiming
     // Both barrel and muzzle are children of this group so they rotate together
@@ -14693,8 +14626,7 @@ function animate() {
     // Update FPS camera recoil (visual pitch kick effect)
     updateFPSCameraRecoil();
     
-    // Update sci-fi base ring animation (rotation + pulse)
-    updateSciFiBaseRing(currentTime / 1000);  // Convert to seconds
+    // REMOVED: updateSciFiBaseRing() - base ring effects removed per user feedback
     
     // Update decorative cannon rings animation
     updateStaticCannonRings(currentTime / 1000);
