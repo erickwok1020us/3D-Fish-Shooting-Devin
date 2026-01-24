@@ -6849,8 +6849,9 @@ function spawnCoinBurst(position, count) {
                         this.mesh.rotateX(Math.PI / 2);
                     }
                     
-                    const scale = Math.max(0.1, 1 - this.elapsedTime);
-                    this.mesh.scale.setScalar(COIN_GLB_CONFIG.scale * scale);
+                    // Keep coin at fixed scale - no shrinking animation
+                    // This ensures coins remain visible throughout the animation
+                    this.mesh.scale.setScalar(COIN_GLB_CONFIG.scale);
                     return this.elapsedTime < 1.0;
                 },
                 
@@ -6908,7 +6909,8 @@ function spawnCoinBurst(position, count) {
                     this.velocity.y -= this.gravity * dt;
                     this.mesh.rotation.z += this.spinSpeed * dt;
                     this.material.opacity = Math.max(0, 1 - this.elapsedTime * 1.5);
-                    this.mesh.scale.setScalar(Math.max(0.1, 1 - this.elapsedTime));
+                    // Use COIN_GLB_CONFIG.scale for consistent coin size
+                    this.mesh.scale.setScalar(COIN_GLB_CONFIG.scale);
                     return this.elapsedTime < 1.0 && this.material.opacity > 0;
                 },
                 
@@ -6955,7 +6957,8 @@ function spawnCoinBurst(position, count) {
                 // Spin and fade
                 this.mesh.rotation.z += this.spinSpeed * dt;
                 this.material.opacity = Math.max(0, 1 - this.elapsedTime * 1.5);
-                this.mesh.scale.setScalar(Math.max(0.1, 1 - this.elapsedTime));
+                // Use COIN_GLB_CONFIG.scale for consistent coin size
+                this.mesh.scale.setScalar(COIN_GLB_CONFIG.scale);
                 
                 return this.elapsedTime < 1.0 && this.material.opacity > 0;
             },
