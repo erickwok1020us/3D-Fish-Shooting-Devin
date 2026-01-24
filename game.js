@@ -6825,6 +6825,173 @@ function spawnWaterColumn(position, height) {
     }
 }
 
+// ============================================================================
+// PUBG-STYLE SMOKE EFFECT SYSTEM FOR FISH DEATH
+// Procedural particle-based smoke effect with radial expansion
+// ============================================================================
+
+// Cached smoke texture (created once, reused for all smoke effects)
+let cachedSmokeTexture = null;
+
+// Create procedural smoke texture using canvas (no external assets needed)
+function createSmokeTexture() {
+    if (cachedSmokeTexture) return cachedSmokeTexture;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(200, 200, 200, 0.6)');
+    gradient.addColorStop(0.5, 'rgba(150, 150, 150, 0.2)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+    
+    cachedSmokeTexture = new THREE.CanvasTexture(canvas);
+    return cachedSmokeTexture;
+}
+
+// Active smoke effects list for update loop
+const activeSmokeEffects = [];
+
+// Smoke effect class - one-shot effect that auto-disposes
+class SmokeEffect {
+    constructor(position, scale = 1.0) {
+        this.particleCount = Math.floor(100 * scale);  // Scale particle count with fish size
+        this.duration = 2.0;  // Shorter duration for fish death (2 seconds)
+        this.particles = [];
+        this.alive = true;
+        this.elapsedTime = 0;
+        
+        this.geometry = new THREE.BufferGeometry();
+        this.positions = new Float32Array(this.particleCount * 3);
+        this.sizes = new Float32Array(this.particleCount);
+        
+        // Initialize particles at spawn position
+        for (let i = 0; i < this.particleCount; i++) {
+            this.positions[i * 3] = position.x;
+            this.positions[i * 3 + 1] = position.y;
+            this.positions[i * 3 + 2] = position.z;
+            
+            // Spherical velocity for radial expansion
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            const speed = (0.5 + Math.random() * 1.0) * scale;  // Faster for underwater
+            
+            this.particles.push({
+                velocity: new THREE.Vector3(
+                    Math.sin(phi) * Math.cos(theta) * speed,
+                    Math.abs(Math.cos(phi) * speed) * 0.5,  // Less upward in underwater
+                    Math.sin(phi) * Math.sin(theta) * speed
+                ),
+                life: 1.0,
+                decay: (1.0 / this.duration) / 60,
+                initialSize: (3 + Math.random() * 5) * scale
+            });
+        }
+        
+        this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
+        this.geometry.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1));
+        
+        this.material = new THREE.PointsMaterial({
+            size: 8 * scale,
+            map: createSmokeTexture(),
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.NormalBlending,
+            opacity: 0.5,
+            sizeAttenuation: true
+        });
+        
+        this.mesh = new THREE.Points(this.geometry, this.material);
+        
+        if (particleGroup) {
+            particleGroup.add(this.mesh);
+        } else if (scene) {
+            scene.add(this.mesh);
+        }
+    }
+    
+    update(dt) {
+        if (!this.alive) return false;
+        
+        this.elapsedTime += dt;
+        const posAttr = this.mesh.geometry.attributes.position;
+        const sizeAttr = this.mesh.geometry.attributes.size;
+        let allDead = true;
+        
+        for (let i = 0; i < this.particleCount; i++) {
+            const p = this.particles[i];
+            
+            if (p.life > 0) {
+                allDead = false;
+                
+                // Move outward
+                posAttr.array[i * 3] += p.velocity.x;
+                posAttr.array[i * 3 + 1] += p.velocity.y;
+                posAttr.array[i * 3 + 2] += p.velocity.z;
+                
+                // Friction (underwater has more resistance)
+                p.velocity.multiplyScalar(0.96);
+                
+                // Decay life
+                p.life -= p.decay;
+                
+                // Grow as fading (bloom effect)
+                sizeAttr.array[i] = p.initialSize * (2.0 - p.life);
+            }
+        }
+        
+        posAttr.needsUpdate = true;
+        sizeAttr.needsUpdate = true;
+        
+        // Fade out overall opacity
+        const lifeRatio = Math.max(0, 1 - (this.elapsedTime / this.duration));
+        this.material.opacity = 0.5 * lifeRatio;
+        
+        // Auto-dispose when all particles are dead or duration exceeded
+        if (allDead || this.elapsedTime >= this.duration) {
+            this.dispose();
+            return false;
+        }
+        
+        return true;
+    }
+    
+    dispose() {
+        this.alive = false;
+        if (particleGroup) {
+            particleGroup.remove(this.mesh);
+        } else if (scene) {
+            scene.remove(this.mesh);
+        }
+        this.geometry.dispose();
+        this.material.dispose();
+    }
+}
+
+// Spawn smoke effect at position with optional scale
+function spawnSmokeEffect(position, scale = 1.0) {
+    const smoke = new SmokeEffect(position, scale);
+    activeSmokeEffects.push(smoke);
+    return smoke;
+}
+
+// Update all active smoke effects (called from main animation loop)
+function updateSmokeEffects(dt) {
+    for (let i = activeSmokeEffects.length - 1; i >= 0; i--) {
+        const smoke = activeSmokeEffects[i];
+        if (!smoke.update(dt)) {
+            activeSmokeEffects.splice(i, 1);
+        }
+    }
+}
+
+// ============================================================================
+// END SMOKE EFFECT SYSTEM
+// ============================================================================
+
 // Apply knockback to nearby fish from explosion
 // Issue #16: Enhanced fish death explosion effects based on fish size
 function spawnFishDeathEffect(position, fishSize, color) {
@@ -6832,25 +6999,28 @@ function spawnFishDeathEffect(position, fishSize, color) {
     
     switch (fishSize) {
         case 'small':
-            // Small splash particles + water ripple
+            // Small splash particles + water ripple + small smoke
             spawnWaterSplash(position.clone(), 0.5);
             createHitParticles(position, color, 8);
+            spawnSmokeEffect(position.clone(), 0.5);  // Small smoke puff
             break;
             
         case 'medium':
-            // Larger explosion + gold coins fly out
+            // Larger explosion + gold coins fly out + medium smoke
             spawnWaterSplash(position.clone(), 0.8);
             createHitParticles(position, color, 15);
             spawnCoinBurst(position.clone(), 5);
+            spawnSmokeEffect(position.clone(), 1.0);  // Medium smoke cloud
             // PERFORMANCE: Use optimized ring function with pooled geometry/material
             spawnExpandingRingOptimized(position, 0x44aaff, 30, 80, 0.3);
             break;
             
         case 'large':
-            // Huge explosion + screen flash + coins shower
+            // Huge explosion + screen flash + coins shower + large smoke
             spawnWaterSplash(position.clone(), 1.2);
             createHitParticles(position, color, 25);
             spawnCoinBurst(position.clone(), 12);
+            spawnSmokeEffect(position.clone(), 1.5);  // Large smoke cloud
             // PERFORMANCE: Use optimized ring function with pooled geometry/material
             spawnExpandingRingOptimized(position, 0xffdd44, 50, 150, 0.4);
             triggerScreenFlash(0xffffcc, 0.3, 150);
@@ -6858,8 +7028,9 @@ function spawnFishDeathEffect(position, fishSize, color) {
             break;
             
         case 'boss':
-            // Massive explosion + light pillar + coin rain + screen shake
+            // Massive explosion + light pillar + coin rain + screen shake + massive smoke
             spawnBossDeathEffect(position.clone(), color);
+            spawnSmokeEffect(position.clone(), 2.5);  // Massive smoke cloud for boss
             break;
     }
 }
@@ -15187,6 +15358,9 @@ function animate() {
     
     // Update floating underwater particles for dynamic atmosphere
     updateUnderwaterParticles(deltaTime);
+    
+    // Update PUBG-style smoke effects for fish death
+    updateSmokeEffects(deltaTime);
     
     // Update panorama sky-sphere animation (slow rotation + bobbing)
     updatePanoramaAnimation(deltaTime);
