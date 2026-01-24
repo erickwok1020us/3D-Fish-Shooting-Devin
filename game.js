@@ -7520,6 +7520,14 @@ function initGameScene() {
     // Create floating underwater particles for dynamic atmosphere
     createUnderwaterParticles();
     
+    updateLoadingProgress(92, 'Pre-initializing effect pools...');
+    // PERFORMANCE FIX: Pre-initialize pools to avoid first-shot stutter
+    // These pools were previously lazily initialized on first use, causing
+    // noticeable stutter when firing for the first time
+    initLightningArcPool();
+    initAudioGainPool();
+    console.log('[PRELOAD] Lightning arc and audio pools pre-initialized');
+    
     updateLoadingProgress(95, 'Setting up controls...');
     setupEventListeners();
     
@@ -14440,6 +14448,13 @@ function updateCameraRotation() {
 function initFPSMode() {
     const crosshair = document.getElementById('crosshair');
     
+    // FIX: Reset FPS yaw/pitch to ensure camera faces forward on game start
+    // This fixes the issue where camera was facing left on initial game entry
+    // Initial pitch set to 15 degrees upward for optimal fish viewing (shows fish pool center)
+    const FPS_INITIAL_PITCH = 15 * (Math.PI / 180);  // 15 degrees upward
+    gameState.fpsYaw = 0;  // Face forward (toward fish pool center)
+    gameState.fpsPitch = FPS_INITIAL_PITCH;
+    
     // Set up cannon for FPS mode
     if (cannonGroup) {
         cannonGroup.visible = true;
@@ -14447,13 +14462,14 @@ function initFPSMode() {
         cannonGroup.children.forEach(child => {
             if (child.isLight) child.visible = false;
         });
+        // FIX: Explicitly reset cannon yaw to 0 (face forward)
         cannonGroup.rotation.y = 0;
     }
     
-    // Set initial pitch to 35 degrees upward (from gameState)
+    // Set initial pitch for cannon (matches camera pitch)
     // cannonPitchGroup.rotation.x is negative of the actual pitch angle
     if (cannonPitchGroup) {
-        cannonPitchGroup.rotation.x = -gameState.fpsPitch;  // -35 degrees
+        cannonPitchGroup.rotation.x = -FPS_INITIAL_PITCH;
     }
     
     // Hide mouse cursor in FPS mode
