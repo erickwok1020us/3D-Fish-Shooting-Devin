@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 60,  // Scale factor for the coin model (increased to match crosshair size)
+    scale: 200,  // Scale factor for the coin model (significantly increased for visibility)
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
@@ -6851,9 +6851,9 @@ function spawnCoinBurst(position, count) {
                         // Distance-based scaling: coins get larger as they approach the camera
                         // This creates a natural perspective effect where coins flying towards the player grow
                         const distance = this.mesh.position.distanceTo(camera.position);
-                        const maxDistance = 500;  // Far distance - coin at minimum scale
-                        const minDistance = 50;   // Near distance (gun) - coin at maximum scale
-                        const minScale = COIN_GLB_CONFIG.scale * 0.3;  // 30% at far distance
+                        const maxDistance = 800;  // Far distance - coin at minimum scale
+                        const minDistance = 200;  // Near distance (gun) - coin at maximum scale
+                        const minScale = COIN_GLB_CONFIG.scale * 0.5;  // 50% at far distance
                         const maxScale = COIN_GLB_CONFIG.scale;        // 100% at near distance
                         
                         // Linear interpolation: closer = larger
@@ -6922,9 +6922,9 @@ function spawnCoinBurst(position, count) {
                     // Distance-based scaling: coins get larger as they approach the camera
                     if (camera) {
                         const distance = this.mesh.position.distanceTo(camera.position);
-                        const maxDistance = 500;
-                        const minDistance = 50;
-                        const minScale = COIN_GLB_CONFIG.scale * 0.3;
+                        const maxDistance = 800;
+                        const minDistance = 200;
+                        const minScale = COIN_GLB_CONFIG.scale * 0.5;
                         const maxScale = COIN_GLB_CONFIG.scale;
                         const t = Math.max(0, Math.min(1, (maxDistance - distance) / (maxDistance - minDistance)));
                         const scale = minScale + t * (maxScale - minScale);
@@ -6980,9 +6980,9 @@ function spawnCoinBurst(position, count) {
                 // Distance-based scaling: coins get larger as they approach the camera
                 if (camera) {
                     const distance = this.mesh.position.distanceTo(camera.position);
-                    const maxDistance = 500;
-                    const minDistance = 50;
-                    const minScale = COIN_GLB_CONFIG.scale * 0.3;
+                    const maxDistance = 800;
+                    const minDistance = 200;
+                    const minScale = COIN_GLB_CONFIG.scale * 0.5;
                     const maxScale = COIN_GLB_CONFIG.scale;
                     const t = Math.max(0, Math.min(1, (maxDistance - distance) / (maxDistance - minDistance)));
                     const scale = minScale + t * (maxScale - minScale);
