@@ -578,7 +578,7 @@
         }
         
         #loading-screen .game-title-img {
-            max-width: 380px;
+            max-width: 520px;
             width: 100%;
             height: auto;
             margin-bottom: 30px;
@@ -648,11 +648,12 @@
             align-items: center;
         }
         
-        #map-loading-overlay h2 {
-            color: #00bfff;
-            font-size: 32px;
+        #map-loading-overlay .game-title-img {
+            max-width: 480px;
+            width: 100%;
+            height: auto;
             margin-bottom: 20px;
-            text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
+            animation: titleShake 0.5s ease-in-out infinite;
         }
         
         #map-loading-overlay .loading-info {
@@ -803,7 +804,7 @@
             border-radius: 20px;
             padding: 40px;
             min-width: 400px;
-            max-width: 500px;
+            max-width: 550px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(100, 150, 255, 0.2);
         }
         
@@ -813,7 +814,7 @@
         }
         
         .lobby-title .game-title-img {
-            max-width: 320px;
+            max-width: 420px;
             width: 100%;
             height: auto;
             animation: titleShake 0.5s ease-in-out infinite;
@@ -1197,7 +1198,7 @@
     <!-- Map Loading Overlay -->
     <div id="map-loading-overlay">
         <div class="map-loading-container">
-            <h2>Loading 3D Map</h2>
+            <img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img">
             <div class="loading-info">Please wait while the underwater world loads...</div>
             <div id="map-loading-bar-container">
                 <div id="map-loading-bar"></div>
