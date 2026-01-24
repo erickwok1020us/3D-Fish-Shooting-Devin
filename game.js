@@ -12154,7 +12154,7 @@ class Fish {
         // In multiplayer, the server sends balanceUpdate events with authoritative rewards
         // Client should NOT calculate or award rewards locally to ensure casino-grade RTP compliance
         if (multiplayerMode) {
-            // In multiplayer, just show visual effects - server will send reward via balanceUpdate
+            // In multiplayer, show visual effects - server will send actual reward via balanceUpdate
             let fishSize = 'small';
             if (this.tier === 'tier4' || this.isBoss) {
                 fishSize = 'boss';
@@ -12163,9 +12163,13 @@ class Fish {
             } else if (this.tier === 'tier2') {
                 fishSize = 'medium';
             }
-            // Visual feedback only - actual reward comes from server
+            // Visual feedback - actual reward comes from server
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
-            createHitParticles(deathPosition, this.config.color || 0xffffff, 10);
+            
+            // ALWAYS play coin sound and spawn coin effect on fish death (casino feedback)
+            playCoinSound(fishSize);
+            const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
+            spawnCoinFlyToScore(deathPosition, coinCount, this.config.reward);
         } else {
             // SINGLE PLAYER MODE: Use local RTP calculation
             // COMBO SYSTEM: Update combo and get bonus
@@ -12187,38 +12191,38 @@ class Fish {
             const baseWin = isKill ? fishReward : 0;
             const win = baseWin > 0 ? Math.floor(baseWin * (1 + comboBonus)) : 0;
             
+            // Determine fish size from tier (used for visual effects)
+            let fishSize = 'small';
+            if (this.tier === 'tier4' || this.isBoss) {
+                fishSize = 'boss';
+            } else if (this.tier === 'tier3') {
+                fishSize = 'large';
+            } else if (this.tier === 'tier2') {
+                fishSize = 'medium';
+            }
+            
+            // ALWAYS spawn visual effects on fish death (regardless of RTP payout)
+            // This provides consistent feedback to players - every kill feels rewarding
+            spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
+            
+            // ALWAYS play coin sound on fish death (casino feedback)
+            playCoinSound(fishSize);
+            
+            // ALWAYS spawn coin visual effect based on fish size
+            // Coin count varies by fish size for visual variety
+            const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
+            spawnCoinFlyToScore(deathPosition, coinCount, win > 0 ? win : fishReward);
+            
             // Record the win for RTP tracking (bet was already recorded when shot was fired)
             if (win > 0) {
                 recordWin(win);
                 gameState.balance += win;
                 gameState.score += Math.floor(win);
                 
-                // Issue #16: Play size-based coin sound
-                // Determine fish size from tier
-                let fishSize = 'small';
-                if (this.tier === 'tier4' || this.isBoss) {
-                    fishSize = 'boss';
-                } else if (this.tier === 'tier3') {
-                    fishSize = 'large';
-                } else if (this.tier === 'tier2') {
-                    fishSize = 'medium';
-                }
-                playCoinSound(fishSize);
-                
-                // Show reward popup
+                // Show reward popup only when actual payout occurs
                 showRewardPopup(deathPosition, win);
-                
-                // Issue #16: Enhanced death explosion effects based on fish size
-                spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
-                
-                // Issue #16: Coin fly animation to score counter
-                const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
-                spawnCoinFlyToScore(deathPosition, coinCount, win);
-            } else {
-                createHitParticles(deathPosition, 0x666666, 5);
-                // Issue #16: Play miss sound when no reward
-                playImpactSound('miss');
             }
+            // Note: No "miss" sound or gray particles - every kill now has coin feedback
         }
         
         // MEMORY LEAK FIX: Store respawn timer ID so it can be cancelled if fish is reused
