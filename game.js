@@ -2015,7 +2015,7 @@ const weaponGLBState = {
 const COIN_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
     filename: 'Coin.glb',
-    scale: 15,  // Scale factor for the coin model (reduced to match small fish size per user request)
+    scale: 8,  // Scale factor for the coin model (reduced by 50% per user request)
     rotationSpeed: 12  // Rotation speed for spinning animation
 };
 
@@ -5629,6 +5629,7 @@ function playSound(type) {
             
         case 'coin':
             // Issue #5: Satisfying "ka-ching!" coin drop/collection sound
+            // Volume reduced by 30% per user request
             oscillator.type = 'sine';
             // Rising "ching!" sound with sparkle
             oscillator.frequency.setValueAtTime(1200, now);
@@ -5636,10 +5637,10 @@ function playSound(type) {
             oscillator.frequency.setValueAtTime(2400, now + 0.1);
             oscillator.frequency.setValueAtTime(2000, now + 0.15);
             oscillator.frequency.setValueAtTime(2800, now + 0.2);
-            gainNode.gain.setValueAtTime(0.25, now);  // Louder
-            gainNode.gain.setValueAtTime(0.2, now + 0.1);
-            gainNode.gain.setValueAtTime(0.25, now + 0.15);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+            gainNode.gain.setValueAtTime(0.175, now);  // Reduced by 30% (was 0.25)
+            gainNode.gain.setValueAtTime(0.14, now + 0.1);  // Reduced by 30% (was 0.2)
+            gainNode.gain.setValueAtTime(0.175, now + 0.15);  // Reduced by 30% (was 0.25)
+            gainNode.gain.exponentialRampToValueAtTime(0.007, now + 0.35);  // Reduced by 30% (was 0.01)
             oscillator.start(now);
             oscillator.stop(now + 0.35);
             break;
@@ -6825,6 +6826,7 @@ function spawnWaterColumn(position, height) {
     }
 }
 
+<<<<<<< HEAD
 // ============================================================================
 // PUBG-STYLE SMOKE EFFECT SYSTEM FOR FISH DEATH
 // Procedural particle-based smoke effect with radial expansion
@@ -6834,6 +6836,7 @@ function spawnWaterColumn(position, height) {
 let cachedSmokeTexture = null;
 
 // Create procedural smoke texture using canvas (no external assets needed)
+// Enhanced for better visibility in underwater environment
 function createSmokeTexture() {
     if (cachedSmokeTexture) return cachedSmokeTexture;
     
@@ -6842,9 +6845,11 @@ function createSmokeTexture() {
     canvas.height = 128;
     const context = canvas.getContext('2d');
     const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
-    gradient.addColorStop(0, 'rgba(200, 200, 200, 0.6)');
-    gradient.addColorStop(0.5, 'rgba(150, 150, 150, 0.2)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    // Brighter, more opaque smoke for underwater visibility
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');  // Bright white center
+    gradient.addColorStop(0.3, 'rgba(220, 220, 220, 0.7)');  // Light gray
+    gradient.addColorStop(0.6, 'rgba(180, 180, 180, 0.4)');  // Medium gray
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');  // Transparent edge
     context.fillStyle = gradient;
     context.fillRect(0, 0, 128, 128);
     
@@ -6856,10 +6861,11 @@ function createSmokeTexture() {
 const activeSmokeEffects = [];
 
 // Smoke effect class - one-shot effect that auto-disposes
+// Enhanced for better visibility in underwater environment
 class SmokeEffect {
     constructor(position, scale = 1.0) {
-        this.particleCount = Math.floor(100 * scale);  // Scale particle count with fish size
-        this.duration = 2.0;  // Shorter duration for fish death (2 seconds)
+        this.particleCount = Math.floor(150 * scale);  // More particles for denser smoke
+        this.duration = 1.5;  // Slightly shorter for snappier effect
         this.particles = [];
         this.alive = true;
         this.elapsedTime = 0;
@@ -6874,20 +6880,20 @@ class SmokeEffect {
             this.positions[i * 3 + 1] = position.y;
             this.positions[i * 3 + 2] = position.z;
             
-            // Spherical velocity for radial expansion
+            // Spherical velocity for radial expansion - FASTER for more visible expansion
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos((Math.random() * 2) - 1);
-            const speed = (0.5 + Math.random() * 1.0) * scale;  // Faster for underwater
+            const speed = (1.5 + Math.random() * 2.0) * scale;  // 3x faster expansion
             
             this.particles.push({
                 velocity: new THREE.Vector3(
                     Math.sin(phi) * Math.cos(theta) * speed,
-                    Math.abs(Math.cos(phi) * speed) * 0.5,  // Less upward in underwater
+                    Math.abs(Math.cos(phi) * speed) * 0.8,  // More upward movement
                     Math.sin(phi) * Math.sin(theta) * speed
                 ),
                 life: 1.0,
                 decay: (1.0 / this.duration) / 60,
-                initialSize: (3 + Math.random() * 5) * scale
+                initialSize: (8 + Math.random() * 12) * scale  // 2-3x larger particles
             });
         }
         
@@ -6895,12 +6901,12 @@ class SmokeEffect {
         this.geometry.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1));
         
         this.material = new THREE.PointsMaterial({
-            size: 8 * scale,
+            size: 20 * scale,  // 2.5x larger base size
             map: createSmokeTexture(),
             transparent: true,
             depthWrite: false,
-            blending: THREE.NormalBlending,
-            opacity: 0.5,
+            blending: THREE.AdditiveBlending,  // Additive for brighter, more visible smoke
+            opacity: 0.7,  // Higher opacity
             sizeAttenuation: true
         });
         
