@@ -648,11 +648,12 @@
             align-items: center;
         }
         
-        #map-loading-overlay h2 {
-            color: #00bfff;
-            font-size: 32px;
+        #map-loading-overlay .game-title-img {
+            max-width: 320px;
+            width: 100%;
+            height: auto;
             margin-bottom: 20px;
-            text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
+            animation: titleShake 0.5s ease-in-out infinite;
         }
         
         #map-loading-overlay .loading-info {
@@ -1197,7 +1198,7 @@
     <!-- Map Loading Overlay -->
     <div id="map-loading-overlay">
         <div class="map-loading-container">
-            <h2>Loading 3D Map</h2>
+            <img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img">
             <div class="loading-info">Please wait while the underwater world loads...</div>
             <div id="map-loading-bar-container">
                 <div id="map-loading-bar"></div>
