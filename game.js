@@ -7521,12 +7521,32 @@ function initGameScene() {
     createUnderwaterParticles();
     
     updateLoadingProgress(92, 'Pre-initializing effect pools...');
-    // PERFORMANCE FIX: Pre-initialize pools to avoid first-shot stutter
+    // PERFORMANCE FIX: Pre-initialize ALL pools to avoid any first-use stutter
     // These pools were previously lazily initialized on first use, causing
-    // noticeable stutter when firing for the first time
+    // noticeable stutter when firing for the first time or when effects trigger
+    
+    // VFX geometry cache (must be initialized before fireball pool)
+    initVfxGeometryCache();
+    
+    // Muzzle flash ring pool (used by all weapons)
+    initMuzzleFlashCache();
+    
+    // Coin pool (used when fish die)
+    initCoinPool();
+    
+    // Explosion effect pool (used for hit effects)
+    initEffectPool();
+    
+    // Fireball material pool (used for hit effects)
+    initFireballMaterialPool();
+    
+    // Lightning arc pool (used by 5x weapon)
     initLightningArcPool();
+    
+    // Audio GainNode pool (used by all weapons)
     initAudioGainPool();
-    console.log('[PRELOAD] Lightning arc and audio pools pre-initialized');
+    
+    console.log('[PRELOAD] All effect pools pre-initialized (VFX geometry, muzzle flash, coin, effect, fireball, lightning arc, audio)');
     
     updateLoadingProgress(95, 'Setting up controls...');
     setupEventListeners();
