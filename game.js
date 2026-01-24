@@ -2084,32 +2084,17 @@ function createCoinModelClone() {
     const clone = coinGLBState.model.clone();
     clone.traverse((child) => {
         if (child.isMesh && child.material) {
-            // Clone the original material to preserve PBR properties (metalness, roughness)
+            // Clone the original material to preserve all PBR properties from the GLB
             child.material = child.material.clone();
             child.material.side = THREE.DoubleSide;
             
-            // FIX: The Coin.glb texture is orange/copper colored. To make it appear gold:
-            // 1. Tint the base color towards bright gold (this multiplies with texture)
-            // 2. Use strong emissive to add golden glow
-            // 3. Increase metalness for shiny gold appearance
-            
-            // Shift the base color towards bright gold (this tints the texture)
-            child.material.color = new THREE.Color(0xffee88);  // Bright yellow-gold tint
-            
-            // Add strong golden emissive glow
+            // IMPORTANT: Do NOT override material.color - let the GLB's original texture show
+            // The user has uploaded a new Coin.glb with correct gold color
+            // Only add subtle emissive for underwater visibility without washing out texture
             if (child.material.emissive) {
-                child.material.emissive = new THREE.Color(0xffd700);  // Pure gold emissive
-                child.material.emissiveIntensity = 0.8;  // Strong glow to shift color
-                // Use texture as emissive map to preserve $ symbol detail
-                if (child.material.map) {
-                    child.material.emissiveMap = child.material.map;
-                }
-            }
-            
-            // Increase metalness for shiny gold coin look
-            if (child.material.metalness !== undefined) {
-                child.material.metalness = 0.9;
-                child.material.roughness = 0.2;
+                // Use very subtle emissive to help visibility without overriding texture
+                child.material.emissive = new THREE.Color(0x332200);  // Very subtle warm glow
+                child.material.emissiveIntensity = 0.3;  // Low intensity to preserve texture details
             }
         }
     });
@@ -2131,9 +2116,9 @@ function getCoinModelFromPool() {
 function returnCoinModelToPool(model) {
     if (!model) return;
     model.visible = false;
-    // Reset position and scale
+    // Reset position but keep the original scale from COIN_GLB_CONFIG
     model.position.set(0, 0, 0);
-    model.scale.set(1, 1, 1);
+    model.scale.setScalar(COIN_GLB_CONFIG.scale);  // Restore original scale (50)
 }
 
 function cloneCoinModel() {
@@ -7212,10 +7197,9 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                 }
                 
                 // Scale up as it gets closer (magnetic effect)
-                // Use a reasonable scale for flying coins (7.5-11.25) for good visibility without being too large
-                // The Coin.glb model is ~2 units, so scale 7.5 = ~15 units wide
-                const baseScale = 7.5;
-                const scale = baseScale * (1 + t * 0.5);
+                // Use COIN_GLB_CONFIG.scale as base for consistent sizing with static coins
+                const baseScale = COIN_GLB_CONFIG.scale;  // 50
+                const scale = baseScale * (1 + t * 0.5);  // 50 to 75 during animation
                 this.coin.scale.setScalar(scale);
                 
                 // Fade trail
