@@ -12883,17 +12883,19 @@ class Bullet {
             // to the muzzle even if their center was 80+ units away.
             // 
             // New approach: Check distance to fish's bounding sphere EDGE, not center
-            // distToFishEdge = distFromOrigin - fishRadius
-            // If the edge is within minHitDistance, skip this fish
+            // We want: distFromOrigin - fishRadius >= minHitDistance
+            // Which is: distFromOrigin >= minHitDistance + fishRadius
+            // Squared: distFromOriginSq >= (minHitDistance + fishRadius)^2
+            // This avoids the sqrt() operation for better performance
             //
             // This prevents the "air wall" effect where bullets hit fish that are:
             // 1. Behind the player's view in FPS mode
             // 2. Swimming very close to the cannon
             // 3. Large fish whose bounding radius extends near the muzzle
-            const distFromOrigin = fishPos.distanceTo(this.origin);
-            const distToFishEdge = distFromOrigin - fishRadius;
+            const distFromOriginSq = fishPos.distanceToSquared(this.origin);
             const minHitDistance = 50;  // Minimum distance to fish's bounding sphere edge
-            if (distToFishEdge < minHitDistance) {
+            const minDistRequired = minHitDistance + fishRadius;
+            if (distFromOriginSq < minDistRequired * minDistRequired) {
                 continue;  // Skip fish whose bounding sphere is too close to muzzle
             }
             
