@@ -6179,12 +6179,14 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     if (weaponKey === '1x') {
         // Small water splash + white light ring explosion
         spawnWaterSplash(hitPos, 20);
-        spawnExpandingRing(hitPos, 0xffffff, 10, 30, 0.3);
+        // PERFORMANCE: Use optimized ring function with pooled geometry/material
+        spawnExpandingRingOptimized(hitPos, 0xffffff, 10, 30, 0.3);
         createHitParticles(hitPos, config.hitColor, 8);
         
     } else if (weaponKey === '3x') {
         // Medium fire explosion + fire particle burst
-        spawnExpandingRing(hitPos, config.hitColor, 15, 50, 0.4);
+        // PERFORMANCE: Use optimized ring function with pooled geometry/material
+        spawnExpandingRingOptimized(hitPos, config.hitColor, 15, 50, 0.4);
         spawnWaterSplash(hitPos, 35);
         // Fire particle burst for 3x weapon
         if (fireParticlePool.initialized) {
@@ -6693,7 +6695,8 @@ function spawnFishDeathEffect(position, fishSize, color) {
             spawnWaterSplash(position.clone(), 0.8);
             createHitParticles(position, color, 15);
             spawnCoinBurst(position.clone(), 5);
-            spawnExpandingRing(position.clone(), 0x44aaff, 30, 80);
+            // PERFORMANCE: Use optimized ring function with pooled geometry/material
+            spawnExpandingRingOptimized(position, 0x44aaff, 30, 80, 0.3);
             break;
             
         case 'large':
@@ -6701,7 +6704,8 @@ function spawnFishDeathEffect(position, fishSize, color) {
             spawnWaterSplash(position.clone(), 1.2);
             createHitParticles(position, color, 25);
             spawnCoinBurst(position.clone(), 12);
-            spawnExpandingRing(position.clone(), 0xffdd44, 50, 150);
+            // PERFORMANCE: Use optimized ring function with pooled geometry/material
+            spawnExpandingRingOptimized(position, 0xffdd44, 50, 150, 0.4);
             triggerScreenFlash(0xffffcc, 0.3, 150);
             triggerScreenShakeWithStrength(5, 200);
             break;
@@ -7070,8 +7074,8 @@ function spawnBossDeathEffect(position, color) {
             
             update(dt, elapsed) {
                 if (!this.triggered && elapsed >= this.delayMs) {
-                    // Trigger the expanding ring (already refactored to use VFX manager)
-                    spawnExpandingRing(this.position, 0xffdd00, 80 + this.ringIndex * 30, 200 + this.ringIndex * 50);
+                    // PERFORMANCE: Use optimized ring function with pooled geometry/material
+                    spawnExpandingRingOptimized(this.position, 0xffdd00, 80 + this.ringIndex * 30, 200 + this.ringIndex * 50, 0.5);
                     this.triggered = true;
                     return false; // Done after triggering
                 }
@@ -7111,6 +7115,9 @@ function applyExplosionKnockback(center, radius, strength) {
 
 // FIX: Track weapon switch animation state to prevent scale accumulation
 let weaponSwitchAnimationId = 0;
+
+// PERFORMANCE: Temp vector for weapon switch animation to avoid per-switch allocation
+const weaponSwitchTempPos = new THREE.Vector3();
 
 // Weapon switch animation
 function playWeaponSwitchAnimation(weaponKey) {
@@ -7153,9 +7160,11 @@ function playWeaponSwitchAnimation(weaponKey) {
     }, 100);
     
     // Spawn ring effect at cannon base
-    const basePos = cannonGroup.position.clone();
-    basePos.y += 30;
-    spawnExpandingRing(basePos, config.ringColor, 30, 60, 0.3);
+    // PERFORMANCE: Use temp vector instead of clone() to avoid per-switch allocation
+    weaponSwitchTempPos.copy(cannonGroup.position);
+    weaponSwitchTempPos.y += 30;
+    // PERFORMANCE: Use optimized ring function with pooled geometry/material
+    spawnExpandingRingOptimized(weaponSwitchTempPos, config.ringColor, 30, 60, 0.3);
 }
 
 // Cannon charge effect (for 5x and 8x weapons)
