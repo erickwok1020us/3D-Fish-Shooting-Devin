@@ -4826,7 +4826,8 @@ const AUDIO_CONFIG = {
         bossDead: 'Boss dead.mp3',
         coinReceive: 'Coin receive.mp3',
         coinCasino: 'Coins recevie-Casino.mp3',
-        background: 'background.mp3'
+        background: 'background.mp3',
+        menuClick: 'Menu click.mp3'
     },
     volumes: {
         weapon1x: 0.4,
@@ -4840,7 +4841,8 @@ const AUDIO_CONFIG = {
         bossDead: 0.7,
         coinReceive: 0.6,
         coinCasino: 0.5,
-        background: 0.3
+        background: 0.3,
+        menuClick: 0.5
     }
 };
 
@@ -4972,6 +4974,12 @@ function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
     
     return source;
 }
+
+// Play menu click sound - exposed globally for lobby UI
+function playMenuClick() {
+    playMp3Sound('menuClick', 1.0);
+}
+window.playMenuClick = playMenuClick;
 
 // Play coin collect sound with pitch adjustment for rising pitch effect
 // coinIndex: 0-based index of the coin in the collection sequence
@@ -12194,14 +12202,17 @@ class Fish {
             this.velocity.multiplyScalar(maxSpeed / currentSpeedFinal);
         }
         
-        // FIX: MINIMUM SPEED ENFORCEMENT for predator fish (sharks, marlin, hammerhead, etc.)
+        // FIX: MINIMUM SPEED ENFORCEMENT for predator fish (sharks, marlin, hammerhead, whale, etc.)
         // This ensures large predators always maintain forward momentum even when other forces
         // (boundary, turn-rate limiter, boids) would slow them down to a stop.
         // Applied AFTER all other velocity modifications to guarantee minimum movement.
         // Note: 'pattern' variable is already declared earlier in this function (line ~9240)
         // FIX: Added 'sShape' pattern (hammerhead) - was missing minimum speed enforcement
         // which caused hammerhead to be almost stationary while other fish moved normally
-        if ((pattern === 'burstAttack' || pattern === 'burstSprint' || pattern === 'sShape') &&
+        // FIX: Added 'cruise' pattern (blueWhale) - Boss whale was stuck in place because
+        // cruise pattern only applies weak random acceleration and has low maxTurnRate (0.3)
+        // Combined with boundary forces, the whale would slow to a stop with no recovery mechanism
+        if ((pattern === 'burstAttack' || pattern === 'burstSprint' || pattern === 'sShape' || pattern === 'cruise') &&
             this.patternState.phase !== 'stop') {
             const minSpeed = this.config.speedMin * 0.4; // 40% of speedMin as absolute minimum
             const currentSpeedAfterClamp = this.velocity.length();

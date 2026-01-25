@@ -1599,13 +1599,20 @@
                 };
             }
             
+            // FIX: Play click sound on menu button clicks
+            function playMenuClickSound() {
+                if (typeof window.playMenuClick === 'function') {
+                    window.playMenuClick();
+                }
+            }
+            
             function setupButtonHandlers() {
                 // Single Player
                 btnSinglePlayer.addEventListener('click', () => {
-                    if (!multiplayer.connected) {
-                        showError('Not connected to server');
-                        return;
-                    }
+                    playMenuClickSound();
+                    
+                    // FIX: Allow single player to start even without server connection
+                    // Single player mode doesn't require server - game works offline
                     // FIX: Use default player name - API will provide actual name
                     const playerName = 'Player';
                     
@@ -1618,12 +1625,15 @@
                         window.startSinglePlayerGame();
                     }
                     
-                    // Also notify server
-                    multiplayer.startSinglePlayer(playerName);
+                    // Notify server if connected (non-blocking)
+                    if (multiplayer && multiplayer.connected) {
+                        multiplayer.startSinglePlayer(playerName);
+                    }
                 });
                 
                 // Create Room
                 btnCreateRoom.addEventListener('click', () => {
+                    playMenuClickSound();
                     if (!multiplayer.connected) {
                         showError('Not connected to server');
                         return;
@@ -1635,6 +1645,7 @@
                 
                 // Join Room (show panel)
                 btnJoinRoom.addEventListener('click', () => {
+                    playMenuClickSound();
                     mainMenu.style.display = 'none';
                     joinRoomPanel.style.display = 'block';
                     roomCodeInput.focus();
@@ -1642,6 +1653,7 @@
                 
                 // Join Room Confirm
                 btnJoinConfirm.addEventListener('click', () => {
+                    playMenuClickSound();
                     const roomCode = roomCodeInput.value.trim().toUpperCase();
                     if (!roomCode || roomCode.length < 4) {
                         showError('Please enter a valid room code');
@@ -1658,6 +1670,7 @@
                 
                 // Join Room Cancel
                 btnJoinCancel.addEventListener('click', () => {
+                    playMenuClickSound();
                     joinRoomPanel.style.display = 'none';
                     mainMenu.style.display = 'flex';
                     roomCodeInput.value = '';
@@ -1665,6 +1678,7 @@
                 
                 // Ready Toggle
                 btnReady.addEventListener('click', () => {
+                    playMenuClickSound();
                     isReady = !isReady;
                     multiplayer.setReady(isReady);
                     btnReady.textContent = isReady ? 'Not Ready' : 'Ready';
@@ -1673,11 +1687,13 @@
                 
                 // Start Game (host only)
                 btnStartGame.addEventListener('click', () => {
+                    playMenuClickSound();
                     multiplayer.startGame();
                 });
                 
                 // Leave Room
                 btnLeaveRoom.addEventListener('click', () => {
+                    playMenuClickSound();
                     multiplayer.leaveRoom();
                     // Cleanup multiplayer game state to prevent Boss UI bug
                     if (typeof window.cleanupMultiplayerGame === 'function') {
