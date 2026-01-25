@@ -4245,10 +4245,13 @@ const BOSS_FISH_TYPES = [
 // Issue #15: List of boss-only species that should NOT spawn during normal gameplay
 // BUG FIX: Removed 'sardine' from boss-only list so small schooling fish appear during normal gameplay
 // This fixes the "too few fish" bug - sardine has count:30 which was being excluded
+// FIX: Added 'killerWhale' to boss-only list - Orca should only appear during Boss Mode
+// This prevents confusion where Orca appears after Boss Mode ends (it was spawning as normal fish)
 const BOSS_ONLY_SPECIES = BOSS_FISH_TYPES
     .filter(boss => boss.baseSpecies !== 'sardine')  // Keep sardine for normal gameplay
-    .map(boss => boss.baseSpecies);
-// Result: ['blueWhale', 'greatWhiteShark', 'mantaRay', 'marlin'] - sardine now spawns normally
+    .map(boss => boss.baseSpecies)
+    .concat(['killerWhale']);  // Orca is boss-only even though it's not in BOSS_FISH_TYPES base list
+// Result: ['blueWhale', 'greatWhiteShark', 'mantaRay', 'marlin', 'killerWhale'] - sardine now spawns normally
 
 // RTP FIX: List of ability fish that should NOT spawn during normal gameplay
 // These fish have special abilities (bomb, lightning, bonus, shield) that can trigger
@@ -4977,8 +4980,13 @@ function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
 
 // Play menu click sound - exposed globally for lobby UI
 // FIX: Changed playMp3Sound to playMP3Sound (correct case) - was causing button click to fail silently
+// FIX: Use weaponSwitch sound as fallback if menuClick is not loaded (Menu click.mp3 may not exist on R2)
 function playMenuClick() {
-    playMP3Sound('menuClick', 1.0);
+    if (audioBufferCache.has('menuClick')) {
+        playMP3Sound('menuClick', 1.0);
+    } else {
+        playMP3Sound('weapon1x', 0.3);
+    }
 }
 window.playMenuClick = playMenuClick;
 
@@ -16373,8 +16381,9 @@ function hideBossWaitingUI() {
 function showBossAlert(bossType) {
     if (!bossUIContainer) createBossUI();
     
-    // Issue #15: Show "BOSS MODE! 15s remaining" format at top center
-    document.getElementById('boss-countdown').textContent = `BOSS MODE! 15s remaining`;
+    // Issue #15: Show "BOSS MODE! 17s remaining" format at top center
+    // Extended from 15s to 17s to give 1x weapon users more time (14s needed for continuous fire)
+    document.getElementById('boss-countdown').textContent = `BOSS MODE! 17s remaining`;
     document.getElementById('boss-desc').textContent = `${bossType.name} - ${bossType.description}`;
     
     // Show alert text briefly for initial announcement
@@ -16706,8 +16715,9 @@ function spawnBossFish() {
         }
     }
     
-    // Start countdown
-    gameState.bossCountdown = 15;
+    // Start countdown - Extended from 15s to 17s to give 1x weapon users more time
+    // (1x weapon needs 14s continuous fire to kill ALPHA ORCA with 2800 HP)
+    gameState.bossCountdown = 17;
     gameState.bossActive = true;
     
     // Start boss time music
