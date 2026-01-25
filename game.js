@@ -7246,17 +7246,222 @@ function spawnCoinBurst(position, count) {
     }
 }
 
+// ============================================================================
+// DELAYED COIN COLLECTION SYSTEM
+// Coins stay at death location for 5-8 seconds with gentle spinning animation
+// Then all coins on screen are collected together and fly to score
+// ============================================================================
+
+const coinCollectionSystem = {
+    waitingCoins: [],           // Coins waiting to be collected
+    collectionTimer: 0,         // Time until next collection
+    collectionInterval: 5000,   // Base interval: 5 seconds
+    collectionIntervalRandom: 3000, // Random addition: 0-3 seconds (total 5-8 seconds)
+    isCollecting: false,        // Whether collection animation is in progress
+    initialized: false
+};
+
+function initCoinCollectionSystem() {
+    if (coinCollectionSystem.initialized) return;
+    coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval + 
+        Math.random() * coinCollectionSystem.collectionIntervalRandom;
+    coinCollectionSystem.initialized = true;
+}
+
+function spawnWaitingCoin(position) {
+    if (!particleGroup) return;
+    
+    const useCoinGLB = coinGLBState.loaded && coinGLBState.model;
+    if (!useCoinGLB) return; // Only support GLB coins for this system
+    
+    const coinModel = cloneCoinModel();
+    if (!coinModel) return;
+    
+    const offsetX = (Math.random() - 0.5) * 60;
+    const offsetY = (Math.random() - 0.5) * 60;
+    const offsetZ = (Math.random() - 0.5) * 60;
+    
+    coinModel.position.set(
+        position.x + offsetX,
+        position.y + offsetY,
+        position.z + offsetZ
+    );
+    coinModel.scale.setScalar(COIN_GLB_CONFIG.scale);
+    particleGroup.add(coinModel);
+    
+    coinCollectionSystem.waitingCoins.push({
+        mesh: coinModel,
+        spinAngle: Math.random() * Math.PI * 2,
+        spinSpeed: 1.5 + Math.random() * 1.0, // Gentle spin: 1.5-2.5 rad/s
+        bobOffset: Math.random() * Math.PI * 2,
+        baseY: coinModel.position.y,
+        state: 'waiting' // 'waiting' or 'collecting'
+    });
+}
+
+function updateCoinCollectionSystem(dt) {
+    if (!coinCollectionSystem.initialized) {
+        initCoinCollectionSystem();
+    }
+    
+    // Update collection timer
+    coinCollectionSystem.collectionTimer -= dt * 1000;
+    
+    // Trigger collection when timer expires and there are waiting coins
+    if (coinCollectionSystem.collectionTimer <= 0 && coinCollectionSystem.waitingCoins.length > 0) {
+        triggerCoinCollection();
+        // Reset timer for next collection
+        coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval + 
+            Math.random() * coinCollectionSystem.collectionIntervalRandom;
+    }
+    
+    // Update waiting coins (gentle spin and bob animation)
+    const time = performance.now() * 0.001;
+    for (let i = coinCollectionSystem.waitingCoins.length - 1; i >= 0; i--) {
+        const coin = coinCollectionSystem.waitingCoins[i];
+        
+        if (coin.state === 'waiting') {
+            // Gentle spinning animation
+            coin.spinAngle += coin.spinSpeed * dt;
+            
+            // Apply rotation around Y axis for spinning effect
+            coin.mesh.rotation.y = coin.spinAngle;
+            
+            // Gentle bobbing up and down
+            const bobAmount = Math.sin(time * 2 + coin.bobOffset) * 5;
+            coin.mesh.position.y = coin.baseY + bobAmount;
+            
+            // Billboard effect: face camera while spinning
+            if (camera) {
+                const cameraDir = new THREE.Vector3();
+                cameraDir.subVectors(camera.position, coin.mesh.position).normalize();
+                const yaw = Math.atan2(cameraDir.x, cameraDir.z);
+                coin.mesh.rotation.y = yaw + coin.spinAngle * 0.3; // Combine camera facing with gentle spin
+            }
+        }
+    }
+}
+
+function triggerCoinCollection() {
+    if (coinCollectionSystem.waitingCoins.length === 0) return;
+    if (!cannonMuzzle) return;
+    
+    // Get target position (cannon muzzle)
+    const targetPos = new THREE.Vector3();
+    cannonMuzzle.getWorldPosition(targetPos);
+    
+    // Start collection animation for all waiting coins
+    coinCollectionSystem.waitingCoins.forEach((coin, index) => {
+        if (coin.state !== 'waiting') return;
+        coin.state = 'collecting';
+        
+        // Stagger the collection slightly for visual effect
+        const delay = index * 30; // 30ms between each coin
+        
+        // Create fly-to-score animation
+        const startX = coin.mesh.position.x;
+        const startY = coin.mesh.position.y;
+        const startZ = coin.mesh.position.z;
+        const midX = (startX + targetPos.x) * 0.5;
+        const midY = (startY + targetPos.y) * 0.5 + 100 + Math.random() * 50;
+        const midZ = (startZ + targetPos.z) * 0.5;
+        
+        addVfxEffect({
+            type: 'coinCollect',
+            coin: coin,
+            delayMs: delay,
+            started: false,
+            startX: startX,
+            startY: startY,
+            startZ: startZ,
+            midX: midX,
+            midY: midY,
+            midZ: midZ,
+            targetX: targetPos.x,
+            targetY: targetPos.y,
+            targetZ: targetPos.z,
+            duration: (0.8 + Math.random() * 0.2) * 1000,
+            elapsedSinceStart: 0,
+            
+            update(dt, elapsed) {
+                if (!this.started) {
+                    if (elapsed < this.delayMs) return true;
+                    this.started = true;
+                    this.elapsedSinceStart = 0;
+                    
+                    // Stop spinning - show front face toward camera
+                    if (camera && this.coin.mesh) {
+                        this.coin.mesh.lookAt(camera.position);
+                    }
+                }
+                
+                this.elapsedSinceStart += dt * 1000;
+                const t = Math.min(this.elapsedSinceStart / this.duration, 1);
+                
+                // Quadratic bezier curve
+                const mt = 1 - t;
+                const mt2 = mt * mt;
+                const t2 = t * t;
+                
+                this.coin.mesh.position.x = mt2 * this.startX + 2 * mt * t * this.midX + t2 * this.targetX;
+                this.coin.mesh.position.y = mt2 * this.startY + 2 * mt * t * this.midY + t2 * this.targetY;
+                this.coin.mesh.position.z = mt2 * this.startZ + 2 * mt * t * this.midZ + t2 * this.targetZ;
+                
+                // Keep facing camera during flight (no spin)
+                if (camera) {
+                    this.coin.mesh.lookAt(camera.position);
+                }
+                
+                // Scale up slightly as it approaches
+                const baseScale = COIN_GLB_CONFIG.scale;
+                const scale = baseScale * (1 + t * 0.3);
+                this.coin.mesh.scale.setScalar(scale);
+                
+                if (t >= 1) {
+                    spawnScorePopEffect();
+                    return false;
+                }
+                return true;
+            },
+            
+            cleanup() {
+                if (this.coin && this.coin.mesh) {
+                    particleGroup.remove(this.coin.mesh);
+                    returnCoinModelToPool(this.coin.mesh);
+                    
+                    // Remove from waiting coins array
+                    const idx = coinCollectionSystem.waitingCoins.indexOf(this.coin);
+                    if (idx !== -1) {
+                        coinCollectionSystem.waitingCoins.splice(idx, 1);
+                    }
+                }
+            }
+        });
+    });
+}
+
 // Issue #16: Coin fly animation to cannon muzzle - REFACTORED to use VFX manager
 // PERFORMANCE: Uses Coin.glb model or cached geometry as fallback
 function spawnCoinFlyToScore(startPosition, coinCount, reward) {
     // FIX: Changed from undefined 'cannon' to 'cannonMuzzle' which is the actual gun barrel tip
     if (!particleGroup || !cannonMuzzle) return;
     
-    // PERFORMANCE: Use Coin.glb model if loaded, otherwise fallback to cached geometry
+    // NEW: Use delayed coin collection system - spawn waiting coins instead of immediate fly
     const useCoinGLB = coinGLBState.loaded && coinGLBState.model;
+    if (useCoinGLB) {
+        // Spawn coins that wait at death location
+        for (let i = 0; i < Math.min(coinCount, 15); i++) {
+            spawnWaitingCoin(startPosition);
+        }
+        return; // Don't use the old immediate fly animation
+    }
+    
+    // FALLBACK: Old immediate fly animation for non-GLB coins
+    
+    // PERFORMANCE: Use cached geometry as fallback (useCoinGLB already checked above)
     const cachedCoinGeometry = vfxGeometryCache.coinSphere;
     const cachedTrailGeometry = vfxGeometryCache.smallSphere;
-    if (!useCoinGLB && (!cachedCoinGeometry || !cachedTrailGeometry)) return;
+    if (!cachedCoinGeometry || !cachedTrailGeometry) return;
     
     // Get cannon muzzle position as target (where the gun barrel points)
     // PERFORMANCE: Reuse temp vector instead of creating new Vector3
@@ -9569,8 +9774,9 @@ const smoothAutoAimState = {
     currentYaw: 0,
     currentPitch: 0,
     initialized: false,
-    // Smooth factor: higher = faster transition (8 = ~125ms to reach target)
-    smoothSpeed: 8.0
+    // Smooth factor: lower = smoother transition (4 = ~250ms to reach target)
+    // Reduced from 8.0 to 4.0 for more cinematic, less jarring rotation
+    smoothSpeed: 4.0
 };
 
 function aimCannonAtFish(fish) {
@@ -9654,6 +9860,8 @@ function aimCannonAtFish(fish) {
 
 // Auto-fire at fish (for AUTO mode - bypasses mouse-based fireBullet)
 // PERFORMANCE: Uses pre-allocated temp vectors to avoid per-call allocations
+// FIX: Bullets now fire in the direction the cannon is VISUALLY pointing,
+// not directly at the target fish. This ensures visual consistency.
 function autoFireAtFish(targetFish) {
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
@@ -9677,9 +9885,20 @@ function autoFireAtFish(targetFish) {
     const muzzlePos = autoFireTempVectors.muzzlePos;
     cannonMuzzle.getWorldPosition(muzzlePos);
     
-    // PERFORMANCE: Reuse pre-allocated temp vector instead of clone().sub().normalize()
+    // FIX: Calculate bullet direction from cannon's CURRENT visual rotation
+    // This ensures bullets always fire where the cannon is visually pointing
     const direction = autoFireTempVectors.direction;
-    direction.copy(targetFish.group.position).sub(muzzlePos).normalize();
+    const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
+    const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+    
+    // Convert yaw/pitch to direction vector
+    // yaw: rotation around Y axis (left/right)
+    // pitch: rotation around X axis (up/down)
+    direction.set(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch)
+    ).normalize();
     
     // Fire based on weapon type
     if (weapon.type === 'spread') {
@@ -12573,8 +12792,9 @@ class Fish {
         
         const deathPosition = this.group.position.clone();
         
-        // Issue #16: Play weapon-specific hit sound (MP3 for 3x, 5x, 8x weapons)
-        playWeaponHitSound(weaponKey);
+        // HIT SOUND LOGIC: Do NOT play hit sound on fish death
+        // Hit sound is now played in bullet collision ONLY when fish survives
+        // On death, we only play coin sound (handled below)
         
         // Phase 2: Trigger special abilities on death
         if (this.config.ability) {
@@ -13357,23 +13577,27 @@ class Bullet {
                 // For 5x/8x: hitPos from segmentIntersectsSphere is already good (explosion effects)
                 
                 // Handle different weapon types
+                // HIT SOUND LOGIC: Play hit sound + show hit effect ONLY if fish survives
+                // If fish dies: only coin sound + smoke + coin drop (handled in Fish.die())
                 if (weapon.type === 'chain') {
                     // Chain lightning: hit first fish, then chain to nearby fish
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
-                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
                     
-                    // Trigger chain lightning effect
+                    // Trigger chain lightning effect (always show for visual feedback)
                     triggerChainLightning(fish, this.weaponKey, weapon.damage);
                     
-                    // Issue #14: Enhanced 5x hit effect (pass bullet direction for orientation)
-                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
+                    // Only show hit particles and hit effect if fish survived
+                    if (!killed) {
+                        createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
+                        spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
+                        playWeaponHitSound(this.weaponKey);
+                    }
                     
                 } else if (weapon.type === 'aoe' || weapon.type === 'superAoe') {
                     // AOE/SuperAOE explosion: damage all fish in radius
+                    // Note: triggerExplosion handles multiple fish, some may die, some may survive
+                    // We show the explosion effect regardless (it's the weapon's visual, not hit feedback)
                     triggerExplosion(bulletTempVectors.hitPos, this.weaponKey);
-                    
-                    // Issue #14/16: Enhanced 8x/20x hit effect (mega explosion)
-                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                     
                     // Issue #16: Extra screen shake for 20x super weapon
                     if (weapon.type === 'superAoe') {
@@ -13384,12 +13608,13 @@ class Bullet {
                 } else {
                     // Standard projectile or spread: single target damage
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
+                    
+                    // Only show hit particles and hit effect if fish survived
                     if (!killed) {
                         createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
+                        spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
+                        playWeaponHitSound(this.weaponKey);
                     }
-                    
-                    // Issue #14: Enhanced 1x/3x hit effect (pass bullet direction for planar orientation)
-                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                 }
                 
                 this.deactivate();
@@ -15484,6 +15709,9 @@ function animate() {
     // VFX MANAGER: Update all centralized visual effects (PERFORMANCE FIX)
     // This replaces individual requestAnimationFrame loops in each effect function
     updateVfxEffects(deltaTime, performance.now());
+    
+    // DELAYED COIN COLLECTION: Update coin collection system (coins wait 5-8 seconds before flying to score)
+    updateCoinCollectionSystem(deltaTime);
     
     // 3X WEAPON FIRE PARTICLES: Update fire trail particles
     updateFireParticles(deltaTime);
