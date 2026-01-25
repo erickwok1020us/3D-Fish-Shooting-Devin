@@ -16381,8 +16381,9 @@ function hideBossWaitingUI() {
 function showBossAlert(bossType) {
     if (!bossUIContainer) createBossUI();
     
-    // Issue #15: Show "BOSS MODE! 15s remaining" format at top center
-    document.getElementById('boss-countdown').textContent = `BOSS MODE! 15s remaining`;
+    // Issue #15: Show "BOSS MODE! 17s remaining" format at top center
+    // Extended from 15s to 17s to give 1x weapon users more time (14s needed for continuous fire)
+    document.getElementById('boss-countdown').textContent = `BOSS MODE! 17s remaining`;
     document.getElementById('boss-desc').textContent = `${bossType.name} - ${bossType.description}`;
     
     // Show alert text briefly for initial announcement
@@ -16714,8 +16715,9 @@ function spawnBossFish() {
         }
     }
     
-    // Start countdown
-    gameState.bossCountdown = 15;
+    // Start countdown - Extended from 15s to 17s to give 1x weapon users more time
+    // (1x weapon needs 14s continuous fire to kill ALPHA ORCA with 2800 HP)
+    gameState.bossCountdown = 17;
     gameState.bossActive = true;
     
     // Start boss time music
