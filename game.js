@@ -4804,6 +4804,7 @@ const AUDIO_CONFIG = {
         hit5x: '5X 武器擊中音效.mp3',
         hit8x: '8X 武器擊中音效.mp3',
         bossTime: 'Boss time.mp3',
+        bossDead: 'Boss dead.mp3',
         coinReceive: 'Coin receive.mp3',
         coinCasino: 'Coins recevie-Casino.mp3',
         background: 'background.mp3'
@@ -4817,6 +4818,7 @@ const AUDIO_CONFIG = {
         hit5x: 0.6,
         hit8x: 0.7,
         bossTime: 0.5,
+        bossDead: 0.7,
         coinReceive: 0.6,
         coinCasino: 0.5,
         background: 0.3
@@ -5081,6 +5083,33 @@ function stopBossMusicMP3() {
     }
     isBossMusicPlaying = false;
     console.log('[AUDIO] Boss time music stopped');
+}
+
+// Play Boss Dead sound effect when boss is killed in Boss Mode
+function playBossDeadSound() {
+    if (!audioContext || !musicGain) return;
+    
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
+    const buffer = audioBufferCache.get('bossDead');
+    if (!buffer) {
+        console.warn('[AUDIO] Boss dead sound not loaded');
+        return;
+    }
+    
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = AUDIO_CONFIG.volumes.bossDead;
+    
+    source.connect(gainNode);
+    gainNode.connect(musicGain);
+    source.start(0);
+    
+    console.log('[AUDIO] Boss dead sound played');
 }
 
 function initAudio() {
@@ -7382,6 +7411,25 @@ function updateCoinCollectionSystem(dt) {
         initCoinCollectionSystem();
     }
     
+    // SAFETY CHECK: Detect and recover from stuck state
+    // If isCollecting is true but coinsBeingCollected is 0, we're stuck
+    if (coinCollectionSystem.isCollecting && coinCollectionSystem.coinsBeingCollected <= 0) {
+        console.warn('[CoinCollection] Detected stuck state - recovering');
+        onCoinCollectionComplete();
+    }
+    
+    // SAFETY CHECK: If isCollecting has been true for too long (>10 seconds), force reset
+    if (coinCollectionSystem.isCollecting) {
+        coinCollectionSystem.collectingDuration = (coinCollectionSystem.collectingDuration || 0) + dt * 1000;
+        if (coinCollectionSystem.collectingDuration > 10000) {
+            console.warn('[CoinCollection] Collection timeout - force resetting');
+            stopCasinoCoinSound();
+            onCoinCollectionComplete();
+        }
+    } else {
+        coinCollectionSystem.collectingDuration = 0;
+    }
+    
     // Only count down timer when NOT collecting (wait for collection to finish first)
     if (!coinCollectionSystem.isCollecting) {
         coinCollectionSystem.collectionTimer -= dt * 1000;
@@ -7539,6 +7587,22 @@ function triggerCoinCollection() {
                     const idx = coinCollectionSystem.waitingCoins.indexOf(this.coin);
                     if (idx !== -1) {
                         coinCollectionSystem.waitingCoins.splice(idx, 1);
+                    }
+                    
+                    // CRITICAL FIX: If cleanup is called before coin reached cannon (e.g., VFX limit reached),
+                    // we must still decrement the counter to prevent isCollecting from being stuck forever
+                    if (this.coin.state === 'collecting' && coinCollectionSystem.coinsBeingCollected > 0) {
+                        coinCollectionSystem.coinsBeingCollected--;
+                        
+                        // Also update sound state
+                        if (casinoSoundState.isPlaying && casinoSoundState.coinsRemaining > 0) {
+                            casinoSoundState.coinsRemaining--;
+                        }
+                        
+                        // Check if all coins have been collected (or cleaned up)
+                        if (coinCollectionSystem.coinsBeingCollected <= 0) {
+                            onCoinCollectionComplete();
+                        }
                     }
                 }
             }
@@ -16723,8 +16787,8 @@ function showBossKilledMessage() {
     document.getElementById('boss-desc').textContent = 'Bonus rewards earned!';
     document.getElementById('boss-countdown').textContent = '';
     
-    // Issue #16: Play boss defeated victory fanfare
-    playSound('bossDefeated');
+    // Play Boss Dead sound effect from R2
+    playBossDeadSound();
     
     // Hide after 2 seconds
     setTimeout(() => {
