@@ -2088,11 +2088,15 @@ function createCoinModelClone() {
             child.material = child.material.clone();
             child.material.side = THREE.DoubleSide;
             
-            // CASINO GAME OPTIMIZATION: Use subtle gold emissive to enhance coin visibility
+            // CASINO GAME OPTIMIZATION: Use bright golden yellow emissive to enhance coin visibility
             // while preserving texture details from the GLB model
             if (child.material.emissive) {
-                child.material.emissive = new THREE.Color(0xffcc00);  // Bright gold emissive
-                child.material.emissiveIntensity = 0.25;  // Reduced to show texture details
+                child.material.emissive = new THREE.Color(0xFFD700);  // Pure gold color (more yellow)
+                child.material.emissiveIntensity = 0.35;  // Slightly increased for better golden glow
+            }
+            // Also tint the base color slightly more golden
+            if (child.material.color) {
+                child.material.color.lerp(new THREE.Color(0xFFD700), 0.3);  // Blend 30% gold into base color
             }
         }
     });
@@ -4946,6 +4950,47 @@ function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
     return source;
 }
 
+// Play coin collect sound with pitch adjustment for rising pitch effect
+// coinIndex: 0-based index of the coin in the collection sequence
+// totalCoins: total number of coins being collected
+function playCoinCollectSoundWithPitch(coinIndex, totalCoins) {
+    if (!audioContext || !sfxGain) return;
+    
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
+    const buffer = audioBufferCache.get('coinReceive');
+    if (!buffer) {
+        return;
+    }
+    
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    
+    // Calculate pitch multiplier: starts at 1.0, rises to 1.5 over the sequence
+    // This creates the "money keeps coming" excitement effect
+    const pitchMultiplier = 1.0 + (coinIndex / Math.max(totalCoins - 1, 1)) * 0.5;
+    source.playbackRate.value = pitchMultiplier;
+    
+    const gainNode = getGainNodeFromPool();
+    // Lower volume (0.3) since multiple coins will play in sequence
+    // Slightly increase volume as pitch rises for better perception
+    const volumeMultiplier = 0.25 + (coinIndex / Math.max(totalCoins - 1, 1)) * 0.15;
+    const baseVolume = AUDIO_CONFIG.volumes['coinReceive'] || 0.6;
+    gainNode.gain.value = baseVolume * volumeMultiplier;
+    
+    source.connect(gainNode);
+    source.start(0);
+    
+    source.onended = () => {
+        source.disconnect();
+        returnGainNodeToPool(gainNode);
+    };
+    
+    return source;
+}
+
 // Start background music (looping)
 function startBackgroundMusicMP3() {
     if (!audioContext || !musicGain) return;
@@ -7350,6 +7395,9 @@ function triggerCoinCollection() {
     const targetPos = new THREE.Vector3();
     cannonMuzzle.getWorldPosition(targetPos);
     
+    // Store total coins for pitch calculation
+    const totalCoins = coinCollectionSystem.waitingCoins.filter(c => c.state === 'waiting').length;
+    
     // Start collection animation for all waiting coins
     coinCollectionSystem.waitingCoins.forEach((coin, index) => {
         if (coin.state !== 'waiting') return;
@@ -7369,6 +7417,8 @@ function triggerCoinCollection() {
         addVfxEffect({
             type: 'coinCollect',
             coin: coin,
+            coinIndex: index,
+            totalCoins: totalCoins,
             delayMs: delay,
             started: false,
             startX: startX,
@@ -7418,6 +7468,8 @@ function triggerCoinCollection() {
                 this.coin.mesh.scale.setScalar(scale);
                 
                 if (t >= 1) {
+                    // Play coin sound with rising pitch when coin reaches cannon muzzle
+                    playCoinCollectSoundWithPitch(this.coinIndex, this.totalCoins);
                     spawnScorePopEffect();
                     return false;
                 }
@@ -12817,8 +12869,8 @@ class Fish {
             // Visual feedback - actual reward comes from server
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
             
-            // ALWAYS play coin sound and spawn coin effect on fish death (casino feedback)
-            playCoinSound(fishSize);
+            // Spawn coin effect - coin sound will play when each coin reaches cannon muzzle
+            // Sound plays with rising pitch for "money keeps coming" effect
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, this.config.reward);
         } else {
@@ -12856,11 +12908,9 @@ class Fish {
             // This provides consistent feedback to players - every kill feels rewarding
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
             
-            // ALWAYS play coin sound on fish death (casino feedback)
-            playCoinSound(fishSize);
-            
             // ALWAYS spawn coin visual effect based on fish size
-            // Coin count varies by fish size for visual variety
+            // Coin sound will play when each coin reaches cannon muzzle (like entering wallet)
+            // Sound plays with rising pitch for "money keeps coming" excitement effect
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, win > 0 ? win : fishReward);
             
