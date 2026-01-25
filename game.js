@@ -7557,7 +7557,7 @@ const casinoSoundState = {
     startTime: 0        // Track when sound started for proportional fade out
 };
 
-// Start playing casino coin collection sound (loops until stopped, max 5 seconds)
+// Start playing casino coin collection sound with continuous fade from start
 function startCasinoCoinSound(totalCoins) {
     if (!audioContext || !sfxGain) return;
     if (casinoSoundState.isPlaying) {
@@ -7577,7 +7577,18 @@ function startCasinoCoinSound(totalCoins) {
     casinoSoundState.source.loop = true; // Loop the sound continuously
     
     casinoSoundState.gainNode = audioContext.createGain();
-    casinoSoundState.gainNode.gain.value = AUDIO_CONFIG.volumes.coinCasino;
+    const startVolume = AUDIO_CONFIG.volumes.coinCasino;
+    
+    // Calculate expected duration based on coin count (roughly 100ms per coin, max 5 seconds)
+    const expectedDuration = Math.min(totalCoins * 0.1, casinoSoundState.maxDuration / 1000);
+    
+    // Start at full volume, then immediately begin fading to near-zero over the expected duration
+    // This creates a natural decay where sound gets quieter as coins are collected
+    casinoSoundState.gainNode.gain.setValueAtTime(startVolume, audioContext.currentTime);
+    casinoSoundState.gainNode.gain.exponentialRampToValueAtTime(
+        startVolume * 0.05,  // Fade to 5% of original volume
+        audioContext.currentTime + expectedDuration
+    );
     
     casinoSoundState.source.connect(casinoSoundState.gainNode);
     casinoSoundState.gainNode.connect(sfxGain);
@@ -7586,6 +7597,7 @@ function startCasinoCoinSound(totalCoins) {
     casinoSoundState.isPlaying = true;
     casinoSoundState.coinsRemaining = totalCoins;
     casinoSoundState.startTime = audioContext.currentTime;
+    casinoSoundState.expectedDuration = expectedDuration;
     
     // Safety: Auto-stop sound after max duration (5 seconds) to prevent endless sound
     if (casinoSoundState.timeoutId) {
@@ -7625,7 +7637,7 @@ function onCoinCollectionComplete() {
     coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval;
 }
 
-// Stop the casino coin sound with proportional fade out based on played duration
+// Stop the casino coin sound - volume is already fading, just do a quick final fade
 function stopCasinoCoinSound() {
     // Clear the auto-stop timeout
     if (casinoSoundState.timeoutId) {
@@ -7635,20 +7647,18 @@ function stopCasinoCoinSound() {
     
     if (!casinoSoundState.isPlaying || !casinoSoundState.source) return;
     
-    // Calculate proportional fade out duration based on how long the sound has played
-    // Fade out = 20% of played duration, clamped between 0.3s and 1.5s
-    const playedDuration = audioContext ? audioContext.currentTime - casinoSoundState.startTime : 1;
-    const fadeOutDuration = Math.min(Math.max(playedDuration * 0.2, 0.3), 1.5);
+    // Since volume has been fading from the start, just do a quick 200ms final fade
+    const finalFadeDuration = 0.2;
     
     try {
-        // Use exponential ramp for more natural-sounding fade (human ear perceives volume logarithmically)
         if (casinoSoundState.gainNode && audioContext) {
+            // Cancel any scheduled ramps and do a quick final fade from current volume
+            casinoSoundState.gainNode.gain.cancelScheduledValues(audioContext.currentTime);
             const currentGain = casinoSoundState.gainNode.gain.value;
             casinoSoundState.gainNode.gain.setValueAtTime(currentGain, audioContext.currentTime);
-            // Exponential ramp needs a small non-zero target value
             casinoSoundState.gainNode.gain.exponentialRampToValueAtTime(
                 0.001, 
-                audioContext.currentTime + fadeOutDuration
+                audioContext.currentTime + finalFadeDuration
             );
         }
         
@@ -7666,7 +7676,8 @@ function stopCasinoCoinSound() {
             casinoSoundState.isPlaying = false;
             casinoSoundState.coinsRemaining = 0;
             casinoSoundState.startTime = 0;
-        }, fadeOutDuration * 1000);
+            casinoSoundState.expectedDuration = 0;
+        }, finalFadeDuration * 1000);
     } catch (e) {
         // Reset state on error
         casinoSoundState.source = null;
@@ -7674,6 +7685,7 @@ function stopCasinoCoinSound() {
         casinoSoundState.isPlaying = false;
         casinoSoundState.coinsRemaining = 0;
         casinoSoundState.startTime = 0;
+        casinoSoundState.expectedDuration = 0;
     }
 }
 
