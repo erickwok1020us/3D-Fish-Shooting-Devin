@@ -4976,8 +4976,9 @@ function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
 }
 
 // Play menu click sound - exposed globally for lobby UI
+// FIX: Changed playMp3Sound to playMP3Sound (correct case) - was causing button click to fail silently
 function playMenuClick() {
-    playMp3Sound('menuClick', 1.0);
+    playMP3Sound('menuClick', 1.0);
 }
 window.playMenuClick = playMenuClick;
 
