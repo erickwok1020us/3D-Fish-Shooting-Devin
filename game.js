@@ -7633,11 +7633,11 @@ function stopCasinoCoinSound() {
     
     if (!casinoSoundState.isPlaying || !casinoSoundState.source) return;
     
-    // Fade out duration: 0.5 seconds for smooth, gradual ending
-    const fadeOutDuration = 0.5;
+    // Fade out duration: 1 second for smooth, natural ending
+    const fadeOutDuration = 1.0;
     
     try {
-        // Gradual fade out for smooth ending (0.5 seconds)
+        // Gradual fade out for smooth ending (1 second)
         if (casinoSoundState.gainNode && audioContext) {
             casinoSoundState.gainNode.gain.linearRampToValueAtTime(
                 0, 
