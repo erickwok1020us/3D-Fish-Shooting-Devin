@@ -7623,7 +7623,7 @@ function onCoinCollectionComplete() {
     coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval;
 }
 
-// Stop the casino coin sound with a quick fade out
+// Stop the casino coin sound with a gradual fade out
 function stopCasinoCoinSound() {
     // Clear the auto-stop timeout
     if (casinoSoundState.timeoutId) {
@@ -7633,16 +7633,19 @@ function stopCasinoCoinSound() {
     
     if (!casinoSoundState.isPlaying || !casinoSoundState.source) return;
     
+    // Fade out duration: 0.5 seconds for smooth, gradual ending
+    const fadeOutDuration = 0.5;
+    
     try {
-        // Quick fade out to avoid audio pop
+        // Gradual fade out for smooth ending (0.5 seconds)
         if (casinoSoundState.gainNode && audioContext) {
             casinoSoundState.gainNode.gain.linearRampToValueAtTime(
                 0, 
-                audioContext.currentTime + 0.1
+                audioContext.currentTime + fadeOutDuration
             );
         }
         
-        // Stop after fade
+        // Stop after fade completes
         setTimeout(() => {
             try {
                 if (casinoSoundState.source) {
@@ -7655,7 +7658,7 @@ function stopCasinoCoinSound() {
             casinoSoundState.gainNode = null;
             casinoSoundState.isPlaying = false;
             casinoSoundState.coinsRemaining = 0;
-        }, 100);
+        }, fadeOutDuration * 1000);
     } catch (e) {
         // Reset state on error
         casinoSoundState.source = null;
