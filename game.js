@@ -7497,8 +7497,7 @@ function triggerCoinCollection() {
                 this.coin.mesh.scale.setScalar(scale);
                 
                 if (t >= 1) {
-                    // Play coin sound with rising pitch when coin reaches cannon muzzle
-                    playCoinCollectSoundWithPitch(this.coinIndex, this.totalCoins);
+                    // Coin reached cannon muzzle - no sound here, sound plays on kill
                     spawnScorePopEffect();
                     return false;
                 }
@@ -12924,8 +12923,10 @@ class Fish {
             // Visual feedback - actual reward comes from server
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
             
-            // Spawn coin effect - coin sound will play when each coin reaches cannon muzzle
-            // Sound plays with rising pitch for "money keeps coming" effect
+            // Play coin sound on fish kill (not on collection)
+            playCoinSound(fishSize);
+            
+            // Spawn coin visual effect - no sound on collection
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, this.config.reward);
         } else {
@@ -12963,9 +12964,10 @@ class Fish {
             // This provides consistent feedback to players - every kill feels rewarding
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
             
-            // ALWAYS spawn coin visual effect based on fish size
-            // Coin sound will play when each coin reaches cannon muzzle (like entering wallet)
-            // Sound plays with rising pitch for "money keeps coming" excitement effect
+            // Play coin sound on fish kill (not on collection)
+            playCoinSound(fishSize);
+            
+            // ALWAYS spawn coin visual effect based on fish size - no sound on collection
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, win > 0 ? win : fishReward);
             
@@ -14859,10 +14861,13 @@ function setupEventListeners() {
         
         // FPS MODE: Re-request Pointer Lock if it was lost (e.g., user pressed Escape)
         // This prevents the mouse from leaving the window when moved
+        // FIX: If pointer is not locked, ONLY lock pointer without firing bullet
+        // This prevents players from spending money just to lock the pointer
         if (gameState.viewMode === 'fps' && document.pointerLockElement !== container) {
             if (container.requestPointerLock) {
                 container.requestPointerLock();
             }
+            return; // Don't fire bullet - just lock pointer
         }
         
         fireBullet(e.clientX, e.clientY);
@@ -16448,6 +16453,12 @@ function updateBossEvent(deltaTime) {
             hideBossUI();
             hideBossWaitingUI();
         }
+        return;
+    }
+    
+    // Guard: Don't run boss system during loading - wait for game to fully load
+    // This prevents boss mode from starting while assets are still loading on slow computers
+    if (gameState.isLoading) {
         return;
     }
     
