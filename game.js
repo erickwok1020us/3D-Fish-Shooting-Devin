@@ -7331,17 +7331,17 @@ function spawnCoinBurst(position, count) {
 const coinCollectionSystem = {
     waitingCoins: [],           // Coins waiting to be collected
     collectionTimer: 0,         // Time until next collection
-    collectionInterval: 5000,   // Base interval: 5 seconds
-    collectionIntervalRandom: 3000, // Random addition: 0-3 seconds (total 5-8 seconds)
+    collectionInterval: 8000,   // Wait 8 seconds AFTER collection finishes before next collection
     isCollecting: false,        // Whether collection animation is in progress
     initialized: false,
-    pendingReward: 0            // Total reward waiting to be collected (balance updates on coin arrival)
+    pendingReward: 0,           // Total reward waiting to be collected (balance updates on coin arrival)
+    maxCollectionTime: 5000,    // Maximum 5 seconds to collect all coins
+    coinsBeingCollected: 0      // Track how many coins are still flying to cannon
 };
 
 function initCoinCollectionSystem() {
     if (coinCollectionSystem.initialized) return;
-    coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval + 
-        Math.random() * coinCollectionSystem.collectionIntervalRandom;
+    coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval;
     coinCollectionSystem.initialized = true;
 }
 
@@ -7382,15 +7382,15 @@ function updateCoinCollectionSystem(dt) {
         initCoinCollectionSystem();
     }
     
-    // Update collection timer
-    coinCollectionSystem.collectionTimer -= dt * 1000;
-    
-    // Trigger collection when timer expires and there are waiting coins
-    if (coinCollectionSystem.collectionTimer <= 0 && coinCollectionSystem.waitingCoins.length > 0) {
-        triggerCoinCollection();
-        // Reset timer for next collection
-        coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval + 
-            Math.random() * coinCollectionSystem.collectionIntervalRandom;
+    // Only count down timer when NOT collecting (wait for collection to finish first)
+    if (!coinCollectionSystem.isCollecting) {
+        coinCollectionSystem.collectionTimer -= dt * 1000;
+        
+        // Trigger collection when timer expires and there are waiting coins
+        if (coinCollectionSystem.collectionTimer <= 0 && coinCollectionSystem.waitingCoins.length > 0) {
+            triggerCoinCollection();
+            // Timer will be reset when collection finishes (in onCoinCollectionComplete)
+        }
     }
     
     // Update waiting coins (gentle spin and bob animation)
@@ -7430,20 +7430,27 @@ function triggerCoinCollection() {
     
     // Store total coins for pitch calculation
     const totalCoins = coinCollectionSystem.waitingCoins.filter(c => c.state === 'waiting').length;
+    if (totalCoins === 0) return;
     
-    // CASINO EFFECT: Start continuous casino sound that plays until all coins are collected
+    // Mark collection as in progress
+    coinCollectionSystem.isCollecting = true;
+    coinCollectionSystem.coinsBeingCollected = totalCoins;
+    
+    // CASINO EFFECT: Start continuous casino sound that plays until all coins are collected (max 5 seconds)
     startCasinoCoinSound(totalCoins);
+    
+    // TIMING: Calculate delay between coins to fit all coins within maxCollectionTime (5 seconds)
+    // Reserve 800ms for the last coin's flight time, so delays must fit in (5000 - 800) = 4200ms
+    const maxDelayTime = coinCollectionSystem.maxCollectionTime - 800;
+    const baseDelay = totalCoins > 1 ? Math.min(150, maxDelayTime / (totalCoins - 1)) : 0;
     
     // Start collection animation for all waiting coins
     coinCollectionSystem.waitingCoins.forEach((coin, index) => {
         if (coin.state !== 'waiting') return;
         coin.state = 'collecting';
         
-        // CASINO EFFECT: Stagger coins with longer delays for more satisfying collection
-        // Each coin starts flying 150-250ms after the previous one
-        // This creates a longer, more casino-like collection animation
-        const baseDelay = 150; // Base delay between coins (ms)
-        const randomDelay = Math.random() * 100; // Random 0-100ms additional delay
+        // CASINO EFFECT: Stagger coins with dynamic delays to fit within 5 seconds
+        const randomDelay = Math.random() * Math.min(50, baseDelay * 0.3);
         const delay = index * baseDelay + randomDelay;
         
         // Create fly-to-score animation
@@ -7544,10 +7551,12 @@ const casinoSoundState = {
     source: null,
     gainNode: null,
     isPlaying: false,
-    coinsRemaining: 0
+    coinsRemaining: 0,
+    maxDuration: 5000,  // Maximum 5 seconds of casino sound
+    timeoutId: null     // Timeout to auto-stop sound after max duration
 };
 
-// Start playing casino coin collection sound (loops until stopped)
+// Start playing casino coin collection sound (loops until stopped, max 5 seconds)
 function startCasinoCoinSound(totalCoins) {
     if (!audioContext || !sfxGain) return;
     if (casinoSoundState.isPlaying) {
@@ -7575,21 +7584,53 @@ function startCasinoCoinSound(totalCoins) {
     
     casinoSoundState.isPlaying = true;
     casinoSoundState.coinsRemaining = totalCoins;
+    
+    // Safety: Auto-stop sound after max duration (5 seconds) to prevent endless sound
+    if (casinoSoundState.timeoutId) {
+        clearTimeout(casinoSoundState.timeoutId);
+    }
+    casinoSoundState.timeoutId = setTimeout(() => {
+        stopCasinoCoinSound();
+    }, casinoSoundState.maxDuration);
 }
 
 // Called when a coin reaches the cannon - decrements counter and stops sound when all coins collected
 function onCoinCollected() {
-    if (!casinoSoundState.isPlaying) return;
+    // Decrement coin counter for collection system
+    coinCollectionSystem.coinsBeingCollected--;
     
-    casinoSoundState.coinsRemaining--;
-    
-    if (casinoSoundState.coinsRemaining <= 0) {
-        stopCasinoCoinSound();
+    // Decrement sound counter
+    if (casinoSoundState.isPlaying) {
+        casinoSoundState.coinsRemaining--;
+        
+        if (casinoSoundState.coinsRemaining <= 0) {
+            stopCasinoCoinSound();
+        }
     }
+    
+    // Check if all coins have been collected
+    if (coinCollectionSystem.coinsBeingCollected <= 0) {
+        onCoinCollectionComplete();
+    }
+}
+
+// Called when all coins in a collection batch have reached the cannon
+function onCoinCollectionComplete() {
+    coinCollectionSystem.isCollecting = false;
+    coinCollectionSystem.coinsBeingCollected = 0;
+    
+    // Reset timer - wait 8 seconds before next collection
+    coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval;
 }
 
 // Stop the casino coin sound with a quick fade out
 function stopCasinoCoinSound() {
+    // Clear the auto-stop timeout
+    if (casinoSoundState.timeoutId) {
+        clearTimeout(casinoSoundState.timeoutId);
+        casinoSoundState.timeoutId = null;
+    }
+    
     if (!casinoSoundState.isPlaying || !casinoSoundState.source) return;
     
     try {
