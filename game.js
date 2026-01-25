@@ -3699,6 +3699,41 @@ function showComboEndNotification(finalCount) {
 
 // ==================== PERFORMANCE OPTIMIZATION FUNCTIONS ====================
 
+// FIX: Helper function to recursively set mesh visibility
+// This handles nested wrapper structures like Manta Ray's mantaCorrectionWrapper -> mantaPitchWrapper -> meshes
+function setMeshVisibilityRecursive(object, visible, exceptMesh = null) {
+    if (!object) return;
+    
+    if (object.isMesh) {
+        if (object !== exceptMesh) {
+            object.visible = visible;
+        }
+    }
+    
+    if (object.children && object.children.length > 0) {
+        for (let i = 0; i < object.children.length; i++) {
+            setMeshVisibilityRecursive(object.children[i], visible, exceptMesh);
+        }
+    }
+}
+
+// FIX: Helper function to recursively dispose mesh geometries in a subtree
+// This properly cleans up nested structures like Manta Ray when GLB model loads
+// Note: Does NOT dispose materials as they are cached and shared across fish
+function disposeMeshSubtreeGeometries(object) {
+    if (!object) return;
+    
+    if (object.isMesh && object.geometry) {
+        object.geometry.dispose();
+    }
+    
+    if (object.children && object.children.length > 0) {
+        for (let i = 0; i < object.children.length; i++) {
+            disposeMeshSubtreeGeometries(object.children[i]);
+        }
+    }
+}
+
 // Update frustum culling and LOD for fish
 function updatePerformanceOptimizations(deltaTime) {
     if (!camera) return;
@@ -3787,43 +3822,27 @@ function updatePerformanceOptimizations(deltaTime) {
                 const childCount = children.length;
                 
                 if (newLodLevel === 0) {
-                    // High detail - full shadows, smooth shading
+                    // High detail - full shadows
+                    // FIX: Removed flatShading modification - it was modifying shared cached materials
+                    // which caused all fish using the same material to be affected
                     fish.body.castShadow = true;
-                    if (fish.body.material) {
-                        fish.body.material.flatShading = false;
-                    }
-                    // PERFORMANCE: Show all child meshes at high detail (indexed loop)
-                    for (let j = 0; j < childCount; j++) {
-                        const child = children[j];
-                        if (child.isMesh) child.visible = true;
-                    }
+                    // PERFORMANCE: Show all child meshes at high detail
+                    // FIX: Use recursive helper to handle nested wrappers (e.g., Manta Ray)
+                    setMeshVisibilityRecursive(fish.group, true);
                 } else if (newLodLevel === 1) {
-                    // Medium detail - no shadows, smooth shading
+                    // Medium detail - no shadows
+                    // FIX: Removed flatShading modification - shared materials issue
                     fish.body.castShadow = false;
-                    if (fish.body.material) {
-                        fish.body.material.flatShading = false;
-                    }
-                    // PERFORMANCE: Hide small detail meshes (indexed loop)
-                    for (let j = 0; j < childCount; j++) {
-                        const child = children[j];
-                        if (child.isMesh && child !== fish.body && child !== fish.tail) {
-                            const childSize = child.geometry?.boundingSphere?.radius || 0;
-                            child.visible = childSize > 5;
-                        }
-                    }
+                    // PERFORMANCE: Show all meshes at medium detail (simplified from size-based hiding)
+                    // FIX: Use recursive helper to handle nested wrappers
+                    setMeshVisibilityRecursive(fish.group, true);
                 } else {
-                    // Low detail - no shadows, flat shading, minimal geometry
+                    // Low detail - no shadows, minimal geometry
+                    // FIX: Removed flatShading modification - shared materials issue
                     fish.body.castShadow = false;
-                    if (fish.body.material) {
-                        fish.body.material.flatShading = true;
-                    }
-                    // PERFORMANCE: Only show body at low detail (indexed loop)
-                    for (let j = 0; j < childCount; j++) {
-                        const child = children[j];
-                        if (child.isMesh && child !== fish.body) {
-                            child.visible = false;
-                        }
-                    }
+                    // PERFORMANCE: Only show body at low detail
+                    // FIX: Use recursive helper to handle nested wrappers
+                    setMeshVisibilityRecursive(fish.group, false, fish.body);
                 }
             }
             
@@ -10322,7 +10341,17 @@ class Fish {
         // Apply global scale multiplier to procedural meshes (same as GLB models)
         const baseSize = this.config.size;
         const scaleMultiplier = CONFIG.glbModelScaleMultiplier || 1.0;
-        const size = baseSize * scaleMultiplier;
+        let size = baseSize * scaleMultiplier;
+        
+        // FIX: Cap procedural mesh size to prevent massive geometry when GLB fails to load
+        // Boss fish like GOLDEN MANTA can have size = 90 * 2.2 * 3.0 = 594 units
+        // This creates a massive flat shape that dominates the screen
+        // Cap at 200 units - GLB models will still load at correct size via tryLoadGLBForFish
+        const MAX_PROCEDURAL_MESH_SIZE = 200;
+        if (size > MAX_PROCEDURAL_MESH_SIZE) {
+            console.log(`[FISH] Capping procedural mesh size from ${size.toFixed(1)} to ${MAX_PROCEDURAL_MESH_SIZE} for form=${this.config.form || 'standard'}`);
+            size = MAX_PROCEDURAL_MESH_SIZE;
+        }
         const color = this.config.color;
         const secondaryColor = this.config.secondaryColor || color;
         const form = this.config.form || 'standard';
@@ -10563,13 +10592,15 @@ class Fish {
                 this.group.add(this.glbCorrectionWrapper);
                 
                 // Remove procedural mesh children (keep GLB only)
-                // FIX: Don't dispose cached materials - they are shared across fish
+                // FIX: Use recursive disposal to handle nested structures like Manta Ray
+                // Manta Ray has: group -> mantaCorrectionWrapper -> mantaPitchWrapper -> meshes
+                // Simple child.geometry.dispose() misses the nested meshes, causing memory leak
                 proceduralChildren.forEach(child => {
                     this.group.remove(child);
-                    // Only dispose geometry, NOT materials (they come from cache and are shared)
-                    if (child.geometry) child.geometry.dispose();
-                    // FIX: Skip material disposal - materials are cached and shared
-                    // Disposing them would corrupt rendering for other fish
+                    // FIX: Recursively dispose all geometries in the subtree
+                    // This properly handles nested wrappers like Manta Ray's structure
+                    // Note: Does NOT dispose materials as they are cached and shared
+                    disposeMeshSubtreeGeometries(child);
                 });
                 
                 // FIX: Store GLB model root separately - don't overwrite this.body
