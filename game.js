@@ -5234,6 +5234,36 @@ function playWeaponShotSynthesized(weaponKey) {
     }
 }
 
+// Play single coin collect sound when coin reaches cannon muzzle
+// Lower volume than full playCoinSound to avoid being too loud when many coins collect
+function playSingleCoinCollectSound() {
+    if (!audioContext || !sfxGain) return;
+    
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
+    // Use MP3 coin sound from R2 bucket with lower volume
+    if (audioBufferCache.has('coinReceive')) {
+        // Lower volume (0.3) since multiple coins will play in sequence
+        playMP3Sound('coinReceive', 0.3);
+    } else {
+        // Fallback to simple synthesized sound
+        const now = audioContext.currentTime;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1400, now);
+        osc.frequency.setValueAtTime(1800, now + 0.03);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.connect(gain);
+        gain.connect(sfxGain);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    }
+}
+
 // Issue #16: Fish kill coin sounds based on fish size
 function playCoinSound(fishSize) {
     if (!audioContext || !sfxGain) return;
@@ -7418,6 +7448,8 @@ function triggerCoinCollection() {
                 this.coin.mesh.scale.setScalar(scale);
                 
                 if (t >= 1) {
+                    // Play coin sound when coin reaches cannon muzzle (like entering wallet)
+                    playSingleCoinCollectSound();
                     spawnScorePopEffect();
                     return false;
                 }
@@ -12817,8 +12849,7 @@ class Fish {
             // Visual feedback - actual reward comes from server
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
             
-            // ALWAYS play coin sound and spawn coin effect on fish death (casino feedback)
-            playCoinSound(fishSize);
+            // Spawn coin effect - coin sound will play when each coin reaches cannon muzzle
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, this.config.reward);
         } else {
@@ -12856,10 +12887,8 @@ class Fish {
             // This provides consistent feedback to players - every kill feels rewarding
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
             
-            // ALWAYS play coin sound on fish death (casino feedback)
-            playCoinSound(fishSize);
-            
             // ALWAYS spawn coin visual effect based on fish size
+            // Coin sound will play when each coin reaches cannon muzzle (like entering wallet)
             // Coin count varies by fish size for visual variety
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, win > 0 ? win : fishReward);
