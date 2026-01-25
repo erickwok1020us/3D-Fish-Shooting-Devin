@@ -6582,37 +6582,66 @@ function spawnWaterSplash(position, size) {
     }
 }
 
-// Spawn shockwave effect (for 5x weapon) - REFACTORED to use VFX manager
+// Spawn shockwave effect (for 5x weapon) - PARTICLE-BASED VERSION
+// Replaced RingGeometry with expanding particle ring for better visual quality
 function spawnShockwave(position, color, radius) {
     if (!scene) return;
     
-    const geometry = new THREE.RingGeometry(1, 5, 32);
-    const material = new THREE.MeshBasicMaterial({
+    const particleCount = 48;
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+        const angle = (i / particleCount) * Math.PI * 2;
+        positions[i * 3] = position.x;
+        positions[i * 3 + 1] = position.y;
+        positions[i * 3 + 2] = position.z;
+        
+        velocities.push({
+            x: Math.cos(angle) * radius * 2,
+            y: (Math.random() - 0.5) * 20,
+            z: Math.sin(angle) * radius * 2
+        });
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    const material = new THREE.PointsMaterial({
         color: color,
+        size: 8,
         transparent: true,
-        opacity: 0.7,
-        side: THREE.DoubleSide
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true
     });
     
-    const shockwave = new THREE.Mesh(geometry, material);
-    shockwave.position.copy(position);
-    shockwave.rotation.x = -Math.PI / 2;
-    scene.add(shockwave);
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
     
-    // Register with VFX manager instead of using own RAF loop
     addVfxEffect({
-        type: 'shockwave',
-        mesh: shockwave,
+        type: 'shockwaveParticles',
+        mesh: particles,
         geometry: geometry,
         material: material,
-        duration: 500, // 0.5s in ms
-        radius: radius,
+        velocities: velocities,
+        duration: 400,
         
         update(dt, elapsed) {
             const progress = Math.min(elapsed / this.duration, 1);
-            const scale = 1 + (this.radius / 5) * progress;
-            this.mesh.scale.set(scale, scale, scale);
-            this.material.opacity = 0.7 * (1 - progress);
+            const positions = this.geometry.attributes.position.array;
+            
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] += this.velocities[i].x * dt;
+                positions[i * 3 + 1] += this.velocities[i].y * dt;
+                positions[i * 3 + 2] += this.velocities[i].z * dt;
+            }
+            this.geometry.attributes.position.needsUpdate = true;
+            
+            this.material.opacity = 0.9 * (1 - progress);
+            this.material.size = 8 + progress * 12;
+            
             return progress < 1;
         },
         
@@ -7468,8 +7497,7 @@ function triggerCoinCollection() {
                 this.coin.mesh.scale.setScalar(scale);
                 
                 if (t >= 1) {
-                    // Play coin sound with rising pitch when coin reaches cannon muzzle
-                    playCoinCollectSoundWithPitch(this.coinIndex, this.totalCoins);
+                    // Coin reached cannon muzzle - no sound here, sound plays on kill
                     spawnScorePopEffect();
                     return false;
                 }
@@ -9520,19 +9548,45 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         // Issue #13: Removed topArmor (red/black top piece) that user said "looks wrong"
         // The barrel should be fully visible without any plate-like obstruction on top
         
-        // Flame ring
-        const flameRingGeometry = new THREE.TorusGeometry(22, 4, 8, 24);
-        const flameRingMaterial = new THREE.MeshStandardMaterial({
+        // Flame ring - PARTICLE-BASED VERSION
+        // Replaced TorusGeometry with animated flame particles for better visual quality
+        const flameParticleCount = 24;
+        const flamePositions = new Float32Array(flameParticleCount * 3);
+        const flameSizes = new Float32Array(flameParticleCount);
+        const flameRadius = 22;
+        
+        for (let i = 0; i < flameParticleCount; i++) {
+            const angle = (i / flameParticleCount) * Math.PI * 2;
+            flamePositions[i * 3] = Math.cos(angle) * flameRadius;
+            flamePositions[i * 3 + 1] = 5;
+            flamePositions[i * 3 + 2] = Math.sin(angle) * flameRadius;
+            flameSizes[i] = 6 + Math.random() * 4;
+        }
+        
+        const flameGeometry = new THREE.BufferGeometry();
+        flameGeometry.setAttribute('position', new THREE.BufferAttribute(flamePositions, 3));
+        flameGeometry.setAttribute('size', new THREE.BufferAttribute(flameSizes, 1));
+        
+        const flameMaterial = new THREE.PointsMaterial({
             color: 0xff4400,
-            emissive: 0xff2200,
-            emissiveIntensity: 0.7,
-            metalness: 0.5,
-            roughness: 0.3
+            size: 8,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            sizeAttenuation: true
         });
-        const flameRing = new THREE.Mesh(flameRingGeometry, flameRingMaterial);
-        flameRing.position.y = 5;
-        flameRing.rotation.x = Math.PI / 2;
-        cannonBodyGroup.add(flameRing);
+        
+        const flameParticles = new THREE.Points(flameGeometry, flameMaterial);
+        flameParticles.userData.basePositions = flamePositions.slice();
+        flameParticles.userData.baseSizes = flameSizes.slice();
+        flameParticles.userData.flameRadius = flameRadius;
+        flameParticles.userData.particleCount = flameParticleCount;
+        cannonBodyGroup.add(flameParticles);
+        
+        // Store reference for animation
+        if (!cannonBodyGroup.userData) cannonBodyGroup.userData = {};
+        cannonBodyGroup.userData.flameParticles = flameParticles;
     }
 }
 
@@ -12869,8 +12923,10 @@ class Fish {
             // Visual feedback - actual reward comes from server
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
             
-            // Spawn coin effect - coin sound will play when each coin reaches cannon muzzle
-            // Sound plays with rising pitch for "money keeps coming" effect
+            // Play coin sound on fish kill (not on collection)
+            playCoinSound(fishSize);
+            
+            // Spawn coin visual effect - no sound on collection
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, this.config.reward);
         } else {
@@ -12908,9 +12964,10 @@ class Fish {
             // This provides consistent feedback to players - every kill feels rewarding
             spawnFishDeathEffect(deathPosition, fishSize, this.config.color);
             
-            // ALWAYS spawn coin visual effect based on fish size
-            // Coin sound will play when each coin reaches cannon muzzle (like entering wallet)
-            // Sound plays with rising pitch for "money keeps coming" excitement effect
+            // Play coin sound on fish kill (not on collection)
+            playCoinSound(fishSize);
+            
+            // ALWAYS spawn coin visual effect based on fish size - no sound on collection
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, win > 0 ? win : fishReward);
             
@@ -14804,10 +14861,13 @@ function setupEventListeners() {
         
         // FPS MODE: Re-request Pointer Lock if it was lost (e.g., user pressed Escape)
         // This prevents the mouse from leaving the window when moved
+        // FIX: If pointer is not locked, ONLY lock pointer without firing bullet
+        // This prevents players from spending money just to lock the pointer
         if (gameState.viewMode === 'fps' && document.pointerLockElement !== container) {
             if (container.requestPointerLock) {
                 container.requestPointerLock();
             }
+            return; // Don't fire bullet - just lock pointer
         }
         
         fireBullet(e.clientX, e.clientY);
@@ -16393,6 +16453,12 @@ function updateBossEvent(deltaTime) {
             hideBossUI();
             hideBossWaitingUI();
         }
+        return;
+    }
+    
+    // Guard: Don't run boss system during loading - wait for game to fully load
+    // This prevents boss mode from starting while assets are still loading on slow computers
+    if (gameState.isLoading) {
         return;
     }
     
