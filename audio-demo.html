@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Casino Audio Effects Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            color: #ffd700;
+        }
+        h2 {
+            color: #4ecdc4;
+            border-bottom: 2px solid #4ecdc4;
+            padding-bottom: 10px;
+        }
+        .section {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.5);
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        .kill-btn { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .coin-btn { background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%); color: #000; }
+        .jackpot-btn { background: linear-gradient(135deg, #ff0844 0%, #ffb199 100%); }
+        .complete-btn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .description {
+            color: #aaa;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Casino Audio Effects Demo</h1>
+    <p style="text-align: center; color: #aaa;">Click buttons to hear synthesized sound effects</p>
+    
+    <div class="section">
+        <h2>1. Kill Confirmation Sounds (擊殺確認音效)</h2>
+        <button class="kill-btn" onclick="playKillSound('small')">Small Fish Kill (小魚)</button>
+        <button class="kill-btn" onclick="playKillSound('medium')">Medium Fish Kill (中魚)</button>
+        <button class="kill-btn" onclick="playKillSound('large')">Large Fish Kill (大魚)</button>
+        <button class="kill-btn" onclick="playKillSound('boss')">Boss Fish Kill (Boss)</button>
+        <p class="description">Different intensity based on fish size - creates immediate "you won" feedback</p>
+    </div>
+    
+    <div class="section">
+        <h2>2. Coin Collection Sounds (金幣收集音效)</h2>
+        <button class="coin-btn" onclick="playCoinCollect(1)">Single Coin (單個金幣)</button>
+        <button class="coin-btn" onclick="playCoinSequence(3)">3 Coins (小魚)</button>
+        <button class="coin-btn" onclick="playCoinSequence(6)">6 Coins (大魚)</button>
+        <button class="coin-btn" onclick="playCoinSequence(10)">10 Coins (Boss)</button>
+        <p class="description">Pitch rises with each coin - creates "money keeps coming" excitement</p>
+    </div>
+    
+    <div class="section">
+        <h2>3. Collection Complete Sound (收集完成音效)</h2>
+        <button class="complete-btn" onclick="playCollectionComplete()">Collection Complete (收集完成)</button>
+        <p class="description">Plays after the last coin is collected - satisfying "cha-ching" feeling</p>
+    </div>
+    
+    <div class="section">
+        <h2>4. Jackpot / Big Win Sound (大獎音效)</h2>
+        <button class="jackpot-btn" onclick="playJackpot()">Jackpot Sound (大獎)</button>
+        <button class="jackpot-btn" onclick="playBossKillSequence()">Full Boss Kill Sequence (完整Boss擊殺)</button>
+        <p class="description">For boss kills and big wins - maximum excitement</p>
+    </div>
+    
+    <div class="section">
+        <h2>5. Alternative Styles (其他風格)</h2>
+        <button onclick="playKillSoundAlt('arcade')">Arcade Style Kill (街機風格)</button>
+        <button onclick="playKillSoundAlt('retro')">Retro Style Kill (復古風格)</button>
+        <button onclick="playKillSoundAlt('modern')">Modern Style Kill (現代風格)</button>
+        <p class="description">Different sound design approaches</p>
+    </div>
+
+    <script>
+        let audioContext;
+        
+        function getAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            return audioContext;
+        }
+        
+        // Kill confirmation sounds - different intensity based on fish size
+        function playKillSound(size) {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            const configs = {
+                small: { freq: 400, duration: 0.15, gain: 0.3 },
+                medium: { freq: 350, duration: 0.2, gain: 0.4 },
+                large: { freq: 300, duration: 0.25, gain: 0.5 },
+                boss: { freq: 250, duration: 0.35, gain: 0.6 }
+            };
+            
+            const config = configs[size];
+            
+            // Main explosion/pop sound
+            const osc1 = ctx.createOscillator();
+            const gain1 = ctx.createGain();
+            osc1.type = 'square';
+            osc1.frequency.setValueAtTime(config.freq, now);
+            osc1.frequency.exponentialRampToValueAtTime(config.freq * 0.5, now + config.duration);
+            gain1.gain.setValueAtTime(config.gain, now);
+            gain1.gain.exponentialRampToValueAtTime(0.01, now + config.duration);
+            osc1.connect(gain1);
+            gain1.connect(ctx.destination);
+            osc1.start(now);
+            osc1.stop(now + config.duration);
+            
+            // Add noise burst for impact
+            const bufferSize = ctx.sampleRate * config.duration;
+            const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1;
+            }
+            const noise = ctx.createBufferSource();
+            noise.buffer = noiseBuffer;
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(config.gain * 0.3, now);
+            noiseGain.gain.exponentialRampToValueAtTime(0.01, now + config.duration * 0.5);
+            noise.connect(noiseGain);
+            noiseGain.connect(ctx.destination);
+            noise.start(now);
+            noise.stop(now + config.duration);
+            
+            // For boss, add extra low rumble
+            if (size === 'boss') {
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(80, now);
+                osc2.frequency.exponentialRampToValueAtTime(40, now + 0.4);
+                gain2.gain.setValueAtTime(0.4, now);
+                gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.start(now);
+                osc2.stop(now + 0.4);
+            }
+        }
+        
+        // Single coin collect sound with optional pitch offset
+        function playCoinCollect(pitchMultiplier = 1) {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            const baseFreq = 1200 * pitchMultiplier;
+            
+            // Main ding
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(baseFreq, now);
+            osc.frequency.setValueAtTime(baseFreq * 1.5, now + 0.05);
+            gain.gain.setValueAtTime(0.25, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.15);
+            
+            // Harmonic
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(baseFreq * 2, now);
+            gain2.gain.setValueAtTime(0.1, now);
+            gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            osc2.start(now);
+            osc2.stop(now + 0.1);
+        }
+        
+        // Coin sequence with rising pitch
+        function playCoinSequence(count) {
+            for (let i = 0; i < count; i++) {
+                setTimeout(() => {
+                    // Pitch rises from 1.0 to 1.5 over the sequence
+                    const pitchMultiplier = 1 + (i / count) * 0.5;
+                    playCoinCollect(pitchMultiplier);
+                }, i * 80); // 80ms between each coin
+            }
+            
+            // Play completion sound after all coins
+            setTimeout(() => {
+                playCollectionComplete();
+            }, count * 80 + 100);
+        }
+        
+        // Collection complete sound
+        function playCollectionComplete() {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            // Ascending arpeggio
+            const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+            notes.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + i * 0.08);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.setValueAtTime(0.3, now + i * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.08 + 0.3);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + i * 0.08);
+                osc.stop(now + i * 0.08 + 0.3);
+            });
+            
+            // Final shimmer
+            const shimmer = ctx.createOscillator();
+            const shimmerGain = ctx.createGain();
+            shimmer.type = 'sine';
+            shimmer.frequency.setValueAtTime(2093, now + 0.32); // C7
+            shimmerGain.gain.setValueAtTime(0.2, now + 0.32);
+            shimmerGain.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
+            shimmer.connect(shimmerGain);
+            shimmerGain.connect(ctx.destination);
+            shimmer.start(now + 0.32);
+            shimmer.stop(now + 0.8);
+        }
+        
+        // Jackpot / Big win sound
+        function playJackpot() {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            // Fanfare-like ascending notes
+            const fanfare = [
+                { freq: 392, time: 0, dur: 0.15 },      // G4
+                { freq: 523.25, time: 0.1, dur: 0.15 }, // C5
+                { freq: 659.25, time: 0.2, dur: 0.15 }, // E5
+                { freq: 783.99, time: 0.3, dur: 0.4 },  // G5 (held)
+                { freq: 1046.50, time: 0.5, dur: 0.5 }, // C6 (held)
+            ];
+            
+            fanfare.forEach(note => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(note.freq, now + note.time);
+                gain.gain.setValueAtTime(0.25, now + note.time);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + note.time + note.dur);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + note.time);
+                osc.stop(now + note.time + note.dur);
+                
+                // Add harmonic
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(note.freq * 2, now + note.time);
+                gain2.gain.setValueAtTime(0.1, now + note.time);
+                gain2.gain.exponentialRampToValueAtTime(0.01, now + note.time + note.dur * 0.5);
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.start(now + note.time);
+                osc2.stop(now + note.time + note.dur);
+            });
+            
+            // Add sparkle effect
+            for (let i = 0; i < 8; i++) {
+                setTimeout(() => {
+                    const sparkle = ctx.createOscillator();
+                    const sparkleGain = ctx.createGain();
+                    sparkle.type = 'sine';
+                    sparkle.frequency.setValueAtTime(2000 + Math.random() * 2000, ctx.currentTime);
+                    sparkleGain.gain.setValueAtTime(0.1, ctx.currentTime);
+                    sparkleGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                    sparkle.connect(sparkleGain);
+                    sparkleGain.connect(ctx.destination);
+                    sparkle.start(ctx.currentTime);
+                    sparkle.stop(ctx.currentTime + 0.1);
+                }, i * 100);
+            }
+        }
+        
+        // Full boss kill sequence
+        function playBossKillSequence() {
+            // 1. Kill sound
+            playKillSound('boss');
+            
+            // 2. Jackpot fanfare after a short delay
+            setTimeout(() => {
+                playJackpot();
+            }, 400);
+            
+            // 3. Coin sequence after coins would start flying (simulating 5-8 second delay compressed)
+            setTimeout(() => {
+                playCoinSequence(10);
+            }, 1500);
+        }
+        
+        // Alternative kill sound styles
+        function playKillSoundAlt(style) {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            if (style === 'arcade') {
+                // Classic arcade explosion
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (style === 'retro') {
+                // 8-bit style
+                const notes = [800, 600, 400, 200];
+                notes.forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.05);
+                    gain.gain.setValueAtTime(0.3, now + i * 0.05);
+                    gain.gain.setValueAtTime(0.01, now + i * 0.05 + 0.04);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + i * 0.05);
+                    osc.stop(now + i * 0.05 + 0.05);
+                });
+            } else if (style === 'modern') {
+                // Modern impact with sub bass
+                const osc1 = ctx.createOscillator();
+                const gain1 = ctx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(60, now);
+                osc1.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+                gain1.gain.setValueAtTime(0.5, now);
+                gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc1.connect(gain1);
+                gain1.connect(ctx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.3);
+                
+                // Click transient
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.type = 'triangle';
+                osc2.frequency.setValueAtTime(1000, now);
+                gain2.gain.setValueAtTime(0.4, now);
+                gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.start(now);
+                osc2.stop(now + 0.05);
+            }
+        }
+    </script>
+</body>
+</html>
