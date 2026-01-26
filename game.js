@@ -13410,6 +13410,18 @@ class Fish {
             return;
         }
         
+        // BUG FIX: Boss-only species should NOT respawn after Boss Mode ends
+        // When a Boss fish (mantaRay, killerWhale, etc.) dies during Boss Mode:
+        // 1. die() is called which schedules a respawn timer
+        // 2. Boss Mode ends, but the respawn timer is still pending
+        // 3. When timer fires, the Boss fish would respawn as a normal fish
+        // This check prevents Boss-only species from respawning outside Boss Mode
+        const fishSpecies = this.tier || this.config?.species || this.form;
+        if (BOSS_ONLY_SPECIES.includes(fishSpecies) && !gameState.bossActive) {
+            console.log(`[FISH] Boss-only species ${fishSpecies} not respawning outside Boss Mode`);
+            return;
+        }
+        
         // Issue #1: Respawn fish in full 3D space around cannon (immersive 360°)
         const position = getRandomFishPositionIn3DSpace();
         this.spawn(position);
