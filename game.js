@@ -4829,8 +4829,8 @@ const AUDIO_CONFIG = {
         bossDead: 'Boss dead.mp3',
         coinReceive: 'Coin receive.mp3',
         coinCasino: 'Coins recevie-Casino.mp3',
-        background: 'background.mp3',
-        menuClick: 'Menu click.mp3'
+        background: 'background.mp3'
+        // menuClick removed - file doesn't exist on R2, using weapon1x as fallback in playMenuClick()
     },
     volumes: {
         weapon1x: 0.4,
@@ -4844,8 +4844,8 @@ const AUDIO_CONFIG = {
         bossDead: 0.7,
         coinReceive: 0.6,
         coinCasino: 0.5,
-        background: 0.3,
-        menuClick: 0.5
+        background: 0.3
+        // menuClick volume removed - using weapon1x as fallback
     }
 };
 
@@ -4980,13 +4980,9 @@ function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
 
 // Play menu click sound - exposed globally for lobby UI
 // FIX: Changed playMp3Sound to playMP3Sound (correct case) - was causing button click to fail silently
-// FIX: Use weaponSwitch sound as fallback if menuClick is not loaded (Menu click.mp3 may not exist on R2)
+// FIX: Menu click.mp3 doesn't exist on R2, so we use weapon1x sound directly as the menu click sound
 function playMenuClick() {
-    if (audioBufferCache.has('menuClick')) {
-        playMP3Sound('menuClick', 1.0);
-    } else {
-        playMP3Sound('weapon1x', 0.3);
-    }
+    playMP3Sound('weapon1x', 0.3);
 }
 window.playMenuClick = playMenuClick;
 
