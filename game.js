@@ -5957,14 +5957,13 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     }
     
     if (weaponKey === '1x') {
-        // Light blue energy ring expanding from barrel - follows barrel direction
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 15, 40, 0.3, barrelDirection);
+        // FIX: Removed muzzle flash ring (user feedback: remove all ring effects)
+        // Keep particles only
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 5);
         
     } else if (weaponKey === '3x') {
-        // PERFORMANCE: Single muzzle flash instead of 3 rings
-        // REDUCED SIZE: 12->32 instead of 15->45 (user feedback: too big)
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 12, 32, 0.3, barrelDirection);
+        // FIX: Removed muzzle flash ring (user feedback: remove all ring effects)
+        // Keep particles only
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 6);
         
     } else if (weaponKey === '5x') {
@@ -5976,7 +5975,7 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
         
     } else if (weaponKey === '8x') {
         spawnFireballMuzzleFlash(muzzlePos, direction);
-        spawnExpandingRingOptimized(muzzlePos, config.muzzleColor, 20, 50, 0.4, barrelDirection);
+        // FIX: Removed muzzle flash ring (user feedback: remove all ring effects)
         triggerScreenShakeWithStrength(config.screenShake);
         spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 25);
     }
@@ -6432,16 +6431,14 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     
     // Fallback to procedural effects
     if (weaponKey === '1x') {
-        // Small water splash + white light ring explosion
+        // Small water splash (ring removed per user feedback)
         spawnWaterSplash(hitPos, 20);
-        // PERFORMANCE: Use optimized ring function with pooled geometry/material
-        spawnExpandingRingOptimized(hitPos, 0xffffff, 10, 30, 0.3);
+        // FIX: Removed expanding ring (user feedback: remove all ring effects)
         createHitParticles(hitPos, config.hitColor, 8);
         
     } else if (weaponKey === '3x') {
         // Medium fire explosion - fire particle burst DISABLED (using original 3x bullet GLB model)
-        // PERFORMANCE: Use optimized ring function with pooled geometry/material
-        spawnExpandingRingOptimized(hitPos, config.hitColor, 15, 50, 0.4);
+        // FIX: Removed expanding ring (user feedback: remove all ring effects)
         spawnWaterSplash(hitPos, 35);
         // Fire particle burst DISABLED - using original 3x bullet GLB model
         // if (fireParticlePool.initialized) {
@@ -6578,54 +6575,17 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
 }
 
 // Spawn water splash effect - REFACTORED to use VFX manager
+// FIX: Removed ring geometry (user feedback: remove all ring effects)
+// Keep only upward splash particles
 function spawnWaterSplash(position, size) {
     if (!scene) return;
     
-    // Create splash ring on water surface
+    // Calculate splash position on water surface
     const surfaceY = CONFIG.aquarium.height / 2 - 50;
     const splashPos = position.clone();
     splashPos.y = Math.min(splashPos.y, surfaceY);
     
-    const geometry = new THREE.RingGeometry(size * 0.3, size, 32);
-    const material = new THREE.MeshBasicMaterial({
-        color: 0xaaddff,
-        transparent: true,
-        opacity: 0.6,
-        side: THREE.DoubleSide
-    });
-    
-    const splash = new THREE.Mesh(geometry, material);
-    splash.position.copy(splashPos);
-    splash.rotation.x = -Math.PI / 2;
-    scene.add(splash);
-    
-    // Register with VFX manager instead of using own RAF loop
-    addVfxEffect({
-        type: 'waterSplash',
-        mesh: splash,
-        geometry: geometry,
-        material: material,
-        currentScale: 1,
-        currentOpacity: 0.6,
-        scaleSpeed: 6, // was 0.1 per frame at 60fps = 6/s
-        fadeSpeed: 3, // was 0.05 per frame at 60fps = 3/s
-        
-        update(dt, elapsed) {
-            this.currentScale += this.scaleSpeed * dt;
-            this.currentOpacity -= this.fadeSpeed * dt;
-            
-            this.mesh.scale.set(this.currentScale, this.currentScale, this.currentScale);
-            this.material.opacity = Math.max(0, this.currentOpacity);
-            
-            return this.currentOpacity > 0;
-        },
-        
-        cleanup() {
-            scene.remove(this.mesh);
-            this.geometry.dispose();
-            this.material.dispose();
-        }
-    });
+    // FIX: Removed RingGeometry splash ring (user feedback: remove all ring effects)
     
     // Spawn upward splash particles (these use the existing particle pool system)
     for (let i = 0; i < 8; i++) {
@@ -7152,8 +7112,7 @@ function spawnFishDeathEffect(position, fishSize, color) {
             createHitParticles(position, color, 15);
             spawnCoinBurst(position.clone(), 5);
             spawnSmokeEffect(position.clone(), 1.0);  // Medium smoke cloud
-            // PERFORMANCE: Use optimized ring function with pooled geometry/material
-            spawnExpandingRingOptimized(position, 0x44aaff, 30, 80, 0.3);
+            // FIX: Removed expanding ring (user feedback: remove all ring effects)
             break;
             
         case 'large':
@@ -7162,8 +7121,7 @@ function spawnFishDeathEffect(position, fishSize, color) {
             createHitParticles(position, color, 25);
             spawnCoinBurst(position.clone(), 12);
             spawnSmokeEffect(position.clone(), 1.5);  // Large smoke cloud
-            // PERFORMANCE: Use optimized ring function with pooled geometry/material
-            spawnExpandingRingOptimized(position, 0xffdd44, 50, 150, 0.4);
+            // FIX: Removed expanding ring (user feedback: remove all ring effects)
             triggerScreenFlash(0xffffcc, 0.3, 150);
             triggerScreenShakeWithStrength(5, 200);
             break;
@@ -8075,31 +8033,8 @@ function spawnBossDeathEffect(position, color) {
     // Coin rain (already refactored to use VFX manager)
     spawnCoinBurst(position.clone(), 30);
     
-    // Multiple expanding rings - use time-based delay instead of setTimeout
-    const positionCopy = position.clone();
-    for (let i = 0; i < 3; i++) {
-        addVfxEffect({
-            type: 'bossDeathRingDelay',
-            delayMs: i * 150,
-            triggered: false,
-            ringIndex: i,
-            position: positionCopy.clone(),
-            
-            update(dt, elapsed) {
-                if (!this.triggered && elapsed >= this.delayMs) {
-                    // PERFORMANCE: Use optimized ring function with pooled geometry/material
-                    spawnExpandingRingOptimized(this.position, 0xffdd00, 80 + this.ringIndex * 30, 200 + this.ringIndex * 50, 0.5);
-                    this.triggered = true;
-                    return false; // Done after triggering
-                }
-                return !this.triggered;
-            },
-            
-            cleanup() {
-                // No cleanup needed - just a delay trigger
-            }
-        });
-    }
+    // FIX: Removed multiple expanding rings (user feedback: remove all ring effects)
+    // Keep screen effects only
     
     // Screen effects (DOM-based, no RAF needed)
     triggerScreenFlash(0xffff88, 0.5, 300);
@@ -14849,6 +14784,7 @@ function triggerExplosion(center, weaponKey) {
 }
 
 // Spawn explosion visual effect
+// FIX: Removed ring effect (user feedback: remove all ring effects)
 function spawnExplosionEffect(center, radius, color) {
     // Create expanding sphere
     const geometry = new THREE.SphereGeometry(1, 16, 16);
@@ -14863,17 +14799,7 @@ function spawnExplosionEffect(center, radius, color) {
     explosion.position.copy(center);
     scene.add(explosion);
     
-    // Create ring effect
-    const ringGeometry = new THREE.TorusGeometry(1, 5, 8, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffaa00,
-        transparent: true,
-        opacity: 0.8
-    });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.position.copy(center);
-    ring.rotation.x = Math.PI / 2;
-    scene.add(ring);
+    // FIX: Removed TorusGeometry ring effect (user feedback: remove all ring effects)
     
     // Animate expansion
     let scale = 1;
@@ -14887,18 +14813,12 @@ function spawnExplosionEffect(center, radius, color) {
         explosion.scale.set(scale, scale, scale);
         explosion.material.opacity = Math.max(0, opacity);
         
-        ring.scale.set(scale * 0.8, scale * 0.8, scale * 0.8);
-        ring.material.opacity = Math.max(0, opacity);
-        
         if (opacity > 0 && scale < maxScale) {
             requestAnimationFrame(animate);
         } else {
             scene.remove(explosion);
-            scene.remove(ring);
             geometry.dispose();
             material.dispose();
-            ringGeometry.dispose();
-            ringMaterial.dispose();
         }
     };
     
