@@ -753,21 +753,22 @@ const CONFIG = {
             convergenceDistance: 750  // Halved from 1500 for better close-range targeting
         },
         '5x': { 
-            multiplier: 5, cost: 5, speed: 750, 
-            damage: 150, shotsPerSecond: 2, // cooldown = 0.5s
-            // Issue #15: Chain lightning jumps 2-3 times with 50% damage reduction per jump
-            type: 'chain', maxChains: 3, chainDecay: 0.5, chainRadius: 250,
-            color: 0xffdd00, size: 12,  // Golden color for lightning
+            multiplier: 5, cost: 5, speed: 900, 
+            damage: 200, shotsPerSecond: 1.5, // cooldown = 0.667s
+            // REDESIGN: Rocket launcher - straight line projectile with explosion on impact
+            type: 'rocket', aoeRadius: 120, damageEdge: 80,
+            color: 0xffdd00, size: 14,  // Golden/orange color for rocket
             cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
+            convergenceDistance: 750
         },
         '8x': { 
-            multiplier: 8, cost: 8, speed: 600, 
-            damage: 250, damageEdge: 100, shotsPerSecond: 2.5, // cooldown = 0.4s
-            type: 'aoe', aoeRadius: 150,
-            color: 0xff4444, size: 14,
+            multiplier: 8, cost: 8, 
+            damage: 350, shotsPerSecond: 1.2, // cooldown = 0.833s (slower but powerful)
+            // REDESIGN: Laser - instant hitscan, pierces through all fish in line
+            type: 'laser', piercing: true, laserWidth: 8,
+            color: 0xff4444, size: 16,
             cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
-            convergenceDistance: 1500  // Original distance for 8x weapon
+            convergenceDistance: 2000  // Laser has infinite range effectively
         }
     },
     
@@ -13717,11 +13718,12 @@ class Bullet {
     }
     
     // PERFORMANCE: Synchronous fire() - no async/await, uses pre-cached models
-    // ACCURATE AIMING: Optional targetPoint parameter for 8x parabolic trajectory
-    fire(origin, direction, weaponKey, targetPoint) {
+    // SIMPLIFIED: All weapons now fire straight (no parabolic trajectory)
+    fire(origin, direction, weaponKey) {
         this.weaponKey = weaponKey;
         const weapon = CONFIG.weapons[weaponKey];
         const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+        // Note: isGrenade flag kept for legacy compatibility but no longer affects trajectory
         this.isGrenade = (weapon.type === 'aoe' || weapon.type === 'superAoe');
         
         this.group.position.copy(origin);
@@ -13730,20 +13732,10 @@ class Bullet {
         // AIR WALL FIX: Store origin (muzzle position) to prevent hitting fish too close to cannon
         this.origin.copy(origin);
         
-        // ACCURATE AIMING: For 8x weapon with parabolic trajectory, calculate compensated velocity
-        // This ensures the grenade lands exactly where the crosshair points
-        if (this.isGrenade && targetPoint) {
-            // Use physics-based velocity calculation for accurate parabolic trajectory
-            calculateParabolicVelocity(origin, targetPoint, weapon.speed, this.velocity);
-        } else {
-            // Standard straight-line velocity for other weapons
-            this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
-            
-            // Legacy: Add upward arc for grenades without target point (fallback)
-            if (this.isGrenade) {
-                this.velocity.y += 200;
-            }
-        }
+        // SIMPLIFIED: All weapons fire straight - no parabolic trajectory
+        // 1x, 3x, 5x (rocket): straight projectile
+        // 8x (laser): handled by fireLaserBeam(), not Bullet class
+        this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
         this.lifetime = 4;
         this.isActive = true;
@@ -13795,15 +13787,8 @@ class Bullet {
             return;
         }
         
-        // Issue #4: Apply gravity only for grenades (8x weapon) for arc trajectory
-        if (this.isGrenade) {
-            this.velocity.y -= 400 * deltaTime;  // Gravity pulls grenade down
-            // PERFORMANCE: Use temp vector instead of clone() for lookAt
-            bulletTempVectors.lookTarget.copy(this.group.position);
-            bulletTempVectors.velocityScaled.copy(this.velocity).normalize();
-            bulletTempVectors.lookTarget.add(bulletTempVectors.velocityScaled);
-            this.group.lookAt(bulletTempVectors.lookTarget);
-        }
+        // NOTE: Gravity/parabolic trajectory removed - all weapons now fire straight
+        // 8x laser is instant hitscan (no bullet), 5x rocket flies straight
         
         // COLLISION OPTIMIZATION: Store last position before moving for segment-sphere collision
         this.lastPosition.copy(this.group.position);
@@ -13910,7 +13895,15 @@ class Bullet {
                 // Handle different weapon types
                 // HIT SOUND LOGIC: Play hit sound + show hit effect ONLY if fish survives
                 // If fish dies: only coin sound + smoke + coin drop (handled in Fish.die())
-                if (weapon.type === 'chain') {
+                if (weapon.type === 'rocket') {
+                    // 5X ROCKET: Straight line projectile with explosion on impact
+                    // Trigger explosion at hit point (damages all fish in radius)
+                    triggerExplosion(bulletTempVectors.hitPos, this.weaponKey);
+                    
+                    // Screen shake for rocket impact
+                    triggerScreenShakeWithStrength(6, 80);
+                    
+                } else if (weapon.type === 'chain') {
                     // Chain lightning: hit first fish, then chain to nearby fish
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
                     
@@ -13987,15 +13980,15 @@ function createBulletPool() {
 
 // Helper function to spawn a bullet in a specific direction
 // PERFORMANCE: Uses free-list for O(1) lookup instead of O(n) .find() scan
-// ACCURATE AIMING: Optional targetPoint parameter for 8x parabolic trajectory
-function spawnBulletFromDirection(origin, direction, weaponKey, targetPoint) {
+// SIMPLIFIED: All weapons fire straight (no parabolic trajectory)
+function spawnBulletFromDirection(origin, direction, weaponKey) {
     // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
     const bullet = freeBullets.pop();
     if (!bullet) return null;
     
     // No need to clone - Bullet.fire() uses copy() internally
-    // ACCURATE AIMING: Pass targetPoint for 8x weapon parabolic trajectory
-    bullet.fire(origin, direction, weaponKey, targetPoint);
+    // SIMPLIFIED: All weapons fire straight
+    bullet.fire(origin, direction, weaponKey);
     activeBullets.push(bullet);
     return bullet;
 }
@@ -14143,12 +14136,18 @@ function fireBullet(targetX, targetY) {
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
         
-    } else if (weapon.type === 'aoe') {
-        // ACCURATE AIMING: 8x weapon uses parabolic trajectory with compensated velocity
-        // Pass target point so bullet can calculate the correct initial velocity
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey, targetPoint);
+    } else if (weapon.type === 'laser') {
+        // 8x LASER: Instant hitscan - no bullet travel, immediate hit detection
+        // Fire a ray from muzzle in direction, damage all fish along the path
+        fireLaserBeam(muzzlePos, direction, weaponKey);
+        
+    } else if (weapon.type === 'rocket') {
+        // 5x ROCKET: Straight line projectile with explosion on impact
+        // No parabolic trajectory - fires straight where you aim
+        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        
     } else {
-        // Single bullet for projectile and chain types (1x, 5x)
+        // Single bullet for projectile type (1x)
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
     
@@ -14754,7 +14753,187 @@ function spawnLightningArc(startPos, endPos, color) {
     activeLightningArcs.push(item);
 }
 
-// AOE Explosion Effect (8x weapon)
+// ==================== 8X LASER WEAPON ====================
+// Instant hitscan laser - damages all fish along the beam path
+// Temp vectors for laser calculations
+const laserTempVectors = {
+    rayEnd: new THREE.Vector3(),
+    fishToRay: new THREE.Vector3(),
+    closestPoint: new THREE.Vector3()
+};
+
+// Active laser beams for animation
+const activeLaserBeams = [];
+
+function fireLaserBeam(origin, direction, weaponKey) {
+    const weapon = CONFIG.weapons[weaponKey];
+    const damage = weapon.damage || 350;
+    const laserWidth = weapon.laserWidth || 8;
+    const maxRange = 3000; // Maximum laser range
+    
+    // Play laser sound
+    playSound('explosion'); // TODO: Add dedicated laser sound
+    
+    // Calculate laser end point
+    laserTempVectors.rayEnd.copy(direction).normalize().multiplyScalar(maxRange).add(origin);
+    
+    // Find all fish hit by the laser beam
+    const hitFish = [];
+    
+    for (const fish of activeFish) {
+        if (!fish.isActive) continue;
+        
+        const fishPos = fish.group.position;
+        const fishRadius = fish.boundingRadius;
+        
+        // Calculate closest point on ray to fish center
+        // Ray: P(t) = origin + direction * t
+        // Project fish position onto ray
+        laserTempVectors.fishToRay.copy(fishPos).sub(origin);
+        const t = laserTempVectors.fishToRay.dot(direction);
+        
+        // Skip fish behind the muzzle
+        if (t < 50) continue;
+        
+        // Calculate closest point on ray
+        laserTempVectors.closestPoint.copy(direction).multiplyScalar(t).add(origin);
+        
+        // Calculate distance from fish center to ray
+        const distanceToRay = fishPos.distanceTo(laserTempVectors.closestPoint);
+        
+        // Check if laser hits fish (ray passes within fish's bounding sphere)
+        if (distanceToRay <= fishRadius + laserWidth) {
+            hitFish.push({
+                fish: fish,
+                distance: t,
+                hitPoint: laserTempVectors.closestPoint.clone()
+            });
+        }
+    }
+    
+    // Sort by distance (closest first)
+    hitFish.sort((a, b) => a.distance - b.distance);
+    
+    // Determine laser end point (first fish hit or max range)
+    let laserEndPoint;
+    if (hitFish.length > 0) {
+        // Laser ends at the last fish hit (piercing through all)
+        laserEndPoint = hitFish[hitFish.length - 1].hitPoint.clone();
+    } else {
+        laserEndPoint = laserTempVectors.rayEnd.clone();
+    }
+    
+    // Damage all fish hit by the laser
+    for (const hit of hitFish) {
+        const killed = hit.fish.takeDamage(damage, weaponKey);
+        
+        // Show hit effect if fish survived
+        if (!killed) {
+            createHitParticles(hit.hitPoint, weapon.color, 8);
+            playWeaponHitSound(weaponKey);
+        }
+    }
+    
+    // Spawn laser beam visual effect
+    spawnLaserBeamEffect(origin, laserEndPoint, weapon.color, laserWidth);
+    
+    // Screen shake for powerful laser
+    triggerScreenShakeWithStrength(8, 100);
+}
+
+// Spawn laser beam visual effect
+function spawnLaserBeamEffect(start, end, color, width) {
+    // Create laser beam geometry (cylinder from start to end)
+    const distance = start.distanceTo(end);
+    const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+    
+    // Create glow core (inner bright beam)
+    const coreGeometry = new THREE.CylinderGeometry(width * 0.3, width * 0.3, distance, 8, 1);
+    const coreMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 1.0
+    });
+    const coreBeam = new THREE.Mesh(coreGeometry, coreMaterial);
+    
+    // Create outer glow
+    const glowGeometry = new THREE.CylinderGeometry(width, width, distance, 8, 1);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.6
+    });
+    const glowBeam = new THREE.Mesh(glowGeometry, glowMaterial);
+    
+    // Create beam group
+    const beamGroup = new THREE.Group();
+    beamGroup.add(coreBeam);
+    beamGroup.add(glowBeam);
+    
+    // Position and orient the beam
+    beamGroup.position.copy(midPoint);
+    
+    // Orient beam to point from start to end
+    const direction = new THREE.Vector3().subVectors(end, start).normalize();
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+    beamGroup.quaternion.copy(quaternion);
+    
+    scene.add(beamGroup);
+    
+    // Add impact flash at end point
+    const flashGeometry = new THREE.SphereGeometry(width * 3, 16, 16);
+    const flashMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.8
+    });
+    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+    flash.position.copy(end);
+    scene.add(flash);
+    
+    // Animate beam fade out using VFX manager
+    addVfxEffect({
+        type: 'laserBeam',
+        beamGroup: beamGroup,
+        flash: flash,
+        coreGeometry: coreGeometry,
+        coreMaterial: coreMaterial,
+        glowGeometry: glowGeometry,
+        glowMaterial: glowMaterial,
+        flashGeometry: flashGeometry,
+        flashMaterial: flashMaterial,
+        duration: 200, // 200ms beam duration
+        
+        update(dt, elapsed) {
+            const progress = elapsed / this.duration;
+            
+            // Fade out beam
+            this.coreMaterial.opacity = 1.0 - progress;
+            this.glowMaterial.opacity = 0.6 * (1.0 - progress);
+            this.flashMaterial.opacity = 0.8 * (1.0 - progress);
+            
+            // Shrink flash
+            const flashScale = 1.0 + progress * 2;
+            this.flash.scale.set(flashScale, flashScale, flashScale);
+            
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.beamGroup);
+            scene.remove(this.flash);
+            this.coreGeometry.dispose();
+            this.coreMaterial.dispose();
+            this.glowGeometry.dispose();
+            this.glowMaterial.dispose();
+            this.flashGeometry.dispose();
+            this.flashMaterial.dispose();
+        }
+    });
+}
+
+// AOE Explosion Effect (for 5x rocket weapon now)
 function triggerExplosion(center, weaponKey) {
     // Issue #6: Play explosion sound
     playSound('explosion');
