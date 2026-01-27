@@ -4851,8 +4851,8 @@ const AUDIO_CONFIG = {
         coinDrop: 'Coin-Fish dead.mp3',    // Sound when fish dies and coins appear
         coinReceive: 'Coin receive.wav',   // Sound when coins reach cannon muzzle
         coinCasino: 'Coin receive.wav',
-        background: 'background.mp3'
-        // menuClick removed - file doesn't exist on R2, using weapon1x as fallback in playMenuClick()
+        background: 'background.mp3',
+        menuClick: 'Click.mp3'  // Button click sound for all menu buttons
     },
     volumes: {
         weapon1x: 0.4,
@@ -4867,8 +4867,8 @@ const AUDIO_CONFIG = {
         coinDrop: 0.6,      // Volume for coin drop sound
         coinReceive: 0.6,
         coinCasino: 0.5,
-        background: 0.3
-        // menuClick volume removed - using weapon1x as fallback
+        background: 0.3,
+        menuClick: 0.5      // Volume for menu button clicks
     }
 };
 
@@ -5002,10 +5002,9 @@ function playMP3Sound(soundKey, volumeMultiplier = 1.0) {
 }
 
 // Play menu click sound - exposed globally for lobby UI
-// FIX: Changed playMp3Sound to playMP3Sound (correct case) - was causing button click to fail silently
-// FIX: Menu click.mp3 doesn't exist on R2, so we use weapon1x sound directly as the menu click sound
+// Uses Click.mp3 from R2 bucket for all menu button clicks
 function playMenuClick() {
-    playMP3Sound('weapon1x', 0.3);
+    playMP3Sound('menuClick');
 }
 window.playMenuClick = playMenuClick;
 
@@ -14101,6 +14100,10 @@ function spawnBulletFromDirection(origin, direction, weaponKey) {
 }
 
 function fireBullet(targetX, targetY) {
+    // FIX: Prevent shooting when not in game scene (e.g., in lobby/menu)
+    // This prevents players from accidentally spending money when clicking menu buttons
+    if (!gameState.isInGameScene) return false;
+    
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
     
