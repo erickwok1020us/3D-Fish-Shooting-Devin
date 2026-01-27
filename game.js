@@ -15009,9 +15009,12 @@ function spawnLaserBeamEffect(start, end, color, width) {
     const sparks = [];
     const sparkGeometry = new THREE.SphereGeometry(width * 0.3, 6, 6);
     
+    // Use bright red color for sparks (user feedback: 鮮紅光)
+    const brightRed = 0xff0000;
+    
     for (let i = 0; i < sparkCount; i++) {
         const sparkMaterial = new THREE.MeshBasicMaterial({
-            color: i % 3 === 0 ? 0xffffff : color,
+            color: i % 3 === 0 ? 0xffffff : brightRed,
             transparent: true,
             opacity: 1.0
         });
