@@ -8571,8 +8571,9 @@ window.startSinglePlayerGame = function() {
     // FIX: Don't show game container yet - wait until map loading is complete
     // This prevents the game screen flash during loading
     
-    // Mark that we're now in the game scene (not lobby)
-    gameState.isInGameScene = true;
+    // FIX: Don't set isInGameScene here - wait until loading is complete
+    // This prevents players from shooting during the loading screen
+    // gameState.isInGameScene will be set to true in loadMap3D() after loading completes
     
     // Reset boss event timers for fresh game start
     gameState.bossSpawnTimer = 60;
@@ -8599,8 +8600,9 @@ window.startMultiplayerGame = function(manager) {
     // Store multiplayer reference
     window.multiplayer = manager;
     
-    // Mark that we're now in the game scene (not lobby)
-    gameState.isInGameScene = true;
+    // FIX: Don't set isInGameScene here - wait until loading is complete
+    // This prevents players from shooting during the loading screen
+    // gameState.isInGameScene will be set to true in loadMap3D() after loading completes
     
     // Reset boss event timers for fresh game start
     gameState.bossSpawnTimer = 60;
@@ -8814,6 +8816,10 @@ function loadMap3D(onComplete) {
             
             console.log('[PRELOAD] All resources loaded, entering game');
             
+            // FIX: Set isInGameScene AFTER loading is complete
+            // This prevents players from shooting during the loading screen
+            gameState.isInGameScene = true;
+            
             // FIX: Stop video background and show game container AFTER loading is complete
             // This ensures smooth transition without game screen flash
             stopVideoBackground();
@@ -8847,6 +8853,9 @@ function loadMap3D(onComplete) {
             // Still wait for weapons even if map fails
             await weaponPreloadPromise;
             clearInterval(weaponProgressInterval);
+            
+            // FIX: Set isInGameScene even on error so game can proceed
+            gameState.isInGameScene = true;
             
             // FIX: Stop video background and show game container even on error
             stopVideoBackground();
@@ -10319,7 +10328,15 @@ function autoFireAtFish(targetFish) {
         
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+    } else if (weapon.type === 'laser') {
+        // 8x LASER: Instant hitscan - no bullet travel, immediate hit detection
+        // Fire a ray from muzzle in direction, damage all fish along the path
+        fireLaserBeam(muzzlePos, direction, weaponKey);
+    } else if (weapon.type === 'rocket') {
+        // 5x ROCKET: Straight line projectile with explosion on impact
+        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     } else {
+        // Single bullet for projectile type (1x)
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
     
