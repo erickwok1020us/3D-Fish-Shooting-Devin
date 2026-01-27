@@ -14964,27 +14964,8 @@ function spawnLaserBeamEffect(start, end, color, width) {
     scene.add(energyRing);
     
     // ==================== IMPACT EFFECTS ====================
-    // Create impact flash at end point - larger and brighter
-    const flashGeometry = new THREE.SphereGeometry(width * 5, 16, 16);
-    const flashMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.9
-    });
-    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
-    flash.position.copy(end);
-    scene.add(flash);
-    
-    // Create secondary impact glow
-    const impactGlowGeometry = new THREE.SphereGeometry(width * 8, 16, 16);
-    const impactGlowMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.4
-    });
-    const impactGlow = new THREE.Mesh(impactGlowGeometry, impactGlowMaterial);
-    impactGlow.position.copy(end);
-    scene.add(impactGlow);
+    // REMOVED: Impact flash and impact glow spheres (user feedback: remove red halo)
+    // Keep only sparks for impact visual
     
     // ==================== PARTICLE TRAIL ====================
     // Create particles along the beam path
@@ -15060,8 +15041,6 @@ function spawnLaserBeamEffect(start, end, color, width) {
         beamGroup: beamGroup,
         muzzleFlash: muzzleFlash,
         energyRing: energyRing,
-        flash: flash,
-        impactGlow: impactGlow,
         particles: particles,
         sparks: sparks,
         coreGeometry: coreGeometry,
@@ -15074,10 +15053,6 @@ function spawnLaserBeamEffect(start, end, color, width) {
         muzzleFlashMaterial: muzzleFlashMaterial,
         ringGeometry: ringGeometry,
         ringMaterial: ringMaterial,
-        flashGeometry: flashGeometry,
-        flashMaterial: flashMaterial,
-        impactGlowGeometry: impactGlowGeometry,
-        impactGlowMaterial: impactGlowMaterial,
         particleGeometry: particleGeometry,
         sparkGeometry: sparkGeometry,
         duration: 400, // Longer duration for dramatic effect
@@ -15107,15 +15082,7 @@ function spawnLaserBeamEffect(start, end, color, width) {
             this.energyRing.scale.set(ringScale, ringScale, 1);
             this.ringMaterial.opacity = 0.8 * Math.max(0, 1.0 - progress * 2);
             
-            // Impact flash
-            this.flashMaterial.opacity = 0.9 * (1.0 - progress);
-            const flashScale = 1.0 + progress * 3;
-            this.flash.scale.set(flashScale, flashScale, flashScale);
-            
-            // Impact glow - slower fade
-            this.impactGlowMaterial.opacity = 0.4 * (1.0 - progress * 0.8);
-            const glowScale = 1.0 + progress * 2;
-            this.impactGlow.scale.set(glowScale, glowScale, glowScale);
+            // REMOVED: Impact flash and impact glow animation (user feedback: remove red halo)
             
             // Animate particles - disperse outward
             for (const particle of this.particles) {
@@ -15147,8 +15114,6 @@ function spawnLaserBeamEffect(start, end, color, width) {
             scene.remove(this.beamGroup);
             scene.remove(this.muzzleFlash);
             scene.remove(this.energyRing);
-            scene.remove(this.flash);
-            scene.remove(this.impactGlow);
             
             for (const particle of this.particles) {
                 scene.remove(particle);
@@ -15169,10 +15134,6 @@ function spawnLaserBeamEffect(start, end, color, width) {
             this.muzzleFlashMaterial.dispose();
             this.ringGeometry.dispose();
             this.ringMaterial.dispose();
-            this.flashGeometry.dispose();
-            this.flashMaterial.dispose();
-            this.impactGlowGeometry.dispose();
-            this.impactGlowMaterial.dispose();
             this.particleGeometry.dispose();
             this.sparkGeometry.dispose();
         }
