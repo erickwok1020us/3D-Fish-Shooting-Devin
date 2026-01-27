@@ -737,14 +737,14 @@ const CONFIG = {
     weapons: {
         '1x': { 
             multiplier: 1, cost: 1, speed: 800, 
-            damage: 100, shotsPerSecond: 2, // cooldown = 0.5s
+            damage: 100, shotsPerSecond: 2.5, // cooldown = 0.4s (faster machine gun feel)
             type: 'projectile', color: 0xcccccc, size: 8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
             convergenceDistance: 750  // Halved from 1500 for better close-range targeting
         },
         '3x': { 
             multiplier: 3, cost: 3, speed: 700, 
-            damage: 180, shotsPerSecond: 1.5, // cooldown = 0.667s
+            damage: 180, shotsPerSecond: 2, // cooldown = 0.5s (shotgun should be faster than rocket)
             // Shotgun effect: Fire 3 bullets in fan spread pattern (-15°, 0°, +15°)
             // Each bullet does NOT penetrate - stops on hit
             type: 'spread', spreadAngle: 15,
@@ -754,7 +754,7 @@ const CONFIG = {
         },
         '5x': { 
             multiplier: 5, cost: 5, speed: 900, 
-            damage: 200, shotsPerSecond: 1.5, // cooldown = 0.667s
+            damage: 200, shotsPerSecond: 1.5, // cooldown = 0.667s (rocket needs weight)
             // REDESIGN: Rocket launcher - straight line projectile with explosion on impact
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
             color: 0xffdd00, size: 14,  // Golden/orange color for rocket
@@ -763,7 +763,7 @@ const CONFIG = {
         },
         '8x': { 
             multiplier: 8, cost: 8, 
-            damage: 350, shotsPerSecond: 1.2, // cooldown = 0.833s (slower but powerful)
+            damage: 350, shotsPerSecond: 1.67, // cooldown = 0.6s (laser should feel snappy)
             // REDESIGN: Laser - instant hitscan, pierces through all fish in line
             type: 'laser', piercing: true, laserWidth: 8,
             color: 0xff4444, size: 16,
@@ -4822,14 +4822,14 @@ const AUDIO_CONFIG = {
         weapon1x: '1X 發射音效.mp3',
         weapon3x: '3X 發射音效.mp3',
         weapon5x: '5X 發射音效.mp3',
-        weapon8x: '8X 發射音效.mp3',
+        weapon8x: '8X 發射音效.wav',
         hit3x: '3X 武器擊中音效.mp3',
         hit5x: '5X 武器擊中音效.mp3',
         hit8x: '8X 武器擊中音效.mp3',
         bossTime: 'Boss time.mp3',
         bossDead: 'Boss dead.mp3',
-        coinReceive: 'Coin receive.mp3',
-        coinCasino: 'Coins recevie-Casino.mp3',
+        coinReceive: 'Coin receive.wav',
+        coinCasino: 'Coin receive.wav',
         background: 'background.mp3'
         // menuClick removed - file doesn't exist on R2, using weapon1x as fallback in playMenuClick()
     },
@@ -7355,7 +7355,7 @@ const coinCollectionSystem = {
     isCollecting: false,        // Whether collection animation is in progress
     initialized: false,
     pendingReward: 0,           // Total reward waiting to be collected (balance updates on coin arrival)
-    maxCollectionTime: 5000,    // Maximum 5 seconds to collect all coins
+    maxCollectionTime: 3000,    // Maximum 3 seconds to collect all coins
     coinsBeingCollected: 0      // Track how many coins are still flying to cannon
 };
 
@@ -7471,16 +7471,35 @@ function triggerCoinCollection() {
     const totalCoins = coinCollectionSystem.waitingCoins.filter(c => c.state === 'waiting').length;
     if (totalCoins === 0) return;
     
+    // DYNAMIC COLLECTION TIME: Based on coin count for better game feel
+    // 1-10 coins: 1.5s (quick collection for small wins)
+    // 11-30 coins: 2.5s (medium collection)
+    // 31-50 coins: 3.5s (longer for big wins)
+    // 50+ coins: 4s (maximum for huge wins like AUTO ATTACK + 8X)
+    let dynamicCollectionTime;
+    if (totalCoins <= 10) {
+        dynamicCollectionTime = 1500;
+    } else if (totalCoins <= 30) {
+        dynamicCollectionTime = 2500;
+    } else if (totalCoins <= 50) {
+        dynamicCollectionTime = 3500;
+    } else {
+        dynamicCollectionTime = 4000;
+    }
+    
+    // Update casino sound max duration to match collection time
+    casinoSoundState.maxDuration = dynamicCollectionTime;
+    
     // Mark collection as in progress
     coinCollectionSystem.isCollecting = true;
     coinCollectionSystem.coinsBeingCollected = totalCoins;
     
-    // CASINO EFFECT: Start continuous casino sound that plays until all coins are collected (max 5 seconds)
+    // CASINO EFFECT: Start continuous casino sound that plays until all coins are collected
     startCasinoCoinSound(totalCoins);
     
-    // TIMING: Calculate delay between coins to fit all coins within maxCollectionTime (5 seconds)
-    // Reserve 800ms for the last coin's flight time, so delays must fit in (5000 - 800) = 4200ms
-    const maxDelayTime = coinCollectionSystem.maxCollectionTime - 800;
+    // TIMING: Calculate delay between coins to fit all coins within dynamic collection time
+    // Reserve 800ms for the last coin's flight time
+    const maxDelayTime = dynamicCollectionTime - 800;
     const baseDelay = totalCoins > 1 ? Math.min(150, maxDelayTime / (totalCoins - 1)) : 0;
     
     // Start collection animation for all waiting coins
@@ -7607,42 +7626,70 @@ const casinoSoundState = {
     gainNode: null,
     isPlaying: false,
     coinsRemaining: 0,
-    maxDuration: 5000,  // Maximum 5 seconds of casino sound
+    totalCoins: 0,      // Total coins in this collection batch (for volume ramping)
+    maxDuration: 4000,  // Maximum 4 seconds of casino sound (for large coin counts)
     timeoutId: null,    // Timeout to auto-stop sound after max duration
-    startTime: 0        // Track when sound started for proportional fade out
+    startTime: 0,       // Track when sound started for proportional fade out
+    lastSoundTime: 0,   // Track last sound play time for rate limiting
+    minSoundInterval: 100  // Minimum 100ms between sounds (max 10 sounds/sec)
 };
 
-// Start playing casino coin collection sound (loops until stopped, max 5 seconds)
+// Play single coin sound effect with CASINO-style volume ramp and pitch variation
+// Volume increases as more coins are collected (building excitement)
+// Pitch varies slightly for natural coin sound variety
+// RATE LIMITED: Max 10 sounds per second to prevent audio overload
+function playCoinReceiveSound() {
+    if (!audioContext || !sfxGain) return;
+    
+    // RATE LIMITING: Don't play if last sound was too recent
+    const now = performance.now();
+    if (now - casinoSoundState.lastSoundTime < casinoSoundState.minSoundInterval) {
+        return; // Skip this sound to prevent audio overload
+    }
+    casinoSoundState.lastSoundTime = now;
+    
+    const buffer = audioBufferCache.get('coinReceive');
+    if (!buffer) return;
+    
+    try {
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        
+        // CASINO EFFECT: Random pitch variation (0.9x - 1.1x) for natural coin sound
+        const pitchVariation = 0.9 + Math.random() * 0.2;
+        source.playbackRate.value = pitchVariation;
+        
+        // CASINO EFFECT: Volume ramps up as coins accumulate (building excitement)
+        // Start at 40% volume, increase to 100% as collection progresses
+        const totalCoins = casinoSoundState.totalCoins || 1;
+        const coinsCollected = totalCoins - (casinoSoundState.coinsRemaining || 0);
+        const progress = Math.min(coinsCollected / totalCoins, 1);
+        
+        // Volume curve: starts at 0.4, ramps to 1.0 (last coins are loudest for climax)
+        const volumeMultiplier = 0.4 + (progress * 0.6);
+        const baseVolume = AUDIO_CONFIG.volumes.coinReceive;
+        
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = baseVolume * volumeMultiplier;
+        
+        source.connect(gainNode);
+        gainNode.connect(sfxGain);
+        source.start(0);
+    } catch (e) {
+        // Ignore audio errors
+    }
+}
+
+// Start coin collection - tracks state for volume ramping
 function startCasinoCoinSound(totalCoins) {
     if (!audioContext || !sfxGain) return;
-    if (casinoSoundState.isPlaying) {
-        // Already playing, just update coin count
-        casinoSoundState.coinsRemaining = totalCoins;
-        return;
-    }
-    
-    const buffer = audioBufferCache.get('coinCasino');
-    if (!buffer) {
-        // Fallback: no sound if not loaded
-        return;
-    }
-    
-    casinoSoundState.source = audioContext.createBufferSource();
-    casinoSoundState.source.buffer = buffer;
-    casinoSoundState.source.loop = true; // Loop the sound continuously
-    
-    casinoSoundState.gainNode = audioContext.createGain();
-    casinoSoundState.gainNode.gain.value = AUDIO_CONFIG.volumes.coinCasino;
-    
-    casinoSoundState.source.connect(casinoSoundState.gainNode);
-    casinoSoundState.gainNode.connect(sfxGain);
-    casinoSoundState.source.start(0);
     
     casinoSoundState.isPlaying = true;
     casinoSoundState.coinsRemaining = totalCoins;
+    casinoSoundState.totalCoins = totalCoins;  // Store total for volume calculation
     casinoSoundState.startTime = audioContext.currentTime;
     
-    // Safety: Auto-stop sound after max duration (5 seconds) to prevent endless sound
+    // Safety: Auto-stop after max duration
     if (casinoSoundState.timeoutId) {
         clearTimeout(casinoSoundState.timeoutId);
     }
@@ -7651,10 +7698,13 @@ function startCasinoCoinSound(totalCoins) {
     }, casinoSoundState.maxDuration);
 }
 
-// Called when a coin reaches the cannon - decrements counter and stops sound when all coins collected
+// Called when a coin reaches the cannon - play CASINO-style sound and decrement counter
 function onCoinCollected() {
     // Decrement coin counter for collection system
     coinCollectionSystem.coinsBeingCollected--;
+    
+    // Play coin receive sound with CASINO effect (volume ramp + pitch variation)
+    playCoinReceiveSound();
     
     // Decrement sound counter
     if (casinoSoundState.isPlaying) {
