@@ -14891,14 +14891,15 @@ function fireLaserBeam(origin, direction, weaponKey) {
     triggerScreenShakeWithStrength(8, 100);
 }
 
-// Spawn laser beam visual effect
+// Spawn laser beam visual effect - STAR WARS STYLE with particles
 function spawnLaserBeamEffect(start, end, color, width) {
-    // Create laser beam geometry (cylinder from start to end)
     const distance = start.distanceTo(end);
     const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+    const direction = new THREE.Vector3().subVectors(end, start).normalize();
     
-    // Create glow core (inner bright beam)
-    const coreGeometry = new THREE.CylinderGeometry(width * 0.3, width * 0.3, distance, 8, 1);
+    // ==================== MAIN BEAM ====================
+    // Create glow core (inner bright beam) - thinner for Star Wars look
+    const coreGeometry = new THREE.CylinderGeometry(width * 0.2, width * 0.2, distance, 8, 1);
     const coreMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
@@ -14906,79 +14907,274 @@ function spawnLaserBeamEffect(start, end, color, width) {
     });
     const coreBeam = new THREE.Mesh(coreGeometry, coreMaterial);
     
-    // Create outer glow
-    const glowGeometry = new THREE.CylinderGeometry(width, width, distance, 8, 1);
+    // Create outer glow - slightly larger
+    const glowGeometry = new THREE.CylinderGeometry(width * 0.8, width * 0.8, distance, 8, 1);
     const glowMaterial = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
-        opacity: 0.6
+        opacity: 0.5
     });
     const glowBeam = new THREE.Mesh(glowGeometry, glowMaterial);
+    
+    // Create outer halo for extra glow
+    const haloGeometry = new THREE.CylinderGeometry(width * 1.5, width * 1.5, distance, 8, 1);
+    const haloMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.2
+    });
+    const haloBeam = new THREE.Mesh(haloGeometry, haloMaterial);
     
     // Create beam group
     const beamGroup = new THREE.Group();
     beamGroup.add(coreBeam);
     beamGroup.add(glowBeam);
+    beamGroup.add(haloBeam);
     
     // Position and orient the beam
     beamGroup.position.copy(midPoint);
-    
-    // Orient beam to point from start to end
-    const direction = new THREE.Vector3().subVectors(end, start).normalize();
     const quaternion = new THREE.Quaternion();
     quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
     beamGroup.quaternion.copy(quaternion);
-    
     scene.add(beamGroup);
     
-    // Add impact flash at end point
-    const flashGeometry = new THREE.SphereGeometry(width * 3, 16, 16);
+    // ==================== MUZZLE FLASH / ENERGY BURST ====================
+    // Create muzzle flash sphere
+    const muzzleFlashGeometry = new THREE.SphereGeometry(width * 4, 16, 16);
+    const muzzleFlashMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.9
+    });
+    const muzzleFlash = new THREE.Mesh(muzzleFlashGeometry, muzzleFlashMaterial);
+    muzzleFlash.position.copy(start);
+    scene.add(muzzleFlash);
+    
+    // Create expanding energy ring at muzzle
+    const ringGeometry = new THREE.RingGeometry(width * 2, width * 4, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    const energyRing = new THREE.Mesh(ringGeometry, ringMaterial);
+    energyRing.position.copy(start);
+    energyRing.lookAt(end);
+    scene.add(energyRing);
+    
+    // ==================== IMPACT EFFECTS ====================
+    // Create impact flash at end point - larger and brighter
+    const flashGeometry = new THREE.SphereGeometry(width * 5, 16, 16);
     const flashMaterial = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.9
     });
     const flash = new THREE.Mesh(flashGeometry, flashMaterial);
     flash.position.copy(end);
     scene.add(flash);
     
-    // Animate beam fade out using VFX manager
+    // Create secondary impact glow
+    const impactGlowGeometry = new THREE.SphereGeometry(width * 8, 16, 16);
+    const impactGlowMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.4
+    });
+    const impactGlow = new THREE.Mesh(impactGlowGeometry, impactGlowMaterial);
+    impactGlow.position.copy(end);
+    scene.add(impactGlow);
+    
+    // ==================== PARTICLE TRAIL ====================
+    // Create particles along the beam path
+    const particleCount = Math.min(30, Math.floor(distance / 50));
+    const particles = [];
+    const particleGeometry = new THREE.SphereGeometry(width * 0.4, 8, 8);
+    
+    for (let i = 0; i < particleCount; i++) {
+        const particleMaterial = new THREE.MeshBasicMaterial({
+            color: i % 2 === 0 ? 0xffffff : color,
+            transparent: true,
+            opacity: 0.8
+        });
+        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+        
+        // Position along beam with slight random offset
+        const t = i / particleCount;
+        particle.position.lerpVectors(start, end, t);
+        particle.position.x += (Math.random() - 0.5) * width * 2;
+        particle.position.y += (Math.random() - 0.5) * width * 2;
+        particle.position.z += (Math.random() - 0.5) * width * 2;
+        
+        // Store initial position and random velocity for animation
+        particle.userData = {
+            initialPos: particle.position.clone(),
+            velocity: new THREE.Vector3(
+                (Math.random() - 0.5) * 100,
+                (Math.random() - 0.5) * 100,
+                (Math.random() - 0.5) * 100
+            ),
+            material: particleMaterial
+        };
+        
+        scene.add(particle);
+        particles.push(particle);
+    }
+    
+    // ==================== IMPACT SPARKS ====================
+    // Create spark particles at impact point
+    const sparkCount = 20;
+    const sparks = [];
+    const sparkGeometry = new THREE.SphereGeometry(width * 0.3, 6, 6);
+    
+    for (let i = 0; i < sparkCount; i++) {
+        const sparkMaterial = new THREE.MeshBasicMaterial({
+            color: i % 3 === 0 ? 0xffffff : color,
+            transparent: true,
+            opacity: 1.0
+        });
+        const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
+        spark.position.copy(end);
+        
+        // Random outward velocity
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        const speed = 200 + Math.random() * 300;
+        spark.userData = {
+            velocity: new THREE.Vector3(
+                Math.sin(phi) * Math.cos(theta) * speed,
+                Math.sin(phi) * Math.sin(theta) * speed,
+                Math.cos(phi) * speed
+            ),
+            material: sparkMaterial
+        };
+        
+        scene.add(spark);
+        sparks.push(spark);
+    }
+    
+    // ==================== ANIMATION ====================
     addVfxEffect({
-        type: 'laserBeam',
+        type: 'laserBeamStarWars',
         beamGroup: beamGroup,
+        muzzleFlash: muzzleFlash,
+        energyRing: energyRing,
         flash: flash,
+        impactGlow: impactGlow,
+        particles: particles,
+        sparks: sparks,
         coreGeometry: coreGeometry,
         coreMaterial: coreMaterial,
         glowGeometry: glowGeometry,
         glowMaterial: glowMaterial,
+        haloGeometry: haloGeometry,
+        haloMaterial: haloMaterial,
+        muzzleFlashGeometry: muzzleFlashGeometry,
+        muzzleFlashMaterial: muzzleFlashMaterial,
+        ringGeometry: ringGeometry,
+        ringMaterial: ringMaterial,
         flashGeometry: flashGeometry,
         flashMaterial: flashMaterial,
-        duration: 200, // 200ms beam duration
+        impactGlowGeometry: impactGlowGeometry,
+        impactGlowMaterial: impactGlowMaterial,
+        particleGeometry: particleGeometry,
+        sparkGeometry: sparkGeometry,
+        duration: 400, // Longer duration for dramatic effect
+        pulsePhase: 0,
         
         update(dt, elapsed) {
             const progress = elapsed / this.duration;
+            this.pulsePhase += dt * 30; // Fast pulse
             
-            // Fade out beam
-            this.coreMaterial.opacity = 1.0 - progress;
-            this.glowMaterial.opacity = 0.6 * (1.0 - progress);
-            this.flashMaterial.opacity = 0.8 * (1.0 - progress);
+            // Beam pulsing effect (Star Wars style flickering)
+            const pulse = 0.8 + Math.sin(this.pulsePhase) * 0.2;
             
-            // Shrink flash
-            const flashScale = 1.0 + progress * 2;
+            // Fade out beam with pulse
+            const beamFade = Math.max(0, 1.0 - progress * 1.5);
+            this.coreMaterial.opacity = beamFade * pulse;
+            this.glowMaterial.opacity = 0.5 * beamFade * pulse;
+            this.haloMaterial.opacity = 0.2 * beamFade;
+            
+            // Muzzle flash - quick fade
+            const muzzleFade = Math.max(0, 1.0 - progress * 4);
+            this.muzzleFlashMaterial.opacity = 0.9 * muzzleFade;
+            const muzzleScale = 1.0 + progress * 3;
+            this.muzzleFlash.scale.set(muzzleScale, muzzleScale, muzzleScale);
+            
+            // Energy ring expansion
+            const ringScale = 1.0 + progress * 5;
+            this.energyRing.scale.set(ringScale, ringScale, 1);
+            this.ringMaterial.opacity = 0.8 * Math.max(0, 1.0 - progress * 2);
+            
+            // Impact flash
+            this.flashMaterial.opacity = 0.9 * (1.0 - progress);
+            const flashScale = 1.0 + progress * 3;
             this.flash.scale.set(flashScale, flashScale, flashScale);
+            
+            // Impact glow - slower fade
+            this.impactGlowMaterial.opacity = 0.4 * (1.0 - progress * 0.8);
+            const glowScale = 1.0 + progress * 2;
+            this.impactGlow.scale.set(glowScale, glowScale, glowScale);
+            
+            // Animate particles - disperse outward
+            for (const particle of this.particles) {
+                const vel = particle.userData.velocity;
+                particle.position.x += vel.x * dt;
+                particle.position.y += vel.y * dt;
+                particle.position.z += vel.z * dt;
+                particle.userData.material.opacity = 0.8 * (1.0 - progress);
+                const pScale = 1.0 - progress * 0.5;
+                particle.scale.set(pScale, pScale, pScale);
+            }
+            
+            // Animate sparks - fly outward with gravity
+            for (const spark of this.sparks) {
+                const vel = spark.userData.velocity;
+                spark.position.x += vel.x * dt;
+                spark.position.y += vel.y * dt - 200 * dt; // Gravity
+                spark.position.z += vel.z * dt;
+                vel.multiplyScalar(0.98); // Air resistance
+                spark.userData.material.opacity = 1.0 * (1.0 - progress);
+                const sScale = 1.0 - progress * 0.7;
+                spark.scale.set(sScale, sScale, sScale);
+            }
             
             return progress < 1;
         },
         
         cleanup() {
             scene.remove(this.beamGroup);
+            scene.remove(this.muzzleFlash);
+            scene.remove(this.energyRing);
             scene.remove(this.flash);
+            scene.remove(this.impactGlow);
+            
+            for (const particle of this.particles) {
+                scene.remove(particle);
+                particle.userData.material.dispose();
+            }
+            for (const spark of this.sparks) {
+                scene.remove(spark);
+                spark.userData.material.dispose();
+            }
+            
             this.coreGeometry.dispose();
             this.coreMaterial.dispose();
             this.glowGeometry.dispose();
             this.glowMaterial.dispose();
+            this.haloGeometry.dispose();
+            this.haloMaterial.dispose();
+            this.muzzleFlashGeometry.dispose();
+            this.muzzleFlashMaterial.dispose();
+            this.ringGeometry.dispose();
+            this.ringMaterial.dispose();
             this.flashGeometry.dispose();
             this.flashMaterial.dispose();
+            this.impactGlowGeometry.dispose();
+            this.impactGlowMaterial.dispose();
+            this.particleGeometry.dispose();
+            this.sparkGeometry.dispose();
         }
     });
 }
