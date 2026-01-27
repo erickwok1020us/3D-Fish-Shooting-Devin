@@ -2418,6 +2418,11 @@ function updateSciFiBaseRing(time) {
 // Debug flag for shooting logs (set to false for production)
 const DEBUG_SHOOTING = false;
 
+// Debug flag for aim direction verification (set to true to verify crosshair accuracy)
+// When enabled, logs aim direction data to console for all 4 weapons
+// In FPS mode, rayDir and direction should be identical (diff = 0)
+const DEBUG_AIM = true;
+
 // PERFORMANCE: Cached geometry and pooled meshes for muzzle flash rings
 // IMPROVED: Object pool to avoid per-shot material creation (reduces GC stutter)
 const muzzleFlashCache = {
@@ -14220,6 +14225,36 @@ function fireBullet(targetX, targetY) {
     // PERFORMANCE: Use temp vector instead of creating new Vector3
     cannonMuzzle.getWorldPosition(fireBulletTempVectors.muzzlePos);
     const muzzlePos = fireBulletTempVectors.muzzlePos;
+    
+    // DEBUG_AIM: Log aim direction data to verify crosshair accuracy
+    // In FPS mode, direction should exactly match camera's forward direction (rayDir)
+    if (DEBUG_AIM) {
+        // Get rayDir for comparison
+        const mouseNDC = new THREE.Vector2(
+            (aimX / window.innerWidth) * 2 - 1,
+            -(aimY / window.innerHeight) * 2 + 1
+        );
+        raycaster.setFromCamera(mouseNDC, camera);
+        const rayDir = raycaster.ray.direction;
+        
+        // Calculate difference between rayDir and actual direction used
+        const diff = new THREE.Vector3().copy(direction).sub(rayDir).length();
+        
+        // Calculate angle difference in degrees
+        const angleDiff = Math.acos(Math.min(1, direction.dot(rayDir))) * (180 / Math.PI);
+        
+        console.log(`[AIM DEBUG] weapon=${weaponKey} viewMode=${gameState.viewMode}`);
+        console.log(`[AIM DEBUG] rayDir=(${rayDir.x.toFixed(4)}, ${rayDir.y.toFixed(4)}, ${rayDir.z.toFixed(4)})`);
+        console.log(`[AIM DEBUG] direction=(${direction.x.toFixed(4)}, ${direction.y.toFixed(4)}, ${direction.z.toFixed(4)})`);
+        console.log(`[AIM DEBUG] vectorDiff=${diff.toFixed(6)} angleDiff=${angleDiff.toFixed(4)}°`);
+        console.log(`[AIM DEBUG] muzzlePos=(${muzzlePos.x.toFixed(1)}, ${muzzlePos.y.toFixed(1)}, ${muzzlePos.z.toFixed(1)})`);
+        console.log(`[AIM DEBUG] targetPoint=(${targetPoint.x.toFixed(1)}, ${targetPoint.y.toFixed(1)}, ${targetPoint.z.toFixed(1)})`);
+        
+        // In FPS mode, diff should be 0 (or very close to 0)
+        if (gameState.viewMode === 'fps' && diff > 0.0001) {
+            console.warn(`[AIM DEBUG] WARNING: FPS mode direction differs from rayDir by ${diff.toFixed(6)}!`);
+        }
+    }
     
     // Fire based on weapon type
     if (weapon.type === 'spread') {
