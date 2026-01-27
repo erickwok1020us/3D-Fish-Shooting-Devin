@@ -9882,9 +9882,15 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
     // PERFORMANCE: Use output vector if provided, otherwise use temp vector
     const result = outDirection || aimTempVectors.direction;
     
-    // FIX: Use ray-plane intersection at Y=0 (fish plane) for accurate crosshair convergence
-    // This ensures the bullet trajectory converges with the crosshair exactly where fish swim
-    // 
+    // FPS MODE FIX (Valorant/CS:GO style):
+    // In FPS mode, use camera's forward direction directly to eliminate parallax offset
+    // This ensures bullets travel exactly where the crosshair points
+    if (gameState.viewMode === 'fps') {
+        result.copy(rayDir);
+        return result;
+    }
+    
+    // THIRD-PERSON MODE: Use ray-plane intersection for accurate click-to-hit
     // Ray equation: P(t) = rayOrigin + rayDir * t
     // Fish plane equation: Y = 0
     // Solve: rayOrigin.y + rayDir.y * t = 0 => t = -rayOrigin.y / rayDir.y
@@ -9931,6 +9937,13 @@ function getAimDirectionFromMouse(targetX, targetY, outDirection) {
 // ACCURATE AIMING: Get both direction and target point for accurate bullet trajectory
 // Returns { direction: Vector3, targetPoint: Vector3 }
 // For 8x weapon, we need the target point to calculate parabolic velocity
+//
+// FPS MODE FIX (Valorant/CS:GO style):
+// In true FPS games, bullets travel in the EXACT direction the camera is looking.
+// The crosshair represents where the camera is looking, and bullets hit exactly there.
+// Previously, we calculated direction from muzzle to ray-plane intersection, which
+// caused parallax offset especially when aiming upward.
+// Now in FPS mode, we use the camera's forward direction directly.
 function getAimDirectionAndTarget(targetX, targetY, outDirection, outTargetPoint) {
     // Convert screen coordinates to normalized device coordinates
     aimTempVectors.mouseNDC.set(
@@ -9951,7 +9964,28 @@ function getAimDirectionAndTarget(targetX, targetY, outDirection, outTargetPoint
     const resultDir = outDirection || aimTempVectors.direction;
     const resultTarget = outTargetPoint || aimTempVectors.targetPoint;
     
-    // Calculate intersection with fish plane (Y=0)
+    // FPS MODE: Use camera's forward direction directly (Valorant/CS:GO style)
+    // This ensures bullets travel exactly where the crosshair points, eliminating parallax
+    if (gameState.viewMode === 'fps') {
+        // Use ray direction directly - this is the camera's forward direction for screen center
+        resultDir.copy(rayDir);
+        
+        // Calculate target point along ray direction at a reasonable distance
+        // Use fish plane intersection if possible, otherwise use fallback distance
+        let targetDistance = 400;
+        if (rayDir.y > 0.001) {
+            const t = -rayOrigin.y / rayDir.y;
+            if (t > 10 && t < 2000) {
+                targetDistance = t;
+            }
+        }
+        resultTarget.copy(aimTempVectors.muzzlePos).addScaledVector(rayDir, targetDistance);
+        
+        return { direction: resultDir, targetPoint: resultTarget };
+    }
+    
+    // THIRD-PERSON MODE: Calculate direction from muzzle to ray-plane intersection
+    // This allows clicking on specific fish in the scene
     let targetDistance;
     if (rayDir.y > 0.001) {
         const t = -rayOrigin.y / rayDir.y;
