@@ -4843,7 +4843,8 @@ const AUDIO_CONFIG = {
         hit8x: '8X 武器擊中音效.mp3',
         bossTime: 'Boss time.mp3',
         bossDead: 'Boss dead.mp3',
-        coinReceive: 'Coin receive.wav',
+        coinDrop: 'Coin-Fish dead.mp3',    // Sound when fish dies and coins appear
+        coinReceive: 'Coin receive.wav',   // Sound when coins reach cannon muzzle
         coinCasino: 'Coin receive.wav',
         background: 'background.mp3'
         // menuClick removed - file doesn't exist on R2, using weapon1x as fallback in playMenuClick()
@@ -4858,6 +4859,7 @@ const AUDIO_CONFIG = {
         hit8x: 0.7,
         bossTime: 0.5,
         bossDead: 0.7,
+        coinDrop: 0.6,      // Volume for coin drop sound
         coinReceive: 0.6,
         coinCasino: 0.5,
         background: 0.3
@@ -5359,6 +5361,7 @@ function playWeaponShotSynthesized(weaponKey) {
 }
 
 // Issue #16: Fish kill coin sounds based on fish size
+// This plays when fish dies and coins appear (Coin-Fish dead.mp3)
 function playCoinSound(fishSize) {
     if (!audioContext || !sfxGain) return;
     
@@ -5366,8 +5369,8 @@ function playCoinSound(fishSize) {
         audioContext.resume();
     }
     
-    // Use MP3 coin sound from R2 bucket
-    if (audioBufferCache.has('coinReceive')) {
+    // Use coinDrop sound (Coin-Fish dead.mp3) for when fish dies and coins appear
+    if (audioBufferCache.has('coinDrop')) {
         // Adjust volume based on fish size
         const volumeMultiplier = {
             'small': 0.6,
@@ -5376,7 +5379,7 @@ function playCoinSound(fishSize) {
             'boss': 1.2
         }[fishSize] || 0.6;
         
-        playMP3Sound('coinReceive', volumeMultiplier);
+        playMP3Sound('coinDrop', volumeMultiplier);
         
         // FIX: Removed playBossFanfare() call - it was causing duplicate audio
         // The MP3 coin sound is sufficient for boss kills
