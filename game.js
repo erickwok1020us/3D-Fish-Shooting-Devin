@@ -1582,25 +1582,40 @@ function resetGlbSwapStats() {
 // This ensures skeleton bindings and animations work correctly
 function cloneGLBModel(model, url) {
     const isSkinned = glbLoaderState.skinnedModelUrls.has(url);
+    let clone;
     
     if (isSkinned) {
         if (typeof THREE.SkeletonUtils !== 'undefined') {
             // Use SkeletonUtils.clone for skinned meshes - this properly clones skeleton bindings
-            const clone = THREE.SkeletonUtils.clone(model);
+            clone = THREE.SkeletonUtils.clone(model);
             // Copy userData manually since SkeletonUtils.clone may not preserve it
             clone.userData = JSON.parse(JSON.stringify(model.userData));
             console.log(`[GLB-LOADER] Cloned skinned mesh using SkeletonUtils: ${url}`);
-            return clone;
         } else {
             // CRITICAL WARNING: SkeletonUtils not available - skinned mesh will NOT move correctly!
             // The mesh will render at the original skeleton's location instead of following the parent
             console.error(`[GLB-LOADER] CRITICAL: SkeletonUtils not available for skinned mesh ${url}! Fish will appear stuck at origin. Make sure SkeletonUtils.js is loaded.`);
-            return model.clone();
+            clone = model.clone();
         }
     } else {
         // Regular clone for non-skinned meshes
-        return model.clone();
+        clone = model.clone();
     }
+    
+    // FIX: Deep clone materials to prevent shared material issues
+    // Without this, all cloned fish share the same material instances,
+    // which can cause texture/color corruption (e.g., normal map displayed as color map)
+    clone.traverse((child) => {
+        if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+                child.material = child.material.map(mat => mat.clone());
+            } else {
+                child.material = child.material.clone();
+            }
+        }
+    });
+    
+    return clone;
 }
 
 async function loadFishManifest() {
