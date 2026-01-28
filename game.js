@@ -15068,8 +15068,16 @@ function checkCrosshairFishHit(origin, direction) {
 function fireWithInstantHit(muzzlePos, direction, weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
     
+    // FPS MODE FIX: Use camera position as ray origin for hit detection
+    // The direction is the camera's forward direction, so the ray should start from camera
+    // Using muzzlePos would cause parallax issues since muzzle is below/behind camera
+    let hitCheckOrigin = muzzlePos;
+    if (gameState.viewMode === 'fps' && camera) {
+        hitCheckOrigin = camera.position;
+    }
+    
     // Check if crosshair is on a fish
-    const hit = checkCrosshairFishHit(muzzlePos, direction);
+    const hit = checkCrosshairFishHit(hitCheckOrigin, direction);
     
     if (hit) {
         // INSTANT HIT: Crosshair is on a fish
