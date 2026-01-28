@@ -848,7 +848,11 @@ const gameState = {
     comboCount: 0,           // Current consecutive kills
     comboTimer: 0,           // Time remaining to continue combo
     comboTimeWindow: 3.0,    // Seconds to get next kill to continue combo
-    lastComboBonus: 0        // Last applied combo bonus percentage
+    lastComboBonus: 0,       // Last applied combo bonus percentage
+    // Third-person mouse hover selection + auto-tracking system
+    hoveredFish: null,       // Currently hovered fish (for highlighting)
+    selectedFish: null,      // Currently selected fish (for auto-tracking)
+    lastHoverCheckTime: 0    // Throttle hover detection to 60fps
 };
 
 // ==================== GLB FISH MODEL LOADER (PDF Spec Compliant) ====================
@@ -8571,8 +8575,9 @@ window.startSinglePlayerGame = function() {
     // FIX: Don't show game container yet - wait until map loading is complete
     // This prevents the game screen flash during loading
     
-    // Mark that we're now in the game scene (not lobby)
-    gameState.isInGameScene = true;
+    // FIX: Don't set isInGameScene here - wait until map loading is complete
+    // This prevents shooting/camera movement during loading screen
+    // gameState.isInGameScene will be set to true in loadMap3D() onComplete callback
     
     // Reset boss event timers for fresh game start
     gameState.bossSpawnTimer = 60;
@@ -8599,8 +8604,9 @@ window.startMultiplayerGame = function(manager) {
     // Store multiplayer reference
     window.multiplayer = manager;
     
-    // Mark that we're now in the game scene (not lobby)
-    gameState.isInGameScene = true;
+    // FIX: Don't set isInGameScene here - wait until map loading is complete
+    // This prevents shooting/camera movement during loading screen
+    // gameState.isInGameScene will be set to true in loadMap3D() onComplete callback
     
     // Reset boss event timers for fresh game start
     gameState.bossSpawnTimer = 60;
@@ -8825,6 +8831,10 @@ function loadMap3D(onComplete) {
             // Hide loading overlay
             overlay.style.display = 'none';
             
+            // FIX: Set isInGameScene AFTER loading is complete
+            // This prevents shooting/camera movement during loading screen
+            gameState.isInGameScene = true;
+            
             onComplete(mapScene);
         },
         // onProgress callback
@@ -8856,6 +8866,10 @@ function loadMap3D(onComplete) {
             }
             
             overlay.style.display = 'none';
+            
+            // FIX: Set isInGameScene even on error so game can proceed
+            gameState.isInGameScene = true;
+            
             // Fall back to procedural aquarium
             createProceduralAquarium();
         }
@@ -13746,6 +13760,9 @@ class Bullet {
         this.glbModel = null;
         this.useGLB = false;
         
+        // FPS INSTANT HIT: Visual-only bullets don't do damage (damage already registered)
+        this.isVisualOnly = false;
+        
         // COLLISION OPTIMIZATION: Store last position for segment-sphere collision
         // This enables accurate swept collision detection to prevent tunneling
         this.lastPosition = new THREE.Vector3();
@@ -13831,6 +13848,9 @@ class Bullet {
         const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
         // Note: isGrenade flag kept for legacy compatibility but no longer affects trajectory
         this.isGrenade = (weapon.type === 'aoe' || weapon.type === 'superAoe');
+        
+        // FPS INSTANT HIT: Reset visual-only flag (will be set by spawnVisualBullet if needed)
+        this.isVisualOnly = false;
         
         this.group.position.copy(origin);
         // COLLISION OPTIMIZATION: Initialize lastPosition for segment-sphere collision
@@ -13939,6 +13959,13 @@ class Bullet {
     }
     
     checkFishCollision() {
+        // FPS INSTANT HIT: Skip collision detection for visual-only bullets
+        // These bullets are purely for visual feedback - damage was already registered
+        // by the instant hit system when the shot was fired
+        if (this.isVisualOnly) {
+            return;
+        }
+        
         const weapon = CONFIG.weapons[this.weaponKey];
         const bulletPos = this.group.position;
         const lastPos = this.lastPosition;
@@ -14259,36 +14286,103 @@ function fireBullet(targetX, targetY) {
         }
     }
     
+    // INSTANT HIT SYSTEM:
+    // FPS MODE: If crosshair is on a fish, register hit immediately
+    // THIRD-PERSON MODE: If a fish is selected (hovered), fire at it with guaranteed hit
+    // This ensures 100% hit rate when aiming at fish (player-friendly)
+    // Visual bullet still travels for satisfying feedback
+    const useFpsInstantHit = gameState.viewMode === 'fps' && weapon.type !== 'laser';
+    const useThirdPersonInstantHit = gameState.viewMode === 'third-person' && 
+                                      gameState.selectedFish && 
+                                      gameState.selectedFish.isActive &&
+                                      weapon.type !== 'laser';
+    
+    // THIRD-PERSON INSTANT HIT: Fire at selected fish
+    if (useThirdPersonInstantHit) {
+        // Use the dedicated function for third-person instant hit
+        fireAtSelectedFish(weaponKey);
+        
+        // Issue #14: Enhanced muzzle flash VFX
+        spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+        
+        // Issue #14: Start charge effect for 5x and 8x weapons
+        if (weaponKey === '5x' || weaponKey === '8x') {
+            startCannonChargeEffect(weaponKey);
+        }
+        
+        // Issue #14: Enhanced cannon recoil animation
+        const config = WEAPON_VFX_CONFIG[weaponKey];
+        const recoilStrength = config ? config.recoilStrength : 5;
+        
+        if (cannonBarrel) {
+            barrelRecoilState.originalPosition.copy(cannonBarrel.position);
+            barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
+            barrelRecoilState.recoilDistance = recoilStrength * 2;
+            barrelRecoilState.active = true;
+            barrelRecoilState.phase = 'kick';
+            barrelRecoilState.kickStartTime = performance.now();
+            barrelRecoilState.kickDuration = 30 + recoilStrength;
+            barrelRecoilState.returnDuration = 80 + recoilStrength * 3;
+        }
+        
+        return true;
+    }
+    
     // Fire based on weapon type
     if (weapon.type === 'spread') {
         // 3x weapon: Fire 3 bullets in fan spread pattern
         const spreadAngle = weapon.spreadAngle * (Math.PI / 180); // Convert to radians
         
-        // Center bullet
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
-        
-        // PERFORMANCE: Use temp vectors instead of clone() + new Vector3()
-        // Left bullet (rotate around Y axis)
-        fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
-        
-        // Right bullet (rotate around Y axis)
-        fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+        if (useFpsInstantHit) {
+            // FPS MODE: Use instant hit for center bullet
+            fireWithInstantHit(muzzlePos, direction, weaponKey);
+            
+            // Side bullets also use instant hit
+            fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
+            fireWithInstantHit(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
+            
+            fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
+            fireWithInstantHit(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+        } else {
+            // THIRD-PERSON MODE: Normal bullet spawning
+            // Center bullet
+            spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+            
+            // PERFORMANCE: Use temp vectors instead of clone() + new Vector3()
+            // Left bullet (rotate around Y axis)
+            fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
+            spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
+            
+            // Right bullet (rotate around Y axis)
+            fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
+            spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+        }
         
     } else if (weapon.type === 'laser') {
         // 8x LASER: Instant hitscan - no bullet travel, immediate hit detection
         // Fire a ray from muzzle in direction, damage all fish along the path
+        // Laser already uses hitscan, no need for FPS instant hit
         fireLaserBeam(muzzlePos, direction, weaponKey);
         
     } else if (weapon.type === 'rocket') {
         // 5x ROCKET: Straight line projectile with explosion on impact
-        // No parabolic trajectory - fires straight where you aim
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        if (useFpsInstantHit) {
+            // FPS MODE: Use instant hit
+            fireWithInstantHit(muzzlePos, direction, weaponKey);
+        } else {
+            // THIRD-PERSON MODE: Normal bullet
+            spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        }
         
     } else {
         // Single bullet for projectile type (1x)
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        if (useFpsInstantHit) {
+            // FPS MODE: Use instant hit
+            fireWithInstantHit(muzzlePos, direction, weaponKey);
+        } else {
+            // THIRD-PERSON MODE: Normal bullet
+            spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        }
     }
     
     // Issue #14: Enhanced muzzle flash VFX
@@ -14893,6 +14987,373 @@ function spawnLightningArc(startPos, endPos, color) {
     activeLightningArcs.push(item);
 }
 
+// ==================== FPS INSTANT HIT SYSTEM ====================
+// When crosshair is on a fish in FPS mode, register hit immediately
+// Visual bullet still travels to the fish for satisfying feedback
+
+// Temp vectors for instant hit detection
+const instantHitTempVectors = {
+    fishToRay: new THREE.Vector3(),
+    closestPoint: new THREE.Vector3()
+};
+
+// Maximum range for all weapons (based on farthest fish distance)
+const FPS_MAX_RANGE = 2000;
+
+// Crosshair tolerance radius for hit detection (in world units)
+// This makes it easier to hit fish - the ray doesn't need to be exactly on the fish center
+const CROSSHAIR_HIT_TOLERANCE = 15;
+
+/**
+ * Check if crosshair is aimed at a fish in FPS mode
+ * Returns the closest fish hit by the crosshair ray, or null if no fish
+ * @param {THREE.Vector3} origin - Ray origin (camera position or muzzle)
+ * @param {THREE.Vector3} direction - Ray direction (camera forward)
+ * @returns {Object|null} - { fish, distance, hitPoint } or null
+ */
+function checkCrosshairFishHit(origin, direction) {
+    let closestHit = null;
+    let closestDistance = Infinity;
+    
+    for (const fish of activeFish) {
+        if (!fish.isActive) continue;
+        
+        const fishPos = fish.group.position;
+        const fishRadius = fish.boundingRadius;
+        
+        // Calculate closest point on ray to fish center
+        // Ray: P(t) = origin + direction * t
+        // Project fish position onto ray
+        instantHitTempVectors.fishToRay.copy(fishPos).sub(origin);
+        const t = instantHitTempVectors.fishToRay.dot(direction);
+        
+        // Skip fish behind the origin or too close
+        if (t < 50) continue;
+        
+        // Skip fish beyond max range
+        if (t > FPS_MAX_RANGE) continue;
+        
+        // Calculate closest point on ray
+        instantHitTempVectors.closestPoint.copy(direction).multiplyScalar(t).add(origin);
+        
+        // Calculate distance from fish center to ray
+        const distanceToRay = fishPos.distanceTo(instantHitTempVectors.closestPoint);
+        
+        // Check if ray passes within fish's bounding sphere + tolerance
+        if (distanceToRay <= fishRadius + CROSSHAIR_HIT_TOLERANCE) {
+            // Found a hit - check if it's the closest
+            if (t < closestDistance) {
+                closestDistance = t;
+                closestHit = {
+                    fish: fish,
+                    distance: t,
+                    hitPoint: instantHitTempVectors.closestPoint.clone()
+                };
+            }
+        }
+    }
+    
+    return closestHit;
+}
+
+/**
+ * Fire with instant hit detection for FPS mode
+ * If crosshair is on a fish, register hit immediately and spawn visual bullet
+ * If no fish, fire normal bullet to max range
+ * @param {THREE.Vector3} muzzlePos - Muzzle position
+ * @param {THREE.Vector3} direction - Firing direction
+ * @param {string} weaponKey - Current weapon key
+ * @returns {boolean} - Whether a fish was hit instantly
+ */
+function fireWithInstantHit(muzzlePos, direction, weaponKey) {
+    const weapon = CONFIG.weapons[weaponKey];
+    
+    // Check if crosshair is on a fish
+    const hit = checkCrosshairFishHit(muzzlePos, direction);
+    
+    if (hit) {
+        // INSTANT HIT: Crosshair is on a fish
+        // 1. Register damage immediately
+        const killed = hit.fish.takeDamage(weapon.damage, weaponKey);
+        
+        // 2. Show hit effect
+        if (!killed) {
+            createHitParticles(hit.hitPoint, weapon.color, 5);
+            playWeaponHitSound(weaponKey);
+        }
+        
+        // 3. Spawn visual bullet that travels to the fish (for visual feedback)
+        // The bullet is purely visual - damage already registered
+        spawnVisualBullet(muzzlePos, hit.hitPoint, weaponKey);
+        
+        return true;
+    }
+    
+    // NO HIT: Fire normal bullet to max range
+    // Bullet can still hit fish along its path through normal collision
+    spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+    return false;
+}
+
+/**
+ * Spawn a visual-only bullet that travels to a specific point
+ * Used for instant hit feedback - the bullet doesn't do damage
+ * @param {THREE.Vector3} origin - Starting position
+ * @param {THREE.Vector3} targetPoint - Target position
+ * @param {string} weaponKey - Weapon key for visual style
+ */
+function spawnVisualBullet(origin, targetPoint, weaponKey) {
+    // Calculate direction from origin to target
+    const direction = new THREE.Vector3().subVectors(targetPoint, origin).normalize();
+    
+    // Spawn a normal bullet - it will travel toward the target
+    // The fish is already dead/damaged, so collision won't double-count
+    const bullet = spawnBulletFromDirection(origin, direction, weaponKey);
+    
+    // Mark bullet as visual-only (optional - for future optimization)
+    if (bullet) {
+        bullet.isVisualOnly = true;
+        // Set a shorter lifetime based on distance to target
+        const distance = origin.distanceTo(targetPoint);
+        const weapon = CONFIG.weapons[weaponKey];
+        bullet.lifetime = Math.min(bullet.lifetime, distance / weapon.speed + 0.1);
+    }
+}
+
+// ==================== THIRD-PERSON MOUSE HOVER SELECTION + AUTO-TRACKING ====================
+// When mouse hovers over a fish in third-person mode:
+// 1. Highlight the fish (visual feedback)
+// 2. Cannon automatically tracks the selected fish
+// 3. Clicking fires at the selected fish with guaranteed hit
+
+// Temp vectors for hover detection
+const hoverDetectionTempVectors = {
+    rayOrigin: new THREE.Vector3(),
+    rayDirection: new THREE.Vector3(),
+    fishToRay: new THREE.Vector3(),
+    closestPoint: new THREE.Vector3()
+};
+
+// Hover detection tolerance (larger than FPS for easier selection)
+const HOVER_DETECTION_TOLERANCE = 25;
+
+/**
+ * Check which fish the mouse is hovering over in third-person mode
+ * Uses ray-sphere intersection similar to FPS instant hit detection
+ * @param {number} mouseX - Mouse X position in screen coordinates
+ * @param {number} mouseY - Mouse Y position in screen coordinates
+ * @returns {Fish|null} - The fish being hovered over, or null
+ */
+function checkMouseHoverFish(mouseX, mouseY) {
+    if (!camera || !activeFish) return null;
+    
+    // Convert mouse position to normalized device coordinates (-1 to +1)
+    const mouseNDC = new THREE.Vector2(
+        (mouseX / window.innerWidth) * 2 - 1,
+        -(mouseY / window.innerHeight) * 2 + 1
+    );
+    
+    // Set up raycaster from camera through mouse position
+    raycaster.setFromCamera(mouseNDC, camera);
+    const rayOrigin = raycaster.ray.origin;
+    const rayDirection = raycaster.ray.direction;
+    
+    let closestFish = null;
+    let closestDistance = Infinity;
+    
+    for (const fish of activeFish) {
+        if (!fish.isActive) continue;
+        
+        const fishPos = fish.group.position;
+        const fishRadius = fish.boundingRadius || fish.config.size * 0.5;
+        
+        // Calculate closest point on ray to fish center
+        hoverDetectionTempVectors.fishToRay.copy(fishPos).sub(rayOrigin);
+        const t = hoverDetectionTempVectors.fishToRay.dot(rayDirection);
+        
+        // Skip fish behind the camera
+        if (t < 0) continue;
+        
+        // Calculate closest point on ray
+        hoverDetectionTempVectors.closestPoint.copy(rayDirection).multiplyScalar(t).add(rayOrigin);
+        
+        // Calculate distance from fish center to ray
+        const distanceToRay = fishPos.distanceTo(hoverDetectionTempVectors.closestPoint);
+        
+        // Check if ray passes within fish's bounding sphere + tolerance
+        if (distanceToRay <= fishRadius + HOVER_DETECTION_TOLERANCE) {
+            // Found a potential hit - check if it's the closest
+            if (t < closestDistance) {
+                closestDistance = t;
+                closestFish = fish;
+            }
+        }
+    }
+    
+    return closestFish;
+}
+
+/**
+ * Update fish highlight effect when hovering
+ * Adds a subtle glow/outline to the hovered fish
+ * @param {Fish|null} fish - The fish to highlight, or null to clear highlight
+ */
+function updateFishHighlight(fish) {
+    // Clear previous highlight
+    if (gameState.hoveredFish && gameState.hoveredFish !== fish) {
+        clearFishHighlight(gameState.hoveredFish);
+    }
+    
+    // Apply new highlight
+    if (fish && fish.isActive) {
+        applyFishHighlight(fish);
+    }
+    
+    gameState.hoveredFish = fish;
+}
+
+/**
+ * Apply highlight effect to a fish
+ * Uses emissive color boost for a subtle glow effect
+ * @param {Fish} fish - The fish to highlight
+ */
+function applyFishHighlight(fish) {
+    if (!fish || !fish.group) return;
+    
+    // Store original emissive values if not already stored
+    if (!fish.originalEmissive) {
+        fish.originalEmissive = [];
+        fish.group.traverse((child) => {
+            if (child.isMesh && child.material) {
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach((mat, idx) => {
+                    if (mat.emissive) {
+                        fish.originalEmissive.push({
+                            mesh: child,
+                            matIndex: idx,
+                            color: mat.emissive.clone(),
+                            intensity: mat.emissiveIntensity || 0
+                        });
+                    }
+                });
+            }
+        });
+    }
+    
+    // Apply highlight glow (boost emissive)
+    fish.group.traverse((child) => {
+        if (child.isMesh && child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((mat) => {
+                if (mat.emissive) {
+                    // Add a cyan/white glow for selection highlight
+                    mat.emissive.setHex(0x00ffff);
+                    mat.emissiveIntensity = 0.3;
+                }
+            });
+        }
+    });
+    
+    fish.isHighlighted = true;
+}
+
+/**
+ * Clear highlight effect from a fish
+ * Restores original emissive values
+ * @param {Fish} fish - The fish to clear highlight from
+ */
+function clearFishHighlight(fish) {
+    if (!fish || !fish.group || !fish.originalEmissive) return;
+    
+    // Restore original emissive values
+    fish.originalEmissive.forEach((data) => {
+        if (data.mesh && data.mesh.material) {
+            const materials = Array.isArray(data.mesh.material) ? data.mesh.material : [data.mesh.material];
+            if (materials[data.matIndex]) {
+                materials[data.matIndex].emissive.copy(data.color);
+                materials[data.matIndex].emissiveIntensity = data.intensity;
+            }
+        }
+    });
+    
+    fish.isHighlighted = false;
+}
+
+/**
+ * Update third-person auto-tracking system
+ * Called from the game loop to smoothly track the selected fish
+ */
+function updateThirdPersonAutoTracking() {
+    // Only active in third-person mode when not in AUTO mode
+    if (gameState.viewMode !== 'third-person') return;
+    if (gameState.autoShoot) return;
+    
+    // If we have a selected fish, track it
+    const targetFish = gameState.selectedFish || gameState.hoveredFish;
+    
+    if (targetFish && targetFish.isActive) {
+        // Use existing aimCannonAtFish function for smooth tracking
+        aimCannonAtFish(targetFish);
+    }
+}
+
+/**
+ * Handle mouse move for third-person hover detection
+ * Called from the mousemove event handler
+ * @param {number} mouseX - Mouse X position
+ * @param {number} mouseY - Mouse Y position
+ */
+function handleThirdPersonHover(mouseX, mouseY) {
+    // Throttle hover detection to ~60fps
+    const now = performance.now();
+    if (now - gameState.lastHoverCheckTime < 16) return;
+    gameState.lastHoverCheckTime = now;
+    
+    // Check which fish is under the mouse
+    const hoveredFish = checkMouseHoverFish(mouseX, mouseY);
+    
+    // Update highlight
+    updateFishHighlight(hoveredFish);
+    
+    // Update selected fish (for auto-tracking)
+    gameState.selectedFish = hoveredFish;
+}
+
+/**
+ * Fire at the selected fish in third-person mode
+ * Guarantees hit if a fish is selected
+ * @param {string} weaponKey - Current weapon key
+ * @returns {boolean} - Whether a fish was targeted
+ */
+function fireAtSelectedFish(weaponKey) {
+    const targetFish = gameState.selectedFish || gameState.hoveredFish;
+    
+    if (!targetFish || !targetFish.isActive) {
+        return false;
+    }
+    
+    const weapon = CONFIG.weapons[weaponKey];
+    const muzzlePos = new THREE.Vector3();
+    cannonMuzzle.getWorldPosition(muzzlePos);
+    
+    // Calculate direction to fish
+    const direction = targetFish.group.position.clone().sub(muzzlePos).normalize();
+    
+    // Register damage immediately (instant hit)
+    const killed = targetFish.takeDamage(weapon.damage, weaponKey);
+    
+    // Show hit effect
+    if (!killed) {
+        createHitParticles(targetFish.group.position, weapon.color, 5);
+        playWeaponHitSound(weaponKey);
+    }
+    
+    // Spawn visual bullet for feedback
+    spawnVisualBullet(muzzlePos, targetFish.group.position.clone(), weaponKey);
+    
+    return true;
+}
+
 // ==================== 8X LASER WEAPON ====================
 // Instant hitscan laser - damages all fish along the beam path
 // Temp vectors for laser calculations
@@ -15489,10 +15950,17 @@ function setupEventListeners() {
             return;
         }
         
-        // 3RD PERSON MODE: Aim cannon at mouse position
-        // PERFORMANCE: Use throttled version to limit calls to once per animation frame
-        // This prevents excessive object allocations and garbage collection pressure
-        aimCannonThrottled(e.clientX, e.clientY);
+        // 3RD PERSON MODE: Mouse hover selection + auto-tracking
+        // Check which fish is under the mouse and highlight it
+        handleThirdPersonHover(e.clientX, e.clientY);
+        
+        // If no fish is selected, use traditional aim at mouse position
+        // If a fish is selected, the cannon will auto-track it via updateThirdPersonAutoTracking()
+        if (!gameState.selectedFish) {
+            // PERFORMANCE: Use throttled version to limit calls to once per animation frame
+            // This prevents excessive object allocations and garbage collection pressure
+            aimCannonThrottled(e.clientX, e.clientY);
+        }
         
         const crosshair = document.getElementById('crosshair');
         if (crosshair) {
@@ -16404,6 +16872,12 @@ function animate() {
         updateFPSCamera();
         // PERFORMANCE FIX: Removed updateFPSDebugOverlay() - DOM updates every frame cause severe FPS drop
         // The debug overlay was for development only and should not run in production
+    }
+    
+    // THIRD-PERSON MODE: Auto-tracking system
+    // When a fish is selected (hovered), cannon automatically tracks it
+    if (gameState.viewMode === 'third-person' && !gameState.autoShoot) {
+        updateThirdPersonAutoTracking();
     }
     
     // Auto-shoot with auto-aim (Issue #3 - fully automatic without mouse following)
