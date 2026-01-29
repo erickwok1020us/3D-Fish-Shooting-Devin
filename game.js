@@ -14361,8 +14361,19 @@ function fireBullet(targetX, targetY) {
     } else if (weapon.type === 'laser') {
         // 8x LASER: Instant hitscan - no bullet travel, immediate hit detection
         // Fire a ray from muzzle in direction, damage all fish along the path
-        // Laser already uses hitscan, no need for FPS instant hit
-        fireLaserBeam(muzzlePos, direction, weaponKey);
+        
+        // THIRD-PERSON MODE FIX: If a fish is selected, fire laser toward that fish
+        // This ensures the laser hits the highlighted fish (guaranteed hit)
+        let laserDirection = direction;
+        const selectedFish = gameState.selectedFish || gameState.hoveredFish;
+        if (gameState.viewMode === 'third-person' && selectedFish && selectedFish.isActive) {
+            // Calculate direction from muzzle to selected fish
+            laserDirection = new THREE.Vector3()
+                .subVectors(selectedFish.group.position, muzzlePos)
+                .normalize();
+        }
+        
+        fireLaserBeam(muzzlePos, laserDirection, weaponKey);
         
     } else if (weapon.type === 'rocket') {
         // 5x ROCKET: Straight line projectile with explosion on impact
@@ -15068,8 +15079,16 @@ function checkCrosshairFishHit(origin, direction) {
 function fireWithInstantHit(muzzlePos, direction, weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
     
+    // FPS MODE FIX: Use camera position as ray origin for hit detection
+    // The direction is the camera's forward direction, so the ray should start from camera
+    // Using muzzlePos would cause parallax issues since muzzle is below/behind camera
+    let hitCheckOrigin = muzzlePos;
+    if (gameState.viewMode === 'fps' && camera) {
+        hitCheckOrigin = camera.position;
+    }
+    
     // Check if crosshair is on a fish
-    const hit = checkCrosshairFishHit(muzzlePos, direction);
+    const hit = checkCrosshairFishHit(hitCheckOrigin, direction);
     
     if (hit) {
         // INSTANT HIT: Crosshair is on a fish
