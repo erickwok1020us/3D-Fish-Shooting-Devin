@@ -15111,19 +15111,30 @@ function fireWithInstantHit(muzzlePos, direction, weaponKey) {
     
     if (hit) {
         // INSTANT HIT: Crosshair is on a fish
-        // 1. Register damage immediately
+        // 1. Register damage immediately (hitscan)
         const killed = hit.fish.takeDamage(weapon.damage, weaponKey);
         
-        // 2. Show hit effect
-        if (!killed) {
-            createHitParticles(hit.hitPoint, weapon.color, 5);
-            playWeaponHitSound(weaponKey);
-        }
+        // 2. Calculate bullet travel time for synced hit effects
+        const distance = muzzlePos.distanceTo(hit.hitPoint);
+        const bulletTravelTime = (distance / weapon.speed) * 1000; // Convert to milliseconds
         
-        // 3. Spawn visual bullet that travels to the fish (for visual feedback)
-        // The bullet is purely visual - damage already registered
+        // 3. Spawn visual bullet that travels to the fish
         // Use convergent direction so bullet visually travels from muzzle to fish
         spawnVisualBulletConvergent(muzzlePos, hit.hitPoint, convergentDirection, weaponKey);
+        
+        // 4. Schedule hit effects to sync with bullet arrival (not immediate)
+        // This makes the visual bullet "arrive" at the same time as the hit effect
+        const hitPointCopy = hit.hitPoint.clone();
+        const directionCopy = convergentDirection.clone();
+        setTimeout(() => {
+            // Show particle hit effect
+            if (!killed) {
+                createHitParticles(hitPointCopy, weapon.color, 5);
+                playWeaponHitSound(weaponKey);
+            }
+            // Spawn GLB hit effect (1x, 3x, 5x weapon models)
+            spawnWeaponHitEffect(weaponKey, hitPointCopy, hit.fish, directionCopy);
+        }, bulletTravelTime);
         
         return true;
     }
@@ -15435,15 +15446,23 @@ function fireLaserBeam(origin, direction, weaponKey) {
     const laserWidth = weapon.laserWidth || 8;
     const maxRange = 3000; // Maximum laser range
     
-    // AIM CONVERGENCE SYSTEM FOR LASER (same logic as fireWithInstantHit)
-    // This ensures 8x laser uses the same convergence logic as 1x, 3x, 5x weapons
+    // AIM CONVERGENCE SYSTEM FOR LASER (IDENTICAL logic to fireWithInstantHit)
+    // This ensures 8x laser uses the EXACT same convergence logic as 1x, 3x, 5x weapons
     const AIM_CONVERGENCE_DIST = 30;
     const cameraPos = camera.position.clone();
     
-    // Calculate convergence target point
-    // For laser, we always use the virtual point at convergence distance
-    // (laser doesn't have instant hit detection like bullets)
-    const convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
+    // Check if crosshair is on a fish (same as fireWithInstantHit)
+    const crosshairHit = checkCrosshairFishHit(cameraPos, direction);
+    
+    // Calculate convergence target point (IDENTICAL to fireWithInstantHit)
+    let convergenceTarget;
+    if (crosshairHit) {
+        // IF raycast hits fish -> Target is the exact hit point (same as 1x)
+        convergenceTarget = crosshairHit.hitPoint;
+    } else {
+        // IF raycast hits NOTHING -> Calculate virtual target point
+        convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
+    }
     
     // Calculate convergent direction from muzzle to convergence target
     let convergentDirection = new THREE.Vector3().subVectors(convergenceTarget, origin).normalize();
