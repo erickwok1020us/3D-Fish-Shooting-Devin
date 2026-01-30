@@ -15060,16 +15060,44 @@ function checkCrosshairFishHit(origin, direction) {
  * Fire with instant hit detection for FPS mode
  * If crosshair is on a fish, register hit immediately and spawn visual bullet
  * If no fish, fire normal bullet to max range
+ * 
+ * AIM CONVERGENCE SYSTEM:
+ * Bullet spawns from gun muzzle but angles toward a convergence point on the camera ray.
+ * This eliminates parallax error caused by muzzle offset from camera.
+ * - If raycast hits fish: target = fish position
+ * - If raycast misses: target = camera position + (camera forward * 30 units)
+ * 
  * @param {THREE.Vector3} muzzlePos - Muzzle position
- * @param {THREE.Vector3} direction - Firing direction
+ * @param {THREE.Vector3} direction - Firing direction (camera forward)
  * @param {string} weaponKey - Current weapon key
  * @returns {boolean} - Whether a fish was hit instantly
  */
 function fireWithInstantHit(muzzlePos, direction, weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
     
+    // AIM CONVERGENCE: Define convergence distance (30 world units = "point blank")
+    const AIM_CONVERGENCE_DIST = 30;
+    
+    // Get camera position for convergence calculation
+    const cameraPos = camera.position.clone();
+    
     // Check if crosshair is on a fish
-    const hit = checkCrosshairFishHit(muzzlePos, direction);
+    const hit = checkCrosshairFishHit(cameraPos, direction);
+    
+    // Calculate convergence target point
+    let convergenceTarget;
+    if (hit) {
+        // IF raycast hits fish -> Target is the exact hit point
+        convergenceTarget = hit.hitPoint;
+    } else {
+        // IF raycast hits NOTHING -> Calculate virtual target point
+        // TargetPos = CameraPos + (CameraForwardDir * 30)
+        convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
+    }
+    
+    // Calculate launch direction: BulletVelocityVector = (TargetPos - MuzzlePosition).normalize()
+    // This angles the bullet upward/inward to pass through crosshair at convergence distance
+    const convergentDirection = new THREE.Vector3().subVectors(convergenceTarget, muzzlePos).normalize();
     
     if (hit) {
         // INSTANT HIT: Crosshair is on a fish
@@ -15084,14 +15112,15 @@ function fireWithInstantHit(muzzlePos, direction, weaponKey) {
         
         // 3. Spawn visual bullet that travels to the fish (for visual feedback)
         // The bullet is purely visual - damage already registered
-        spawnVisualBullet(muzzlePos, hit.hitPoint, weaponKey);
+        // Use convergent direction so bullet visually travels from muzzle to fish
+        spawnVisualBulletConvergent(muzzlePos, hit.hitPoint, convergentDirection, weaponKey);
         
         return true;
     }
     
-    // NO HIT: Fire normal bullet to max range
+    // NO HIT: Fire normal bullet toward convergence point
     // Bullet can still hit fish along its path through normal collision
-    spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+    spawnBulletFromDirection(muzzlePos, convergentDirection, weaponKey);
     return false;
 }
 
@@ -15109,6 +15138,30 @@ function spawnVisualBullet(origin, targetPoint, weaponKey) {
     // Spawn a normal bullet - it will travel toward the target
     // The fish is already dead/damaged, so collision won't double-count
     const bullet = spawnBulletFromDirection(origin, direction, weaponKey);
+    
+    // Mark bullet as visual-only (optional - for future optimization)
+    if (bullet) {
+        bullet.isVisualOnly = true;
+        // Set a shorter lifetime based on distance to target
+        const distance = origin.distanceTo(targetPoint);
+        const weapon = CONFIG.weapons[weaponKey];
+        bullet.lifetime = Math.min(bullet.lifetime, distance / weapon.speed + 0.1);
+    }
+}
+
+/**
+ * Spawn a visual-only bullet with convergent trajectory (Aim Convergence System)
+ * Bullet spawns from muzzle and travels along the pre-calculated convergent direction
+ * Used for FPS instant hit feedback with parallax correction
+ * @param {THREE.Vector3} origin - Starting position (muzzle)
+ * @param {THREE.Vector3} targetPoint - Target position (fish hit point)
+ * @param {THREE.Vector3} convergentDirection - Pre-calculated direction from muzzle to convergence target
+ * @param {string} weaponKey - Weapon key for visual style
+ */
+function spawnVisualBulletConvergent(origin, targetPoint, convergentDirection, weaponKey) {
+    // Spawn a normal bullet using the convergent direction
+    // The fish is already dead/damaged, so collision won't double-count
+    const bullet = spawnBulletFromDirection(origin, convergentDirection, weaponKey);
     
     // Mark bullet as visual-only (optional - for future optimization)
     if (bullet) {
