@@ -15097,7 +15097,17 @@ function fireWithInstantHit(muzzlePos, direction, weaponKey) {
     
     // Calculate launch direction: BulletVelocityVector = (TargetPos - MuzzlePosition).normalize()
     // This angles the bullet upward/inward to pass through crosshair at convergence distance
-    const convergentDirection = new THREE.Vector3().subVectors(convergenceTarget, muzzlePos).normalize();
+    let convergentDirection = new THREE.Vector3().subVectors(convergenceTarget, muzzlePos).normalize();
+    
+    // INVERSE SHOOTING SAFETY CHECK (Dot Product)
+    // Problem: If target is behind muzzle (e.g., aiming at ground near feet), 
+    // the firing vector points backwards, causing bullet to shoot into player's face.
+    // Solution: Check if convergent direction opposes camera forward direction
+    const dot = convergentDirection.dot(direction);
+    if (dot < 0) {
+        // Vector opposes camera view - force shoot straight where looking
+        convergentDirection = direction.clone();
+    }
     
     if (hit) {
         // INSTANT HIT: Crosshair is on a fish
@@ -15425,11 +15435,34 @@ function fireLaserBeam(origin, direction, weaponKey) {
     const laserWidth = weapon.laserWidth || 8;
     const maxRange = 3000; // Maximum laser range
     
+    // AIM CONVERGENCE SYSTEM FOR LASER (same logic as fireWithInstantHit)
+    // This ensures 8x laser uses the same convergence logic as 1x, 3x, 5x weapons
+    const AIM_CONVERGENCE_DIST = 30;
+    const cameraPos = camera.position.clone();
+    
+    // Calculate convergence target point
+    // For laser, we always use the virtual point at convergence distance
+    // (laser doesn't have instant hit detection like bullets)
+    const convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
+    
+    // Calculate convergent direction from muzzle to convergence target
+    let convergentDirection = new THREE.Vector3().subVectors(convergenceTarget, origin).normalize();
+    
+    // INVERSE SHOOTING SAFETY CHECK (Dot Product)
+    const dot = convergentDirection.dot(direction);
+    if (dot < 0) {
+        // Vector opposes camera view - force shoot straight where looking
+        convergentDirection = direction.clone();
+    }
+    
+    // Use convergent direction for laser
+    const laserDirection = convergentDirection;
+    
     // Play laser sound
     playSound('explosion'); // TODO: Add dedicated laser sound
     
-    // Calculate laser end point
-    laserTempVectors.rayEnd.copy(direction).normalize().multiplyScalar(maxRange).add(origin);
+    // Calculate laser end point using convergent direction
+    laserTempVectors.rayEnd.copy(laserDirection).normalize().multiplyScalar(maxRange).add(origin);
     
     // Find all fish hit by the laser beam
     const hitFish = [];
@@ -15441,16 +15474,16 @@ function fireLaserBeam(origin, direction, weaponKey) {
         const fishRadius = fish.boundingRadius;
         
         // Calculate closest point on ray to fish center
-        // Ray: P(t) = origin + direction * t
+        // Ray: P(t) = origin + laserDirection * t
         // Project fish position onto ray
         laserTempVectors.fishToRay.copy(fishPos).sub(origin);
-        const t = laserTempVectors.fishToRay.dot(direction);
+        const t = laserTempVectors.fishToRay.dot(laserDirection);
         
         // Skip fish behind the muzzle
         if (t < 50) continue;
         
         // Calculate closest point on ray
-        laserTempVectors.closestPoint.copy(direction).multiplyScalar(t).add(origin);
+        laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(t).add(origin);
         
         // Calculate distance from fish center to ray
         const distanceToRay = fishPos.distanceTo(laserTempVectors.closestPoint);
