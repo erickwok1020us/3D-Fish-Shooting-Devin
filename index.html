@@ -6,6 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fish Shooter 3D</title>
     <style>
+        /* Custom Font - Nice.ttf */
+        @font-face {
+            font-family: 'Nice';
+            src: url('assets/fonts/Nice.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -15,7 +24,7 @@
         body {
             overflow: hidden;
             background: #000;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Nice', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             /* Issue: Removed cursor: crosshair to prevent duplicate crosshair in 3rd person mode */
             /* Custom #crosshair element handles all crosshair display */
         }
