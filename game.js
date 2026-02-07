@@ -1,6 +1,71 @@
 // Fish Shooter 3D - Clean Aquarium Version
 // Using Three.js for 3D rendering
 
+// ==================== PROVABLY FAIR BACKEND INTEGRATION ====================
+// Shadow Mode: Frontend runs game visually, backend validates all critical decisions
+// Server-authoritative design ensures fairness and prevents cheating
+const PROVABLY_FAIR_CONFIG = {
+    enabled: true,
+    shadowMode: true,
+    backendUrl: 'https://app-mrylmfcn.fly.dev'
+};
+
+let provablyFairConnected = false;
+
+async function initProvablyFairBackend() {
+    if (!PROVABLY_FAIR_CONFIG.enabled) {
+        console.log('[PF] Provably Fair backend disabled');
+        return;
+    }
+    
+    if (typeof ProvablyFairClient === 'undefined') {
+        console.warn('[PF] ProvablyFairClient not loaded, running offline');
+        return;
+    }
+    
+    try {
+        console.log('[PF] Connecting to Provably Fair backend...');
+        await ProvablyFairClient.connect(CONFIG.game.initialBalance);
+        provablyFairConnected = true;
+        console.log('[PF] Connected to backend');
+        
+        ProvablyFairClient.setOnBalanceUpdate((newBalance) => {
+            if (PROVABLY_FAIR_CONFIG.shadowMode) {
+                console.log('[PF-SHADOW] Server balance:', newBalance, 'Local balance:', gameState.balance);
+            } else {
+                gameState.balance = newBalance;
+                updateBalanceDisplay();
+            }
+        });
+        
+        ProvablyFairClient.setOnReceiptCreated((receipt) => {
+            console.log('[PF] Kill receipt:', receipt.receipt_hash);
+        });
+        
+        ProvablyFairClient.setOnConnectionChange((connected) => {
+            provablyFairConnected = connected;
+            console.log('[PF] Connection status:', connected ? 'ONLINE' : 'OFFLINE');
+        });
+        
+    } catch (error) {
+        console.warn('[PF] Failed to connect to backend:', error);
+        provablyFairConnected = false;
+    }
+}
+
+function sendShotToBackend(fishId, weaponKey, targetPosition) {
+    if (!provablyFairConnected || !PROVABLY_FAIR_CONFIG.enabled) return;
+    
+    ProvablyFairClient.sendShotIntent(fishId, weaponKey, targetPosition);
+}
+
+function updateBalanceDisplay() {
+    const balanceEl = document.getElementById('balance-value');
+    if (balanceEl) {
+        balanceEl.textContent = gameState.balance.toFixed(2);
+    }
+}
+
 // ==================== SPHERICAL PANORAMA BACKGROUND SYSTEM ====================
 // Sky-sphere mesh approach for full control over panorama positioning and animation
 // Benefits: Can tilt to show seafloor, add dynamic rotation, wider effective view
@@ -8379,6 +8444,10 @@ async function init() {
         updateProgress(95, 'Initializing coin pool...');
         initCoinModelPool();
         
+        // Connect to Provably Fair backend (Shadow Mode)
+        updateProgress(98, 'Connecting to fairness server...');
+        await initProvablyFairBackend();
+        
         updateProgress(100, 'Ready!');
         console.log('[PRELOAD] All GLB models preloaded successfully');
     } catch (error) {
@@ -13103,6 +13172,18 @@ class Fish {
         // BUG FIX: Guard against taking damage when already dead
         // This prevents multiple die() calls and duplicate respawn timers
         if (!this.isActive) return false;
+        
+        // PROVABLY FAIR: Send shot intent to backend for validation
+        // Shadow Mode: Backend validates but doesn't override local game
+        if (provablyFairConnected && PROVABLY_FAIR_CONFIG.enabled) {
+            const fishId = this.id || `fish_${this.config.type}_${Date.now()}`;
+            const targetPos = {
+                x: this.group.position.x / 10,
+                y: this.group.position.y / 10,
+                z: this.group.position.z / 10
+            };
+            sendShotToBackend(fishId, weaponKey, targetPos);
+        }
         
         // Phase 2: Shield Turtle - check if fish has shield
         if (this.config.ability === 'shield' && this.shieldHP > 0) {
