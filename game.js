@@ -32,6 +32,7 @@ async function initProvablyFairBackend() {
         ProvablyFairClient.setOnBalanceUpdate((newBalance) => {
             if (PROVABLY_FAIR_CONFIG.shadowMode) {
                 console.log('[PF-SHADOW] Server balance:', newBalance, 'Local balance:', gameState.balance);
+                updateFairnessPanel();
             } else {
                 gameState.balance = newBalance;
                 updateBalanceDisplay();
@@ -40,12 +41,16 @@ async function initProvablyFairBackend() {
         
         ProvablyFairClient.setOnReceiptCreated((receipt) => {
             console.log('[PF] Kill receipt:', receipt.receipt_hash);
+            updateReceiptsList();
         });
         
         ProvablyFairClient.setOnConnectionChange((connected) => {
             provablyFairConnected = connected;
             console.log('[PF] Connection status:', connected ? 'ONLINE' : 'OFFLINE');
+            updateFairnessPanel();
         });
+        
+        updateFairnessPanel();
         
     } catch (error) {
         console.warn('[PF] Failed to connect to backend:', error);
@@ -64,7 +69,80 @@ function updateBalanceDisplay() {
     if (balanceEl) {
         balanceEl.textContent = gameState.balance.toFixed(2);
     }
+    updateFairnessPanel();
 }
+
+function toggleFairnessPanel() {
+    const panel = document.getElementById('fairness-panel');
+    const toggle = document.getElementById('fairness-toggle');
+    if (panel && toggle) {
+        panel.classList.toggle('visible');
+        toggle.classList.toggle('panel-open');
+        if (panel.classList.contains('visible')) {
+            updateFairnessPanel();
+        }
+    }
+}
+
+function updateFairnessPanel() {
+    if (typeof ProvablyFairClient === 'undefined') return;
+    
+    const statusEl = document.getElementById('pf-status');
+    const serverBalanceEl = document.getElementById('pf-server-balance');
+    const localBalanceEl = document.getElementById('pf-local-balance');
+    const modeEl = document.getElementById('pf-mode');
+    const serverIndicator = document.getElementById('server-balance-value');
+    
+    if (statusEl) {
+        statusEl.textContent = ProvablyFairClient.isOnline() ? 'Connected' : 'Offline';
+        statusEl.style.color = ProvablyFairClient.isOnline() ? '#00ff96' : '#ff6666';
+    }
+    
+    if (serverBalanceEl) {
+        const serverBal = ProvablyFairClient.getBalance();
+        serverBalanceEl.textContent = serverBal > 0 ? serverBal.toFixed(2) : '--';
+    }
+    
+    if (localBalanceEl && typeof gameState !== 'undefined') {
+        localBalanceEl.textContent = gameState.balance.toFixed(2);
+    }
+    
+    if (modeEl) {
+        modeEl.textContent = PROVABLY_FAIR_CONFIG.shadowMode ? 'Shadow' : 'Server';
+    }
+    
+    if (serverIndicator) {
+        const serverBal = ProvablyFairClient.getBalance();
+        serverIndicator.textContent = serverBal > 0 ? serverBal.toFixed(2) : '--';
+    }
+    
+    updateReceiptsList();
+}
+
+function updateReceiptsList() {
+    if (typeof ProvablyFairClient === 'undefined') return;
+    
+    const receiptsEl = document.getElementById('receipts-list');
+    if (!receiptsEl) return;
+    
+    const receipts = ProvablyFairClient.getReceipts();
+    
+    if (receipts.length === 0) {
+        receiptsEl.innerHTML = '<div style="color: #88ccaa; font-size: 11px;">No receipts yet</div>';
+        return;
+    }
+    
+    const recentReceipts = receipts.slice(-5).reverse();
+    receiptsEl.innerHTML = recentReceipts.map(r => `
+        <div class="receipt-item">
+            <div style="color: #aaddcc;">Fish: ${r.fish_type || 'Unknown'}</div>
+            <div style="color: #88ccaa;">Reward: ${r.reward ? r.reward.toFixed(2) : '0.00'}</div>
+            <div class="receipt-hash">${r.receipt_hash ? r.receipt_hash.substring(0, 16) + '...' : 'N/A'}</div>
+        </div>
+    `).join('');
+}
+
+window.toggleFairnessPanel = toggleFairnessPanel;
 
 // ==================== SPHERICAL PANORAMA BACKGROUND SYSTEM ====================
 // Sky-sphere mesh approach for full control over panorama positioning and animation
@@ -10363,6 +10441,7 @@ function autoFireAtFish(targetFish) {
     
     // Deduct cost
     gameState.balance -= weapon.cost;
+    updateBalanceDisplay();
     
     // Set cooldown
     gameState.cooldown = 1 / weapon.shotsPerSecond;
@@ -14303,6 +14382,7 @@ function fireBullet(targetX, targetY) {
     
     // Deduct cost
     gameState.balance -= weapon.cost;
+    updateBalanceDisplay();
     
     // Record bet for RTP tracking
     recordBet(weaponKey);

@@ -1057,6 +1057,116 @@
             }
         }
         
+        /* Provably Fair Panel Styles */
+        #fairness-panel {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            background: linear-gradient(180deg, rgba(20, 40, 60, 0.95), rgba(10, 25, 40, 0.95));
+            border: 2px solid rgba(0, 200, 150, 0.5);
+            border-radius: 15px;
+            padding: 15px;
+            pointer-events: auto;
+            display: none;
+            z-index: 50;
+            box-shadow: 0 5px 20px rgba(0, 200, 150, 0.2);
+            min-width: 280px;
+            max-width: 320px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        #fairness-panel.visible {
+            display: block;
+        }
+        
+        #fairness-panel h4 {
+            color: #00c896;
+            font-size: 14px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid rgba(0, 200, 150, 0.3);
+            padding-bottom: 8px;
+        }
+        
+        #fairness-panel .fairness-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            color: #aaddcc;
+            font-size: 12px;
+            border-bottom: 1px solid rgba(0, 200, 150, 0.1);
+        }
+        
+        #fairness-panel .fairness-label {
+            color: #88ccaa;
+        }
+        
+        #fairness-panel .fairness-value {
+            color: #00ff96;
+            font-weight: bold;
+            font-family: monospace;
+        }
+        
+        #fairness-panel .receipt-item {
+            background: rgba(0, 100, 80, 0.2);
+            border-radius: 8px;
+            padding: 8px;
+            margin: 6px 0;
+            font-size: 11px;
+        }
+        
+        #fairness-panel .receipt-hash {
+            color: #00c896;
+            font-family: monospace;
+            word-break: break-all;
+            font-size: 10px;
+        }
+        
+        #fairness-toggle {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            background: linear-gradient(135deg, rgba(0, 200, 150, 0.3), rgba(0, 150, 100, 0.2));
+            border: 2px solid #00c896;
+            border-radius: 10px;
+            padding: 8px 12px;
+            color: #00ff96;
+            font-size: 12px;
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 45;
+            transition: all 0.3s ease;
+        }
+        
+        #fairness-toggle:hover {
+            background: linear-gradient(135deg, rgba(0, 200, 150, 0.5), rgba(0, 150, 100, 0.4));
+            transform: scale(1.05);
+        }
+        
+        #fairness-toggle.panel-open {
+            display: none;
+        }
+        
+        .server-balance-indicator {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            background: rgba(0, 100, 80, 0.3);
+            border: 1px solid rgba(0, 200, 150, 0.3);
+            border-radius: 8px;
+            padding: 4px 10px;
+            color: #88ccaa;
+            font-size: 11px;
+            display: none;
+        }
+        
+        .server-balance-indicator.visible {
+            display: block;
+        }
+        
         /* Help Panel Styles */
         #help-panel {
             position: absolute;
@@ -1276,6 +1386,46 @@
                 <div class="balance-icon">$</div>
                 <span class="balance-value" id="balance-value">1000.00</span>
                 <span class="balance-label">USDT</span>
+            </div>
+            
+            <!-- Server Balance Indicator (Shadow Mode) -->
+            <div id="server-balance-indicator" class="server-balance-indicator">
+                Server: <span id="server-balance-value">--</span>
+            </div>
+            
+            <!-- Provably Fair Toggle Button -->
+            <button id="fairness-toggle" onclick="toggleFairnessPanel()">Provably Fair</button>
+            
+            <!-- Provably Fair Panel -->
+            <div id="fairness-panel">
+                <h4>Provably Fair</h4>
+                <div id="fairness-status">
+                    <div class="fairness-row">
+                        <span class="fairness-label">Status</span>
+                        <span class="fairness-value" id="pf-status">Connecting...</span>
+                    </div>
+                    <div class="fairness-row">
+                        <span class="fairness-label">Server Balance</span>
+                        <span class="fairness-value" id="pf-server-balance">--</span>
+                    </div>
+                    <div class="fairness-row">
+                        <span class="fairness-label">Local Balance</span>
+                        <span class="fairness-value" id="pf-local-balance">--</span>
+                    </div>
+                    <div class="fairness-row">
+                        <span class="fairness-label">Mode</span>
+                        <span class="fairness-value" id="pf-mode">Shadow</span>
+                    </div>
+                    <div class="fairness-row">
+                        <span class="fairness-label">Target RTP</span>
+                        <span class="fairness-value" id="pf-rtp">99%</span>
+                    </div>
+                </div>
+                <h4 style="margin-top: 15px;">Recent Receipts</h4>
+                <div id="receipts-list">
+                    <div style="color: #88ccaa; font-size: 11px;">No receipts yet</div>
+                </div>
+                <button onclick="toggleFairnessPanel()" style="margin-top: 12px; width: 100%; padding: 8px; background: rgba(0, 150, 100, 0.3); border: 1px solid #00c896; border-radius: 8px; color: #00ff96; cursor: pointer;">Close</button>
             </div>
             
             <!-- Settings Container - Top Right (Issue #19: Unified container) -->
