@@ -1110,8 +1110,7 @@ class BinarySocket {
      * Send shot fired event
      */
     async shoot(data) {
-        this.shotSequenceId++;
-        const shotSequenceId = this.shotSequenceId;
+        const shotSequenceId = (typeof data.seq === 'number') ? data.seq : ++this.shotSequenceId;
         
         const payload = {
             playerId: data.playerId,
@@ -1123,7 +1122,7 @@ class BinarySocket {
             directionY: data.directionY,
             directionZ: data.directionZ,
             shotSequenceId: shotSequenceId,
-            timestamp: Date.now()
+            timestamp: (typeof data.clientTime === 'number') ? data.clientTime : Date.now()
         };
         
         await this.sendPacket(this.PacketId.SHOT_FIRED, payload);

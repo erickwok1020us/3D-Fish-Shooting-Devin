@@ -279,7 +279,19 @@ class MultiplayerManager {
         // Server errors
         this.binarySocket.on('serverError', (data) => {
             console.error('[MULTIPLAYER] Server error:', data);
-            if (this.onError) this.onError(data.message || 'Server error');
+            const msg = data.message || '';
+            if (msg.startsWith('ANOMALY_COOLDOWN')) {
+                const duration = parseInt(msg.split(':')[1]) || 10000;
+                if (this.onAnomalyCooldown) this.onAnomalyCooldown({ durationMs: duration });
+            } else if (msg === 'ANOMALY_WARNING') {
+                if (this.onAnomalyWarning) this.onAnomalyWarning({});
+            } else if (msg === 'SEQ_REQUIRED' || msg === 'CLIENT_TIME_REQUIRED' ||
+                       msg === 'INVALID_COORDINATES' || msg.includes('REPLAY') ||
+                       msg.includes('LAG') || msg.includes('DRIFT')) {
+                if (this.onShootRejected) this.onShootRejected({ reason: msg });
+            } else {
+                if (this.onError) this.onError(msg || 'Server error');
+            }
         });
     }
     
@@ -390,6 +402,11 @@ class MultiplayerManager {
             this.playerId = data.playerId;
             this.slotIndex = data.slotIndex;
             this.isHost = data.isHost;
+            this._shootSeq = 0;
+            if (data.rulesHash) this.rulesHash = data.rulesHash;
+            if (data.rulesVersion) this.rulesVersion = data.rulesVersion;
+            if (data.enforcementPhase != null) this.enforcementPhase = data.enforcementPhase;
+            this._sendVersionCheck();
             if (this.onRoomJoined) this.onRoomJoined(data);
         });
         
@@ -1099,7 +1116,9 @@ class MultiplayerManager {
     
     _sendVersionCheck() {
         if (!this.connected || !this.rulesVersion) return;
-        if (this.socket) {
+        if (this.useBinaryProtocol && this.binarySocket) {
+            console.log('[MULTIPLAYER] Version check skipped for binary protocol (server validates per-packet)');
+        } else if (this.socket) {
             this.socket.emit('versionCheck', { rulesVersion: this.rulesVersion });
         }
     }

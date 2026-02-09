@@ -5902,7 +5902,11 @@ function showRareFishNotification() {
     }, 2000);
 }
 
+var _govNotifTimer = null;
+var _govNotifEl = null;
 function showGovernanceNotification(message, level) {
+    if (_govNotifTimer) { clearTimeout(_govNotifTimer); }
+    if (_govNotifEl && _govNotifEl.parentNode) { _govNotifEl.remove(); }
     const el = document.createElement('div');
     el.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:10000;' +
         'padding:10px 24px;border-radius:8px;font-family:sans-serif;font-size:14px;font-weight:600;' +
@@ -5912,10 +5916,13 @@ function showGovernanceNotification(message, level) {
             : 'background:rgba(234,179,8,0.9);color:#000;border:1px solid #facc15;');
     el.textContent = message;
     document.body.appendChild(el);
+    _govNotifEl = el;
     requestAnimationFrame(() => { el.style.opacity = '1'; });
-    setTimeout(() => {
+    _govNotifTimer = setTimeout(() => {
         el.style.opacity = '0';
-        setTimeout(() => el.remove(), 400);
+        setTimeout(() => { if (el.parentNode) el.remove(); }, 400);
+        _govNotifTimer = null;
+        _govNotifEl = null;
     }, 3000);
 }
 
