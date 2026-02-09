@@ -550,6 +550,11 @@ class BinarySocket {
             case this.PacketId.PLAYER_LEAVE:
                 return this._decodePlayerLeave(view, buffer);
             case this.PacketId.ROOM_STATE:
+                if (buffer.length > 0 && buffer[0] === 0x7B) {
+                    try {
+                        return JSON.parse(new TextDecoder().decode(buffer));
+                    } catch (_) {}
+                }
                 return this._decodeRoomState(view, buffer);
             case this.PacketId.TIME_SYNC_PONG:
                 return this._decodeTimeSyncPong(view, buffer);
