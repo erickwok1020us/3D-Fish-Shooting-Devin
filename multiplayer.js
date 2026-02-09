@@ -74,6 +74,12 @@ class MultiplayerManager {
         this.lastUpdateTime = 0;
         this.updateQueue = [];        // Queued updates to batch send
         
+        // Phase 3 enforcement state
+        this._shootSeq = 0;
+        this.rulesVersion = null;
+        this.rulesHash = null;
+        this.enforcementPhase = null;
+        
         // Callbacks
         this.onConnected = null;
         this.onReconnecting = null;
@@ -88,6 +94,10 @@ class MultiplayerManager {
         this.onBalanceUpdate = null;
         this.onBossWave = null;
         this.onError = null;
+        this.onShootRejected = null;
+        this.onAnomalyWarning = null;
+        this.onAnomalyCooldown = null;
+        this.onVersionMismatch = null;
     }
     
     /**
@@ -366,6 +376,11 @@ class MultiplayerManager {
             this.playerId = data.playerId;
             this.slotIndex = data.slotIndex;
             this.isHost = data.isHost;
+            this._shootSeq = 0;
+            if (data.rulesHash) this.rulesHash = data.rulesHash;
+            if (data.rulesVersion) this.rulesVersion = data.rulesVersion;
+            if (data.enforcementPhase != null) this.enforcementPhase = data.enforcementPhase;
+            this._sendVersionCheck();
             if (this.onRoomCreated) this.onRoomCreated(data);
         });
         
@@ -420,6 +435,11 @@ class MultiplayerManager {
             this.playerId = data.playerId;
             this.slotIndex = data.slotIndex;
             this.isSinglePlayer = true;
+            this._shootSeq = 0;
+            if (data.rulesHash) this.rulesHash = data.rulesHash;
+            if (data.rulesVersion) this.rulesVersion = data.rulesVersion;
+            if (data.enforcementPhase != null) this.enforcementPhase = data.enforcementPhase;
+            this._sendVersionCheck();
             if (this.onGameStarted) this.onGameStarted(data);
         });
         
@@ -479,6 +499,40 @@ class MultiplayerManager {
         this.socket.on('insufficientBalance', (data) => {
             console.warn('[MULTIPLAYER] Insufficient balance:', data);
             if (this.onError) this.onError('Insufficient balance! Need ' + data.required + ' coins');
+        });
+        
+        this.socket.on('shootRejected', (data) => {
+            console.warn('[MULTIPLAYER] Shoot rejected:', data.reason);
+            if (this.onShootRejected) this.onShootRejected(data);
+        });
+        
+        this.socket.on('anomalyWarning', (data) => {
+            console.warn('[MULTIPLAYER] Anomaly warning:', data.message);
+            if (this.onAnomalyWarning) this.onAnomalyWarning(data);
+        });
+        
+        this.socket.on('anomalyCooldown', (data) => {
+            console.warn('[MULTIPLAYER] Anomaly cooldown:', data.message, data.durationMs + 'ms');
+            if (this.onAnomalyCooldown) this.onAnomalyCooldown(data);
+        });
+        
+        this.socket.on('anomalyDisconnect', (data) => {
+            console.error('[MULTIPLAYER] Anomaly disconnect:', data.message);
+            this.connected = false;
+            if (this.onError) this.onError('Disconnected: ' + data.message);
+        });
+        
+        this.socket.on('versionMismatch', (data) => {
+            console.warn('[MULTIPLAYER] Version mismatch:', data);
+            if (this.onVersionMismatch) this.onVersionMismatch(data);
+        });
+        
+        this.socket.on('versionOk', (data) => {
+            console.log('[MULTIPLAYER] Version OK:', data.version);
+        });
+        
+        this.socket.on('seedRevealed', (data) => {
+            console.log('[MULTIPLAYER] Seed revealed, new commitment:', data.newCommitment ? 'yes' : 'no');
         });
     }
     
@@ -827,17 +881,23 @@ class MultiplayerManager {
     shoot(targetX, targetZ) {
         if (!this.connected || !this.roomCode) return;
         
+        this._shootSeq++;
+        
         if (this.useBinaryProtocol && this.binarySocket) {
             this.binarySocket.shoot({
                 targetX,
                 targetZ,
                 playerId: this.playerId,
-                weapon: this.currentWeapon || '1x'
+                weapon: this.currentWeapon || '1x',
+                seq: this._shootSeq,
+                clientTime: Date.now()
             });
         } else if (this.socket) {
             this.socket.emit('shoot', {
                 targetX,
-                targetZ
+                targetZ,
+                seq: this._shootSeq,
+                clientTime: Date.now()
             });
         }
     }
@@ -1035,6 +1095,13 @@ class MultiplayerManager {
         }
         
         return optimized;
+    }
+    
+    _sendVersionCheck() {
+        if (!this.connected || !this.rulesVersion) return;
+        if (this.socket) {
+            this.socket.emit('versionCheck', { rulesVersion: this.rulesVersion });
+        }
     }
     
     /**
