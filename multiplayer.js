@@ -201,6 +201,10 @@ class MultiplayerManager {
         // Room events
         this.binarySocket.on('roomState', (data) => {
             console.log('[MULTIPLAYER] Room state:', data);
+            if (data.state === 'seedRevealed' || data.state === 'receipts') {
+                if (this.onRoomState) this.onRoomState(data);
+                return;
+            }
             this.roomCode = data.roomCode;
             if (data.playerId) this.playerId = data.playerId;
             if (data.slotIndex !== undefined) this.slotIndex = data.slotIndex;
