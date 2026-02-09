@@ -5902,6 +5902,23 @@ function showRareFishNotification() {
     }, 2000);
 }
 
+function showGovernanceNotification(message, level) {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:10000;' +
+        'padding:10px 24px;border-radius:8px;font-family:sans-serif;font-size:14px;font-weight:600;' +
+        'pointer-events:none;opacity:0;transition:opacity 0.3s;' +
+        (level === 'error'
+            ? 'background:rgba(220,38,38,0.9);color:#fff;border:1px solid #f87171;'
+            : 'background:rgba(234,179,8,0.9);color:#000;border:1px solid #facc15;');
+    el.textContent = message;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => { el.style.opacity = '1'; });
+    setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 400);
+    }, 3000);
+}
+
 function triggerRedBorder() {
     const container = document.getElementById('game-container');
     if (!container) return;
@@ -8678,6 +8695,22 @@ window.startMultiplayerGame = function(manager) {
                 startBossMusicMP3();
                 showRareFishNotification('BOSS WAVE INCOMING!');
             }
+        };
+        
+        multiplayerManager.onShootRejected = function(data) {
+            showGovernanceNotification('Shot rejected: ' + data.reason, 'warning');
+        };
+        
+        multiplayerManager.onAnomalyWarning = function(data) {
+            showGovernanceNotification('Anomaly detected in play pattern', 'warning');
+        };
+        
+        multiplayerManager.onAnomalyCooldown = function(data) {
+            showGovernanceNotification('Cooldown: ' + Math.round(data.durationMs / 1000) + 's shooting disabled', 'error');
+        };
+        
+        multiplayerManager.onVersionMismatch = function(data) {
+            showGovernanceNotification('Game version outdated — please refresh', 'error');
         };
     }
     
