@@ -4849,7 +4849,7 @@ const AUDIO_CONFIG = {
         weapon8x: '8X 發射音效.wav',
         hit3x: '3X 武器擊中音效.mp3',
         hit5x: '5X 武器擊中音效.mp3',
-        hit8x: '8X 武器擊中音效.mp3',
+        hit8x: '8X 發射音效.wav',
         bossTime: 'Boss time.mp3',
         bossDead: 'Boss dead.mp3',
         coinDrop: 'Coin-Fish dead.mp3',    // Sound when fish dies and coins appear
