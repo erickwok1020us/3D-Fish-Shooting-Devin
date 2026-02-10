@@ -852,7 +852,8 @@ const gameState = {
     // Third-person mouse hover selection + auto-tracking system
     hoveredFish: null,       // Currently hovered fish (for highlighting)
     selectedFish: null,      // Currently selected fish (for auto-tracking)
-    lastHoverCheckTime: 0    // Throttle hover detection to 60fps
+    lastHoverCheckTime: 0,    // Throttle hover detection to 60fps
+    currentBulletEffect: 0    // Index into BULLET_EFFECT_PRESETS (0 = default/no override)
 };
 
 // ==================== GLB FISH MODEL LOADER (PDF Spec Compliant) ====================
@@ -4324,6 +4325,371 @@ const WEAPON_VFX_CONFIG = {
     // Note: 20x weapon removed per latest specification
 };
 
+// ==================== BULLET EFFECT PRESETS (15 Visual Styles) ====================
+const BULLET_EFFECT_PRESETS = [
+    {
+        id: 'default', name: 'Default',
+        bulletColor: null, bulletEmissive: null, emissiveIntensity: 0.8,
+        trailColor: null, trailOpacity: 0.5,
+        muzzleColor: null, hitColor: null,
+        muzzleParticles: 0, hitParticles: 0,
+        trailType: 'none', hitType: 'default',
+        bulletScale: 1.0, trailSize: 1.0, trailLife: 0.4,
+        secondaryColor: null
+    },
+    {
+        id: 'fireball', name: 'Fireball',
+        bulletColor: 0xff6600, bulletEmissive: 0xff4400, emissiveIntensity: 1.2,
+        trailColor: 0xff3300, trailOpacity: 0.7,
+        muzzleColor: 0xff6600, hitColor: 0xff4400,
+        muzzleParticles: 8, hitParticles: 15,
+        trailType: 'fire', hitType: 'explosion',
+        bulletScale: 1.2, trailSize: 1.5, trailLife: 0.5,
+        secondaryColor: 0xffaa00
+    },
+    {
+        id: 'ice_crystal', name: 'Ice Crystal',
+        bulletColor: 0x00ddff, bulletEmissive: 0x00bbee, emissiveIntensity: 1.0,
+        trailColor: 0x88eeff, trailOpacity: 0.6,
+        muzzleColor: 0x00ddff, hitColor: 0x00bbff,
+        muzzleParticles: 6, hitParticles: 12,
+        trailType: 'sparkle', hitType: 'shatter',
+        bulletScale: 0.9, trailSize: 1.0, trailLife: 0.6,
+        secondaryColor: 0xaaeeff
+    },
+    {
+        id: 'lightning', name: 'Lightning',
+        bulletColor: 0xffff00, bulletEmissive: 0xffee00, emissiveIntensity: 1.5,
+        trailColor: 0xffff44, trailOpacity: 0.8,
+        muzzleColor: 0xffff00, hitColor: 0xffee00,
+        muzzleParticles: 10, hitParticles: 14,
+        trailType: 'electric', hitType: 'electric',
+        bulletScale: 0.8, trailSize: 0.8, trailLife: 0.3,
+        secondaryColor: 0xffffaa
+    },
+    {
+        id: 'plasma', name: 'Plasma',
+        bulletColor: 0xaa00ff, bulletEmissive: 0x8800dd, emissiveIntensity: 1.3,
+        trailColor: 0xbb44ff, trailOpacity: 0.7,
+        muzzleColor: 0xaa00ff, hitColor: 0x9900ee,
+        muzzleParticles: 7, hitParticles: 12,
+        trailType: 'spiral', hitType: 'implosion',
+        bulletScale: 1.1, trailSize: 1.2, trailLife: 0.5,
+        secondaryColor: 0xdd88ff
+    },
+    {
+        id: 'golden_phoenix', name: 'Golden Phoenix',
+        bulletColor: 0xffd700, bulletEmissive: 0xffaa00, emissiveIntensity: 1.4,
+        trailColor: 0xffcc00, trailOpacity: 0.7,
+        muzzleColor: 0xffd700, hitColor: 0xffbb00,
+        muzzleParticles: 10, hitParticles: 18,
+        trailType: 'sparkle', hitType: 'burst',
+        bulletScale: 1.0, trailSize: 1.3, trailLife: 0.6,
+        secondaryColor: 0xffee88
+    },
+    {
+        id: 'emerald', name: 'Emerald',
+        bulletColor: 0x00ff66, bulletEmissive: 0x00dd44, emissiveIntensity: 1.0,
+        trailColor: 0x44ff88, trailOpacity: 0.6,
+        muzzleColor: 0x00ff66, hitColor: 0x00ee55,
+        muzzleParticles: 6, hitParticles: 10,
+        trailType: 'sparkle', hitType: 'shatter',
+        bulletScale: 0.9, trailSize: 1.0, trailLife: 0.5,
+        secondaryColor: 0x88ffaa
+    },
+    {
+        id: 'crimson', name: 'Crimson Flame',
+        bulletColor: 0xcc0000, bulletEmissive: 0xaa0000, emissiveIntensity: 1.2,
+        trailColor: 0xff2200, trailOpacity: 0.7,
+        muzzleColor: 0xcc0000, hitColor: 0xdd0000,
+        muzzleParticles: 8, hitParticles: 14,
+        trailType: 'fire', hitType: 'explosion',
+        bulletScale: 1.1, trailSize: 1.4, trailLife: 0.5,
+        secondaryColor: 0xff4444
+    },
+    {
+        id: 'ocean', name: 'Ocean Wave',
+        bulletColor: 0x0088cc, bulletEmissive: 0x0077bb, emissiveIntensity: 0.9,
+        trailColor: 0x00aadd, trailOpacity: 0.5,
+        muzzleColor: 0x0099dd, hitColor: 0x0088cc,
+        muzzleParticles: 6, hitParticles: 12,
+        trailType: 'bubble', hitType: 'splash',
+        bulletScale: 1.0, trailSize: 1.2, trailLife: 0.7,
+        secondaryColor: 0x44ccee
+    },
+    {
+        id: 'starlight', name: 'Starlight',
+        bulletColor: 0xffffff, bulletEmissive: 0xeeeeff, emissiveIntensity: 1.8,
+        trailColor: 0xffffff, trailOpacity: 0.6,
+        muzzleColor: 0xffffff, hitColor: 0xeeeeff,
+        muzzleParticles: 12, hitParticles: 20,
+        trailType: 'sparkle', hitType: 'burst',
+        bulletScale: 0.7, trailSize: 0.8, trailLife: 0.4,
+        secondaryColor: 0xddddff
+    },
+    {
+        id: 'shadow', name: 'Shadow Bolt',
+        bulletColor: 0x440066, bulletEmissive: 0x330055, emissiveIntensity: 1.0,
+        trailColor: 0x660088, trailOpacity: 0.8,
+        muzzleColor: 0x550077, hitColor: 0x440066,
+        muzzleParticles: 5, hitParticles: 10,
+        trailType: 'spiral', hitType: 'implosion',
+        bulletScale: 1.0, trailSize: 1.3, trailLife: 0.6,
+        secondaryColor: 0x9944cc
+    },
+    {
+        id: 'neon_pink', name: 'Neon Pink',
+        bulletColor: 0xff00aa, bulletEmissive: 0xee0099, emissiveIntensity: 1.6,
+        trailColor: 0xff44cc, trailOpacity: 0.7,
+        muzzleColor: 0xff00aa, hitColor: 0xff00bb,
+        muzzleParticles: 8, hitParticles: 14,
+        trailType: 'electric', hitType: 'burst',
+        bulletScale: 0.9, trailSize: 1.0, trailLife: 0.4,
+        secondaryColor: 0xff88dd
+    },
+    {
+        id: 'solar_flare', name: 'Solar Flare',
+        bulletColor: 0xff8800, bulletEmissive: 0xff6600, emissiveIntensity: 1.5,
+        trailColor: 0xffaa00, trailOpacity: 0.8,
+        muzzleColor: 0xff8800, hitColor: 0xff7700,
+        muzzleParticles: 10, hitParticles: 16,
+        trailType: 'fire', hitType: 'explosion',
+        bulletScale: 1.3, trailSize: 1.6, trailLife: 0.5,
+        secondaryColor: 0xffdd44
+    },
+    {
+        id: 'toxic', name: 'Toxic',
+        bulletColor: 0x44ff00, bulletEmissive: 0x33dd00, emissiveIntensity: 1.1,
+        trailColor: 0x66ff22, trailOpacity: 0.7,
+        muzzleColor: 0x44ff00, hitColor: 0x33ee00,
+        muzzleParticles: 7, hitParticles: 12,
+        trailType: 'bubble', hitType: 'splash',
+        bulletScale: 1.0, trailSize: 1.1, trailLife: 0.6,
+        secondaryColor: 0x88ff44
+    },
+    {
+        id: 'crystal_rainbow', name: 'Crystal Rainbow',
+        bulletColor: 0xff00ff, bulletEmissive: 0x00ffff, emissiveIntensity: 1.4,
+        trailColor: 0xff88ff, trailOpacity: 0.6,
+        muzzleColor: 0xff44ff, hitColor: 0x44ffff,
+        muzzleParticles: 10, hitParticles: 18,
+        trailType: 'sparkle', hitType: 'shatter',
+        bulletScale: 0.9, trailSize: 1.0, trailLife: 0.5,
+        secondaryColor: 0x88ffff,
+        rainbow: true
+    }
+];
+
+function getActiveBulletEffect() {
+    const idx = gameState.currentBulletEffect;
+    if (idx <= 0 || idx >= BULLET_EFFECT_PRESETS.length) return BULLET_EFFECT_PRESETS[0];
+    return BULLET_EFFECT_PRESETS[idx];
+}
+
+const bulletTrailTempVec = new THREE.Vector3();
+
+function spawnBulletTrailParticle(position, bulletVelocity, preset) {
+    if (!preset || preset.trailType === 'none') return;
+    const particle = freeParticles.pop();
+    if (!particle) return;
+
+    const trailSize = preset.trailSize || 1.0;
+    const trailLife = preset.trailLife || 0.4;
+    let color = preset.trailColor;
+
+    if (preset.rainbow) {
+        const t = (performance.now() % 2000) / 2000;
+        const r = Math.sin(t * Math.PI * 2) * 0.5 + 0.5;
+        const g = Math.sin(t * Math.PI * 2 + 2.094) * 0.5 + 0.5;
+        const b = Math.sin(t * Math.PI * 2 + 4.189) * 0.5 + 0.5;
+        color = (Math.floor(r * 255) << 16) | (Math.floor(g * 255) << 8) | Math.floor(b * 255);
+    }
+
+    const spread = 3 * trailSize;
+
+    if (preset.trailType === 'fire') {
+        bulletTrailTempVec.set(
+            -bulletVelocity.x * 0.15 + (Math.random() - 0.5) * 40,
+            -bulletVelocity.y * 0.15 + Math.random() * 30 + 10,
+            -bulletVelocity.z * 0.15 + (Math.random() - 0.5) * 40
+        );
+        const useColor = Math.random() > 0.5 ? color : (preset.secondaryColor || color);
+        particle.spawn(position, bulletTrailTempVec, useColor,
+            (3 + Math.random() * 4) * trailSize, trailLife * (0.8 + Math.random() * 0.4));
+    } else if (preset.trailType === 'sparkle') {
+        bulletTrailTempVec.set(
+            (Math.random() - 0.5) * 60,
+            (Math.random() - 0.5) * 60,
+            (Math.random() - 0.5) * 60
+        );
+        const useColor = Math.random() > 0.3 ? color : (preset.secondaryColor || 0xffffff);
+        particle.spawn(position, bulletTrailTempVec, useColor,
+            (1 + Math.random() * 2) * trailSize, trailLife * (0.5 + Math.random() * 0.5));
+    } else if (preset.trailType === 'electric') {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 20 + Math.random() * 30;
+        bulletTrailTempVec.set(
+            Math.cos(angle) * dist,
+            Math.sin(angle) * dist,
+            (Math.random() - 0.5) * 40
+        );
+        particle.spawn(position, bulletTrailTempVec, color,
+            (1.5 + Math.random() * 2) * trailSize, trailLife * 0.3);
+    } else if (preset.trailType === 'bubble') {
+        bulletTrailTempVec.set(
+            (Math.random() - 0.5) * 20,
+            Math.random() * 40 + 10,
+            (Math.random() - 0.5) * 20
+        );
+        particle.spawn(position, bulletTrailTempVec, color,
+            (2 + Math.random() * 3) * trailSize, trailLife * (0.8 + Math.random() * 0.4));
+    } else if (preset.trailType === 'spiral') {
+        const t = performance.now() * 0.01;
+        const spiralR = 25 * trailSize;
+        bulletTrailTempVec.set(
+            Math.cos(t) * spiralR + (Math.random() - 0.5) * 10,
+            Math.sin(t) * spiralR + (Math.random() - 0.5) * 10,
+            -bulletVelocity.z * 0.1
+        );
+        const useColor = Math.random() > 0.5 ? color : (preset.secondaryColor || color);
+        particle.spawn(position, bulletTrailTempVec, useColor,
+            (2 + Math.random() * 3) * trailSize, trailLife * (0.6 + Math.random() * 0.4));
+    }
+
+    activeParticles.push(particle);
+}
+
+function spawnPresetHitEffect(hitPos, preset) {
+    if (!preset || preset.hitType === 'default') return;
+    const hitColor = preset.hitColor;
+    const count = preset.hitParticles || 10;
+
+    if (preset.hitType === 'explosion') {
+        spawnWaterSplash(hitPos, 35);
+        createHitParticles(hitPos, hitColor, count);
+        triggerScreenFlash(hitColor, 80, 0.15);
+    } else if (preset.hitType === 'shatter') {
+        for (let i = 0; i < count; i++) {
+            const p = freeParticles.pop();
+            if (!p) break;
+            const angle = (i / count) * Math.PI * 2;
+            const speed = 80 + Math.random() * 120;
+            bulletTrailTempVec.set(
+                Math.cos(angle) * speed,
+                Math.random() * 60 + 20,
+                Math.sin(angle) * speed
+            );
+            const c = Math.random() > 0.5 ? hitColor : (preset.secondaryColor || hitColor);
+            p.spawn(hitPos, bulletTrailTempVec, c, 2 + Math.random() * 3, 0.4 + Math.random() * 0.3);
+            activeParticles.push(p);
+        }
+    } else if (preset.hitType === 'electric') {
+        for (let i = 0; i < 4; i++) {
+            const angle = (i / 4) * Math.PI * 2;
+            const endPos = hitPos.clone();
+            endPos.x += Math.cos(angle) * 50;
+            endPos.z += Math.sin(angle) * 50;
+            spawnLightningArc(hitPos, endPos, hitColor);
+        }
+        createHitParticles(hitPos, hitColor, count);
+    } else if (preset.hitType === 'implosion') {
+        for (let i = 0; i < count; i++) {
+            const p = freeParticles.pop();
+            if (!p) break;
+            const angle = (i / count) * Math.PI * 2;
+            const dist = 60 + Math.random() * 40;
+            const startPos = hitPos.clone();
+            startPos.x += Math.cos(angle) * dist;
+            startPos.z += Math.sin(angle) * dist;
+            bulletTrailTempVec.set(
+                -Math.cos(angle) * 150,
+                (Math.random() - 0.5) * 40,
+                -Math.sin(angle) * 150
+            );
+            p.spawn(startPos, bulletTrailTempVec, hitColor, 2 + Math.random() * 2, 0.3 + Math.random() * 0.2);
+            activeParticles.push(p);
+        }
+    } else if (preset.hitType === 'burst') {
+        spawnShockwave(hitPos, hitColor, 60);
+        createHitParticles(hitPos, hitColor, count);
+    } else if (preset.hitType === 'splash') {
+        spawnWaterSplash(hitPos, 30);
+        createHitParticles(hitPos, hitColor, count);
+    }
+}
+
+function createBulletEffectSelectorUI() {
+    let panel = document.getElementById('bullet-effect-panel');
+    if (panel) panel.remove();
+
+    panel = document.createElement('div');
+    panel.id = 'bullet-effect-panel';
+    panel.style.cssText = `
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.92); border: 2px solid #00ccff; border-radius: 16px;
+        padding: 20px; z-index: 10000; display: none; color: #fff;
+        font-family: 'Segoe UI', Arial, sans-serif; max-width: 680px; width: 90vw;
+        box-shadow: 0 0 40px rgba(0,200,255,0.3);
+    `;
+
+    let html = '<div style="text-align:center;margin-bottom:16px;font-size:20px;font-weight:bold;color:#00ccff;">Bullet Effects</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">';
+
+    for (let i = 0; i < BULLET_EFFECT_PRESETS.length; i++) {
+        const p = BULLET_EFFECT_PRESETS[i];
+        const color = p.bulletColor ? '#' + p.bulletColor.toString(16).padStart(6, '0') : '#66ff66';
+        const glow = p.bulletEmissive ? '#' + p.bulletEmissive.toString(16).padStart(6, '0') : color;
+        const isDefault = i === 0;
+        html += `<div data-effect-idx="${i}" class="effect-btn" style="
+            cursor:pointer; padding:10px 6px; border-radius:10px;
+            border:2px solid ${isDefault ? '#888' : glow};
+            background:${isDefault ? 'rgba(50,50,50,0.8)' : 'rgba(0,0,0,0.6)'};
+            text-align:center; transition:all 0.2s;
+            ${gameState.currentBulletEffect === i ? 'box-shadow:0 0 15px ' + glow + ';border-color:#fff;' : ''}
+        ">
+            <div style="width:28px;height:28px;border-radius:50%;margin:0 auto 6px;
+                background:${isDefault ? 'radial-gradient(circle,#66ff66,#339933)' : 'radial-gradient(circle,' + color + ',' + glow + ')'};
+                box-shadow:0 0 12px ${glow};
+            "></div>
+            <div style="font-size:11px;color:#ccc;">${p.name}</div>
+        </div>`;
+    }
+
+    html += '</div>';
+    html += '<div style="text-align:center;margin-top:14px;"><button id="close-effect-panel" style="background:#333;color:#fff;border:1px solid #555;padding:8px 24px;border-radius:8px;cursor:pointer;font-size:14px;">Close</button></div>';
+
+    panel.innerHTML = html;
+    document.body.appendChild(panel);
+
+    panel.querySelectorAll('.effect-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.getAttribute('data-effect-idx'));
+            gameState.currentBulletEffect = idx;
+            panel.style.display = 'none';
+            createBulletEffectSelectorUI();
+        });
+        btn.addEventListener('mouseenter', () => {
+            btn.style.transform = 'scale(1.08)';
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.style.transform = 'scale(1)';
+        });
+    });
+
+    document.getElementById('close-effect-panel').addEventListener('click', () => {
+        panel.style.display = 'none';
+    });
+}
+
+function toggleBulletEffectPanel() {
+    let panel = document.getElementById('bullet-effect-panel');
+    if (!panel) {
+        createBulletEffectSelectorUI();
+        panel = document.getElementById('bullet-effect-panel');
+    }
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
 // ==================== 3X WEAPON FIRE PARTICLE SYSTEM ====================
 // Uses Unity-extracted textures for fire trail and hit effects
 const FIRE_PARTICLE_CONFIG = {
@@ -6007,28 +6373,33 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
         barrelDirection = muzzleFlashTemp.barrelForward;
     }
     
+    const bfxMuzzle = getActiveBulletEffect();
+    const useBfxMuzzle = bfxMuzzle && bfxMuzzle.id !== 'default';
+    const muzzleColorOverride = useBfxMuzzle ? bfxMuzzle.muzzleColor : null;
+    const muzzleCountOverride = useBfxMuzzle ? bfxMuzzle.muzzleParticles : 0;
+    
     if (weaponKey === '1x') {
-        // FIX: Removed muzzle flash ring (user feedback: remove all ring effects)
-        // Keep particles only
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 5);
+        const mc = muzzleColorOverride || config.muzzleColor;
+        const mp = muzzleCountOverride || 5;
+        spawnMuzzleParticles(muzzlePos, direction, mc, mp);
         
     } else if (weaponKey === '3x') {
-        // FIX: Removed muzzle flash ring (user feedback: remove all ring effects)
-        // Keep particles only
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 6);
+        const mc = muzzleColorOverride || config.muzzleColor;
+        const mp = muzzleCountOverride || 6;
+        spawnMuzzleParticles(muzzlePos, direction, mc, mp);
         
     } else if (weaponKey === '5x') {
-        // FIX: Removed muzzle flash ring for 5x weapon (user feedback: too distracting)
-        // Keep lightning burst and particles only
-        // PERFORMANCE: Reduced lightning burst count from 4 to 2 to reduce stutter
-        spawnLightningBurst(muzzlePos, config.muzzleColor, 2);
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 8);
+        const mc = muzzleColorOverride || config.muzzleColor;
+        const mp = muzzleCountOverride || 8;
+        spawnLightningBurst(muzzlePos, mc, 2);
+        spawnMuzzleParticles(muzzlePos, direction, mc, mp);
         
     } else if (weaponKey === '8x') {
         spawnFireballMuzzleFlash(muzzlePos, direction);
-        // FIX: Removed muzzle flash ring (user feedback: remove all ring effects)
         triggerScreenShakeWithStrength(config.screenShake);
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 25);
+        const mc = muzzleColorOverride || config.muzzleColor;
+        const mp = muzzleCountOverride || 25;
+        spawnMuzzleParticles(muzzlePos, direction, mc, mp);
     }
 }
 
@@ -6480,22 +6851,27 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         }
     }
     
-    // Fallback to procedural effects
+    // Check if bullet effect preset overrides the hit effect
+    const bfxHit = getActiveBulletEffect();
+    const useBfxHit = bfxHit && bfxHit.id !== 'default';
+    
+    if (useBfxHit) {
+        spawnPresetHitEffect(hitPos, bfxHit);
+        if (weaponKey === '5x') triggerScreenShakeWithStrength(1);
+        if (weaponKey === '8x') {
+            triggerScreenShakeWithStrength(3);
+            applyExplosionKnockback(hitPos, 200, 150);
+        }
+        return;
+    }
+    
+    // Fallback to procedural effects (default preset or no preset)
     if (weaponKey === '1x') {
-        // Small water splash (ring removed per user feedback)
         spawnWaterSplash(hitPos, 20);
-        // FIX: Removed expanding ring (user feedback: remove all ring effects)
         createHitParticles(hitPos, config.hitColor, 8);
         
     } else if (weaponKey === '3x') {
-        // Medium fire explosion - fire particle burst DISABLED (using original 3x bullet GLB model)
-        // FIX: Removed expanding ring (user feedback: remove all ring effects)
         spawnWaterSplash(hitPos, 35);
-        // Fire particle burst DISABLED - using original 3x bullet GLB model
-        // if (fireParticlePool.initialized) {
-        //     spawnFireHitBurst(hitPos);
-        // }
-        // Electric arc effects around impact
         for (let i = 0; i < 4; i++) {
             const angle = (i / 4) * Math.PI * 2;
             const endPos = hitPos.clone();
@@ -6506,26 +6882,17 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         createHitParticles(hitPos, config.hitColor, 12);
         
     } else if (weaponKey === '5x') {
-        // FIX: Remove ring effects for 5x hit (keep water splash, shockwave, particles)
         spawnWaterSplash(hitPos, 50);
-        // Screen edge flash
         triggerScreenFlash(config.hitColor, 100, 0.2);
-        // Golden shockwave
         spawnShockwave(hitPos, config.hitColor, 100);
         createHitParticles(hitPos, config.hitColor, 20);
-        // Slight screen shake
         triggerScreenShakeWithStrength(1);
         
     } else if (weaponKey === '8x') {
-        // THREE-STAGE EXPLOSION
         spawnMegaExplosion(hitPos);
-        // Strong screen shake
         triggerScreenShakeWithStrength(3);
-        // Full-screen white flash
         triggerScreenFlash(0xffffff, 100, 0.4);
-        // Massive water column
         spawnWaterColumn(hitPos, 80);
-        // Knockback nearby fish
         applyExplosionKnockback(hitPos, 200, 150);
     }
 }
@@ -13924,12 +14291,20 @@ class Bullet {
                 this.glbModel.visible = false;
             }
             
-            // Update procedural visual based on weapon
-            this.bullet.material.color.setHex(weapon.color);
-            this.bullet.material.emissive.setHex(weapon.color);
-            this.trail.material.color.setHex(weapon.color);
+            // Update procedural visual based on weapon (with bullet effect preset override)
+            const bfxPreset = getActiveBulletEffect();
+            const useBfx = bfxPreset && bfxPreset.id !== 'default';
+            const bColor = useBfx ? bfxPreset.bulletColor : weapon.color;
+            const bEmissive = useBfx ? bfxPreset.bulletEmissive : weapon.color;
+            const bEmissiveI = useBfx ? bfxPreset.emissiveIntensity : 0.8;
+            this.bullet.material.color.setHex(bColor);
+            this.bullet.material.emissive.setHex(bEmissive);
+            this.bullet.material.emissiveIntensity = bEmissiveI;
+            this.trail.material.color.setHex(useBfx ? bfxPreset.trailColor : weapon.color);
+            this.trail.material.opacity = useBfx ? bfxPreset.trailOpacity : 0.5;
             
-            const scale = weapon.size / 8;
+            const bfxScale = useBfx ? bfxPreset.bulletScale : 1.0;
+            const scale = (weapon.size / 8) * bfxScale;
             this.bullet.scale.set(scale, scale, scale);
             this.trail.scale.set(scale, scale, scale);
         }
@@ -13973,6 +14348,17 @@ class Bullet {
         //         this.lastFireParticleTime = 0;
         //     }
         // }
+        
+        const bfxTrailPreset = getActiveBulletEffect();
+        if (bfxTrailPreset && bfxTrailPreset.trailType !== 'none') {
+            if (!this._bfxTrailTimer) this._bfxTrailTimer = 0;
+            this._bfxTrailTimer += deltaTime;
+            const spawnInterval = 0.02;
+            if (this._bfxTrailTimer >= spawnInterval) {
+                spawnBulletTrailParticle(this.group.position, this.velocity, bfxTrailPreset);
+                this._bfxTrailTimer = 0;
+            }
+        }
         
         // Check boundaries - very lenient to allow bullets to reach fish
         const { width, height, depth, floorY } = CONFIG.aquarium;
@@ -16389,8 +16775,10 @@ function setupEventListeners() {
             toggleSettingsPanel();
             highlightButton('#settings-container');
             return;
+        } else if (e.key === 'b' || e.key === 'B') {
+            toggleBulletEffectPanel();
+            return;
         } else if (e.key === 'h' || e.key === 'H' || e.key === 'F1') {
-            // H or F1 key: Toggle help panel
             e.preventDefault();
             toggleHelpPanel();
             return;
