@@ -4661,8 +4661,15 @@ function createBulletEffectSelectorUI() {
     panel.innerHTML = html;
     document.body.appendChild(panel);
 
+    panel.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+    panel.addEventListener('mouseup', (e) => { e.stopPropagation(); });
+    panel.addEventListener('click', (e) => { e.stopPropagation(); });
+    panel.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    panel.addEventListener('pointerup', (e) => { e.stopPropagation(); });
+
     panel.querySelectorAll('.effect-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
             const idx = parseInt(btn.getAttribute('data-effect-idx'));
             gameState.currentBulletEffect = idx;
             panel.style.display = 'none';
@@ -4676,7 +4683,8 @@ function createBulletEffectSelectorUI() {
         });
     });
 
-    document.getElementById('close-effect-panel').addEventListener('click', () => {
+    document.getElementById('close-effect-panel').addEventListener('click', (e) => {
+        e.stopPropagation();
         panel.style.display = 'none';
     });
 }
@@ -16542,7 +16550,8 @@ function setupEventListeners() {
         // Don't shoot if clicking on UI elements
         if (e.target.closest('#weapon-panel') || 
             e.target.closest('#auto-shoot-btn') ||
-            e.target.closest('#settings-container')) {
+            e.target.closest('#settings-container') ||
+            e.target.closest('#bullet-effect-panel')) {
             return;
         }
         
