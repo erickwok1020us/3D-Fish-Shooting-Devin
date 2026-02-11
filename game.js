@@ -740,9 +740,9 @@ const CONFIG = {
             damage: 100, shotsPerSecond: 2.5, // cooldown = 0.4s (faster machine gun feel)
             type: 'projectile', color: 0xcccccc, size: 8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
-            convergenceDistance: 500
+            convergenceDistance: 700
         },
-        '3x': { 
+        '3x': {
             multiplier: 3, cost: 3, speed: 700, 
             damage: 180, shotsPerSecond: 2, // cooldown = 0.5s (shotgun should be faster than rocket)
             // Shotgun effect: Fire 3 bullets in fan spread pattern (-15°, 0°, +15°)
@@ -750,25 +750,25 @@ const CONFIG = {
             type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 10,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
-            convergenceDistance: 500
+            convergenceDistance: 700
         },
-        '5x': { 
+        '5x': {
             multiplier: 5, cost: 5, speed: 900, 
             damage: 200, shotsPerSecond: 1.5, // cooldown = 0.667s (rocket needs weight)
             // REDESIGN: Rocket launcher - straight line projectile with explosion on impact
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
             color: 0xffdd00, size: 14,  // Golden/orange color for rocket
             cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-            convergenceDistance: 500
+            convergenceDistance: 700
         },
-        '8x': { 
+        '8x': {
             multiplier: 8, cost: 8, 
             damage: 350, shotsPerSecond: 1.67, // cooldown = 0.6s (laser should feel snappy)
             // REDESIGN: Laser - instant hitscan, pierces through all fish in line
             type: 'laser', piercing: true, laserWidth: 8,
             color: 0xff4444, size: 16,
             cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
-            convergenceDistance: 500
+            convergenceDistance: 700
         }
     },
     
@@ -15104,7 +15104,7 @@ function checkCrosshairFishHit(origin, direction) {
 function fireWithInstantHit(muzzlePos, direction, weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
     
-    const AIM_CONVERGENCE_DIST = 500;
+    const AIM_CONVERGENCE_DIST = 700;
     
     const cameraPos = camera.position.clone();
     
@@ -15463,23 +15463,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
     const laserWidth = weapon.laserWidth || 8;
     const maxRange = 3000; // Maximum laser range
     
-    const AIM_CONVERGENCE_DIST = 500;
-    const cameraPos = camera.position.clone();
-    
-    const convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
-    
-    // Calculate convergent direction from muzzle to convergence target
-    let convergentDirection = new THREE.Vector3().subVectors(convergenceTarget, origin).normalize();
-    
-    // INVERSE SHOOTING SAFETY CHECK (Dot Product)
-    const dot = convergentDirection.dot(direction);
-    if (dot < 0) {
-        // Vector opposes camera view - force shoot straight where looking
-        convergentDirection = direction.clone();
-    }
-    
-    // Use convergent direction for laser
-    const laserDirection = convergentDirection;
+    const laserDirection = direction.clone().normalize();
     
     // Play laser sound
     playSound('explosion'); // TODO: Add dedicated laser sound
