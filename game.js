@@ -10424,25 +10424,27 @@ class Fish {
     }
     
     createMesh() {
-        // FIX: Clean up old group before creating new one (prevents orphaned groups in scene)
-        // This is critical for fish recycling during Boss Mode swarm spawns
-        // Without this fix, old groups remain in fishGroup causing memory leaks and rendering issues
-        if (this.group && this.group.parent) {
-            // Clean up old GLB wrapper if it exists
+        if (this.group) {
             if (this.glbCorrectionWrapper) {
                 this.group.remove(this.glbCorrectionWrapper);
-                // Clean up old AnimationMixer if exists
                 if (this.glbMixer && this.glbModelRoot) {
                     this.glbMixer.stopAllAction();
                     this.glbMixer.uncacheRoot(this.glbModelRoot);
                 }
             }
-            // Remove old group from parent (fishGroup)
-            this.group.parent.remove(this.group);
-            // Dispose procedural mesh geometries (but NOT materials - they're cached)
+            if (this.group.parent) {
+                this.group.parent.remove(this.group);
+            }
             this.group.children.forEach(child => {
                 if (child.geometry) child.geometry.dispose();
             });
+            this.glbModelRoot = null;
+            this.glbMeshes = null;
+            this.glbMixer = null;
+            this.glbAction = null;
+            this.glbPitchWrapper = null;
+            this.glbCorrectionWrapper = null;
+            this.glbLoaded = false;
         }
         
         this.group = new THREE.Group();
@@ -10469,20 +10471,7 @@ class Fish {
         this.group.userData.isFish = true;
         this.group.userData.fishForm = form;
         
-        // FIX: Reset GLB state when form changes (e.g., Boss fish using recycled pool fish)
-        // This ensures the new form's GLB model will be loaded in spawn()
-        // Without this fix, Boss fish like ALPHA ORCA would show geometry instead of GLB
-        // because glbLoaded remained true from the previous fish's form
-        if (this.form !== form) {
-            this.glbLoaded = false;
-            // Clean up old GLB model references to allow new model to load
-            this.glbModelRoot = null;
-            this.glbMeshes = null;
-            this.glbMixer = null;
-            this.glbAction = null;
-            this.glbPitchWrapper = null;
-            this.glbCorrectionWrapper = null;
-        }
+        // GLB state is now always reset in the cleanup block above
         
         // PERFORMANCE: Use cached materials (same color fish share materials - reduces GPU state changes)
         const bodyMaterial = getCachedFishMaterial(color, 0.3, 0.2, color, 0.1);
@@ -17687,13 +17676,11 @@ function spawnBossFish() {
     showBossAlert(bossType);
     
     if (bossType.isSwarm) {
-        // Spawn a swarm of fish as the boss
         const swarmFish = [];
         const centerPos = getRandomFishPositionIn3DSpace();
         
         for (let i = 0; i < bossType.swarmCount; i++) {
-            // PERFORMANCE: Use free-list for O(1) fish retrieval instead of O(n) find()
-            // This eliminates the O(n²) behavior during boss swarm spawn
+            if (activeFish.length >= FISH_SPAWN_CONFIG.maxCount) break;
             const fish = freeFish.pop();
             if (fish) {
                 fish.config = bossConfig;
@@ -17722,8 +17709,6 @@ function spawnBossFish() {
             addBossGlowEffect(swarmFish[0], bossType.glowColor);
         }
     } else {
-        // Spawn single boss fish
-        // PERFORMANCE: Use free-list for O(1) fish retrieval instead of O(n) find()
         const fish = freeFish.pop();
         if (fish) {
             fish.config = bossConfig;
@@ -17831,31 +17816,41 @@ function endBossEvent() {
     gameState.activeBoss = null;
     hideBossUI();
     
-    // Stop boss time music when boss event ends
     stopBossMusicMP3();
     
-    // Remove any remaining boss fish and return them to the pool
-    // BUG FIX: Use fish.group.parent.remove() instead of scene.remove()
-    // because fish groups are added to fishGroup, not scene directly
-    activeFish.forEach(fish => {
+    for (let i = activeFish.length - 1; i >= 0; i--) {
+        const fish = activeFish[i];
         if (fish.isBoss && fish.isActive) {
             fish.isActive = false;
             fish.group.visible = false;
             
-            // Remove from correct parent (fishGroup, not scene)
+            if (fish.respawnTimerId) {
+                clearTimeout(fish.respawnTimerId);
+                fish.respawnTimerId = null;
+            }
+            
+            if (fish.glbMixer) {
+                fish.glbMixer.stopAllAction();
+                if (fish.glbModelRoot) {
+                    fish.glbMixer.uncacheRoot(fish.glbModelRoot);
+                }
+                fish.glbMixer = null;
+                fish.glbAction = null;
+            }
+            
             if (fish.group.parent) {
                 fish.group.parent.remove(fish.group);
             }
             
-            // Clear boss flag so fish can be reused as normal fish
             fish.isBoss = false;
             
-            // Return to free pool for reuse (with duplicate guard)
+            activeFish.splice(i, 1);
+            
             if (!freeFish.includes(fish)) {
                 freeFish.push(fish);
             }
         }
-    });
+    }
 }
 
 function showBossKilledMessage() {
