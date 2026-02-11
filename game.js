@@ -740,7 +740,7 @@ const CONFIG = {
             damage: 100, shotsPerSecond: 2.5, // cooldown = 0.4s (faster machine gun feel)
             type: 'projectile', color: 0xcccccc, size: 8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
-            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
+            convergenceDistance: 500
         },
         '3x': { 
             multiplier: 3, cost: 3, speed: 700, 
@@ -750,7 +750,7 @@ const CONFIG = {
             type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 10,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
-            convergenceDistance: 750  // Halved from 1500 for better close-range targeting
+            convergenceDistance: 500
         },
         '5x': { 
             multiplier: 5, cost: 5, speed: 900, 
@@ -759,7 +759,7 @@ const CONFIG = {
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
             color: 0xffdd00, size: 14,  // Golden/orange color for rocket
             cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-            convergenceDistance: 750
+            convergenceDistance: 500
         },
         '8x': { 
             multiplier: 8, cost: 8, 
@@ -768,7 +768,7 @@ const CONFIG = {
             type: 'laser', piercing: true, laserWidth: 8,
             color: 0xff4444, size: 16,
             cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
-            convergenceDistance: 2000  // Laser has infinite range effectively
+            convergenceDistance: 500
         }
     },
     
@@ -15104,25 +15104,13 @@ function checkCrosshairFishHit(origin, direction) {
 function fireWithInstantHit(muzzlePos, direction, weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
     
-    // AIM CONVERGENCE: Define convergence distance (30 world units = "point blank")
-    const AIM_CONVERGENCE_DIST = 30;
+    const AIM_CONVERGENCE_DIST = 500;
     
-    // Get camera position for convergence calculation
     const cameraPos = camera.position.clone();
     
-    // Check if crosshair is on a fish
     const hit = checkCrosshairFishHit(cameraPos, direction);
     
-    // Calculate convergence target point
-    let convergenceTarget;
-    if (hit) {
-        // IF raycast hits fish -> Target is the exact hit point
-        convergenceTarget = hit.hitPoint;
-    } else {
-        // IF raycast hits NOTHING -> Calculate virtual target point
-        // TargetPos = CameraPos + (CameraForwardDir * 30)
-        convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
-    }
+    const convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
     
     // Calculate launch direction: BulletVelocityVector = (TargetPos - MuzzlePosition).normalize()
     // This angles the bullet upward/inward to pass through crosshair at convergence distance
@@ -15475,23 +15463,10 @@ function fireLaserBeam(origin, direction, weaponKey) {
     const laserWidth = weapon.laserWidth || 8;
     const maxRange = 3000; // Maximum laser range
     
-    // AIM CONVERGENCE SYSTEM FOR LASER (IDENTICAL logic to fireWithInstantHit)
-    // This ensures 8x laser uses the EXACT same convergence logic as 1x, 3x, 5x weapons
-    const AIM_CONVERGENCE_DIST = 30;
+    const AIM_CONVERGENCE_DIST = 500;
     const cameraPos = camera.position.clone();
     
-    // Check if crosshair is on a fish (same as fireWithInstantHit)
-    const crosshairHit = checkCrosshairFishHit(cameraPos, direction);
-    
-    // Calculate convergence target point (IDENTICAL to fireWithInstantHit)
-    let convergenceTarget;
-    if (crosshairHit) {
-        // IF raycast hits fish -> Target is the exact hit point (same as 1x)
-        convergenceTarget = crosshairHit.hitPoint;
-    } else {
-        // IF raycast hits NOTHING -> Calculate virtual target point
-        convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
-    }
+    const convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
     
     // Calculate convergent direction from muzzle to convergence target
     let convergentDirection = new THREE.Vector3().subVectors(convergenceTarget, origin).normalize();
