@@ -3085,7 +3085,7 @@ const PERFORMANCE_CONFIG = {
     },
     // Particle limits
     particles: {
-        maxCount: 150,           // Maximum active particles (reduced from 500 to prevent FPS drops)
+        maxCount: 500,           // Maximum active particles
         cullDistance: 800        // Don't render particles beyond this
     },
     // Shadow map quality settings
@@ -14725,7 +14725,7 @@ function createHitParticles(position, color, count) {
                 (Math.random() - 0.5) * 150
             );
             // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
-            particle.spawn(position, velocity, color, 1.5 + Math.random() * 2, 0.4);
+            particle.spawn(position, velocity, color, 2 + Math.random() * 3, 0.8);
             activeParticles.push(particle);
         }
     }
@@ -17237,7 +17237,7 @@ function createBossUI() {
     bossUIContainer.id = 'boss-ui';
     bossUIContainer.style.cssText = `
         position: fixed;
-        top: 80px;
+        top: 20px;
         left: 50%;
         transform: translateX(-50%);
         text-align: center;
@@ -17247,9 +17247,9 @@ function createBossUI() {
         background: linear-gradient(180deg, rgba(255, 0, 0, 0.3), rgba(100, 0, 0, 0.2));
         border: 3px solid #ff4444;
         border-radius: 15px;
-        padding: 10px 30px;
+        padding: 15px 40px;
         box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
-        min-width: 250px;
+        min-width: 300px;
         max-width: 90vw;
         white-space: nowrap;
     `;
