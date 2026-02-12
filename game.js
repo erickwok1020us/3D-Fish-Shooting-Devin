@@ -14404,12 +14404,7 @@ function fireBullet(targetX, targetY) {
         }
     }
     
-    // INSTANT HIT SYSTEM:
-    // FPS MODE: If crosshair is on a fish, register hit immediately
-    // THIRD-PERSON MODE: If a fish is selected (hovered), fire at it with guaranteed hit
-    // This ensures 100% hit rate when aiming at fish (player-friendly)
-    // Visual bullet still travels for satisfying feedback
-    const useFpsInstantHit = gameState.viewMode === 'fps' && weapon.type !== 'laser';
+    const useFpsConvergent = gameState.viewMode === 'fps' && weapon.type !== 'laser';
     const useThirdPersonInstantHit = gameState.viewMode === 'third-person' && 
                                       gameState.selectedFish && 
                                       gameState.selectedFish.isActive &&
@@ -14451,16 +14446,14 @@ function fireBullet(targetX, targetY) {
         // 3x weapon: Fire 3 bullets in fan spread pattern
         const spreadAngle = weapon.spreadAngle * (Math.PI / 180); // Convert to radians
         
-        if (useFpsInstantHit) {
-            // FPS MODE: Use instant hit for center bullet
-            fireWithInstantHit(muzzlePos, direction, weaponKey);
+        if (useFpsConvergent) {
+            fireWithConvergentDirection(muzzlePos, direction, weaponKey);
             
-            // Side bullets also use instant hit
             fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-            fireWithInstantHit(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
+            fireWithConvergentDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
             
             fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-            fireWithInstantHit(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+            fireWithConvergentDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
         } else {
             // THIRD-PERSON MODE: Normal bullet spawning
             // Center bullet
@@ -14484,19 +14477,15 @@ function fireBullet(targetX, targetY) {
         
     } else if (weapon.type === 'rocket') {
         // 5x ROCKET: Straight line projectile with explosion on impact
-        if (useFpsInstantHit) {
-            // FPS MODE: Use instant hit
-            fireWithInstantHit(muzzlePos, direction, weaponKey);
+        if (useFpsConvergent) {
+            fireWithConvergentDirection(muzzlePos, direction, weaponKey);
         } else {
-            // THIRD-PERSON MODE: Normal bullet
             spawnBulletFromDirection(muzzlePos, direction, weaponKey);
         }
         
     } else {
-        // Single bullet for projectile type (1x)
-        if (useFpsInstantHit) {
-            // FPS MODE: Use instant hit
-            fireWithInstantHit(muzzlePos, direction, weaponKey);
+        if (useFpsConvergent) {
+            fireWithConvergentDirection(muzzlePos, direction, weaponKey);
         } else {
             // THIRD-PERSON MODE: Normal bullet
             spawnBulletFromDirection(muzzlePos, direction, weaponKey);
@@ -15120,7 +15109,7 @@ const FPS_MAX_RANGE = 2000;
 
 // Crosshair tolerance radius for hit detection (in world units)
 // This makes it easier to hit fish - the ray doesn't need to be exactly on the fish center
-const CROSSHAIR_HIT_TOLERANCE = 15;
+const CROSSHAIR_HIT_TOLERANCE = 5;
 
 /**
  * Check if crosshair is aimed at a fish in FPS mode
@@ -15190,63 +15179,19 @@ function checkCrosshairFishHit(origin, direction) {
  * @param {string} weaponKey - Current weapon key
  * @returns {boolean} - Whether a fish was hit instantly
  */
-function fireWithInstantHit(muzzlePos, direction, weaponKey) {
-    const weapon = CONFIG.weapons[weaponKey];
-    
+function fireWithConvergentDirection(muzzlePos, direction, weaponKey) {
     const AIM_CONVERGENCE_DIST = 700;
     
     const cameraPos = camera.position.clone();
-    
-    const hit = checkCrosshairFishHit(cameraPos, direction);
-    
     const convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
     
-    // Calculate launch direction: BulletVelocityVector = (TargetPos - MuzzlePosition).normalize()
-    // This angles the bullet upward/inward to pass through crosshair at convergence distance
     let convergentDirection = new THREE.Vector3().subVectors(convergenceTarget, muzzlePos).normalize();
     
-    // INVERSE SHOOTING SAFETY CHECK (Dot Product)
-    // Problem: If target is behind muzzle (e.g., aiming at ground near feet), 
-    // the firing vector points backwards, causing bullet to shoot into player's face.
-    // Solution: Check if convergent direction opposes camera forward direction
     const dot = convergentDirection.dot(direction);
     if (dot < 0) {
-        // Vector opposes camera view - force shoot straight where looking
         convergentDirection = direction.clone();
     }
     
-    if (hit) {
-        // INSTANT HIT: Crosshair is on a fish
-        // 1. Register damage immediately (hitscan)
-        const killed = hit.fish.takeDamage(weapon.damage, weaponKey);
-        
-        // 2. Calculate bullet travel time for synced hit effects
-        const distance = muzzlePos.distanceTo(hit.hitPoint);
-        const bulletTravelTime = (distance / weapon.speed) * 1000; // Convert to milliseconds
-        
-        // 3. Spawn visual bullet that travels to the fish
-        // Use convergent direction so bullet visually travels from muzzle to fish
-        spawnVisualBulletConvergent(muzzlePos, hit.hitPoint, convergentDirection, weaponKey);
-        
-        // 4. Schedule hit effects to sync with bullet arrival (not immediate)
-        // This makes the visual bullet "arrive" at the same time as the hit effect
-        const hitPointCopy = hit.hitPoint.clone();
-        const directionCopy = convergentDirection.clone();
-        setTimeout(() => {
-            // Show particle hit effect
-            if (!killed) {
-                createHitParticles(hitPointCopy, weapon.color, 5);
-                playWeaponHitSound(weaponKey);
-            }
-            // Spawn GLB hit effect (1x, 3x, 5x weapon models)
-            spawnWeaponHitEffect(weaponKey, hitPointCopy, hit.fish, directionCopy);
-        }, bulletTravelTime);
-        
-        return true;
-    }
-    
-    // NO HIT: Fire normal bullet toward convergence point
-    // Bullet can still hit fish along its path through normal collision
     spawnBulletFromDirection(muzzlePos, convergentDirection, weaponKey);
     return false;
 }
@@ -15981,6 +15926,10 @@ function selectWeapon(weaponKey) {
     });
     
     updateCannonVisual();
+    
+    if (gameState.viewMode === 'fps') {
+        updateFPSCamera();
+    }
     
     // Issue #14: Play weapon switch animation with ring color change
     playWeaponSwitchAnimation(weaponKey);
@@ -17308,6 +17257,9 @@ function createBossUI() {
         border-radius: 15px;
         padding: 15px 40px;
         box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
+        min-width: 300px;
+        max-width: 90vw;
+        white-space: nowrap;
     `;
     
     // Issue #15: Boss Mode countdown with "BOSS MODE! Xs remaining" format
