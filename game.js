@@ -7843,14 +7843,103 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
     const actualCoinCount = Math.min(coinCount, 15);
     const rewardPerCoin = actualCoinCount > 0 ? reward / actualCoinCount : 0;
     
-    // NEW: Use delayed coin collection system - spawn waiting coins instead of immediate fly
+    // INSTANT FLY: Coins fly to cannon immediately on fish death (no 8s delay)
     const useCoinGLB = coinGLBState.loaded && coinGLBState.model;
     if (useCoinGLB) {
-        // Spawn coins that wait at death location, each carrying a portion of the reward
+        const targetPos = new THREE.Vector3();
+        cannonMuzzle.getWorldPosition(targetPos);
+        
         for (let i = 0; i < actualCoinCount; i++) {
-            spawnWaitingCoin(startPosition, rewardPerCoin);
+            const coinModel = cloneCoinModel();
+            if (!coinModel) continue;
+            
+            const offsetX = (Math.random() - 0.5) * 60;
+            const offsetY = (Math.random() - 0.5) * 60;
+            const offsetZ = (Math.random() - 0.5) * 60;
+            
+            coinModel.position.set(
+                startPosition.x + offsetX,
+                startPosition.y + offsetY,
+                startPosition.z + offsetZ
+            );
+            coinModel.scale.setScalar(COIN_GLB_CONFIG.scale);
+            particleGroup.add(coinModel);
+            
+            const startX = coinModel.position.x;
+            const startY = coinModel.position.y;
+            const startZ = coinModel.position.z;
+            const midX = (startX + targetPos.x) * 0.5;
+            const midY = (startY + targetPos.y) * 0.5 + 80 + Math.random() * 40;
+            const midZ = (startZ + targetPos.z) * 0.5;
+            const coinReward = rewardPerCoin;
+            const delayMs = i * 30;
+            
+            addVfxEffect({
+                type: 'coinInstantFly',
+                mesh: coinModel,
+                reward: coinReward,
+                delayMs: delayMs,
+                started: false,
+                startX: startX,
+                startY: startY,
+                startZ: startZ,
+                midX: midX,
+                midY: midY,
+                midZ: midZ,
+                targetX: targetPos.x,
+                targetY: targetPos.y,
+                targetZ: targetPos.z,
+                duration: (0.3 + Math.random() * 0.2) * 1000,
+                elapsedSinceStart: 0,
+                
+                update(dt, elapsed) {
+                    if (!this.started) {
+                        if (elapsed < this.delayMs) return true;
+                        this.started = true;
+                        this.elapsedSinceStart = 0;
+                        if (camera && this.mesh) {
+                            this.mesh.lookAt(camera.position);
+                        }
+                    }
+                    
+                    this.elapsedSinceStart += dt * 1000;
+                    const t = Math.min(this.elapsedSinceStart / this.duration, 1);
+                    
+                    const mt = 1 - t;
+                    const mt2 = mt * mt;
+                    const t2 = t * t;
+                    
+                    this.mesh.position.x = mt2 * this.startX + 2 * mt * t * this.midX + t2 * this.targetX;
+                    this.mesh.position.y = mt2 * this.startY + 2 * mt * t * this.midY + t2 * this.targetY;
+                    this.mesh.position.z = mt2 * this.startZ + 2 * mt * t * this.midZ + t2 * this.targetZ;
+                    
+                    if (camera) {
+                        this.mesh.lookAt(camera.position);
+                    }
+                    
+                    const baseScale = COIN_GLB_CONFIG.scale;
+                    const scale = baseScale * (1 + t * 0.3);
+                    this.mesh.scale.setScalar(scale);
+                    
+                    if (t >= 1) {
+                        if (this.reward > 0) {
+                            gameState.balance += this.reward;
+                            gameState.score += Math.floor(this.reward);
+                        }
+                        playCoinReceiveSound();
+                        spawnScorePopEffect();
+                        return false;
+                    }
+                    return true;
+                },
+                
+                cleanup() {
+                    particleGroup.remove(this.mesh);
+                    returnCoinModelToPool(this.mesh);
+                }
+            });
         }
-        return; // Don't use the old immediate fly animation
+        return;
     }
     
     // FALLBACK: Old immediate fly animation for non-GLB coins
