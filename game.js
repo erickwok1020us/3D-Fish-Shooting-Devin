@@ -15982,6 +15982,10 @@ function selectWeapon(weaponKey) {
     
     updateCannonVisual();
     
+    if (gameState.viewMode === 'fps') {
+        updateFPSCamera();
+    }
+    
     // Issue #14: Play weapon switch animation with ring color change
     playWeaponSwitchAnimation(weaponKey);
     
@@ -17308,6 +17312,9 @@ function createBossUI() {
         border-radius: 15px;
         padding: 15px 40px;
         box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
+        min-width: 300px;
+        max-width: 90vw;
+        white-space: nowrap;
     `;
     
     // Issue #15: Boss Mode countdown with "BOSS MODE! Xs remaining" format
