@@ -14983,8 +14983,7 @@ function updateLightningArcs(deltaTime) {
         
         item.opacity -= fadeSpeed * deltaTime;
         
-        const age = (performance.now() - (item.spawnTime || 0)) / 1000;
-        if (item.opacity <= 0 || age > 2) {
+        if (item.opacity <= 0) {
             // Animation complete, return to pool
             returnLightningArcToPool(item);
             activeLightningArcs.splice(i, 1);
@@ -15085,7 +15084,6 @@ function spawnLightningArc(startPos, endPos, color) {
     
     // Reset animation state
     item.opacity = 1;
-    item.spawnTime = performance.now();
     
     // Add to active list for animation
     activeLightningArcs.push(item);
