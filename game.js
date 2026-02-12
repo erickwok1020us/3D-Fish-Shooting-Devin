@@ -14183,7 +14183,7 @@ class Bullet {
             this.bullet.material.emissive.setHex(weapon.color);
             this.trail.material.color.setHex(weapon.color);
             
-            const scale = weapon.size / 8;
+            const scale = Math.max(weapon.size / 8, 0.5);
             this.bullet.scale.set(scale, scale, scale);
             this.trail.scale.set(scale, scale, scale);
         }
@@ -14318,12 +14318,9 @@ class Bullet {
                     // Trigger chain lightning effect (always show for visual feedback)
                     triggerChainLightning(fish, this.weaponKey, weapon.damage);
                     
-                    // Only show hit particles and hit effect if fish survived
-                    if (!killed) {
-                        createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
-                        spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
-                        playWeaponHitSound(this.weaponKey);
-                    }
+                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
+                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
+                    playWeaponHitSound(this.weaponKey);
                     
                 } else if (weapon.type === 'aoe' || weapon.type === 'superAoe') {
                     // AOE/SuperAOE explosion: damage all fish in radius
@@ -14341,12 +14338,9 @@ class Bullet {
                     // Standard projectile or spread: single target damage
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
                     
-                    // Only show hit particles and hit effect if fish survived
-                    if (!killed) {
-                        createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
-                        spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
-                        playWeaponHitSound(this.weaponKey);
-                    }
+                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
+                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
+                    playWeaponHitSound(this.weaponKey);
                 }
                 
                 this.deactivate();
@@ -15340,7 +15334,8 @@ function checkCrosshairFishHit(origin, direction) {
  * @returns {boolean} - Whether a fish was hit instantly
  */
 function fireWithConvergentDirection(muzzlePos, direction, weaponKey) {
-    const AIM_CONVERGENCE_DIST = 700;
+    const weapon = CONFIG.weapons[weaponKey];
+    const AIM_CONVERGENCE_DIST = weapon.convergenceDistance || 1400;
     
     const cameraPos = camera.position.clone();
     const convergenceTarget = cameraPos.clone().addScaledVector(direction, AIM_CONVERGENCE_DIST);
@@ -15629,11 +15624,8 @@ function fireAtSelectedFish(weaponKey) {
     // Register damage immediately (instant hit)
     const killed = targetFish.takeDamage(weapon.damage, weaponKey);
     
-    // Show hit effect
-    if (!killed) {
-        createHitParticles(targetFish.group.position, weapon.color, 5);
-        playWeaponHitSound(weaponKey);
-    }
+    createHitParticles(targetFish.group.position, weapon.color, 5);
+    playWeaponHitSound(weaponKey);
     
     // Spawn visual bullet for feedback
     spawnVisualBullet(muzzlePos, targetFish.group.position.clone(), weaponKey);
@@ -15730,11 +15722,8 @@ function fireLaserBeam(origin, direction, weaponKey) {
     for (const hit of hitFish) {
         const killed = hit.fish.takeDamage(damage, weaponKey);
         
-        // Show hit effect if fish survived
-        if (!killed) {
-            createHitParticles(hit.hitPoint, weapon.color, 8);
-            playWeaponHitSound(weaponKey);
-        }
+        createHitParticles(hit.hitPoint, weapon.color, 8);
+        playWeaponHitSound(weaponKey);
     }
     
     // Visual beam: from muzzle (origin) to end point on camera ray
@@ -16011,18 +16000,22 @@ function triggerExplosion(center, weaponKey) {
     spawnExplosionEffect(center, aoeRadius, weapon.color);
     
     // Damage all fish within radius
+    let hitAny = false;
     for (const fish of activeFish) {
         if (!fish.isActive) continue;
         
         const distance = center.distanceTo(fish.group.position);
         if (distance <= aoeRadius) {
-            // Calculate damage based on distance (linear falloff)
-            const t = distance / aoeRadius; // 0 at center, 1 at edge
+            const t = distance / aoeRadius;
             const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
             
             fish.takeDamage(damage, weaponKey);
             createHitParticles(fish.group.position, weapon.color, 3);
+            hitAny = true;
         }
+    }
+    if (hitAny) {
+        playWeaponHitSound(weaponKey);
     }
 }
 
