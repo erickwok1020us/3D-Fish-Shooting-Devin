@@ -740,7 +740,7 @@ const CONFIG = {
             damage: 100, shotsPerSecond: 2.5,
             type: 'projectile', color: 0xcccccc, size: 0.8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
-            convergenceDistance: 700
+            convergenceDistance: 1400
         },
         '3x': {
             multiplier: 3, cost: 3, speed: 1000, 
@@ -748,7 +748,7 @@ const CONFIG = {
             type: 'projectile',
             color: 0xffaa00, size: 0.8,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
-            convergenceDistance: 700
+            convergenceDistance: 1400
         },
         '5x': {
             multiplier: 5, cost: 5, speed: 1000, 
@@ -756,16 +756,15 @@ const CONFIG = {
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
             color: 0xffdd00, size: 0.8,
             cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-            convergenceDistance: 700
+            convergenceDistance: 1400
         },
         '8x': {
             multiplier: 8, cost: 8, 
-            damage: 350, shotsPerSecond: 1.67, // cooldown = 0.6s (laser should feel snappy)
-            // REDESIGN: Laser - instant hitscan, pierces through all fish in line
+            damage: 350, shotsPerSecond: 1.67,
             type: 'laser', piercing: true, laserWidth: 8,
             color: 0xff4444, size: 16,
             cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
-            convergenceDistance: 700
+            convergenceDistance: 1400
         }
     },
     
