@@ -10650,7 +10650,9 @@ class Fish {
         }
         
         // Bounding sphere for collision
-        this.boundingRadius = size * 0.8;
+        // Reduced from 0.8 to 0.35 so the collision sphere matches the fish's visual width
+        // (fish are elongated, not spherical - width is ~35-40% of length)
+        this.boundingRadius = size * 0.35;
         
         // PERFORMANCE: Only enable shadows for boss fish (tier 5+) to reduce GPU load
         // Regular fish (tier 1-4) don't cast shadows - this significantly improves FPS
@@ -14100,7 +14102,7 @@ class Bullet {
             
             // AIR WALL FIX v2: Skip fish whose bounding sphere EDGE is too close to the muzzle
             // Previous fix checked fish CENTER distance, but large fish (e.g., Blue Whale with
-            // boundingRadius=336 after 3x scale) could still have their bounding sphere extend
+            // boundingRadius=147 after 3x scale * 0.35) could still have their bounding sphere extend
             // to the muzzle even if their center was 80+ units away.
             // 
             // New approach: Check distance to fish's bounding sphere EDGE, not center
