@@ -745,7 +745,7 @@ const CONFIG = {
         '3x': {
             multiplier: 3, cost: 3, speed: 1000, 
             damage: 180, shotsPerSecond: 2.5,
-            type: 'projectile',
+            type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 0.8,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
             convergenceDistance: 1400
