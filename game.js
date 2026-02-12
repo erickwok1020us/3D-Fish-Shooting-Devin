@@ -6097,6 +6097,51 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
     });
 }
 
+let _hitMarkerEl = null;
+let _hitMarkerTimer = null;
+
+function showHitMarker() {
+    if (!_hitMarkerEl) {
+        _hitMarkerEl = document.createElement('div');
+        _hitMarkerEl.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.08s ease-out;
+        `;
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '28');
+        svg.setAttribute('height', '28');
+        svg.setAttribute('viewBox', '0 0 28 28');
+        svg.innerHTML = `
+            <line x1="4" y1="4" x2="24" y2="24" stroke="#ff3333" stroke-width="3" stroke-linecap="round"/>
+            <line x1="24" y1="4" x2="4" y2="24" stroke="#ff3333" stroke-width="3" stroke-linecap="round"/>
+        `;
+        _hitMarkerEl.appendChild(svg);
+        document.body.appendChild(_hitMarkerEl);
+    }
+
+    if (_hitMarkerTimer) {
+        clearTimeout(_hitMarkerTimer);
+        _hitMarkerTimer = null;
+    }
+
+    _hitMarkerEl.style.opacity = '1';
+    _hitMarkerEl.style.transition = 'none';
+
+    _hitMarkerTimer = setTimeout(() => {
+        if (_hitMarkerEl) {
+            _hitMarkerEl.style.transition = 'opacity 0.12s ease-out';
+            _hitMarkerEl.style.opacity = '0';
+        }
+        _hitMarkerTimer = null;
+    }, 100);
+}
+
 // Temp vectors for muzzle flash barrel direction calculation (avoid per-shot allocations)
 const muzzleFlashTemp = {
     barrelForward: new THREE.Vector3(),
@@ -13377,32 +13422,42 @@ class Fish {
         
         this.hp -= damage;
         
-        // Flash effect - apply to all meshes for GLB fish, or just body for procedural
-        // FIX: Guard against missing material or emissiveIntensity property
+        showHitMarker();
+        
         if (this.glbLoaded && this.glbMeshes) {
-            // Apply flash to all GLB meshes
             this.glbMeshes.forEach(mesh => {
-                if (mesh.material && 'emissiveIntensity' in mesh.material) {
-                    mesh.material.emissiveIntensity = 0.8;
+                if (mesh.material && 'emissive' in mesh.material) {
+                    if (!mesh._origEmissive) {
+                        mesh._origEmissive = mesh.material.emissive.clone();
+                        mesh._origEmissiveIntensity = mesh.material.emissiveIntensity;
+                    }
+                    mesh.material.emissive.set(0xffffff);
+                    mesh.material.emissiveIntensity = 1.0;
                 }
             });
             setTimeout(() => {
                 if (this.isActive && this.glbMeshes) {
                     this.glbMeshes.forEach(mesh => {
-                        if (mesh.material && 'emissiveIntensity' in mesh.material) {
-                            mesh.material.emissiveIntensity = 0.1;
+                        if (mesh.material && mesh._origEmissive) {
+                            mesh.material.emissive.copy(mesh._origEmissive);
+                            mesh.material.emissiveIntensity = mesh._origEmissiveIntensity;
                         }
                     });
                 }
-            }, 100);
-        } else if (this.body && this.body.material && 'emissiveIntensity' in this.body.material) {
-            // Procedural fish - single body mesh
-            this.body.material.emissiveIntensity = 0.8;
+            }, 150);
+        } else if (this.body && this.body.material && 'emissive' in this.body.material) {
+            if (!this.body._origEmissive) {
+                this.body._origEmissive = this.body.material.emissive.clone();
+                this.body._origEmissiveIntensity = this.body.material.emissiveIntensity;
+            }
+            this.body.material.emissive.set(0xffffff);
+            this.body.material.emissiveIntensity = 1.0;
             setTimeout(() => {
-                if (this.isActive && this.body && this.body.material) {
-                    this.body.material.emissiveIntensity = 0.1;
+                if (this.isActive && this.body && this.body.material && this.body._origEmissive) {
+                    this.body.material.emissive.copy(this.body._origEmissive);
+                    this.body.material.emissiveIntensity = this.body._origEmissiveIntensity;
                 }
-            }, 100);
+            }, 150);
         }
         
         if (this.hp <= 0) {
