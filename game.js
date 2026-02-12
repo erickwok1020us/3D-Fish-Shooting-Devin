@@ -15468,8 +15468,18 @@ function fireLaserBeam(origin, direction, weaponKey) {
     // Play laser sound
     playSound('explosion'); // TODO: Add dedicated laser sound
     
-    // Calculate laser end point using convergent direction
-    laserTempVectors.rayEnd.copy(laserDirection).normalize().multiplyScalar(maxRange).add(origin);
+    // FPS MODE FIX: Use camera position as ray origin for hit detection.
+    // The muzzle is offset from the camera (below and in front). If we raycast
+    // from the muzzle in the camera's forward direction, the ray is parallel to
+    // but offset from the crosshair line. This offset varies with pitch angle
+    // (camera Y is fixed, muzzle Y changes with pitch rotation), causing the
+    // laser to appear to shift up/down relative to the crosshair at different angles.
+    // Fix: hit detection uses camera ray (matches crosshair), visual beam renders
+    // from muzzle to the hit/end point on the camera ray (natural convergent visual).
+    const hitOrigin = (gameState.viewMode === 'fps') ? camera.position.clone() : origin;
+    
+    // Calculate laser end point along the hit detection ray
+    laserTempVectors.rayEnd.copy(laserDirection).multiplyScalar(maxRange).add(hitOrigin);
     
     // Find all fish hit by the laser beam
     const hitFish = [];
@@ -15481,16 +15491,15 @@ function fireLaserBeam(origin, direction, weaponKey) {
         const fishRadius = fish.boundingRadius;
         
         // Calculate closest point on ray to fish center
-        // Ray: P(t) = origin + laserDirection * t
-        // Project fish position onto ray
-        laserTempVectors.fishToRay.copy(fishPos).sub(origin);
+        // Ray: P(t) = hitOrigin + laserDirection * t
+        laserTempVectors.fishToRay.copy(fishPos).sub(hitOrigin);
         const t = laserTempVectors.fishToRay.dot(laserDirection);
         
-        // Skip fish behind the muzzle
+        // Skip fish behind the ray origin
         if (t < 50) continue;
         
         // Calculate closest point on ray
-        laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(t).add(origin);
+        laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(t).add(hitOrigin);
         
         // Calculate distance from fish center to ray
         const distanceToRay = fishPos.distanceTo(laserTempVectors.closestPoint);
@@ -15508,7 +15517,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
     // Sort by distance (closest first)
     hitFish.sort((a, b) => a.distance - b.distance);
     
-    // Determine laser end point (first fish hit or max range)
+    // Determine laser end point (last fish hit or max range on camera ray)
     let laserEndPoint;
     if (hitFish.length > 0) {
         // Laser ends at the last fish hit (piercing through all)
@@ -15528,7 +15537,8 @@ function fireLaserBeam(origin, direction, weaponKey) {
         }
     }
     
-    // Spawn laser beam visual effect
+    // Visual beam: from muzzle (origin) to end point on camera ray
+    // This creates a natural convergent beam from cannon to crosshair target
     spawnLaserBeamEffect(origin, laserEndPoint, weapon.color, laserWidth);
     
     // Screen shake for powerful laser
