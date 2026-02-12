@@ -2232,32 +2232,32 @@ function segmentIntersectsSphere(p0, p1, center, radius, outPoint) {
 // halfHeight: vertical (dorsal to ventral)
 // halfWidth: horizontal perpendicular to body
 const FISH_ELLIPSOID_RATIOS = {
-    whale:       [0.45, 0.18, 0.18],
-    killerWhale: [0.42, 0.17, 0.17],
-    shark:       [0.45, 0.15, 0.15],
-    marlin:      [0.48, 0.12, 0.12],
-    hammerhead:  [0.42, 0.13, 0.22],
-    tuna:        [0.40, 0.15, 0.15],
-    dolphinfish: [0.40, 0.15, 0.15],
-    barracuda:   [0.48, 0.10, 0.10],
-    grouper:     [0.35, 0.20, 0.20],
-    parrotfish:  [0.35, 0.18, 0.15],
-    angelfish:   [0.25, 0.30, 0.08],
-    lionfish:    [0.30, 0.22, 0.22],
-    tang:        [0.28, 0.25, 0.10],
-    sardine:     [0.40, 0.12, 0.12],
-    anchovy:     [0.40, 0.12, 0.12],
-    clownfish:   [0.30, 0.18, 0.13],
-    damselfish:  [0.30, 0.18, 0.13],
-    mantaRay:    [0.30, 0.08, 0.45],
-    pufferfish:  [0.22, 0.22, 0.22],
-    seahorse:    [0.12, 0.38, 0.12],
-    flyingFish:  [0.40, 0.12, 0.22],
-    crab:        [0.20, 0.15, 0.25],
-    eel:         [0.50, 0.10, 0.10],
-    turtle:      [0.30, 0.18, 0.30],
-    goldfish:    [0.25, 0.20, 0.15],
-    standard:    [0.35, 0.15, 0.15],
+    whale:       [0.45, 0.28, 0.28],
+    killerWhale: [0.42, 0.27, 0.27],
+    shark:       [0.45, 0.25, 0.25],
+    marlin:      [0.48, 0.22, 0.22],
+    hammerhead:  [0.42, 0.23, 0.32],
+    tuna:        [0.40, 0.25, 0.25],
+    dolphinfish: [0.40, 0.25, 0.25],
+    barracuda:   [0.48, 0.20, 0.20],
+    grouper:     [0.38, 0.30, 0.30],
+    parrotfish:  [0.35, 0.28, 0.25],
+    angelfish:   [0.28, 0.35, 0.18],
+    lionfish:    [0.32, 0.30, 0.30],
+    tang:        [0.30, 0.32, 0.20],
+    sardine:     [0.40, 0.22, 0.22],
+    anchovy:     [0.40, 0.22, 0.22],
+    clownfish:   [0.32, 0.28, 0.22],
+    damselfish:  [0.32, 0.28, 0.22],
+    mantaRay:    [0.32, 0.18, 0.45],
+    pufferfish:  [0.28, 0.28, 0.28],
+    seahorse:    [0.20, 0.38, 0.20],
+    flyingFish:  [0.40, 0.22, 0.30],
+    crab:        [0.25, 0.22, 0.30],
+    eel:         [0.50, 0.20, 0.20],
+    turtle:      [0.32, 0.25, 0.35],
+    goldfish:    [0.28, 0.28, 0.22],
+    standard:    [0.35, 0.25, 0.25],
 };
 
 const ellipsoidTempVectors = {
@@ -13444,7 +13444,7 @@ class Fish {
                         }
                     });
                 }
-            }, 150);
+            }, 80);
         } else if (this.body && this.body.material && 'emissive' in this.body.material) {
             if (!this.body._origEmissive) {
                 this.body._origEmissive = this.body.material.emissive.clone();
@@ -13457,7 +13457,7 @@ class Fish {
                     this.body.material.emissive.copy(this.body._origEmissive);
                     this.body.material.emissiveIntensity = this.body._origEmissiveIntensity;
                 }
-            }, 150);
+            }, 80);
         }
         
         if (this.hp <= 0) {
