@@ -2226,6 +2226,126 @@ function segmentIntersectsSphere(p0, p1, center, radius, outPoint) {
     return { hit: false, t: -1 };
 }
 
+// ELLIPSOID COLLISION SYSTEM: Per-form aspect ratios for accurate fish hitboxes
+// [halfLength, halfHeight, halfWidth] as fractions of 'size' (= config.size * glbModelScaleMultiplier)
+// halfLength: along fish body axis (head to tail)
+// halfHeight: vertical (dorsal to ventral)
+// halfWidth: horizontal perpendicular to body
+const FISH_ELLIPSOID_RATIOS = {
+    whale:       [0.45, 0.18, 0.18],
+    killerWhale: [0.42, 0.17, 0.17],
+    shark:       [0.45, 0.15, 0.15],
+    marlin:      [0.48, 0.12, 0.12],
+    hammerhead:  [0.42, 0.13, 0.22],
+    tuna:        [0.40, 0.15, 0.15],
+    dolphinfish: [0.40, 0.15, 0.15],
+    barracuda:   [0.48, 0.10, 0.10],
+    grouper:     [0.35, 0.20, 0.20],
+    parrotfish:  [0.35, 0.18, 0.15],
+    angelfish:   [0.25, 0.30, 0.08],
+    lionfish:    [0.30, 0.22, 0.22],
+    tang:        [0.28, 0.25, 0.10],
+    sardine:     [0.40, 0.12, 0.12],
+    anchovy:     [0.40, 0.12, 0.12],
+    clownfish:   [0.30, 0.18, 0.13],
+    damselfish:  [0.30, 0.18, 0.13],
+    mantaRay:    [0.30, 0.08, 0.45],
+    pufferfish:  [0.22, 0.22, 0.22],
+    seahorse:    [0.12, 0.38, 0.12],
+    flyingFish:  [0.40, 0.12, 0.22],
+    crab:        [0.20, 0.15, 0.25],
+    eel:         [0.50, 0.10, 0.10],
+    turtle:      [0.30, 0.18, 0.30],
+    goldfish:    [0.25, 0.20, 0.15],
+    standard:    [0.35, 0.15, 0.15],
+};
+
+const ellipsoidTempVectors = {
+    relP0: new THREE.Vector3(),
+    relP1: new THREE.Vector3(),
+    scaledP0: new THREE.Vector3(),
+    scaledP1: new THREE.Vector3(),
+    segDir: new THREE.Vector3(),
+    toCenter: new THREE.Vector3(),
+    closestPoint: new THREE.Vector3(),
+};
+
+function segmentIntersectsEllipsoid(p0, p1, center, halfExtents, yaw, outPoint) {
+    const cosYaw = Math.cos(yaw);
+    const sinYaw = Math.sin(yaw);
+
+    const r0 = ellipsoidTempVectors.relP0;
+    const r1 = ellipsoidTempVectors.relP1;
+    r0.subVectors(p0, center);
+    r1.subVectors(p1, center);
+
+    const hx = halfExtents.x, hy = halfExtents.y, hz = halfExtents.z;
+    const sp0 = ellipsoidTempVectors.scaledP0;
+    const sp1 = ellipsoidTempVectors.scaledP1;
+    sp0.set((r0.x * cosYaw - r0.z * sinYaw) / hx, r0.y / hy, (r0.x * sinYaw + r0.z * cosYaw) / hz);
+    sp1.set((r1.x * cosYaw - r1.z * sinYaw) / hx, r1.y / hy, (r1.x * sinYaw + r1.z * cosYaw) / hz);
+
+    const sd = ellipsoidTempVectors.segDir;
+    sd.subVectors(sp1, sp0);
+    const segLenSq = sd.lengthSq();
+
+    if (segLenSq < 0.0001) {
+        if (sp0.lengthSq() <= 1.0) {
+            if (outPoint) outPoint.copy(p0);
+            return { hit: true, t: 0 };
+        }
+        return { hit: false, t: -1 };
+    }
+
+    ellipsoidTempVectors.toCenter.copy(sp0).negate();
+    const t = Math.max(0, Math.min(1,
+        ellipsoidTempVectors.toCenter.dot(sd) / segLenSq
+    ));
+    ellipsoidTempVectors.closestPoint.copy(sp0).addScaledVector(sd, t);
+
+    if (ellipsoidTempVectors.closestPoint.lengthSq() <= 1.0) {
+        if (outPoint) outPoint.lerpVectors(p0, p1, t);
+        return { hit: true, t: t };
+    }
+    return { hit: false, t: -1 };
+}
+
+function rayHitsEllipsoid(rayOrigin, rayDir, fishCenter, halfExtents, yaw, tolerance) {
+    const cosYaw = Math.cos(yaw);
+    const sinYaw = Math.sin(yaw);
+    const eX = halfExtents.x + tolerance;
+    const eY = halfExtents.y + tolerance;
+    const eZ = halfExtents.z + tolerance;
+
+    const relX = rayOrigin.x - fishCenter.x;
+    const relY = rayOrigin.y - fishCenter.y;
+    const relZ = rayOrigin.z - fishCenter.z;
+
+    const oX = (relX * cosYaw - relZ * sinYaw) / eX;
+    const oY = relY / eY;
+    const oZ = (relX * sinYaw + relZ * cosYaw) / eZ;
+
+    const dX = (rayDir.x * cosYaw - rayDir.z * sinYaw) / eX;
+    const dY = rayDir.y / eY;
+    const dZ = (rayDir.x * sinYaw + rayDir.z * cosYaw) / eZ;
+
+    const a = dX * dX + dY * dY + dZ * dZ;
+    const b = 2 * (oX * dX + oY * dY + oZ * dZ);
+    const c = oX * oX + oY * oY + oZ * oZ - 1;
+    const disc = b * b - 4 * a * c;
+
+    if (disc < 0) return { hit: false, t: -1 };
+
+    const sqrtDisc = Math.sqrt(disc);
+    const t1 = (-b - sqrtDisc) / (2 * a);
+    const t2 = (-b + sqrtDisc) / (2 * a);
+
+    if (t2 < 0) return { hit: false, t: -1 };
+    const tEntry = t1 > 0 ? t1 : t2;
+
+    return { hit: true, t: tEntry };
+}
+
 // PERFORMANCE: Temp vectors for fireBullet - reused to avoid per-shot allocations
 const fireBulletTempVectors = {
     leftDir: new THREE.Vector3(),
@@ -10647,10 +10767,13 @@ class Fish {
                 this.createStandardFishMesh(size, bodyMaterial, secondaryMaterial);
         }
         
-        // Bounding sphere for collision
-        // Reduced from 0.8 to 0.2 so the collision sphere tightly matches the fish's visual body
-        // (fish are elongated, not spherical - width is ~20-25% of length at widest point)
-        this.boundingRadius = size * 0.2;
+        const ratios = FISH_ELLIPSOID_RATIOS[form] || FISH_ELLIPSOID_RATIOS.standard;
+        this.ellipsoidHalfExtents = new THREE.Vector3(
+            size * ratios[0],
+            size * ratios[1],
+            size * ratios[2]
+        );
+        this.boundingRadius = Math.max(this.ellipsoidHalfExtents.x, this.ellipsoidHalfExtents.y, this.ellipsoidHalfExtents.z);
         
         // PERFORMANCE: Only enable shadows for boss fish (tier 5+) to reduce GPU load
         // Regular fish (tier 1-4) don't cast shadows - this significantly improves FPS
@@ -14098,50 +14221,31 @@ class Bullet {
             const fishPos = fish.group.position;
             const fishRadius = fish.boundingRadius;
             
-            // AIR WALL FIX v2: Skip fish whose bounding sphere EDGE is too close to the muzzle
-            // Previous fix checked fish CENTER distance, but large fish (e.g., Blue Whale with
-            // boundingRadius=84 after 3x scale * 0.2) could still have their bounding sphere extend
-            // to the muzzle even if their center was 80+ units away.
-            // 
-            // New approach: Check distance to fish's bounding sphere EDGE, not center
-            // We want: distFromOrigin - fishRadius >= minHitDistance
-            // Which is: distFromOrigin >= minHitDistance + fishRadius
-            // Squared: distFromOriginSq >= (minHitDistance + fishRadius)^2
-            // This avoids the sqrt() operation for better performance
-            //
-            // This prevents the "air wall" effect where bullets hit fish that are:
-            // 1. Behind the player's view in FPS mode
-            // 2. Swimming very close to the cannon
-            // 3. Large fish whose bounding radius extends near the muzzle
             const distFromOriginSq = fishPos.distanceToSquared(this.origin);
-            const minHitDistance = 50;  // Minimum distance to fish's bounding sphere edge
+            const minHitDistance = 50;
             const minDistRequired = minHitDistance + fishRadius;
             if (distFromOriginSq < minDistRequired * minDistRequired) {
-                continue;  // Skip fish whose bounding sphere is too close to muzzle
+                continue;
             }
             
-            // COLLISION OPTIMIZATION: Use segment-sphere collision for accurate hit detection
-            // This replaces the old point-sphere + 100 buffer approach which caused:
-            // - Small fish (size=10) to have 13x larger hitbox than intended
-            // - Large fish (size=100) to have 2.25x larger hitbox than intended
-            // Segment-sphere collision naturally handles tunneling at any FPS
-            const collision = segmentIntersectsSphere(lastPos, bulletPos, fishPos, fishRadius, bulletTempVectors.hitPos);
+            const fishYaw = fish._currentYaw || 0;
+            const halfExt = fish.ellipsoidHalfExtents;
+            const collision = halfExt
+                ? segmentIntersectsEllipsoid(lastPos, bulletPos, fishPos, halfExt, fishYaw, bulletTempVectors.hitPos)
+                : segmentIntersectsSphere(lastPos, bulletPos, fishPos, fishRadius, bulletTempVectors.hitPos);
             
             if (collision.hit) {
-                // PERFORMANCE: Use temp vectors instead of clone() calls
                 bulletTempVectors.bulletDir.copy(this.velocity).normalize();
                 
-                // Calculate hit position on fish's surface for accurate hit effect placement
                 if (weapon.type === 'projectile' || weapon.type === 'spread') {
-                    // 1x/3x: Use the collision point from segment-sphere intersection
-                    // hitPos is already set by segmentIntersectsSphere
-                    // Adjust to be on fish surface for better visual effect
                     bulletTempVectors.fishToBullet.copy(bulletTempVectors.hitPos).sub(fishPos).normalize();
+                    const surfaceDist = halfExt
+                        ? Math.min(halfExt.x, halfExt.y, halfExt.z) * 0.8
+                        : fishRadius * 0.8;
                     bulletTempVectors.hitPos.copy(fishPos).add(
-                        bulletTempVectors.fishToBullet.multiplyScalar(fishRadius * 0.8)
+                        bulletTempVectors.fishToBullet.multiplyScalar(surfaceDist)
                     );
                 }
-                // For 5x/8x: hitPos from segmentIntersectsSphere is already good (explosion effects)
                 
                 // Handle different weapon types
                 // HIT SOUND LOGIC: Play hit sound + show hit effect ONLY if fish survives
@@ -15126,36 +15230,39 @@ function checkCrosshairFishHit(origin, direction) {
         if (!fish.isActive) continue;
         
         const fishPos = fish.group.position;
-        const fishRadius = fish.boundingRadius;
+        const halfExt = fish.ellipsoidHalfExtents;
+        const fishYaw = fish._currentYaw || 0;
         
-        // Calculate closest point on ray to fish center
-        // Ray: P(t) = origin + direction * t
-        // Project fish position onto ray
         instantHitTempVectors.fishToRay.copy(fishPos).sub(origin);
-        const t = instantHitTempVectors.fishToRay.dot(direction);
+        const tProj = instantHitTempVectors.fishToRay.dot(direction);
         
-        // Skip fish behind the origin or too close
-        if (t < 50) continue;
+        if (tProj < 50) continue;
+        if (tProj > FPS_MAX_RANGE) continue;
         
-        // Skip fish beyond max range
-        if (t > FPS_MAX_RANGE) continue;
-        
-        // Calculate closest point on ray
-        instantHitTempVectors.closestPoint.copy(direction).multiplyScalar(t).add(origin);
-        
-        // Calculate distance from fish center to ray
-        const distanceToRay = fishPos.distanceTo(instantHitTempVectors.closestPoint);
-        
-        // Check if ray passes within fish's bounding sphere + tolerance
-        if (distanceToRay <= fishRadius + CROSSHAIR_HIT_TOLERANCE) {
-            // Found a hit - check if it's the closest
-            if (t < closestDistance) {
-                closestDistance = t;
+        if (halfExt) {
+            const result = rayHitsEllipsoid(origin, direction, fishPos, halfExt, fishYaw, CROSSHAIR_HIT_TOLERANCE);
+            if (result.hit && result.t >= 50 && result.t < closestDistance) {
+                closestDistance = result.t;
+                instantHitTempVectors.closestPoint.copy(direction).multiplyScalar(result.t).add(origin);
                 closestHit = {
                     fish: fish,
-                    distance: t,
+                    distance: result.t,
                     hitPoint: instantHitTempVectors.closestPoint.clone()
                 };
+            }
+        } else {
+            instantHitTempVectors.closestPoint.copy(direction).multiplyScalar(tProj).add(origin);
+            const distanceToRay = fishPos.distanceTo(instantHitTempVectors.closestPoint);
+            const fishRadius = fish.boundingRadius;
+            if (distanceToRay <= fishRadius + CROSSHAIR_HIT_TOLERANCE) {
+                if (tProj < closestDistance) {
+                    closestDistance = tProj;
+                    closestHit = {
+                        fish: fish,
+                        distance: tProj,
+                        hitPoint: instantHitTempVectors.closestPoint.clone()
+                    };
+                }
             }
         }
     }
@@ -15290,27 +15397,29 @@ function checkMouseHoverFish(mouseX, mouseY) {
         if (!fish.isActive) continue;
         
         const fishPos = fish.group.position;
-        const fishRadius = fish.boundingRadius || fish.config.size * 0.5;
+        const halfExt = fish.ellipsoidHalfExtents;
+        const fishYaw = fish._currentYaw || 0;
         
-        // Calculate closest point on ray to fish center
         hoverDetectionTempVectors.fishToRay.copy(fishPos).sub(rayOrigin);
-        const t = hoverDetectionTempVectors.fishToRay.dot(rayDirection);
+        const tProj = hoverDetectionTempVectors.fishToRay.dot(rayDirection);
         
-        // Skip fish behind the camera
-        if (t < 0) continue;
+        if (tProj < 0) continue;
         
-        // Calculate closest point on ray
-        hoverDetectionTempVectors.closestPoint.copy(rayDirection).multiplyScalar(t).add(rayOrigin);
-        
-        // Calculate distance from fish center to ray
-        const distanceToRay = fishPos.distanceTo(hoverDetectionTempVectors.closestPoint);
-        
-        // Check if ray passes within fish's bounding sphere + tolerance
-        if (distanceToRay <= fishRadius + HOVER_DETECTION_TOLERANCE) {
-            // Found a potential hit - check if it's the closest
-            if (t < closestDistance) {
-                closestDistance = t;
+        if (halfExt) {
+            const result = rayHitsEllipsoid(rayOrigin, rayDirection, fishPos, halfExt, fishYaw, HOVER_DETECTION_TOLERANCE);
+            if (result.hit && result.t >= 0 && result.t < closestDistance) {
+                closestDistance = result.t;
                 closestFish = fish;
+            }
+        } else {
+            hoverDetectionTempVectors.closestPoint.copy(rayDirection).multiplyScalar(tProj).add(rayOrigin);
+            const distanceToRay = fishPos.distanceTo(hoverDetectionTempVectors.closestPoint);
+            const fishRadius = fish.boundingRadius || fish.config.size * 0.5;
+            if (distanceToRay <= fishRadius + HOVER_DETECTION_TOLERANCE) {
+                if (tProj < closestDistance) {
+                    closestDistance = tProj;
+                    closestFish = fish;
+                }
             }
         }
     }
@@ -15522,29 +15631,33 @@ function fireLaserBeam(origin, direction, weaponKey) {
         if (!fish.isActive) continue;
         
         const fishPos = fish.group.position;
-        const fishRadius = fish.boundingRadius;
+        const halfExt = fish.ellipsoidHalfExtents;
+        const fishYaw = fish._currentYaw || 0;
         
-        // Calculate closest point on ray to fish center
-        // Ray: P(t) = hitOrigin + laserDirection * t
-        laserTempVectors.fishToRay.copy(fishPos).sub(hitOrigin);
-        const t = laserTempVectors.fishToRay.dot(laserDirection);
-        
-        // Skip fish behind the ray origin
-        if (t < 50) continue;
-        
-        // Calculate closest point on ray
-        laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(t).add(hitOrigin);
-        
-        // Calculate distance from fish center to ray
-        const distanceToRay = fishPos.distanceTo(laserTempVectors.closestPoint);
-        
-        // Check if laser hits fish (ray passes within fish's bounding sphere)
-        if (distanceToRay <= fishRadius + laserWidth) {
-            hitFish.push({
-                fish: fish,
-                distance: t,
-                hitPoint: laserTempVectors.closestPoint.clone()
-            });
+        if (halfExt) {
+            const result = rayHitsEllipsoid(hitOrigin, laserDirection, fishPos, halfExt, fishYaw, laserWidth);
+            if (result.hit && result.t >= 50) {
+                laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(result.t).add(hitOrigin);
+                hitFish.push({
+                    fish: fish,
+                    distance: result.t,
+                    hitPoint: laserTempVectors.closestPoint.clone()
+                });
+            }
+        } else {
+            const fishRadius = fish.boundingRadius;
+            laserTempVectors.fishToRay.copy(fishPos).sub(hitOrigin);
+            const t = laserTempVectors.fishToRay.dot(laserDirection);
+            if (t < 50) continue;
+            laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(t).add(hitOrigin);
+            const distanceToRay = fishPos.distanceTo(laserTempVectors.closestPoint);
+            if (distanceToRay <= fishRadius + laserWidth) {
+                hitFish.push({
+                    fish: fish,
+                    distance: t,
+                    hitPoint: laserTempVectors.closestPoint.clone()
+                });
+            }
         }
     }
     
