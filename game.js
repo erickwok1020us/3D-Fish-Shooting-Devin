@@ -13345,8 +13345,9 @@ class Fish {
         
         const deathPosition = this.group.position.clone();
         
-        // Kill feedback: coin sound + smoke + coin drop (handled below)
-        // Hit feedback (hit sound + hit particles) is played at the collision site separately
+        // HIT SOUND LOGIC: Do NOT play hit sound on fish death
+        // Hit sound is now played in bullet collision ONLY when fish survives
+        // On death, we only play coin sound (handled below)
         
         // Phase 2: Trigger special abilities on death
         if (this.config.ability) {
@@ -14143,8 +14144,8 @@ class Bullet {
                 // For 5x/8x: hitPos from segmentIntersectsSphere is already good (explosion effects)
                 
                 // Handle different weapon types
-                // HIT FEEDBACK: Always play hit sound + show hit effect on every hit
-                // Kill feedback (coin sound + smoke + coin drop) is handled separately in Fish.die()
+                // HIT SOUND LOGIC: Play hit sound + show hit effect ONLY if fish survives
+                // If fish dies: only coin sound + smoke + coin drop (handled in Fish.die())
                 if (weapon.type === 'rocket') {
                     // 5X ROCKET: Straight line projectile with explosion on impact
                     // Trigger explosion at hit point (damages all fish in radius)
@@ -14153,18 +14154,19 @@ class Bullet {
                     // Screen shake for rocket impact
                     triggerScreenShakeWithStrength(6, 80);
                     
-                    playWeaponHitSound(this.weaponKey);
-                    
                 } else if (weapon.type === 'chain') {
                     // Chain lightning: hit first fish, then chain to nearby fish
-                    fish.takeDamage(weapon.damage, this.weaponKey);
+                    const killed = fish.takeDamage(weapon.damage, this.weaponKey);
                     
                     // Trigger chain lightning effect (always show for visual feedback)
                     triggerChainLightning(fish, this.weaponKey, weapon.damage);
                     
-                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
-                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
-                    playWeaponHitSound(this.weaponKey);
+                    // Only show hit particles and hit effect if fish survived
+                    if (!killed) {
+                        createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
+                        spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
+                        playWeaponHitSound(this.weaponKey);
+                    }
                     
                 } else if (weapon.type === 'aoe' || weapon.type === 'superAoe') {
                     // AOE/SuperAOE explosion: damage all fish in radius
@@ -14180,11 +14182,14 @@ class Bullet {
                     
                 } else {
                     // Standard projectile or spread: single target damage
-                    fish.takeDamage(weapon.damage, this.weaponKey);
+                    const killed = fish.takeDamage(weapon.damage, this.weaponKey);
                     
-                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
-                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
-                    playWeaponHitSound(this.weaponKey);
+                    // Only show hit particles and hit effect if fish survived
+                    if (!killed) {
+                        createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
+                        spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
+                        playWeaponHitSound(this.weaponKey);
+                    }
                 }
                 
                 this.deactivate();
@@ -15460,11 +15465,13 @@ function fireAtSelectedFish(weaponKey) {
     const direction = targetFish.group.position.clone().sub(muzzlePos).normalize();
     
     // Register damage immediately (instant hit)
-    targetFish.takeDamage(weapon.damage, weaponKey);
+    const killed = targetFish.takeDamage(weapon.damage, weaponKey);
     
-    // Always show hit feedback on every hit
-    createHitParticles(targetFish.group.position, weapon.color, 5);
-    playWeaponHitSound(weaponKey);
+    // Show hit effect
+    if (!killed) {
+        createHitParticles(targetFish.group.position, weapon.color, 5);
+        playWeaponHitSound(weaponKey);
+    }
     
     // Spawn visual bullet for feedback
     spawnVisualBullet(muzzlePos, targetFish.group.position.clone(), weaponKey);
@@ -15555,11 +15562,13 @@ function fireLaserBeam(origin, direction, weaponKey) {
     
     // Damage all fish hit by the laser
     for (const hit of hitFish) {
-        hit.fish.takeDamage(damage, weaponKey);
+        const killed = hit.fish.takeDamage(damage, weaponKey);
         
-        // Always show hit feedback on every hit
-        createHitParticles(hit.hitPoint, weapon.color, 8);
-        playWeaponHitSound(weaponKey);
+        // Show hit effect if fish survived
+        if (!killed) {
+            createHitParticles(hit.hitPoint, weapon.color, 8);
+            playWeaponHitSound(weaponKey);
+        }
     }
     
     // Visual beam: from muzzle (origin) to end point on camera ray
@@ -15841,15 +15850,14 @@ function triggerExplosion(center, weaponKey) {
         
         const distance = center.distanceTo(fish.group.position);
         if (distance <= aoeRadius) {
-            const t = distance / aoeRadius;
+            // Calculate damage based on distance (linear falloff)
+            const t = distance / aoeRadius; // 0 at center, 1 at edge
             const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
             
             fish.takeDamage(damage, weaponKey);
             createHitParticles(fish.group.position, weapon.color, 3);
         }
     }
-    
-    playWeaponHitSound(weaponKey);
 }
 
 // Spawn explosion visual effect
