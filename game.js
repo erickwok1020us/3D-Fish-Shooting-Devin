@@ -736,37 +736,35 @@ const CONFIG = {
     // Issue #16 CORRECTION: All weapons have 100% accuracy - point-and-click shooting
     weapons: {
         '1x': { 
-            multiplier: 1, cost: 1, speed: 800, 
-            damage: 100, shotsPerSecond: 2.5, // cooldown = 0.4s (faster machine gun feel)
-            type: 'projectile', color: 0xcccccc, size: 8,
+            multiplier: 1, cost: 1, speed: 1000, 
+            damage: 100, shotsPerSecond: 2.5,
+            type: 'projectile', color: 0xcccccc, size: 0.8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
-            convergenceDistance: 700
+            convergenceDistance: 1400
         },
         '3x': {
-            multiplier: 3, cost: 3, speed: 700, 
-            damage: 180, shotsPerSecond: 2, // cooldown = 0.5s
+            multiplier: 3, cost: 3, speed: 1000, 
+            damage: 180, shotsPerSecond: 2.5,
             type: 'projectile',
-            color: 0xffaa00, size: 10,
+            color: 0xffaa00, size: 0.8,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
-            convergenceDistance: 700
+            convergenceDistance: 1400
         },
         '5x': {
-            multiplier: 5, cost: 5, speed: 900, 
-            damage: 200, shotsPerSecond: 1.5, // cooldown = 0.667s (rocket needs weight)
-            // REDESIGN: Rocket launcher - straight line projectile with explosion on impact
+            multiplier: 5, cost: 5, speed: 1000, 
+            damage: 200, shotsPerSecond: 2.5,
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
-            color: 0xffdd00, size: 14,  // Golden/orange color for rocket
+            color: 0xffdd00, size: 0.8,
             cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-            convergenceDistance: 700
+            convergenceDistance: 1400
         },
         '8x': {
             multiplier: 8, cost: 8, 
-            damage: 350, shotsPerSecond: 1.67, // cooldown = 0.6s (laser should feel snappy)
-            // REDESIGN: Laser - instant hitscan, pierces through all fish in line
+            damage: 350, shotsPerSecond: 1.67,
             type: 'laser', piercing: true, laserWidth: 8,
             color: 0xff4444, size: 16,
             cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
-            convergenceDistance: 700
+            convergenceDistance: 1400
         }
     },
     
@@ -1960,7 +1958,7 @@ const WEAPON_GLB_CONFIG = {
             bullet: '3x 子彈模組',
             hitEffect: '3x 擊中特效',
             scale: 1.0,
-            bulletScale: 0.6,
+            bulletScale: 0.5,
             hitEffectScale: 0.5,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
@@ -1979,7 +1977,7 @@ const WEAPON_GLB_CONFIG = {
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
             scale: 1.2,
-            bulletScale: 0.7,
+            bulletScale: 0.5,
             hitEffectScale: 0.7,
             muzzleOffset: new THREE.Vector3(0, 25, 70),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -2232,32 +2230,32 @@ function segmentIntersectsSphere(p0, p1, center, radius, outPoint) {
 // halfHeight: vertical (dorsal to ventral)
 // halfWidth: horizontal perpendicular to body
 const FISH_ELLIPSOID_RATIOS = {
-    whale:       [0.45, 0.18, 0.18],
-    killerWhale: [0.42, 0.17, 0.17],
-    shark:       [0.45, 0.15, 0.15],
-    marlin:      [0.48, 0.12, 0.12],
-    hammerhead:  [0.42, 0.13, 0.22],
-    tuna:        [0.40, 0.15, 0.15],
-    dolphinfish: [0.40, 0.15, 0.15],
-    barracuda:   [0.48, 0.10, 0.10],
-    grouper:     [0.35, 0.20, 0.20],
-    parrotfish:  [0.35, 0.18, 0.15],
-    angelfish:   [0.25, 0.30, 0.08],
-    lionfish:    [0.30, 0.22, 0.22],
-    tang:        [0.28, 0.25, 0.10],
-    sardine:     [0.40, 0.12, 0.12],
-    anchovy:     [0.40, 0.12, 0.12],
-    clownfish:   [0.30, 0.18, 0.13],
-    damselfish:  [0.30, 0.18, 0.13],
-    mantaRay:    [0.30, 0.08, 0.45],
-    pufferfish:  [0.22, 0.22, 0.22],
-    seahorse:    [0.12, 0.38, 0.12],
-    flyingFish:  [0.40, 0.12, 0.22],
-    crab:        [0.20, 0.15, 0.25],
-    eel:         [0.50, 0.10, 0.10],
-    turtle:      [0.30, 0.18, 0.30],
-    goldfish:    [0.25, 0.20, 0.15],
-    standard:    [0.35, 0.15, 0.15],
+    whale:       [0.45, 0.28, 0.28],
+    killerWhale: [0.42, 0.27, 0.27],
+    shark:       [0.45, 0.25, 0.25],
+    marlin:      [0.48, 0.22, 0.22],
+    hammerhead:  [0.42, 0.23, 0.32],
+    tuna:        [0.40, 0.25, 0.25],
+    dolphinfish: [0.40, 0.25, 0.25],
+    barracuda:   [0.48, 0.20, 0.20],
+    grouper:     [0.38, 0.30, 0.30],
+    parrotfish:  [0.35, 0.28, 0.25],
+    angelfish:   [0.28, 0.35, 0.18],
+    lionfish:    [0.32, 0.30, 0.30],
+    tang:        [0.30, 0.32, 0.20],
+    sardine:     [0.40, 0.22, 0.22],
+    anchovy:     [0.40, 0.22, 0.22],
+    clownfish:   [0.32, 0.28, 0.22],
+    damselfish:  [0.32, 0.28, 0.22],
+    mantaRay:    [0.32, 0.18, 0.45],
+    pufferfish:  [0.28, 0.28, 0.28],
+    seahorse:    [0.20, 0.38, 0.20],
+    flyingFish:  [0.40, 0.22, 0.30],
+    crab:        [0.25, 0.22, 0.30],
+    eel:         [0.50, 0.20, 0.20],
+    turtle:      [0.32, 0.25, 0.35],
+    goldfish:    [0.28, 0.28, 0.22],
+    standard:    [0.35, 0.25, 0.25],
 };
 
 const ellipsoidTempVectors = {
@@ -13444,7 +13442,7 @@ class Fish {
                         }
                     });
                 }
-            }, 150);
+            }, 80);
         } else if (this.body && this.body.material && 'emissive' in this.body.material) {
             if (!this.body._origEmissive) {
                 this.body._origEmissive = this.body.material.emissive.clone();
@@ -13457,7 +13455,7 @@ class Fish {
                     this.body.material.emissive.copy(this.body._origEmissive);
                     this.body.material.emissiveIntensity = this.body._origEmissiveIntensity;
                 }
-            }, 150);
+            }, 80);
         }
         
         if (this.hp <= 0) {
@@ -14159,7 +14157,7 @@ class Bullet {
         // 8x (laser): handled by fireLaserBeam(), not Bullet class
         this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
-        this.lifetime = 4;
+        this.lifetime = 2.8;
         this.isActive = true;
         this.group.visible = true;
         
