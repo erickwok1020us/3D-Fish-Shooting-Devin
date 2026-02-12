@@ -744,10 +744,8 @@ const CONFIG = {
         },
         '3x': {
             multiplier: 3, cost: 3, speed: 700, 
-            damage: 180, shotsPerSecond: 2, // cooldown = 0.5s (shotgun should be faster than rocket)
-            // Shotgun effect: Fire 3 bullets in fan spread pattern (-15°, 0°, +15°)
-            // Each bullet does NOT penetrate - stops on hit
-            type: 'spread', spreadAngle: 15,
+            damage: 180, shotsPerSecond: 2, // cooldown = 0.5s
+            type: 'projectile',
             color: 0xffaa00, size: 10,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
             convergenceDistance: 700
@@ -1944,7 +1942,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffect: '1x 擊中特效',
             scale: 0.8,
             bulletScale: 0.5,
-            hitEffectScale: 1.0,
+            hitEffectScale: 0.5,
             muzzleOffset: new THREE.Vector3(0, 25, 60),
             // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -1963,7 +1961,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffect: '3x 擊中特效',
             scale: 1.0,
             bulletScale: 0.6,
-            hitEffectScale: 1.2,
+            hitEffectScale: 0.5,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -1982,7 +1980,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffect: '5x 擊中特效',
             scale: 1.2,
             bulletScale: 0.7,
-            hitEffectScale: 1.5,
+            hitEffectScale: 0.7,
             muzzleOffset: new THREE.Vector3(0, 25, 70),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -10650,9 +10648,9 @@ class Fish {
         }
         
         // Bounding sphere for collision
-        // Reduced from 0.8 to 0.35 so the collision sphere matches the fish's visual width
-        // (fish are elongated, not spherical - width is ~35-40% of length)
-        this.boundingRadius = size * 0.35;
+        // Reduced from 0.8 to 0.2 so the collision sphere tightly matches the fish's visual body
+        // (fish are elongated, not spherical - width is ~20-25% of length at widest point)
+        this.boundingRadius = size * 0.2;
         
         // PERFORMANCE: Only enable shadows for boss fish (tier 5+) to reduce GPU load
         // Regular fish (tier 1-4) don't cast shadows - this significantly improves FPS
@@ -14102,7 +14100,7 @@ class Bullet {
             
             // AIR WALL FIX v2: Skip fish whose bounding sphere EDGE is too close to the muzzle
             // Previous fix checked fish CENTER distance, but large fish (e.g., Blue Whale with
-            // boundingRadius=147 after 3x scale * 0.35) could still have their bounding sphere extend
+            // boundingRadius=84 after 3x scale * 0.2) could still have their bounding sphere extend
             // to the muzzle even if their center was 80+ units away.
             // 
             // New approach: Check distance to fish's bounding sphere EDGE, not center
