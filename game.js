@@ -1958,7 +1958,7 @@ const WEAPON_GLB_CONFIG = {
             bullet: '3x 子彈模組',
             hitEffect: '3x 擊中特效',
             scale: 1.0,
-            bulletScale: 0.5,
+            bulletScale: 1.0,
             hitEffectScale: 0.5,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
