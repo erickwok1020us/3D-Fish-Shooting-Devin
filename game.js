@@ -736,26 +736,25 @@ const CONFIG = {
     // Issue #16 CORRECTION: All weapons have 100% accuracy - point-and-click shooting
     weapons: {
         '1x': { 
-            multiplier: 1, cost: 1, speed: 800, 
-            damage: 100, shotsPerSecond: 2.5, // cooldown = 0.4s (faster machine gun feel)
-            type: 'projectile', color: 0xcccccc, size: 8,
+            multiplier: 1, cost: 1, speed: 1000, 
+            damage: 100, shotsPerSecond: 2.5,
+            type: 'projectile', color: 0xcccccc, size: 0.8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
             convergenceDistance: 700
         },
         '3x': {
-            multiplier: 3, cost: 3, speed: 700, 
-            damage: 180, shotsPerSecond: 2, // cooldown = 0.5s
+            multiplier: 3, cost: 3, speed: 1000, 
+            damage: 180, shotsPerSecond: 2.5,
             type: 'projectile',
-            color: 0xffaa00, size: 10,
+            color: 0xffaa00, size: 0.8,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
             convergenceDistance: 700
         },
         '5x': {
-            multiplier: 5, cost: 5, speed: 900, 
-            damage: 200, shotsPerSecond: 1.5, // cooldown = 0.667s (rocket needs weight)
-            // REDESIGN: Rocket launcher - straight line projectile with explosion on impact
+            multiplier: 5, cost: 5, speed: 1000, 
+            damage: 200, shotsPerSecond: 2.5,
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
-            color: 0xffdd00, size: 14,  // Golden/orange color for rocket
+            color: 0xffdd00, size: 0.8,
             cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
             convergenceDistance: 700
         },
@@ -1960,7 +1959,7 @@ const WEAPON_GLB_CONFIG = {
             bullet: '3x 子彈模組',
             hitEffect: '3x 擊中特效',
             scale: 1.0,
-            bulletScale: 0.6,
+            bulletScale: 0.5,
             hitEffectScale: 0.5,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
@@ -1979,7 +1978,7 @@ const WEAPON_GLB_CONFIG = {
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
             scale: 1.2,
-            bulletScale: 0.7,
+            bulletScale: 0.5,
             hitEffectScale: 0.7,
             muzzleOffset: new THREE.Vector3(0, 25, 70),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -14159,7 +14158,7 @@ class Bullet {
         // 8x (laser): handled by fireLaserBeam(), not Bullet class
         this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
-        this.lifetime = 4;
+        this.lifetime = 2.8;
         this.isActive = true;
         this.group.visible = true;
         
