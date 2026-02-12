@@ -430,7 +430,7 @@
             color: #fff;
         }
         
-        /* Issue #16: Dynamic crosshair that shows weapon accuracy/spread */
+        /* Crosshair container */
         #crosshair {
             position: fixed;
             width: 40px;
@@ -439,11 +439,9 @@
             z-index: 100;
             transform: translate(-50%, -50%);
             display: block;
-            transition: width 0.2s ease, height 0.2s ease;
         }
         
-        /* FPS mode: Crosshair always centered via CSS (more robust than JS positioning) */
-        /* Explicitly set all positioning properties to ensure centering regardless of previous state */
+        /* FPS mode: Crosshair always centered via CSS */
         #crosshair.fps-mode {
             position: fixed !important;
             left: 50% !important;
@@ -453,70 +451,78 @@
             opacity: 1 !important;
         }
         
+        /* Ring hidden by default (not used in cross or dot mode) */
         #crosshair .crosshair-ring {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: 2px solid rgba(255, 255, 255, 0.7);
-            border-radius: 50%;
-            box-sizing: border-box;
+            display: none;
         }
         
+        /* Center dot: hidden by default, shown only for 8x */
         #crosshair .crosshair-dot {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 4px;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.9);
+            width: 6px;
+            height: 6px;
+            background: #ff44ff;
             border-radius: 50%;
             transform: translate(-50%, -50%);
+            display: none;
         }
         
+        /* Cross lines for 1x/3x/5x */
         #crosshair .crosshair-line {
             position: absolute;
-            background: rgba(255, 255, 255, 0.6);
+            background: #66ff66;
         }
         
         #crosshair .crosshair-line.top {
             width: 2px;
-            height: 8px;
+            height: 10px;
             left: 50%;
-            top: 4px;
+            top: 2px;
             transform: translateX(-50%);
         }
         
         #crosshair .crosshair-line.bottom {
             width: 2px;
-            height: 8px;
+            height: 10px;
             left: 50%;
-            bottom: 4px;
+            bottom: 2px;
             transform: translateX(-50%);
         }
         
         #crosshair .crosshair-line.left {
-            width: 8px;
+            width: 10px;
             height: 2px;
             top: 50%;
-            left: 4px;
+            left: 2px;
             transform: translateY(-50%);
         }
         
         #crosshair .crosshair-line.right {
-            width: 8px;
+            width: 10px;
             height: 2px;
             top: 50%;
-            right: 4px;
+            right: 2px;
             transform: translateY(-50%);
         }
         
-        /* Crosshair color based on weapon */
-        #crosshair.weapon-1x .crosshair-ring { border-color: rgba(102, 255, 102, 0.7); }
-        #crosshair.weapon-3x .crosshair-ring { border-color: rgba(255, 170, 0, 0.7); }
-        #crosshair.weapon-5x .crosshair-ring { border-color: rgba(0, 170, 255, 0.7); }
-        #crosshair.weapon-8x .crosshair-ring { border-color: rgba(255, 68, 255, 0.7); }
+        /* 1x/3x/5x: Show cross lines, hide dot */
+        #crosshair.weapon-1x .crosshair-line,
+        #crosshair.weapon-3x .crosshair-line,
+        #crosshair.weapon-5x .crosshair-line { display: block; }
+        #crosshair.weapon-1x .crosshair-dot,
+        #crosshair.weapon-3x .crosshair-dot,
+        #crosshair.weapon-5x .crosshair-dot { display: none; }
+        
+        /* Weapon-specific cross colors */
+        #crosshair.weapon-1x .crosshair-line { background: #66ff66; }
+        #crosshair.weapon-3x .crosshair-line { background: #ffaa00; }
+        #crosshair.weapon-5x .crosshair-line { background: #00aaff; }
+        
+        /* 8x: Show dot, hide cross lines */
+        #crosshair.weapon-8x .crosshair-dot { display: block; }
+        #crosshair.weapon-8x .crosshair-line { display: none; }
         
         /* Reward Animation */
         .reward-popup {
@@ -1213,7 +1219,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #299</div>
+    <div id="pr-version-tag">PR #300</div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
