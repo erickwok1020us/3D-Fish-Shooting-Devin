@@ -2949,10 +2949,21 @@ function warmUpWeaponShaders() {
         renderer.render(scene, camera);
     }
     
-    // Restore visibility state
-    weaponGLBState.preClonedCannons.forEach((cannon, weaponKey) => {
-        cannon.visible = visibilityState.get(weaponKey);
+    // After warmup, hide all cannons first
+    weaponGLBState.preClonedCannons.forEach((cannon) => {
+        cannon.visible = false;
     });
+    
+    // Then show only the currently selected weapon's cannon
+    const currentWeapon = gameState.currentWeapon || '1x';
+    const currentCannon = weaponGLBState.preClonedCannons.get(currentWeapon);
+    if (currentCannon) {
+        currentCannon.visible = true;
+        cannonBarrel = currentCannon;
+        weaponGLBState.currentWeaponModel = currentCannon;
+        weaponGLBState.currentWeaponKey = currentWeapon;
+        console.log(`[WEAPON-GLB] Shader warmup: showing current weapon ${currentWeapon}`);
+    }
     
     weaponGLBState.shadersWarmedUp = true;
     console.log('[WEAPON-GLB] Shader warmup complete');
@@ -9905,6 +9916,17 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         });
         if (weaponGLBState.currentWeaponModel) {
             weaponGLBState.currentWeaponModel.visible = false;
+        }
+        
+        // Remove and dispose any non-pre-cloned (fallback) cannon models from cannonBodyGroup
+        // These are stale models from the initial load before pre-cloning completed
+        const preClonedSet = new Set(weaponGLBState.preClonedCannons.values());
+        for (let i = cannonBodyGroup.children.length - 1; i >= 0; i--) {
+            const child = cannonBodyGroup.children[i];
+            if (!preClonedSet.has(child)) {
+                cannonBodyGroup.remove(child);
+                disposeObject3D(child);
+            }
         }
         
         // Show the new weapon
