@@ -736,22 +736,22 @@ const CONFIG = {
     // Issue #16 CORRECTION: All weapons have 100% accuracy - point-and-click shooting
     weapons: {
         '1x': { 
-            multiplier: 1, cost: 1, speed: 1000, 
+            multiplier: 1, cost: 1, speed: 1500, 
             damage: 100, shotsPerSecond: 2.5,
             type: 'projectile', color: 0xcccccc, size: 0.8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
             convergenceDistance: 1400
         },
         '3x': {
-            multiplier: 3, cost: 3, speed: 1000, 
+            multiplier: 3, cost: 3, speed: 1500, 
             damage: 100, shotsPerSecond: 2.5,
             type: 'spread', spreadAngle: 15,
-            color: 0xffaa00, size: 0.8,
-            cannonColor: 0xff8800, cannonEmissive: 0xff4400,
+            color: 0xffaaaa, size: 0.8,
+            cannonColor: 0xff8888, cannonEmissive: 0xff6666,
             convergenceDistance: 1400
         },
         '5x': {
-            multiplier: 5, cost: 5, speed: 1000, 
+            multiplier: 5, cost: 5, speed: 1500, 
             damage: 200, shotsPerSecond: 2.5,
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
             color: 0xffdd00, size: 0.8,
@@ -1935,41 +1935,36 @@ const WEAPON_GLB_CONFIG = {
     weapons: {
         '1x': {
             cannon: '1x 武器模組',
-            cannonNonPlayer: '1x 武器模組(非玩家).glb',  // Low-poly version for other players (~3k triangles)
+            cannonNonPlayer: '1x 武器模組(非玩家).glb',
             bullet: '1x 子彈模組',
             hitEffect: '1x 擊中特效',
             scale: 0.8,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 25, 60),
-            // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
+            muzzleOffset: new THREE.Vector3(0, 40, 60),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            // FPS Camera: Lower camera position so cannon muzzle is visible when looking straight
             fpsCameraBackDist: 95,
-            fpsCameraUpOffset: 65
+            fpsCameraUpOffset: 85
         },
         '3x': {
             cannon: '3x 武器模組',
-            cannonNonPlayer: '3x 武器模組(非玩家).glb',  // Low-poly version for other players (~3k triangles)
-            bullet: '3x 子彈模組',
+            cannonNonPlayer: '3x 武器模組(非玩家).glb',
+            bullet: '1x 子彈模組',
+            bulletTint: 0xffaaaa,
             hitEffect: '3x 擊中特效',
             scale: 1.0,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 25, 65),
-            // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
+            muzzleOffset: new THREE.Vector3(0, 40, 65),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            // X-axis rotation to show water splash crown front face (not bottom)
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            // FPS Camera: Lower camera position so cannon muzzle is visible when looking straight
             fpsCameraBackDist: 105,
-            fpsCameraUpOffset: 70
+            fpsCameraUpOffset: 90
         },
         '5x': {
             cannon: '5x 武器模組',
@@ -1979,13 +1974,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.2,
             bulletScale: 0.5,
             hitEffectScale: 0.7,
-            muzzleOffset: new THREE.Vector3(0, 25, 70),
+            muzzleOffset: new THREE.Vector3(0, 40, 70),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            // FPS Camera: Lower camera position so cannon muzzle is visible when looking straight
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 80
+            fpsCameraUpOffset: 100
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -1995,13 +1989,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.5,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 25, 80),
+            muzzleOffset: new THREE.Vector3(0, 40, 80),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            // FPS Camera: Lower camera position so cannon muzzle is visible when looking straight
             fpsCameraBackDist: 190,
-            fpsCameraUpOffset: 100
+            fpsCameraUpOffset: 120
         }
     }
 };
@@ -4447,24 +4440,24 @@ const WEAPON_VFX_CONFIG = {
         trailColor: 0xffffff,       // White
         hitColor: 0x88ddff,         // Light blue
         ringColor: 0xffffff,        // White for weapon switch
-        recoilStrength: 3,
-        screenShake: 0
+        recoilStrength: 5,
+        screenShake: 0.5
     },
     '3x': {
-        muzzleColor: 0x44ff44,      // Green
-        trailColor: 0x44ff88,       // Green
-        hitColor: 0x44ff44,         // Green
-        ringColor: 0x44ff44,        // Green for weapon switch
-        recoilStrength: 5,
-        screenShake: 0
+        muzzleColor: 0xffaaaa,      // Light red
+        trailColor: 0xffbbbb,       // Light red
+        hitColor: 0xffaaaa,         // Light red
+        ringColor: 0xffaaaa,        // Light red for weapon switch
+        recoilStrength: 8,
+        screenShake: 1.0
     },
     '5x': {
         muzzleColor: 0xffdd00,      // Golden yellow
         trailColor: 0xffcc00,       // Gold
         hitColor: 0xffdd00,         // Gold
         ringColor: 0xffdd00,        // Gold for weapon switch
-        recoilStrength: 8,
-        screenShake: 1,             // Slight shake
+        recoilStrength: 12,
+        screenShake: 1.5,           // Slight shake
         chargeTime: 0.2             // 0.2s charge effect
     },
     '8x': {
@@ -14208,6 +14201,15 @@ class Bullet {
             this.proceduralGroup.visible = false;
             if (this.glbModel) {
                 this.glbModel.visible = true;
+                if (glbConfig && glbConfig.bulletTint) {
+                    const tintColor = new THREE.Color(glbConfig.bulletTint);
+                    this.glbModel.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            if (child.material.color) child.material.color.copy(tintColor);
+                            if (child.material.emissive) child.material.emissive.copy(tintColor);
+                        }
+                    });
+                }
             }
         } else {
             // Fallback to procedural bullet
