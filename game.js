@@ -736,14 +736,14 @@ const CONFIG = {
     // Issue #16 CORRECTION: All weapons have 100% accuracy - point-and-click shooting
     weapons: {
         '1x': { 
-            multiplier: 1, cost: 1, speed: 1500, 
+            multiplier: 1, cost: 1, speed: 1800,
             damage: 100, shotsPerSecond: 2.5,
             type: 'projectile', color: 0xcccccc, size: 0.8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
             convergenceDistance: 1400
         },
         '3x': {
-            multiplier: 3, cost: 3, speed: 1500, 
+            multiplier: 3, cost: 3, speed: 1800,
             damage: 100, shotsPerSecond: 2.5,
             type: 'spread', spreadAngle: 15,
             color: 0xffaaaa, size: 0.8,
@@ -751,7 +751,7 @@ const CONFIG = {
             convergenceDistance: 1400
         },
         '5x': {
-            multiplier: 5, cost: 5, speed: 1500, 
+            multiplier: 5, cost: 5, speed: 1800,
             damage: 200, shotsPerSecond: 2.5,
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
             color: 0xffdd00, size: 0.8,
@@ -1941,13 +1941,13 @@ const WEAPON_GLB_CONFIG = {
             scale: 0.8,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 40, 60),
+            muzzleOffset: new THREE.Vector3(0, 50, 60),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 95,
-            fpsCameraUpOffset: 85
+            fpsCameraUpOffset: 95
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -1958,13 +1958,13 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.0,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 40, 65),
+            muzzleOffset: new THREE.Vector3(0, 50, 65),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 105,
-            fpsCameraUpOffset: 90
+            fpsCameraUpOffset: 100
         },
         '5x': {
             cannon: '5x 武器模組',
@@ -1974,12 +1974,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.2,
             bulletScale: 0.5,
             hitEffectScale: 0.7,
-            muzzleOffset: new THREE.Vector3(0, 40, 70),
+            muzzleOffset: new THREE.Vector3(0, 50, 70),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 100
+            fpsCameraUpOffset: 110
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -1989,12 +1989,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.5,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 40, 80),
+            muzzleOffset: new THREE.Vector3(0, 50, 80),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 190,
-            fpsCameraUpOffset: 120
+            fpsCameraUpOffset: 130
         }
     }
 };
@@ -14448,6 +14448,13 @@ function fireBullet(targetX, targetY) {
     
     // Check cooldown - use shotsPerSecond to calculate cooldown
     if (gameState.cooldown > 0) return false;
+    
+    const chEl = document.getElementById('crosshair');
+    if (chEl) {
+        chEl.classList.remove('firing');
+        void chEl.offsetWidth;
+        chEl.classList.add('firing');
+    }
     
     // MULTIPLAYER MODE: Send shoot to server, don't do local balance/cost handling
     // Server handles balance deduction and collision detection
