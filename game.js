@@ -862,7 +862,8 @@ const gameState = {
     // Third-person mouse hover selection + auto-tracking system
     hoveredFish: null,       // Currently hovered fish (for highlighting)
     selectedFish: null,      // Currently selected fish (for auto-tracking)
-    lastHoverCheckTime: 0    // Throttle hover detection to 60fps
+    lastHoverCheckTime: 0,   // Throttle hover detection to 60fps
+    fpsCannonSide: 'right'   // FPS weapon hand side: 'right' or 'left' (toggle with T key)
 };
 
 // ==================== GLB FISH MODEL LOADER (PDF Spec Compliant) ====================
@@ -6141,49 +6142,38 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
     });
 }
 
-let _hitMarkerEl = null;
-let _hitMarkerTimer = null;
-
 function showHitMarker() {
-    if (!_hitMarkerEl) {
-        _hitMarkerEl = document.createElement('div');
-        _hitMarkerEl.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            z-index: 10000;
-            opacity: 0;
-            transition: opacity 0.08s ease-out;
-        `;
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('width', '28');
-        svg.setAttribute('height', '28');
-        svg.setAttribute('viewBox', '0 0 28 28');
-        svg.innerHTML = `
-            <line x1="4" y1="4" x2="24" y2="24" stroke="#ff3333" stroke-width="3" stroke-linecap="round"/>
-            <line x1="24" y1="4" x2="4" y2="24" stroke="#ff3333" stroke-width="3" stroke-linecap="round"/>
-        `;
-        _hitMarkerEl.appendChild(svg);
-        document.body.appendChild(_hitMarkerEl);
-    }
+    const el = document.createElement('div');
+    el.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 10000;
+        opacity: 1;
+    `;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '18');
+    svg.setAttribute('height', '18');
+    svg.setAttribute('viewBox', '0 0 18 18');
+    svg.innerHTML = `<polygon points="9,1 17,9 9,17 1,9" fill="none" stroke="#ff8cc8" stroke-width="2"/>`;
+    el.appendChild(svg);
+    document.body.appendChild(el);
 
-    if (_hitMarkerTimer) {
-        clearTimeout(_hitMarkerTimer);
-        _hitMarkerTimer = null;
-    }
-
-    _hitMarkerEl.style.opacity = '1';
-    _hitMarkerEl.style.transition = 'none';
-
-    _hitMarkerTimer = setTimeout(() => {
-        if (_hitMarkerEl) {
-            _hitMarkerEl.style.transition = 'opacity 0.12s ease-out';
-            _hitMarkerEl.style.opacity = '0';
+    const start = performance.now();
+    const duration = 300;
+    function animateMarker(now) {
+        const t = Math.min((now - start) / duration, 1);
+        el.style.transform = `translate(-50%, calc(-50% - ${t * 30}px))`;
+        el.style.opacity = String(1 - t);
+        if (t < 1) {
+            requestAnimationFrame(animateMarker);
+        } else {
+            el.remove();
         }
-        _hitMarkerTimer = null;
-    }, 100);
+    }
+    requestAnimationFrame(animateMarker);
 }
 
 // Temp vectors for muzzle flash barrel direction calculation (avoid per-shot allocations)
@@ -16681,6 +16671,9 @@ function setupEventListeners() {
             e.preventDefault();
             toggleHelpPanel();
             return;
+        } else if (e.key === 't' || e.key === 'T') {
+            toggleCannonSide();
+            return;
         }
         
         // Camera rotation with D key (A is now for Auto toggle)
@@ -16737,6 +16730,15 @@ function toggleAutoShoot() {
         btn.classList.toggle('active', gameState.autoShoot);
     }
     playSound('weaponSwitch'); // Audio feedback
+}
+
+function toggleCannonSide() {
+    if (gameState.viewMode !== 'fps') return;
+    gameState.fpsCannonSide = gameState.fpsCannonSide === 'right' ? 'left' : 'right';
+    updateFPSCamera();
+    playSound('weaponSwitch');
+    const btn = document.getElementById('hand-side-btn');
+    if (btn) btn.textContent = (gameState.fpsCannonSide === 'right' ? 'RIGHT HAND' : 'LEFT HAND') + ' (T)';
 }
 
 // Toggle settings panel
@@ -17037,6 +17039,7 @@ const FPS_PITCH_MAX = 47.5 * (Math.PI / 180);   // +47.5Â° (look up) - total 95Â
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
 const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
 const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
+const FPS_CANNON_SIDE_OFFSET = 45;          // Horizontal offset for left/right hand positioning
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
@@ -17100,16 +17103,24 @@ function updateFPSCamera() {
     const backwardDir = forward.clone().negate();
     const backOffset = backwardDir.multiplyScalar(cameraBackDist);
     
+    // Calculate horizontal (right) vector for left/right hand offset
+    // Right vector = cross(forward, up) in the horizontal plane
+    const rightX = Math.sin(yaw - Math.PI / 2);
+    const rightZ = Math.cos(yaw - Math.PI / 2);
+    const sideSign = gameState.fpsCannonSide === 'right' ? -1 : 1;
+    const sideOffsetX = rightX * FPS_CANNON_SIDE_OFFSET * sideSign;
+    const sideOffsetZ = rightZ * FPS_CANNON_SIDE_OFFSET * sideSign;
+    
     // FIXED camera Y position based on constants - NEVER accumulates
     // Base Y (-337.5) + pitch pivot (35) + muzzle offset (25) + camera up offset
     const FIXED_MUZZLE_Y = -337.5 + 35 + 25;  // = -277.5
     const cameraY = FIXED_MUZZLE_Y + cameraUpOffset;
     
-    // Set camera position with FIXED Y
+    // Set camera position with FIXED Y + side offset for left/right hand
     camera.position.set(
-        cannonBasePos.x + backOffset.x,
+        cannonBasePos.x + backOffset.x + sideOffsetX,
         cameraY,  // FIXED Y position - guaranteed no accumulation
-        cannonBasePos.z + backOffset.z
+        cannonBasePos.z + backOffset.z + sideOffsetZ
     );
     
     // Always keep camera upright in world space (locked to world Y axis)

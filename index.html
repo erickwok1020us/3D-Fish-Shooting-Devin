@@ -231,7 +231,7 @@
             align-items: flex-end;
         }
         
-        #auto-shoot-btn, #center-view-btn, #view-mode-btn {
+        #auto-shoot-btn, #center-view-btn, #view-mode-btn, #hand-side-btn {
             padding: 10px 25px;
             background: rgba(50, 50, 60, 0.9);
             border: 2px solid #555;
@@ -245,7 +245,7 @@
             min-width: 140px;
         }
         
-        #auto-shoot-btn:hover, #center-view-btn:hover, #view-mode-btn:hover {
+        #auto-shoot-btn:hover, #center-view-btn:hover, #view-mode-btn:hover, #hand-side-btn:hover {
             border-color: #777;
             color: #aaa;
         }
@@ -286,6 +286,18 @@
             border-color: #aa66ff;
             color: #cc99ff;
             box-shadow: 0 0 15px rgba(150, 100, 200, 0.4);
+        }
+        
+        #hand-side-btn {
+            background: rgba(60, 70, 60, 0.9);
+            border-color: #66aa66;
+            color: #88cc88;
+        }
+        
+        #hand-side-btn:hover {
+            background: rgba(80, 100, 80, 0.9);
+            border-color: #88cc88;
+            color: #aaffaa;
         }
         
         /* Settings Panel */
@@ -1231,7 +1243,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #308</div>
+    <div id="pr-version-tag">PR #309</div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
@@ -1408,6 +1420,7 @@
                 <button id="auto-shoot-btn">AUTO OFF (A)</button>
                 <button id="view-mode-btn">3RD PERSON (Space)</button>
                 <button id="center-view-btn">CENTER VIEW (C)</button>
+                <button id="hand-side-btn" onclick="toggleCannonSide()">RIGHT HAND (T)</button>
             </div>
             
             <!-- Weapon Panel - Updated: 4 weapons only (1x, 3x, 5x, 8x) -->
