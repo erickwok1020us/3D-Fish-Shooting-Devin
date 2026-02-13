@@ -6162,20 +6162,20 @@ function showHitMarker(spreadIndex) {
         pointer-events: none;
         z-index: 10000;
         opacity: 1;
-        font-size: 20px;
-        color: #44ff44;
+        font-size: 26px;
+        color: #aaffcc;
         font-weight: bold;
-        text-shadow: 0 0 4px rgba(68, 255, 68, 0.6);
+        text-shadow: 0 0 8px rgba(170, 255, 204, 0.9), 0 0 3px #fff;
     `;
     el.textContent = '\u2714';
     document.body.appendChild(el);
 
     const start = performance.now();
-    const duration = 300;
+    const duration = 450;
     function animateMarker(now) {
         const t = Math.min((now - start) / duration, 1);
-        el.style.transform = `translate(calc(-50% + ${t * 25}px), calc(-50% - ${t * 30}px))`;
-        el.style.opacity = String(1 - t);
+        el.style.transform = `translate(calc(-50% + ${t * 30}px), calc(-50% - ${t * 40}px)) scale(${1 + t * 0.3})`;
+        el.style.opacity = String(1 - t * t);
         if (t < 1) {
             requestAnimationFrame(animateMarker);
         } else {
@@ -9898,14 +9898,13 @@ async function buildCannonGeometryForWeapon(weaponKey) {
     // PERFORMANCE OPTIMIZATION: Use pre-cloned cannons with show/hide instead of clone/dispose
     // This eliminates the main source of weapon switching lag
     if (weaponGLBState.enabled && glbConfig && weaponGLBState.preClonedCannons.has(weaponKey)) {
-        // Hide current weapon (if any) - use currentWeaponModel to hide the ACTUAL model
-        // in the scene, not the pre-cloned lookup (which may be a different clone)
+        // Hide ALL weapon models to prevent any stale/ghost models from remaining visible.
+        // This covers both cache-built models and pre-cloned models regardless of load order.
+        weaponGLBState.preClonedCannons.forEach((cannon) => {
+            cannon.visible = false;
+        });
         if (weaponGLBState.currentWeaponModel) {
             weaponGLBState.currentWeaponModel.visible = false;
-        }
-        if (weaponGLBState.currentWeaponKey && weaponGLBState.preClonedCannons.has(weaponGLBState.currentWeaponKey)) {
-            const preCloned = weaponGLBState.preClonedCannons.get(weaponGLBState.currentWeaponKey);
-            preCloned.visible = false;
         }
         
         // Show the new weapon
