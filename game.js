@@ -14496,6 +14496,12 @@ function fireBullet(targetX, targetY) {
         void chEl.offsetWidth;
         chEl.classList.add('firing');
     }
+    const vspreadEl = document.getElementById('crosshair-vspread');
+    if (vspreadEl && vspreadEl.style.display !== 'none') {
+        vspreadEl.classList.remove('firing');
+        void vspreadEl.offsetWidth;
+        vspreadEl.classList.add('firing');
+    }
     
     // MULTIPLAYER MODE: Send shoot to server, don't do local balance/cost handling
     // Server handles balance deduction and collision detection
@@ -16202,48 +16208,35 @@ function updateCrosshairForWeapon(weaponKey) {
         crosshair.classList.add('fps-mode');
     }
     
-    const leftCH = document.getElementById('crosshair-left');
-    const rightCH = document.getElementById('crosshair-right');
-    if (leftCH && rightCH) {
+    const vspread = document.getElementById('crosshair-vspread');
+    if (vspread) {
         if (weaponKey === '3x') {
-            leftCH.style.display = 'block';
-            rightCH.style.display = 'block';
+            vspread.style.display = 'block';
+            if (hasFpsMode) vspread.classList.add('fps-mode');
+            else vspread.classList.remove('fps-mode');
             updateSpreadCrosshairPositions();
         } else {
-            leftCH.style.display = 'none';
-            rightCH.style.display = 'none';
+            vspread.style.display = 'none';
+            vspread.classList.remove('fps-mode');
         }
     }
 }
 
 function updateSpreadCrosshairPositions() {
-    const leftCH = document.getElementById('crosshair-left');
-    const rightCH = document.getElementById('crosshair-right');
-    if (!leftCH || !rightCH) return;
-    if (leftCH.style.display === 'none') return;
-    
-    const spreadAngle = CONFIG.weapons['3x'].spreadAngle * (Math.PI / 180);
-    const vFov = camera.fov * (Math.PI / 180);
-    const aspect = window.innerWidth / window.innerHeight;
-    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
-    const pixelOffset = Math.tan(spreadAngle) / Math.tan(hFov / 2) * (window.innerWidth / 2);
+    const vspread = document.getElementById('crosshair-vspread');
+    if (!vspread) return;
+    if (vspread.style.display === 'none') return;
     
     if (gameState.viewMode === 'fps') {
-        const cx = window.innerWidth / 2;
-        const cy = window.innerHeight / 2;
-        leftCH.style.left = (cx - pixelOffset) + 'px';
-        leftCH.style.top = cy + 'px';
-        rightCH.style.left = (cx + pixelOffset) + 'px';
-        rightCH.style.top = cy + 'px';
+        vspread.style.left = '50%';
+        vspread.style.top = '50%';
     } else {
         const mainCH = document.getElementById('crosshair');
         if (mainCH) {
             const mainLeft = parseFloat(mainCH.style.left) || window.innerWidth / 2;
             const mainTop = parseFloat(mainCH.style.top) || window.innerHeight / 2;
-            leftCH.style.left = (mainLeft - pixelOffset) + 'px';
-            leftCH.style.top = mainTop + 'px';
-            rightCH.style.left = (mainLeft + pixelOffset) + 'px';
-            rightCH.style.top = mainTop + 'px';
+            vspread.style.left = mainLeft + 'px';
+            vspread.style.top = mainTop + 'px';
         }
     }
 }
@@ -16902,6 +16895,8 @@ function initFPSMode() {
     
     // FPS MODE: Add CSS class to center crosshair
     if (crosshair) crosshair.classList.add('fps-mode');
+    const vspreadInit = document.getElementById('crosshair-vspread');
+    if (vspreadInit && gameState.currentWeapon === '3x') vspreadInit.classList.add('fps-mode');
     
     // Update camera position
     updateFPSCamera();
@@ -16998,6 +16993,8 @@ function toggleViewMode() {
         camera.updateProjectionMatrix();
         // FPS MODE: Add CSS class to center crosshair (more robust than JS positioning)
         if (crosshair) crosshair.classList.add('fps-mode');
+        const vspreadFps = document.getElementById('crosshair-vspread');
+        if (vspreadFps && gameState.currentWeapon === '3x') vspreadFps.classList.add('fps-mode');
         updateSpreadCrosshairPositions();
         updateFPSCamera();
     } else {
@@ -17018,6 +17015,8 @@ function toggleViewMode() {
         }
         // 3RD PERSON MODE: Remove CSS class so crosshair follows mouse
         if (crosshair) crosshair.classList.remove('fps-mode');
+        const vspread3rd = document.getElementById('crosshair-vspread');
+        if (vspread3rd) vspread3rd.classList.remove('fps-mode');
         // Show mouse cursor again in 3RD PERSON mode
         const container = document.getElementById('game-container');
         if (container) container.classList.remove('fps-hide-cursor');
