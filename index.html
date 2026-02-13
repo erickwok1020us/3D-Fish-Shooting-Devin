@@ -470,17 +470,18 @@
             left: 50%;
             width: 3px;
             height: 3px;
-            background: #88ffaa;
+            background: #aaffcc;
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 6px #88ffaa;
+            box-shadow: 0 0 8px #aaffcc, 0 0 3px #fff;
             display: none;
         }
         
         /* Cross lines for 1x/3x/5x (thin + shape with center gap) */
         #crosshair .crosshair-line {
             position: absolute;
-            background: rgba(136, 255, 170, 0.85);
+            background: rgba(170, 255, 204, 1);
+            box-shadow: 0 0 4px rgba(170, 255, 204, 0.6);
             display: none;
         }
         #crosshair .crosshair-line.top { top: 2px; left: 50%; width: 1px; height: 12px; transform: translateX(-50%); }
@@ -510,16 +511,16 @@
         #crosshair.weapon-8x .crosshair-line { display: none; }
         
         /* Crosshair shrink + brightness animation on fire */
-        @keyframes lineTop { 0% { top: 7px; filter: brightness(1.5); } 100% { top: 2px; filter: brightness(1); } }
-        @keyframes lineBottom { 0% { bottom: 7px; filter: brightness(1.5); } 100% { bottom: 2px; filter: brightness(1); } }
-        @keyframes lineLeft { 0% { left: 7px; filter: brightness(1.5); } 100% { left: 2px; filter: brightness(1); } }
-        @keyframes lineRight { 0% { right: 7px; filter: brightness(1.5); } 100% { right: 2px; filter: brightness(1); } }
-        #crosshair.firing .crosshair-line.top { animation: lineTop 0.15s ease-out; }
-        #crosshair.firing .crosshair-line.bottom { animation: lineBottom 0.15s ease-out; }
-        #crosshair.firing .crosshair-line.left { animation: lineLeft 0.15s ease-out; }
-        #crosshair.firing .crosshair-line.right { animation: lineRight 0.15s ease-out; }
-        @keyframes dotPulse { 0% { transform: translate(-50%,-50%) scale(1.8); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1); opacity: 1; } }
-        #crosshair.firing .crosshair-dot { animation: dotPulse 0.15s ease-out; }
+        @keyframes lineTop { 0% { top: 10px; filter: brightness(2); } 100% { top: 2px; filter: brightness(1); } }
+        @keyframes lineBottom { 0% { bottom: 10px; filter: brightness(2); } 100% { bottom: 2px; filter: brightness(1); } }
+        @keyframes lineLeft { 0% { left: 10px; filter: brightness(2); } 100% { left: 2px; filter: brightness(1); } }
+        @keyframes lineRight { 0% { right: 10px; filter: brightness(2); } 100% { right: 2px; filter: brightness(1); } }
+        #crosshair.firing .crosshair-line.top { animation: lineTop 0.2s ease-out; }
+        #crosshair.firing .crosshair-line.bottom { animation: lineBottom 0.2s ease-out; }
+        #crosshair.firing .crosshair-line.left { animation: lineLeft 0.2s ease-out; }
+        #crosshair.firing .crosshair-line.right { animation: lineRight 0.2s ease-out; }
+        @keyframes dotPulse { 0% { transform: translate(-50%,-50%) scale(2.2); opacity: 1; filter: brightness(2); } 100% { transform: translate(-50%,-50%) scale(1); opacity: 1; filter: brightness(1); } }
+        #crosshair.firing .crosshair-dot { animation: dotPulse 0.2s ease-out; }
         
         /* 3x Forward-Scatter Reticle (overlays base crosshair) */
         #crosshair-vspread {
@@ -537,7 +538,7 @@
             left: 50%;
             height: 18px;
             width: 1px;
-            background: linear-gradient(to top, rgba(136,255,170,0.7), rgba(136,255,170,0.15));
+            background: linear-gradient(to top, rgba(170,255,204,0.9), rgba(170,255,204,0.2));
             transform-origin: bottom center;
         }
         #crosshair-vspread .vspread-line.top { transform: translateX(-50%) rotate(0deg); }
@@ -547,7 +548,7 @@
             position: absolute;
             width: 5px;
             height: 5px;
-            border: 1px solid rgba(136,255,170,0.7);
+            border: 1px solid rgba(170,255,204,0.9);
             border-radius: 50%;
             transform: translate(-50%, -50%);
         }
@@ -566,7 +567,7 @@
         
         /* V-spread firing animation */
         @keyframes vspreadFire {
-            0% { filter: brightness(1.6); }
+            0% { filter: brightness(2.2); }
             100% { filter: brightness(1); }
         }
         #crosshair-vspread.firing .vspread-line {
