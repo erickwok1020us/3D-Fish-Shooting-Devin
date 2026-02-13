@@ -9898,10 +9898,14 @@ async function buildCannonGeometryForWeapon(weaponKey) {
     // PERFORMANCE OPTIMIZATION: Use pre-cloned cannons with show/hide instead of clone/dispose
     // This eliminates the main source of weapon switching lag
     if (weaponGLBState.enabled && glbConfig && weaponGLBState.preClonedCannons.has(weaponKey)) {
-        // Hide current weapon (if any)
+        // Hide current weapon (if any) - use currentWeaponModel to hide the ACTUAL model
+        // in the scene, not the pre-cloned lookup (which may be a different clone)
+        if (weaponGLBState.currentWeaponModel) {
+            weaponGLBState.currentWeaponModel.visible = false;
+        }
         if (weaponGLBState.currentWeaponKey && weaponGLBState.preClonedCannons.has(weaponGLBState.currentWeaponKey)) {
-            const currentCannon = weaponGLBState.preClonedCannons.get(weaponGLBState.currentWeaponKey);
-            currentCannon.visible = false;
+            const preCloned = weaponGLBState.preClonedCannons.get(weaponGLBState.currentWeaponKey);
+            preCloned.visible = false;
         }
         
         // Show the new weapon
