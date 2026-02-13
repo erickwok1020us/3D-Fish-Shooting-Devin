@@ -491,13 +491,15 @@
         /* Hide old brackets */
         #crosshair .crosshair-bracket { display: none !important; }
         
-        /* 1x/3x/5x: Show cross lines + dot */
+        /* 1x/5x: Show cross lines + dot */
         #crosshair.weapon-1x .crosshair-line,
-        #crosshair.weapon-3x .crosshair-line,
         #crosshair.weapon-5x .crosshair-line { display: block; }
         #crosshair.weapon-1x .crosshair-dot,
-        #crosshair.weapon-3x .crosshair-dot,
         #crosshair.weapon-5x .crosshair-dot { display: block; }
+        
+        /* 3x: Hide default crosshair elements (V-spread reticle used instead) */
+        #crosshair.weapon-3x .crosshair-line { display: none; }
+        #crosshair.weapon-3x .crosshair-dot { display: none; }
         
         /* 8x: Show only dot (larger, purple), hide cross lines */
         #crosshair.weapon-8x .crosshair-dot {
@@ -519,34 +521,92 @@
         #crosshair.firing .crosshair-line.left { animation: lineLeft 0.12s ease-out; }
         #crosshair.firing .crosshair-line.right { animation: lineRight 0.12s ease-out; }
         
-        /* 3x spread crosshairs (left + right) */
-        .spread-crosshair {
+        /* 3x V-Spread Reticle */
+        #crosshair-vspread {
             position: fixed;
-            width: 40px;
-            height: 40px;
+            width: 100px;
+            height: 60px;
             pointer-events: none;
             z-index: 100;
             transform: translate(-50%, -50%);
             display: none;
         }
-        .spread-crosshair .crosshair-dot {
+        #crosshair-vspread .vspread-origin {
             position: absolute;
-            top: 50%; left: 50%;
-            width: 3px; height: 3px;
+            top: 50%;
+            left: 8px;
+            width: 4px;
+            height: 4px;
             background: #ff8cc8;
             border-radius: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 6px #ff8cc8;
+            transform: translateY(-50%);
+            box-shadow: 0 0 8px #ff8cc8;
+            z-index: 2;
         }
-        .spread-crosshair .crosshair-bracket { display: none; }
-        .spread-crosshair .crosshair-line {
+        #crosshair-vspread .vspread-line {
             position: absolute;
-            background: rgba(255, 140, 200, 0.85);
+            top: 50%;
+            left: 10px;
+            height: 1.5px;
+            width: 70px;
+            background: linear-gradient(90deg, rgba(255,140,200,0.9), rgba(255,140,200,0.2));
+            transform-origin: 0 50%;
         }
-        .spread-crosshair .crosshair-line.top { top: 2px; left: 50%; width: 1.5px; height: 10px; transform: translateX(-50%); }
-        .spread-crosshair .crosshair-line.bottom { bottom: 2px; left: 50%; width: 1.5px; height: 10px; transform: translateX(-50%); }
-        .spread-crosshair .crosshair-line.left { left: 2px; top: 50%; width: 10px; height: 1.5px; transform: translateY(-50%); }
-        .spread-crosshair .crosshair-line.right { right: 2px; top: 50%; width: 10px; height: 1.5px; transform: translateY(-50%); }
+        #crosshair-vspread .vspread-line.top { transform: rotate(-12deg); }
+        #crosshair-vspread .vspread-line.mid { transform: rotate(0deg); }
+        #crosshair-vspread .vspread-line.bot { transform: rotate(12deg); }
+        #crosshair-vspread .vspread-endpoint {
+            position: absolute;
+            width: 7px;
+            height: 7px;
+            border: 1.5px solid #ff8cc8;
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(255,140,200,0.5);
+            transform: translate(-50%, -50%);
+        }
+        #crosshair-vspread .vspread-endpoint.ep-top { top: calc(50% - 15px); right: 2px; transform: translate(0, -50%); }
+        #crosshair-vspread .vspread-endpoint.ep-mid { top: 50%; right: -2px; transform: translate(0, -50%); }
+        #crosshair-vspread .vspread-endpoint.ep-bot { bottom: calc(50% - 15px); right: 2px; transform: translate(0, -50%); }
+        #crosshair-vspread .vspread-tick-v {
+            position: absolute;
+            left: 8px;
+            width: 1px;
+            background: rgba(255,140,200,0.4);
+            transform: translateX(-50%);
+        }
+        #crosshair-vspread .vspread-tick-v.up { height: 10px; bottom: 50%; margin-bottom: 5px; }
+        #crosshair-vspread .vspread-tick-v.down { height: 10px; top: 50%; margin-top: 5px; }
+        #crosshair-vspread .vspread-tick-h {
+            position: absolute;
+            top: 50%;
+            height: 1px;
+            background: rgba(255,140,200,0.4);
+            transform: translateY(-50%);
+            right: calc(100% - 6px);
+            width: 12px;
+        }
+        
+        /* FPS mode: V-spread centered */
+        #crosshair-vspread.fps-mode {
+            position: fixed !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            display: block !important;
+        }
+        
+        /* V-spread firing animation */
+        @keyframes vspreadFire {
+            0% { opacity: 1; }
+            30% { opacity: 1; filter: brightness(1.6); }
+            100% { opacity: 1; filter: brightness(1); }
+        }
+        #crosshair-vspread.firing .vspread-line {
+            animation: vspreadFire 0.15s ease-out;
+        }
+        #crosshair-vspread.firing .vspread-endpoint {
+            animation: vspreadFire 0.15s ease-out;
+        }
         
         /* Reward Animation */
         .reward-popup {
@@ -1464,19 +1524,17 @@
             <div class="crosshair-line left"></div>
             <div class="crosshair-line right"></div>
         </div>
-        <div id="crosshair-left" class="spread-crosshair">
-            <div class="crosshair-dot"></div>
-            <div class="crosshair-line top"></div>
-            <div class="crosshair-line bottom"></div>
-            <div class="crosshair-line left"></div>
-            <div class="crosshair-line right"></div>
-        </div>
-        <div id="crosshair-right" class="spread-crosshair">
-            <div class="crosshair-dot"></div>
-            <div class="crosshair-line top"></div>
-            <div class="crosshair-line bottom"></div>
-            <div class="crosshair-line left"></div>
-            <div class="crosshair-line right"></div>
+        <div id="crosshair-vspread">
+            <div class="vspread-origin"></div>
+            <div class="vspread-tick-h"></div>
+            <div class="vspread-tick-v up"></div>
+            <div class="vspread-tick-v down"></div>
+            <div class="vspread-line top"></div>
+            <div class="vspread-line mid"></div>
+            <div class="vspread-line bot"></div>
+            <div class="vspread-endpoint ep-top"></div>
+            <div class="vspread-endpoint ep-mid"></div>
+            <div class="vspread-endpoint ep-bot"></div>
         </div>
     </div>
     
