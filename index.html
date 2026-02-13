@@ -488,14 +488,35 @@
         #crosshair.weapon-3x .crosshair-dot,
         #crosshair.weapon-5x .crosshair-dot { display: block; }
         
-        /* 8x: Show only dot (larger, purple), hide brackets */
+        /* 8x Precision Dot: glow dot + thin ring + 4 ticks */
+        #crosshair .crosshair-ring {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 22px; height: 22px;
+            border: 1px solid rgba(200, 100, 255, 0.6);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+        #crosshair .crosshair-tick {
+            position: absolute;
+            background: rgba(200, 100, 255, 0.8);
+            display: none;
+        }
+        #crosshair .crosshair-tick.tk-t { top: 2px; left: 50%; width: 1px; height: 6px; transform: translateX(-50%); }
+        #crosshair .crosshair-tick.tk-b { bottom: 2px; left: 50%; width: 1px; height: 6px; transform: translateX(-50%); }
+        #crosshair .crosshair-tick.tk-l { left: 2px; top: 50%; width: 6px; height: 1px; transform: translateY(-50%); }
+        #crosshair .crosshair-tick.tk-r { right: 2px; top: 50%; width: 6px; height: 1px; transform: translateY(-50%); }
+        
         #crosshair.weapon-8x .crosshair-dot {
             display: block;
-            width: 6px;
-            height: 6px;
-            background: #ff44ff;
-            box-shadow: 0 0 8px #ff44ff;
+            width: 5px;
+            height: 5px;
+            background: #cc44ff;
+            box-shadow: 0 0 10px #cc44ff, 0 0 4px #cc44ff;
         }
+        #crosshair.weapon-8x .crosshair-ring { display: block; }
+        #crosshair.weapon-8x .crosshair-tick { display: block; }
         #crosshair.weapon-8x .crosshair-bracket { display: none; }
         
         /* Crosshair shrink animation on fire — animate brackets inward */
@@ -1233,7 +1254,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #305</div>
+    <div id="pr-version-tag">PR #306</div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
@@ -1452,6 +1473,11 @@
             <div class="crosshair-bracket tr"></div>
             <div class="crosshair-bracket bl"></div>
             <div class="crosshair-bracket br"></div>
+            <div class="crosshair-ring"></div>
+            <div class="crosshair-tick tk-t"></div>
+            <div class="crosshair-tick tk-b"></div>
+            <div class="crosshair-tick tk-l"></div>
+            <div class="crosshair-tick tk-r"></div>
         </div>
         <div id="crosshair-left" class="spread-crosshair">
             <div class="crosshair-dot"></div>
