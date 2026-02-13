@@ -1956,13 +1956,13 @@ const WEAPON_GLB_CONFIG = {
             scale: 0.8,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 65, 60),
+            muzzleOffset: new THREE.Vector3(0, 65, 45),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 45,
-            fpsCameraUpOffset: 55
+            fpsCameraUpOffset: 15
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -1973,13 +1973,13 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.0,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 65, 65),
+            muzzleOffset: new THREE.Vector3(0, 65, 50),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 70,
-            fpsCameraUpOffset: 60
+            fpsCameraUpOffset: 22
         },
         '5x': {
             cannon: '5x 武器模組',
@@ -1989,12 +1989,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.2,
             bulletScale: 0.5,
             hitEffectScale: 0.7,
-            muzzleOffset: new THREE.Vector3(0, 65, 70),
+            muzzleOffset: new THREE.Vector3(0, 65, 55),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 85,
-            fpsCameraUpOffset: 65
+            fpsCameraUpOffset: 28
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -2004,12 +2004,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.5,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 65, 80),
+            muzzleOffset: new THREE.Vector3(0, 65, 65),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 75
+            fpsCameraUpOffset: 40
         }
     }
 };
@@ -6142,12 +6142,22 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
     });
 }
 
-function showHitMarker() {
+function showHitMarker(spreadIndex) {
     const el = document.createElement('div');
+    let startX = window.innerWidth / 2;
+    const startY = window.innerHeight / 2;
+    if (spreadIndex === -1 || spreadIndex === 1) {
+        const spreadAngle = CONFIG.weapons['3x'].spreadAngle * (Math.PI / 180);
+        const vFov = camera.fov * (Math.PI / 180);
+        const aspect = window.innerWidth / window.innerHeight;
+        const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+        const pixelOffset = Math.tan(spreadAngle) / Math.tan(hFov / 2) * (window.innerWidth / 2);
+        startX += spreadIndex * pixelOffset;
+    }
     el.style.cssText = `
         position: fixed;
-        top: 50%;
-        left: 50%;
+        top: ${startY}px;
+        left: ${startX}px;
         transform: translate(-50%, -50%);
         pointer-events: none;
         z-index: 10000;
@@ -13417,7 +13427,7 @@ class Fish {
         this.tail.rotation.y = Math.sin(time + this.group.position.x) * 0.3;
     }
     
-    takeDamage(damage, weaponKey) {
+    takeDamage(damage, weaponKey, spreadIndex) {
         // BUG FIX: Guard against taking damage when already dead
         // This prevents multiple die() calls and duplicate respawn timers
         if (!this.isActive) return false;
@@ -13454,7 +13464,7 @@ class Fish {
         
         this.hp -= damage;
         
-        showHitMarker();
+        showHitMarker(spreadIndex);
         
         if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
@@ -14098,6 +14108,8 @@ class Bullet {
         // AIR WALL FIX: Store bullet origin (muzzle position) to prevent hitting fish too close to cannon
         this.origin = new THREE.Vector3();
         
+        this.spreadIndex = 0;
+        
         this.createMesh();
     }
     
@@ -14205,6 +14217,7 @@ class Bullet {
         // 8x (laser): handled by fireLaserBeam(), not Bullet class
         this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
+        this.spreadIndex = 0;
         this.lifetime = 2.8;
         this.isActive = true;
         this.group.visible = true;
@@ -14405,7 +14418,7 @@ class Bullet {
                     
                 } else {
                     // Standard projectile or spread: single target damage
-                    const killed = fish.takeDamage(weapon.damage, this.weaponKey);
+                    const killed = fish.takeDamage(weapon.damage, this.weaponKey, this.spreadIndex);
                     
                     createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
                     spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
@@ -14453,7 +14466,7 @@ function createBulletPool() {
 // Helper function to spawn a bullet in a specific direction
 // PERFORMANCE: Uses free-list for O(1) lookup instead of O(n) .find() scan
 // SIMPLIFIED: All weapons fire straight (no parabolic trajectory)
-function spawnBulletFromDirection(origin, direction, weaponKey) {
+function spawnBulletFromDirection(origin, direction, weaponKey, spreadIndex) {
     // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
     const bullet = freeBullets.pop();
     if (!bullet) return null;
@@ -14461,6 +14474,7 @@ function spawnBulletFromDirection(origin, direction, weaponKey) {
     // No need to clone - Bullet.fire() uses copy() internally
     // SIMPLIFIED: All weapons fire straight
     bullet.fire(origin, direction, weaponKey);
+    if (spreadIndex !== undefined) bullet.spreadIndex = spreadIndex;
     activeBullets.push(bullet);
     return bullet;
 }
@@ -14675,26 +14689,26 @@ function fireBullet(targetX, targetY) {
         const spreadAngle = weapon.spreadAngle * (Math.PI / 180); // Convert to radians
         
         if (useFpsConvergent) {
-            fireWithConvergentDirection(muzzlePos, direction, weaponKey);
+            fireWithConvergentDirection(muzzlePos, direction, weaponKey, 0);
             
             fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-            fireWithConvergentDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
+            fireWithConvergentDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
             
             fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-            fireWithConvergentDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+            fireWithConvergentDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
         } else {
             // THIRD-PERSON MODE: Normal bullet spawning
             // Center bullet
-            spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+            spawnBulletFromDirection(muzzlePos, direction, weaponKey, 0);
             
             // PERFORMANCE: Use temp vectors instead of clone() + new Vector3()
             // Left bullet (rotate around Y axis)
             fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-            spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
+            spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
             
             // Right bullet (rotate around Y axis)
             fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-            spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+            spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
         }
         
     } else if (weapon.type === 'laser') {
@@ -15410,7 +15424,7 @@ function checkCrosshairFishHit(origin, direction) {
  * @param {string} weaponKey - Current weapon key
  * @returns {boolean} - Whether a fish was hit instantly
  */
-function fireWithConvergentDirection(muzzlePos, direction, weaponKey) {
+function fireWithConvergentDirection(muzzlePos, direction, weaponKey, spreadIndex) {
     const weapon = CONFIG.weapons[weaponKey];
     const AIM_CONVERGENCE_DIST = weapon.convergenceDistance || 1400;
     
@@ -15424,7 +15438,7 @@ function fireWithConvergentDirection(muzzlePos, direction, weaponKey) {
         convergentDirection = direction.clone();
     }
     
-    spawnBulletFromDirection(muzzlePos, convergentDirection, weaponKey);
+    spawnBulletFromDirection(muzzlePos, convergentDirection, weaponKey, spreadIndex);
     return false;
 }
 
@@ -17126,7 +17140,7 @@ function updateFPSCamera() {
     // Set camera position with FIXED Y + side offset for left/right hand
     camera.position.set(
         cannonBasePos.x + backOffset.x + sideOffsetX,
-        cameraY,  // FIXED Y position - guaranteed no accumulation
+        cameraY + backOffset.y,
         cannonBasePos.z + backOffset.z + sideOffsetZ
     );
     
