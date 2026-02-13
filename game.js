@@ -1961,7 +1961,7 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            fpsCameraBackDist: 65,
+            fpsCameraBackDist: 45,
             fpsCameraUpOffset: 55
         },
         '3x': {
@@ -6152,20 +6152,19 @@ function showHitMarker() {
         pointer-events: none;
         z-index: 10000;
         opacity: 1;
+        font-size: 20px;
+        color: #44ff44;
+        font-weight: bold;
+        text-shadow: 0 0 4px rgba(68, 255, 68, 0.6);
     `;
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '18');
-    svg.setAttribute('height', '18');
-    svg.setAttribute('viewBox', '0 0 18 18');
-    svg.innerHTML = `<polygon points="9,1 17,9 9,17 1,9" fill="none" stroke="#ff8cc8" stroke-width="2"/>`;
-    el.appendChild(svg);
+    el.textContent = '\u2714';
     document.body.appendChild(el);
 
     const start = performance.now();
     const duration = 300;
     function animateMarker(now) {
         const t = Math.min((now - start) / duration, 1);
-        el.style.transform = `translate(-50%, calc(-50% - ${t * 30}px))`;
+        el.style.transform = `translate(calc(-50% + ${t * 25}px), calc(-50% - ${t * 30}px))`;
         el.style.opacity = String(1 - t);
         if (t < 1) {
             requestAnimationFrame(animateMarker);
@@ -16556,6 +16555,12 @@ function setupEventListeners() {
     
     window.addEventListener('mouseup', (e) => {
         if (e.button === 2) {  // Right mouse button
+            const dx = e.clientX - gameState.rightDragStartX;
+            const dy = e.clientY - gameState.rightDragStartY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 5) {
+                toggleCannonSide();
+            }
             gameState.isRightDragging = false;
         }
     });
@@ -16733,9 +16738,10 @@ function toggleAutoShoot() {
 }
 
 function toggleCannonSide() {
-    if (gameState.viewMode !== 'fps') return;
     gameState.fpsCannonSide = gameState.fpsCannonSide === 'right' ? 'left' : 'right';
-    updateFPSCamera();
+    if (gameState.viewMode === 'fps') {
+        updateFPSCamera();
+    }
     playSound('weaponSwitch');
     const btn = document.getElementById('hand-side-btn');
     if (btn) btn.textContent = (gameState.fpsCannonSide === 'right' ? 'RIGHT HAND' : 'LEFT HAND') + ' (T)';
@@ -17039,7 +17045,7 @@ const FPS_PITCH_MAX = 47.5 * (Math.PI / 180);   // +47.5Â° (look up) - total 95Â
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
 const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
 const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
-const FPS_CANNON_SIDE_OFFSET = 45;          // Horizontal offset for left/right hand positioning
+const FPS_CANNON_SIDE_OFFSET = 60;          // Horizontal offset for left/right hand positioning
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
@@ -17112,8 +17118,9 @@ function updateFPSCamera() {
     const sideOffsetZ = rightZ * FPS_CANNON_SIDE_OFFSET * sideSign;
     
     // FIXED camera Y position based on constants - NEVER accumulates
-    // Base Y (-337.5) + pitch pivot (35) + muzzle offset (25) + camera up offset
-    const FIXED_MUZZLE_Y = -337.5 + 35 + 25;  // = -277.5
+    // Base Y (-337.5) + pitch pivot (35) + actual muzzle Y offset (from weapon GLB config)
+    const muzzleYOffset = cannonMuzzle ? cannonMuzzle.position.y : 25;
+    const FIXED_MUZZLE_Y = -337.5 + 35 + muzzleYOffset;
     const cameraY = FIXED_MUZZLE_Y + cameraUpOffset;
     
     // Set camera position with FIXED Y + side offset for left/right hand
