@@ -524,6 +524,33 @@
         #crosshair.weapon-8x .crosshair-dot { display: block; }
         #crosshair.weapon-8x .crosshair-line { display: none; }
         
+        /* 3x spread crosshairs (left + right) */
+        .spread-crosshair {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+            z-index: 100;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+        .spread-crosshair .crosshair-line {
+            position: absolute;
+            background: #ffaa00;
+        }
+        .spread-crosshair .crosshair-line.top {
+            width: 2px; height: 10px; left: 50%; top: 2px; transform: translateX(-50%);
+        }
+        .spread-crosshair .crosshair-line.bottom {
+            width: 2px; height: 10px; left: 50%; bottom: 2px; transform: translateX(-50%);
+        }
+        .spread-crosshair .crosshair-line.left {
+            width: 10px; height: 2px; top: 50%; left: 2px; transform: translateY(-50%);
+        }
+        .spread-crosshair .crosshair-line.right {
+            width: 10px; height: 2px; top: 50%; right: 2px; transform: translateY(-50%);
+        }
+        
         /* Reward Animation */
         .reward-popup {
             position: absolute;
@@ -1219,7 +1246,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #301</div>
+    <div id="pr-version-tag">PR #302</div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
@@ -1435,6 +1462,18 @@
         <div id="crosshair" class="weapon-1x">
             <div class="crosshair-ring"></div>
             <div class="crosshair-dot"></div>
+            <div class="crosshair-line top"></div>
+            <div class="crosshair-line bottom"></div>
+            <div class="crosshair-line left"></div>
+            <div class="crosshair-line right"></div>
+        </div>
+        <div id="crosshair-left" class="spread-crosshair">
+            <div class="crosshair-line top"></div>
+            <div class="crosshair-line bottom"></div>
+            <div class="crosshair-line left"></div>
+            <div class="crosshair-line right"></div>
+        </div>
+        <div id="crosshair-right" class="spread-crosshair">
             <div class="crosshair-line top"></div>
             <div class="crosshair-line bottom"></div>
             <div class="crosshair-line left"></div>

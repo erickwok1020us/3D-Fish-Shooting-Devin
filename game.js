@@ -744,7 +744,7 @@ const CONFIG = {
         },
         '3x': {
             multiplier: 3, cost: 3, speed: 1000, 
-            damage: 180, shotsPerSecond: 2.5,
+            damage: 100, shotsPerSecond: 2.5,
             type: 'spread', spreadAngle: 15,
             color: 0xffaa00, size: 0.8,
             cannonColor: 0xff8800, cannonEmissive: 0xff4400,
@@ -1958,7 +1958,7 @@ const WEAPON_GLB_CONFIG = {
             bullet: '3x 子彈模組',
             hitEffect: '3x 擊中特效',
             scale: 1.0,
-            bulletScale: 1.0,
+            bulletScale: 0.5,
             hitEffectScale: 0.5,
             muzzleOffset: new THREE.Vector3(0, 25, 65),
             // FIX: Changed to +90° to match 8x - cannon model now visually points toward bullet direction
@@ -3740,13 +3740,52 @@ function getNearbyFish(fish) {
 
 // PERFORMANCE: Get nearby fish for bullet collision using spatial hash
 // This reduces bullet collision from O(bullets * fish) to O(bullets * k) where k is nearby fish
+// FIX: Query both lastPos and currentPos to prevent bullets skipping fish at low FPS
+// When bullet moves fast (low FPS), the segment lastPos->currentPos can span multiple cells.
+// Querying only currentPos could miss fish near lastPos that the segment passes through.
+function getNearbyFishForBullet(lastPos, currentPos) {
+    const cellX0 = Math.floor(lastPos.x / SPATIAL_HASH_CELL_SIZE);
+    const cellY0 = Math.floor(lastPos.y / SPATIAL_HASH_CELL_SIZE);
+    const cellZ0 = Math.floor(lastPos.z / SPATIAL_HASH_CELL_SIZE);
+    const cellX1 = Math.floor(currentPos.x / SPATIAL_HASH_CELL_SIZE);
+    const cellY1 = Math.floor(currentPos.y / SPATIAL_HASH_CELL_SIZE);
+    const cellZ1 = Math.floor(currentPos.z / SPATIAL_HASH_CELL_SIZE);
+    
+    const minCX = Math.min(cellX0, cellX1) - 1;
+    const maxCX = Math.max(cellX0, cellX1) + 1;
+    const minCY = Math.min(cellY0, cellY1) - 1;
+    const maxCY = Math.max(cellY0, cellY1) + 1;
+    const minCZ = Math.min(cellZ0, cellZ1) - 1;
+    const maxCZ = Math.max(cellZ0, cellZ1) + 1;
+    
+    const nearby = [];
+    const seen = new Set();
+    for (let cx = minCX; cx <= maxCX; cx++) {
+        for (let cy = minCY; cy <= maxCY; cy++) {
+            for (let cz = minCZ; cz <= maxCZ; cz++) {
+                const key = `${cx},${cy},${cz}`;
+                const cell = spatialHashGrid.get(key);
+                if (cell) {
+                    for (let i = 0; i < cell.length; i++) {
+                        const fish = cell[i];
+                        if (!seen.has(fish)) {
+                            seen.add(fish);
+                            nearby.push(fish);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return nearby;
+}
+
 function getNearbyFishAtPosition(pos) {
     const cellX = Math.floor(pos.x / SPATIAL_HASH_CELL_SIZE);
     const cellY = Math.floor(pos.y / SPATIAL_HASH_CELL_SIZE);
     const cellZ = Math.floor(pos.z / SPATIAL_HASH_CELL_SIZE);
     
     const nearby = [];
-    // Check 3x3x3 cube of cells (current + 26 neighbors)
     for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
             for (let dz = -1; dz <= 1; dz++) {
@@ -14266,7 +14305,9 @@ class Bullet {
         
         // PERFORMANCE: Use spatial hash to only check nearby fish
         // This reduces O(bullets * fish) to O(bullets * k) where k is nearby fish count
-        const nearbyFish = getNearbyFishAtPosition(bulletPos);
+        // FIX: Query both lastPos and bulletPos to cover the full segment path
+        // This prevents bullets from passing through fish at low FPS
+        const nearbyFish = getNearbyFishForBullet(lastPos, bulletPos);
         
         for (const fish of nearbyFish) {
             if (!fish.isActive) continue;
@@ -16102,16 +16143,58 @@ function updateCrosshairForWeapon(weaponKey) {
     const crosshair = document.getElementById('crosshair');
     if (!crosshair) return;
     
-    // Fixed crosshair size for all weapons (100% accuracy)
     crosshair.style.width = '40px';
     crosshair.style.height = '40px';
     
-    // Update crosshair color class based on weapon
-    // IMPORTANT: Preserve fps-mode class if present (don't use className = which replaces all)
     const hasFpsMode = crosshair.classList.contains('fps-mode');
     crosshair.className = 'weapon-' + weaponKey;
     if (hasFpsMode) {
         crosshair.classList.add('fps-mode');
+    }
+    
+    const leftCH = document.getElementById('crosshair-left');
+    const rightCH = document.getElementById('crosshair-right');
+    if (leftCH && rightCH) {
+        if (weaponKey === '3x') {
+            leftCH.style.display = 'block';
+            rightCH.style.display = 'block';
+            updateSpreadCrosshairPositions();
+        } else {
+            leftCH.style.display = 'none';
+            rightCH.style.display = 'none';
+        }
+    }
+}
+
+function updateSpreadCrosshairPositions() {
+    const leftCH = document.getElementById('crosshair-left');
+    const rightCH = document.getElementById('crosshair-right');
+    if (!leftCH || !rightCH) return;
+    if (leftCH.style.display === 'none') return;
+    
+    const spreadAngle = CONFIG.weapons['3x'].spreadAngle * (Math.PI / 180);
+    const vFov = camera.fov * (Math.PI / 180);
+    const aspect = window.innerWidth / window.innerHeight;
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+    const pixelOffset = Math.tan(spreadAngle) / Math.tan(hFov / 2) * (window.innerWidth / 2);
+    
+    if (gameState.viewMode === 'fps') {
+        const cx = window.innerWidth / 2;
+        const cy = window.innerHeight / 2;
+        leftCH.style.left = (cx - pixelOffset) + 'px';
+        leftCH.style.top = cy + 'px';
+        rightCH.style.left = (cx + pixelOffset) + 'px';
+        rightCH.style.top = cy + 'px';
+    } else {
+        const mainCH = document.getElementById('crosshair');
+        if (mainCH) {
+            const mainLeft = parseFloat(mainCH.style.left) || window.innerWidth / 2;
+            const mainTop = parseFloat(mainCH.style.top) || window.innerHeight / 2;
+            leftCH.style.left = (mainLeft - pixelOffset) + 'px';
+            leftCH.style.top = mainTop + 'px';
+            rightCH.style.left = (mainLeft + pixelOffset) + 'px';
+            rightCH.style.top = mainTop + 'px';
+        }
     }
 }
 
@@ -16272,6 +16355,7 @@ function setupEventListeners() {
                 crosshair.style.left = e.clientX + 'px';
                 crosshair.style.top = e.clientY + 'px';
             }
+            updateSpreadCrosshairPositions();
         }
     });
     
@@ -16351,6 +16435,7 @@ function setupEventListeners() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        updateSpreadCrosshairPositions();
     });
     
     // Prevent context menu
@@ -16844,6 +16929,7 @@ function toggleViewMode() {
         camera.updateProjectionMatrix();
         // FPS MODE: Add CSS class to center crosshair (more robust than JS positioning)
         if (crosshair) crosshair.classList.add('fps-mode');
+        updateSpreadCrosshairPositions();
         updateFPSCamera();
     } else {
         gameState.viewMode = 'third-person';
@@ -17201,12 +17287,8 @@ function animate() {
     // Update fish with error handling to prevent freeze bugs
     // MULTIPLAYER: Skip local fish updates in multiplayer mode - fish come from server
     if (!multiplayerMode) {
-        // PERFORMANCE: Rebuild spatial hash before fish updates for O(n*k) boids instead of O(n²)
+        // PERFORMANCE: Rebuild spatial hash BEFORE fish updates for boids neighbor lookup
         rebuildSpatialHash(activeFish);
-        
-        // NOTE: Batch updates and LOD removed - they caused fish to freeze
-        // The batch system used array index which changes during splice operations
-        // The LOD system mutated shared materials affecting all fish
         
         let fishUpdateErrors = 0;
         for (let i = activeFish.length - 1; i >= 0; i--) {
@@ -17253,6 +17335,10 @@ function animate() {
         
         // Dynamic fish respawn system - maintain target fish count (single-player only)
         updateDynamicFishSpawn(deltaTime);
+        
+        // FIX: Rebuild spatial hash AFTER fish move so bullet collision uses current positions
+        // Without this, bullets query stale fish positions causing pass-through at cell boundaries
+        rebuildSpatialHash(activeFish);
     }
     
     // Update bullets
