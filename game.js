@@ -1960,8 +1960,8 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            fpsCameraBackDist: 95,
-            fpsCameraUpOffset: 110
+            fpsCameraBackDist: 65,
+            fpsCameraUpOffset: 55
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -1977,8 +1977,8 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            fpsCameraBackDist: 105,
-            fpsCameraUpOffset: 115
+            fpsCameraBackDist: 70,
+            fpsCameraUpOffset: 60
         },
         '5x': {
             cannon: '5x 武器模組',
@@ -1992,8 +1992,8 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 125
+            fpsCameraBackDist: 85,
+            fpsCameraUpOffset: 65
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -2007,8 +2007,8 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 190,
-            fpsCameraUpOffset: 145
+            fpsCameraBackDist: 130,
+            fpsCameraUpOffset: 75
         }
     }
 };
@@ -6228,8 +6228,7 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
         // FIX: Removed muzzle flash ring for 5x weapon (user feedback: too distracting)
         // Keep lightning burst and particles only
         // PERFORMANCE: Reduced lightning burst count from 4 to 2 to reduce stutter
-        spawnLightningBurst(muzzlePos, config.muzzleColor, 2);
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 8);
+        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 4);
         
     } else if (weaponKey === '8x') {
         spawnFireballMuzzleFlash(muzzlePos, direction);
