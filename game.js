@@ -384,7 +384,20 @@ function createUnderwaterParticles() {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
     
-    // Create particle material with soft glow
+    const bubbleCanvas = document.createElement('canvas');
+    bubbleCanvas.width = 32;
+    bubbleCanvas.height = 32;
+    const ctx = bubbleCanvas.getContext('2d');
+    ctx.beginPath();
+    ctx.arc(16, 16, 14, 0, Math.PI * 2);
+    const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 14);
+    grad.addColorStop(0, 'rgba(255,255,255,0.8)');
+    grad.addColorStop(0.5, 'rgba(170,221,255,0.4)');
+    grad.addColorStop(1, 'rgba(170,221,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    const bubbleTexture = new THREE.CanvasTexture(bubbleCanvas);
+
     const material = new THREE.PointsMaterial({
         color: 0xaaddff,
         size: 3,
@@ -392,7 +405,8 @@ function createUnderwaterParticles() {
         opacity: 0.4,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-        sizeAttenuation: true
+        sizeAttenuation: true,
+        map: bubbleTexture
     });
     
     underwaterParticleSystem = new THREE.Points(geometry, material);
@@ -736,14 +750,14 @@ const CONFIG = {
     // Issue #16 CORRECTION: All weapons have 100% accuracy - point-and-click shooting
     weapons: {
         '1x': { 
-            multiplier: 1, cost: 1, speed: 1800,
+            multiplier: 1, cost: 1, speed: 2000,
             damage: 100, shotsPerSecond: 2.5,
             type: 'projectile', color: 0xcccccc, size: 0.8,
             cannonColor: 0xcccccc, cannonEmissive: 0x666666,
             convergenceDistance: 1400
         },
         '3x': {
-            multiplier: 3, cost: 3, speed: 1800,
+            multiplier: 3, cost: 3, speed: 2000,
             damage: 100, shotsPerSecond: 2.5,
             type: 'spread', spreadAngle: 15,
             color: 0xffaaaa, size: 0.8,
@@ -751,7 +765,7 @@ const CONFIG = {
             convergenceDistance: 1400
         },
         '5x': {
-            multiplier: 5, cost: 5, speed: 1800,
+            multiplier: 5, cost: 5, speed: 2000,
             damage: 200, shotsPerSecond: 2.5,
             type: 'rocket', aoeRadius: 120, damageEdge: 80,
             color: 0xffdd00, size: 0.8,
@@ -1941,13 +1955,13 @@ const WEAPON_GLB_CONFIG = {
             scale: 0.8,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 50, 60),
+            muzzleOffset: new THREE.Vector3(0, 65, 60),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 95,
-            fpsCameraUpOffset: 95
+            fpsCameraUpOffset: 110
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -1958,13 +1972,13 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.0,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 50, 65),
+            muzzleOffset: new THREE.Vector3(0, 65, 65),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 105,
-            fpsCameraUpOffset: 100
+            fpsCameraUpOffset: 115
         },
         '5x': {
             cannon: '5x 武器模組',
@@ -1974,12 +1988,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.2,
             bulletScale: 0.5,
             hitEffectScale: 0.7,
-            muzzleOffset: new THREE.Vector3(0, 50, 70),
+            muzzleOffset: new THREE.Vector3(0, 65, 70),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 110
+            fpsCameraUpOffset: 125
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -1989,12 +2003,12 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.5,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 50, 80),
+            muzzleOffset: new THREE.Vector3(0, 65, 80),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 190,
-            fpsCameraUpOffset: 130
+            fpsCameraUpOffset: 145
         }
     }
 };
@@ -14130,6 +14144,20 @@ class Bullet {
         this.proceduralGroup.add(this.trail);
         
         this.group.add(this.proceduralGroup);
+        
+        const glowTrailGeo = new THREE.CylinderGeometry(1.5, 0.3, 30, 6);
+        glowTrailGeo.rotateX(Math.PI / 2);
+        glowTrailGeo.translate(0, 0, -18);
+        this.glowTrailMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.25,
+            depthWrite: false
+        });
+        this.glowTrail = new THREE.Mesh(glowTrailGeo, this.glowTrailMat);
+        this.glowTrail.visible = false;
+        this.group.add(this.glowTrail);
+        
         this.group.visible = false;
         bulletGroup.add(this.group);
     }
@@ -14236,6 +14264,16 @@ class Bullet {
         // Apply rotation fix for GLB models if needed
         if (this.useGLB && glbConfig && glbConfig.bulletRotationFix) {
             this.glbModel.rotation.copy(glbConfig.bulletRotationFix);
+        }
+        
+        const isProjectile = (weapon.type === 'projectile' || weapon.type === 'spread' || weapon.type === 'rocket');
+        if (isProjectile) {
+            const vfx = WEAPON_VFX_CONFIG[weaponKey];
+            this.glowTrailMat.color.setHex(vfx ? vfx.trailColor : 0xffffff);
+            this.glowTrailMat.opacity = 0.25;
+            this.glowTrail.visible = true;
+        } else {
+            this.glowTrail.visible = false;
         }
     }
     
@@ -14395,6 +14433,7 @@ class Bullet {
     deactivate() {
         this.isActive = false;
         this.group.visible = false;
+        this.glowTrail.visible = false;
         
         // PERFORMANCE: Return GLB model to pool for reuse
         if (this.useGLB && this.glbModel) {
