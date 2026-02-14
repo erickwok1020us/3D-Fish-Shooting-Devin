@@ -863,7 +863,9 @@ const gameState = {
     hoveredFish: null,       // Currently hovered fish (for highlighting)
     selectedFish: null,      // Currently selected fish (for auto-tracking)
     lastHoverCheckTime: 0,   // Throttle hover detection to 60fps
-    fpsCannonSide: 'right'   // FPS weapon hand side: 'right' or 'left' (toggle with T key)
+    fpsCannonSide: 'right',  // FPS weapon hand side (fixed right)
+    isScoping: false,        // Right-click scope zoom active
+    scopeTargetFov: 60       // Target FOV for scope zoom (60=normal FPS, 30=zoomed)
 };
 
 // ==================== GLB FISH MODEL LOADER (PDF Spec Compliant) ====================
@@ -16812,21 +16814,21 @@ function setupEventListeners() {
     // Prevent context menu
     container.addEventListener('contextmenu', (e) => e.preventDefault());
     
-    // Right-click drag for camera rotation (horizontal + vertical)
+    // Right-click: scope zoom (hold) + camera drag
     container.addEventListener('mousedown', (e) => {
         if (e.button === 2) {  // Right mouse button
             gameState.isRightDragging = true;
             gameState.rightDragStartX = e.clientX;
             gameState.rightDragStartY = e.clientY;
-            // Store start values based on view mode
             if (gameState.viewMode === 'fps') {
-                // In FPS mode, read cannon's current rotation as start values
                 gameState.rightDragStartYaw = cannonGroup ? cannonGroup.rotation.y : 0;
                 gameState.rightDragStartPitch = cannonPitchGroup ? cannonPitchGroup.rotation.x : 0;
             } else {
                 gameState.rightDragStartYaw = gameState.cameraYaw;
                 gameState.rightDragStartPitch = gameState.cameraPitch;
             }
+            gameState.isScoping = true;
+            gameState.scopeTargetFov = 30;
         }
     });
     
@@ -16890,10 +16892,9 @@ function setupEventListeners() {
     
     window.addEventListener('mouseup', (e) => {
         if (e.button === 2) {  // Right mouse button
-            const dx = e.clientX - gameState.rightDragStartX;
-            const dy = e.clientY - gameState.rightDragStartY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
             gameState.isRightDragging = false;
+            gameState.isScoping = false;
+            gameState.scopeTargetFov = gameState.viewMode === 'fps' ? 60 : 75;
         }
     });
     
@@ -17655,8 +17656,18 @@ function animate() {
     // This ensures camera follows when aiming (click) or auto-aim rotates the cannon
     if (gameState.viewMode === 'fps') {
         updateFPSCamera();
-        // PERFORMANCE FIX: Removed updateFPSDebugOverlay() - DOM updates every frame cause severe FPS drop
-        // The debug overlay was for development only and should not run in production
+    }
+    
+    // Smooth scope zoom FOV transition
+    if (camera.fov !== gameState.scopeTargetFov) {
+        const fovDiff = gameState.scopeTargetFov - camera.fov;
+        const fovStep = fovDiff * Math.min(1, deltaTime * 12);
+        if (Math.abs(fovDiff) < 0.5) {
+            camera.fov = gameState.scopeTargetFov;
+        } else {
+            camera.fov += fovStep;
+        }
+        camera.updateProjectionMatrix();
     }
     
     // THIRD-PERSON MODE: Auto-tracking system
@@ -17667,16 +17678,14 @@ function animate() {
     
     // Auto-shoot with auto-aim (Issue #3 - fully automatic without mouse following)
     if (gameState.autoShoot) {
+        const targetFish = autoAimAtNearestFish();
+        if (targetFish) {
+            aimCannonAtFish(targetFish);
+        }
         autoShootTimer -= deltaTime;
         if (autoShootTimer <= 0) {
-            // Find nearest fish and aim at it
-            const targetFish = autoAimAtNearestFish();
             if (targetFish) {
-                // Aim cannon at fish and fire
-                const dir = aimCannonAtFish(targetFish);
-                if (dir) {
-                    autoFireAtFish(targetFish);
-                }
+                autoFireAtFish(targetFish);
             }
             const weapon = CONFIG.weapons[gameState.currentWeapon];
             autoShootTimer = (1 / weapon.shotsPerSecond) + 0.05;
