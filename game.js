@@ -1956,7 +1956,7 @@ const WEAPON_GLB_CONFIG = {
             scale: 0.8,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 65, 45),
+            muzzleOffset: new THREE.Vector3(0, 30, 45),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
@@ -1973,7 +1973,7 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.0,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
-            muzzleOffset: new THREE.Vector3(0, 65, 50),
+            muzzleOffset: new THREE.Vector3(0, 30, 50),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
@@ -1989,7 +1989,7 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.2,
             bulletScale: 0.5,
             hitEffectScale: 0.7,
-            muzzleOffset: new THREE.Vector3(0, 65, 55),
+            muzzleOffset: new THREE.Vector3(0, 30, 55),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
@@ -2004,7 +2004,7 @@ const WEAPON_GLB_CONFIG = {
             scale: 1.5,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 65, 65),
+            muzzleOffset: new THREE.Vector3(0, 30, 65),
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
@@ -2949,6 +2949,19 @@ function warmUpWeaponShaders() {
         renderer.render(scene, camera);
     }
     
+    // Clean up ALL non-pre-cloned (stale fallback) models from cannonBodyGroup
+    // These were created by the initial buildCannonGeometryForWeapon('1x') before pre-cloning completed
+    if (cannonBodyGroup) {
+        const preClonedSet = new Set(weaponGLBState.preClonedCannons.values());
+        for (let i = cannonBodyGroup.children.length - 1; i >= 0; i--) {
+            const child = cannonBodyGroup.children[i];
+            if (!preClonedSet.has(child)) {
+                cannonBodyGroup.remove(child);
+                disposeObject3D(child);
+            }
+        }
+    }
+    
     // After warmup, hide all cannons first
     weaponGLBState.preClonedCannons.forEach((cannon) => {
         cannon.visible = false;
@@ -2962,6 +2975,13 @@ function warmUpWeaponShaders() {
         cannonBarrel = currentCannon;
         weaponGLBState.currentWeaponModel = currentCannon;
         weaponGLBState.currentWeaponKey = currentWeapon;
+        
+        // Update muzzle position for current weapon
+        const glbConfig = WEAPON_GLB_CONFIG.weapons[currentWeapon];
+        if (cannonMuzzle && glbConfig && glbConfig.muzzleOffset) {
+            cannonMuzzle.position.copy(glbConfig.muzzleOffset);
+        }
+        
         console.log(`[WEAPON-GLB] Shader warmup: showing current weapon ${currentWeapon}`);
     }
     
@@ -3157,6 +3177,15 @@ async function preloadAllWeapons() {
     // Note: warmUpWeaponShaders() needs renderer/scene/camera to be ready
     // It will be called again from init() if not ready here
     warmUpWeaponShaders();
+    
+    // ROBUST FIX: Re-initialize the current weapon using the pre-cloned path
+    // This definitively fixes cannon visibility regardless of race conditions with
+    // the initial buildCannonGeometryForWeapon('1x') call during init
+    const currentWeapon = gameState.currentWeapon || '1x';
+    if (weaponGLBState.preClonedCannons.has(currentWeapon)) {
+        buildCannonGeometryForWeapon(currentWeapon);
+        console.log(`[WEAPON-GLB] Re-initialized ${currentWeapon} cannon after preload`);
+    }
 }
 
 function getWeaponGLBStats() {
@@ -9993,6 +10022,16 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         // ASYNC path: Model not cached yet, load it (only happens on first switch)
         try {
             const cannonModel = await loadWeaponGLB(weaponKey, 'cannon');
+            
+            // GUARD: If pre-cloned cannon became available during the async load
+            // (from preloadAllWeapons running concurrently), skip adding this fallback model.
+            // The pre-cloned system will handle cannon visibility via warmUpWeaponShaders
+            // and the re-initialization call in preloadAllWeapons.
+            if (weaponGLBState.preClonedCannons.has(weaponKey)) {
+                console.log(`[WEAPON-GLB] Pre-cloned ${weaponKey} now available, skipping async fallback`);
+                return;
+            }
+            
             if (cannonModel) {
                 // Apply scale from config
                 const scale = glbConfig.scale;
