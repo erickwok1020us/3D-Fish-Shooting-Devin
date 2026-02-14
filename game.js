@@ -1962,7 +1962,8 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 45,
-            fpsCameraUpOffset: 15
+            fpsCameraUpOffset: 15,
+            cannonYOffset: 24
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -1979,7 +1980,8 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 70,
-            fpsCameraUpOffset: 22
+            fpsCameraUpOffset: 22,
+            cannonYOffset: 20
         },
         '5x': {
             cannon: '5x 武器模組',
@@ -1994,7 +1996,8 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 85,
-            fpsCameraUpOffset: 28
+            fpsCameraUpOffset: 28,
+            cannonYOffset: 20
         },
         '8x': {
             cannon: '8x 武器模組',
@@ -2009,7 +2012,8 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 40
+            fpsCameraUpOffset: 40,
+            cannonYOffset: 20
         }
     }
 };
@@ -2911,7 +2915,8 @@ async function preCloneCannonForInstantSwitch(weaponKey) {
     // Apply scale and position from config
     const scale = glbConfig.scale;
     cannonModel.scale.set(scale, scale, scale);
-    cannonModel.position.set(0, 20, 0);
+    const yOffset = glbConfig.cannonYOffset !== undefined ? glbConfig.cannonYOffset : 20;
+    cannonModel.position.set(0, yOffset, 0);
     
     // Start hidden - will be shown when weapon is selected
     cannonModel.visible = false;
@@ -6312,26 +6317,23 @@ function update3xSideCrosshairPositions() {
     sideR.style.top = cy + 'px';
 }
 
-function showHitMarker(spreadIndex) {
+const _hitMarkerProjVec = new THREE.Vector3();
+function showHitMarker(spreadIndex, fishWorldPos) {
     const el = document.createElement('div');
     let startX = window.innerWidth / 2;
     let startY = window.innerHeight / 2;
 
-    if (gameState.currentWeapon === '3x') {
-        const w = window.innerWidth;
-        const spread = CROSSHAIR_B_SPREAD * (w / 500);
-        if (gameState.viewMode === 'fps') {
-            startX = w / 2;
-            startY = window.innerHeight / 2;
-        } else {
-            const mainCH = document.getElementById('crosshair');
-            if (mainCH) {
-                startX = parseFloat(mainCH.style.left) || w / 2;
-                startY = parseFloat(mainCH.style.top) || window.innerHeight / 2;
-            }
+    if (fishWorldPos && camera) {
+        _hitMarkerProjVec.copy(fishWorldPos);
+        _hitMarkerProjVec.project(camera);
+        const hw = window.innerWidth / 2;
+        const hh = window.innerHeight / 2;
+        const sx = _hitMarkerProjVec.x * hw + hw;
+        const sy = -_hitMarkerProjVec.y * hh + hh;
+        if (_hitMarkerProjVec.z > 0 && _hitMarkerProjVec.z < 1) {
+            startX = sx;
+            startY = sy;
         }
-        if (spreadIndex === -1) startX -= spread;
-        else if (spreadIndex === 1) startX += spread;
     }
 
     el.style.cssText = `
@@ -10145,7 +10147,8 @@ async function buildCannonGeometryForWeapon(weaponKey) {
             if (cannonModel) {
                 const scale = glbConfig.scale;
                 cannonModel.scale.set(scale, scale, scale);
-                cannonModel.position.set(0, 20, 0);
+                const yOff = glbConfig.cannonYOffset !== undefined ? glbConfig.cannonYOffset : 20;
+                cannonModel.position.set(0, yOff, 0);
                 cannonBarrel = cannonModel;
                 cannonBodyGroup.add(cannonModel);
                 
@@ -10177,8 +10180,8 @@ async function buildCannonGeometryForWeapon(weaponKey) {
                 const scale = glbConfig.scale;
                 cannonModel.scale.set(scale, scale, scale);
                 
-                // Position the wrapper group (internal model centering is preserved)
-                cannonModel.position.set(0, 20, 0);
+                const yOff2 = glbConfig.cannonYOffset !== undefined ? glbConfig.cannonYOffset : 20;
+                cannonModel.position.set(0, yOff2, 0);
                 
                 // Store reference for recoil animation
                 cannonBarrel = cannonModel;
@@ -10226,8 +10229,8 @@ async function buildCannonGeometryForWeapon(weaponKey) {
             emissiveIntensity: 0.2
         });
         cannonBarrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-        cannonBarrel.position.set(0, 20, 0);
-        // Issue #10: No initial rotation - pitch group handles all rotation
+        const proceduralYOff = glbConfig && glbConfig.cannonYOffset !== undefined ? glbConfig.cannonYOffset : 20;
+        cannonBarrel.position.set(0, proceduralYOff, 0);
         cannonBodyGroup.add(cannonBarrel);
         
         // Silver ring
@@ -13654,7 +13657,8 @@ class Fish {
         
         this.hp -= damage;
         
-        showHitMarker(spreadIndex);
+        const fishPos = this.group ? this.group.position : null;
+        showHitMarker(spreadIndex, fishPos);
         
         if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
@@ -17260,7 +17264,7 @@ function updateViewModeButton() {
 // FPS rotation limits - user requested: 180° horizontal, 80° vertical
 const FPS_YAW_MAX = 90 * (Math.PI / 180);     // ±90° yaw (180° total horizontal)
 const FPS_PITCH_MIN = -47.5 * (Math.PI / 180);  // -47.5° (look down)
-const FPS_PITCH_MAX = 65 * (Math.PI / 180);   // +65° (look up) - total 112.5° vertical
+const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5° vertical
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
