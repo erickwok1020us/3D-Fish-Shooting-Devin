@@ -6285,10 +6285,55 @@ function updateCrosshairCanvasOverlay(currentTime) {
     drawCrosshairB(crosshairCtx, w, h, cx, cy, currentTime, dt);
 }
 
+function update3xSideCrosshairPositions() {
+    if (gameState.currentWeapon !== '3x') return;
+    const sideL = document.getElementById('crosshair-3x-left');
+    const sideR = document.getElementById('crosshair-3x-right');
+    if (!sideL || !sideR) return;
+    const w = window.innerWidth;
+    const spread = CROSSHAIR_B_SPREAD * (w / 500);
+    let cx, cy;
+    if (gameState.viewMode === 'fps') {
+        cx = w / 2;
+        cy = window.innerHeight / 2;
+    } else {
+        const mainCH = document.getElementById('crosshair');
+        if (mainCH) {
+            cx = parseFloat(mainCH.style.left) || w / 2;
+            cy = parseFloat(mainCH.style.top) || window.innerHeight / 2;
+        } else {
+            cx = w / 2;
+            cy = window.innerHeight / 2;
+        }
+    }
+    sideL.style.left = (cx - spread) + 'px';
+    sideL.style.top = cy + 'px';
+    sideR.style.left = (cx + spread) + 'px';
+    sideR.style.top = cy + 'px';
+}
+
 function showHitMarker(spreadIndex) {
     const el = document.createElement('div');
     let startX = window.innerWidth / 2;
-    const startY = window.innerHeight / 2;
+    let startY = window.innerHeight / 2;
+
+    if (gameState.currentWeapon === '3x') {
+        const w = window.innerWidth;
+        const spread = CROSSHAIR_B_SPREAD * (w / 500);
+        if (gameState.viewMode === 'fps') {
+            startX = w / 2;
+            startY = window.innerHeight / 2;
+        } else {
+            const mainCH = document.getElementById('crosshair');
+            if (mainCH) {
+                startX = parseFloat(mainCH.style.left) || w / 2;
+                startY = parseFloat(mainCH.style.top) || window.innerHeight / 2;
+            }
+        }
+        if (spreadIndex === -1) startX -= spread;
+        else if (spreadIndex === 1) startX += spread;
+    }
+
     el.style.cssText = `
         position: fixed;
         top: ${startY}px;
@@ -14304,13 +14349,13 @@ class Bullet {
         
         this.group.add(this.proceduralGroup);
         
-        const glowTrailGeo = new THREE.CylinderGeometry(1.5, 0.3, 30, 6);
+        const glowTrailGeo = new THREE.CylinderGeometry(2.5, 0.5, 45, 6);
         glowTrailGeo.rotateX(Math.PI / 2);
-        glowTrailGeo.translate(0, 0, -18);
+        glowTrailGeo.translate(0, 0, -24);
         this.glowTrailMat = new THREE.MeshBasicMaterial({
             color: 0xffffff,
             transparent: true,
-            opacity: 0.25,
+            opacity: 0.5,
             depthWrite: false
         });
         this.glowTrail = new THREE.Mesh(glowTrailGeo, this.glowTrailMat);
@@ -14430,7 +14475,7 @@ class Bullet {
         if (isProjectile) {
             const vfx = WEAPON_VFX_CONFIG[weaponKey];
             this.glowTrailMat.color.setHex(vfx ? vfx.trailColor : 0xffffff);
-            this.glowTrailMat.opacity = 0.25;
+            this.glowTrailMat.opacity = 0.5;
             this.glowTrail.visible = true;
         } else {
             this.glowTrail.visible = false;
@@ -14660,6 +14705,18 @@ function fireBullet(targetX, targetY) {
         vspreadEl.classList.remove('firing');
         void vspreadEl.offsetWidth;
         vspreadEl.classList.add('firing');
+    }
+    const sideL = document.getElementById('crosshair-3x-left');
+    const sideR = document.getElementById('crosshair-3x-right');
+    if (sideL && sideL.style.display !== 'none') {
+        sideL.classList.remove('firing');
+        void sideL.offsetWidth;
+        sideL.classList.add('firing');
+    }
+    if (sideR && sideR.style.display !== 'none') {
+        sideR.classList.remove('firing');
+        void sideR.offsetWidth;
+        sideR.classList.add('firing');
     }
     
     // MULTIPLAYER MODE: Send shoot to server, don't do local balance/cost handling
@@ -16373,15 +16430,17 @@ function updateCrosshairForWeapon(weaponKey) {
     }
     const chCanvas = document.getElementById('crosshair-canvas');
     if (chCanvas) {
-        if (weaponKey === '3x') {
-            chCanvas.style.display = 'block';
-            if (!crosshairCanvas) initCrosshairCanvas();
-            pelletStates[0].timer = 0;
-            pelletStates[1].timer = 0;
-            pelletStates[2].timer = 0;
-        } else {
-            chCanvas.style.display = 'none';
-        }
+        chCanvas.style.display = 'none';
+    }
+    const sideL = document.getElementById('crosshair-3x-left');
+    const sideR = document.getElementById('crosshair-3x-right');
+    if (weaponKey === '3x') {
+        if (sideL) sideL.style.display = 'block';
+        if (sideR) sideR.style.display = 'block';
+        update3xSideCrosshairPositions();
+    } else {
+        if (sideL) sideL.style.display = 'none';
+        if (sideR) sideR.style.display = 'none';
     }
 }
 
@@ -17678,6 +17737,7 @@ function animate() {
         renderer.render(scene, camera);
     
     updateCrosshairCanvasOverlay(currentTime);
+    update3xSideCrosshairPositions();
 }
 
 // PERFORMANCE FIX: Cache seaweed and caustic light references to avoid iterating all children every frame

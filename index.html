@@ -522,6 +522,43 @@
         @keyframes dotPulse { 0% { transform: translate(-50%,-50%) scale(2.2); opacity: 1; filter: brightness(2); } 100% { transform: translate(-50%,-50%) scale(1); opacity: 1; filter: brightness(1); } }
         #crosshair.firing .crosshair-dot { animation: dotPulse 0.2s ease-out; }
         
+        /* 3x side crosshairs (DOM-based, same style as #crosshair) */
+        .crosshair-3x-side {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+            z-index: 100;
+            transform: translate(-50%, -50%);
+        }
+        .crosshair-3x-side .crosshair-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 1px;
+            height: 1px;
+            background: #aaffcc;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 4px #aaffcc, 0 0 2px #fff;
+            display: block;
+        }
+        .crosshair-3x-side .crosshair-line {
+            position: absolute;
+            background: rgba(170, 255, 204, 1);
+            box-shadow: 0 0 4px rgba(170, 255, 204, 0.6);
+            display: block;
+        }
+        .crosshair-3x-side .crosshair-line.top { top: 2px; left: 50%; width: 1px; height: 12px; transform: translateX(-50%); }
+        .crosshair-3x-side .crosshair-line.bottom { bottom: 2px; left: 50%; width: 1px; height: 12px; transform: translateX(-50%); }
+        .crosshair-3x-side .crosshair-line.left { left: 2px; top: 50%; width: 12px; height: 1px; transform: translateY(-50%); }
+        .crosshair-3x-side .crosshair-line.right { right: 2px; top: 50%; width: 12px; height: 1px; transform: translateY(-50%); }
+        .crosshair-3x-side.firing .crosshair-line.top { animation: lineTop 0.2s ease-out; }
+        .crosshair-3x-side.firing .crosshair-line.bottom { animation: lineBottom 0.2s ease-out; }
+        .crosshair-3x-side.firing .crosshair-line.left { animation: lineLeft 0.2s ease-out; }
+        .crosshair-3x-side.firing .crosshair-line.right { animation: lineRight 0.2s ease-out; }
+        .crosshair-3x-side.firing .crosshair-dot { animation: dotPulse 0.2s ease-out; }
+
         /* 3x Forward-Scatter Reticle (overlays base crosshair) */
         #crosshair-vspread {
             position: fixed;
@@ -1502,6 +1539,20 @@
             <div class="vspread-endpoint ep-bot"></div>
         </div>
         <canvas id="crosshair-canvas" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;display:none;"></canvas>
+        <div id="crosshair-3x-left" class="crosshair-3x-side" style="display:none;">
+            <div class="crosshair-dot"></div>
+            <div class="crosshair-line top"></div>
+            <div class="crosshair-line bottom"></div>
+            <div class="crosshair-line left"></div>
+            <div class="crosshair-line right"></div>
+        </div>
+        <div id="crosshair-3x-right" class="crosshair-3x-side" style="display:none;">
+            <div class="crosshair-dot"></div>
+            <div class="crosshair-line top"></div>
+            <div class="crosshair-line bottom"></div>
+            <div class="crosshair-line left"></div>
+            <div class="crosshair-line right"></div>
+        </div>
     </div>
     
     <!-- Three.js -->
