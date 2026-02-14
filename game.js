@@ -1964,7 +1964,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 45,
-            fpsCameraUpOffset: 15,
+            fpsCameraUpOffset: 55,
             cannonYOffset: 24
         },
         '3x': {
@@ -1982,7 +1982,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 70,
-            fpsCameraUpOffset: 22,
+            fpsCameraUpOffset: 65,
             cannonYOffset: 20
         },
         '5x': {
@@ -1998,7 +1998,7 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 85,
-            fpsCameraUpOffset: 28,
+            fpsCameraUpOffset: 75,
             cannonYOffset: 20
         },
         '8x': {
@@ -2014,7 +2014,7 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 40,
+            fpsCameraUpOffset: 90,
             cannonYOffset: 20
         }
     }
