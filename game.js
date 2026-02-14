@@ -9129,19 +9129,19 @@ window.startMultiplayerGame = function(manager) {
     multiplayerMode = true;
     multiplayerManager = manager;
     
-    var _killDebug = { kills: 0, totalReward: 0, totalCost: 0, log: [], el: null };
+    window._killDebug = { kills: 0, totalReward: 0, totalCost: 0, log: [], el: null };
     (function() {
         var d = document.createElement('div');
         d.id = 'kill-debug-overlay';
         d.style.cssText = 'position:fixed;top:8px;right:8px;background:rgba(0,0,0,0.75);color:#0f0;font:11px monospace;padding:6px 10px;z-index:99999;pointer-events:none;max-height:260px;overflow:hidden;border-radius:4px;min-width:280px';
         d.innerHTML = '[RTP Debug] waiting...';
         document.body.appendChild(d);
-        _killDebug.el = d;
+        window._killDebug.el = d;
     })();
 
-    function _updateKillDebugOverlay() {
-        var d = _killDebug;
-        if (!d.el) return;
+    window._updateKillDebugOverlay = function() {
+        var d = window._killDebug;
+        if (!d || !d.el) return;
         var rtp = d.totalCost > 0 ? ((d.totalReward / d.totalCost) * 100).toFixed(2) : '--';
         var delta = d.totalReward - d.totalCost;
         var lines = ['[RTP Debug] kills=' + d.kills + ' RTP=' + rtp + '% delta=' + delta];
@@ -9151,7 +9151,7 @@ window.startMultiplayerGame = function(manager) {
             lines.push('T' + e.tier + ' ' + e.weapon + ' r=' + e.reward + ' c=' + e.cost + ' d=' + e.sessionDelta);
         }
         d.el.innerHTML = lines.join('<br>');
-    }
+    };
 
     // Setup multiplayer callbacks
     if (multiplayerManager) {
@@ -9198,18 +9198,18 @@ window.startMultiplayerGame = function(manager) {
         multiplayerManager.onFishKilled = function(data) {
             console.log('[GAME] Fish killed event received:', data.fishId, data.typeName, 'killedBy:', data.killedBy, 'reward:', data.reward);
             
-            if (data.killedBy === multiplayerManager.playerId && data.reward) {
-                _killDebug.kills++;
-                _killDebug.totalReward += data.reward;
+            if (data.killedBy === multiplayerManager.playerId && data.reward && window._killDebug) {
+                window._killDebug.kills++;
+                window._killDebug.totalReward += data.reward;
                 var w = CONFIG.weapons[gameState.currentWeapon] || CONFIG.weapons['1x'];
-                _killDebug.log.push({
+                window._killDebug.log.push({
                     tier: data.tier || '?',
                     weapon: gameState.currentWeapon || '1x',
                     reward: data.reward,
                     cost: w.cost,
-                    sessionDelta: _killDebug.totalReward - _killDebug.totalCost
+                    sessionDelta: window._killDebug.totalReward - window._killDebug.totalCost
                 });
-                _updateKillDebugOverlay();
+                if (window._updateKillDebugOverlay) window._updateKillDebugOverlay();
             }
             
             const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
@@ -19097,9 +19097,9 @@ function multiplayerShoot(targetX, targetZ) {
     multiplayerManager.shoot(targetX, targetZ);
     
     var w = CONFIG.weapons[gameState.currentWeapon] || CONFIG.weapons['1x'];
-    if (typeof _killDebug !== 'undefined') {
-        _killDebug.totalCost += w.cost;
-        _updateKillDebugOverlay();
+    if (window._killDebug) {
+        window._killDebug.totalCost += w.cost;
+        if (window._updateKillDebugOverlay) window._updateKillDebugOverlay();
     }
     
     playWeaponShot(gameState.currentWeapon);
