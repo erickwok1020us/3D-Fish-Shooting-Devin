@@ -10122,6 +10122,14 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         weaponGLBState.currentWeaponModel = newCannon;
         weaponGLBState.currentWeaponKey = weaponKey;
         
+        // Safety: Reset barrel position to config value (prevents drift from recoil corruption)
+        const yOff = glbConfig.cannonYOffset !== undefined ? glbConfig.cannonYOffset : 20;
+        newCannon.position.set(0, yOff, 0);
+        
+        // Cancel any active barrel recoil to prevent stale animation on new weapon
+        barrelRecoilState.active = false;
+        barrelRecoilState.phase = 'idle';
+        
         // Update muzzle position based on GLB config
         if (cannonMuzzle && glbConfig.muzzleOffset) {
             cannonMuzzle.position.copy(glbConfig.muzzleOffset);
@@ -10877,13 +10885,30 @@ function autoFireAtFish(targetFish) {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
     
-    // Cannon recoil animation
+    // Cannon recoil using proper barrelRecoilState system (avoids position corruption during rapid fire)
     if (cannonBarrel) {
-        const originalY = cannonBarrel.position.y;
-        cannonBarrel.position.y -= 3;
-        setTimeout(() => {
-            if (cannonBarrel) cannonBarrel.position.y = originalY;
-        }, 50);
+        const weaponConfig = WEAPON_VFX_CONFIG[weaponKey];
+        const recoilStrength = weaponConfig ? weaponConfig.recoilStrength : 5;
+        
+        if (gameState.viewMode === 'fps') {
+            fpsCameraRecoilState.maxPitchOffset = recoilStrength * 0.003;
+            fpsCameraRecoilState.active = true;
+            fpsCameraRecoilState.phase = 'kick';
+            fpsCameraRecoilState.kickStartTime = performance.now();
+            fpsCameraRecoilState.kickDuration = 30 + recoilStrength;
+            fpsCameraRecoilState.returnDuration = 100 + recoilStrength * 4;
+        } else {
+            const glbCfg = WEAPON_GLB_CONFIG.weapons[weaponKey];
+            const correctY = glbCfg && glbCfg.cannonYOffset !== undefined ? glbCfg.cannonYOffset : 20;
+            barrelRecoilState.originalPosition.set(0, correctY, 0);
+            barrelRecoilState.recoilVector.set(0, -1, 0);
+            barrelRecoilState.recoilDistance = recoilStrength * 2;
+            barrelRecoilState.active = true;
+            barrelRecoilState.phase = 'kick';
+            barrelRecoilState.kickStartTime = performance.now();
+            barrelRecoilState.kickDuration = 30 + recoilStrength;
+            barrelRecoilState.returnDuration = 80 + recoilStrength * 3;
+        }
     }
     
     return true;
