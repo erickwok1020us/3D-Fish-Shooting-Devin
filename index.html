@@ -1493,7 +1493,7 @@
             <div class="crosshair-line left"></div>
             <div class="crosshair-line right"></div>
         </div>
-        <div id="crosshair-vspread">
+        <div id="crosshair-vspread" style="display:none;">
             <div class="vspread-line top"></div>
             <div class="vspread-line mid"></div>
             <div class="vspread-line bot"></div>
@@ -1501,6 +1501,7 @@
             <div class="vspread-endpoint ep-mid"></div>
             <div class="vspread-endpoint ep-bot"></div>
         </div>
+        <canvas id="crosshair-canvas" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;display:none;"></canvas>
     </div>
     
     <!-- Three.js -->

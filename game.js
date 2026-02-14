@@ -6182,18 +6182,168 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
     });
 }
 
+const pelletStates = [
+    { hit: false, timer: 0 },
+    { hit: false, timer: 0 },
+    { hit: false, timer: 0 }
+];
+const CROSSHAIR_B_SPREAD = 120;
+let crosshairCanvas = null;
+let crosshairCtx = null;
+let crosshairCanvasLastTime = 0;
+
+function initCrosshairCanvas() {
+    crosshairCanvas = document.getElementById('crosshair-canvas');
+    if (!crosshairCanvas) return;
+    crosshairCtx = crosshairCanvas.getContext('2d');
+    resizeCrosshairCanvas();
+    window.addEventListener('resize', resizeCrosshairCanvas);
+}
+
+function resizeCrosshairCanvas() {
+    if (!crosshairCanvas) return;
+    crosshairCanvas.width = window.innerWidth * window.devicePixelRatio;
+    crosshairCanvas.height = window.innerHeight * window.devicePixelRatio;
+    crosshairCanvas.style.width = window.innerWidth + 'px';
+    crosshairCanvas.style.height = window.innerHeight + 'px';
+    if (crosshairCtx) {
+        crosshairCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    }
+}
+
+function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
+    const spread = CROSSHAIR_B_SPREAD * (w / 500);
+    const pts = [
+        { x: cx - spread, y: cy },
+        { x: cx, y: cy },
+        { x: cx + spread, y: cy }
+    ];
+
+    const basePulse = 1 + Math.sin(time * 0.004) * 0.04;
+
+    ctx.strokeStyle = 'rgba(170,255,204,0.18)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.lineTo(pts[2].x, pts[2].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    pts.forEach((p, i) => {
+        const state = pelletStates[i];
+        if (state.timer > 0) state.timer -= dt;
+        const isActive = state.timer > 0;
+        const isHit = state.hit;
+        const progress = isActive ? state.timer / 800 : 0;
+
+        let mainColor, glowColor, dotColor;
+        let sizeMultiplier = basePulse;
+
+        if (isActive && isHit) {
+            const ease = Math.sin(progress * Math.PI);
+            mainColor = `rgba(170,255,204,${0.5 + ease * 0.5})`;
+            glowColor = `rgba(170,255,204,${ease * 0.4})`;
+            dotColor = 'rgba(255,255,255,1)';
+            sizeMultiplier = basePulse + ease * 0.5;
+        } else {
+            mainColor = i === 1 ? 'rgba(170,255,204,0.9)' : 'rgba(170,255,204,0.65)';
+            glowColor = 'rgba(170,255,204,0.2)';
+            dotColor = 'rgba(255,255,255,0.9)';
+        }
+
+        const size = (i === 1 ? 20 : 16) * sizeMultiplier;
+        const arm = size;
+
+        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, size * 2.5);
+        glow.addColorStop(0, glowColor);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(p.x - size * 2.5, p.y - size * 2.5, size * 5, size * 5);
+
+        ctx.strokeStyle = mainColor;
+        ctx.lineWidth = 1;
+        const gap = 5;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - arm); ctx.lineTo(p.x, p.y - gap);
+        ctx.moveTo(p.x, p.y + gap); ctx.lineTo(p.x, p.y + arm);
+        ctx.moveTo(p.x - arm, p.y); ctx.lineTo(p.x - gap, p.y);
+        ctx.moveTo(p.x + gap, p.y); ctx.lineTo(p.x + arm, p.y);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
+        ctx.fillStyle = dotColor;
+        ctx.fill();
+
+        if (isActive && isHit) {
+            const checkS = size * 1.2;
+            const alpha = Math.min(1, progress * 2);
+            const scale = 1 + (1 - Math.min(1, progress * 3)) * 0.3;
+            ctx.save();
+            ctx.translate(p.x, p.y - size * 1.5);
+            ctx.scale(scale, scale);
+            const glowR = checkS * 0.8;
+            const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR);
+            grd.addColorStop(0, `rgba(170,255,204,${alpha * 0.4})`);
+            grd.addColorStop(1, 'rgba(170,255,204,0)');
+            ctx.fillStyle = grd;
+            ctx.fillRect(-glowR, -glowR, glowR * 2, glowR * 2);
+            ctx.strokeStyle = `rgba(170,255,204,${alpha})`;
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(-checkS * 0.35, -checkS * 0.02);
+            ctx.lineTo(-checkS * 0.08, checkS * 0.3);
+            ctx.lineTo(checkS * 0.38, -checkS * 0.28);
+            ctx.stroke();
+            ctx.restore();
+        }
+    });
+}
+
+function updateCrosshairCanvasOverlay(currentTime) {
+    if (!crosshairCtx || !crosshairCanvas) return;
+    if (gameState.currentWeapon !== '3x') return;
+    if (crosshairCanvas.style.display === 'none') return;
+
+    const dt = crosshairCanvasLastTime ? currentTime - crosshairCanvasLastTime : 16;
+    crosshairCanvasLastTime = currentTime;
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    crosshairCtx.clearRect(0, 0, w, h);
+
+    let cx, cy;
+    if (gameState.viewMode === 'fps') {
+        cx = w / 2;
+        cy = h / 2;
+    } else {
+        const mainCH = document.getElementById('crosshair');
+        if (mainCH) {
+            cx = parseFloat(mainCH.style.left) || w / 2;
+            cy = parseFloat(mainCH.style.top) || h / 2;
+        } else {
+            cx = w / 2;
+            cy = h / 2;
+        }
+    }
+
+    drawCrosshairB(crosshairCtx, w, h, cx, cy, currentTime, dt);
+}
+
 function showHitMarker(spreadIndex) {
+    if (gameState.currentWeapon === '3x') {
+        const pelletIndex = spreadIndex === -1 ? 0 : spreadIndex === 0 ? 1 : 2;
+        pelletStates[pelletIndex].hit = true;
+        pelletStates[pelletIndex].timer = 800;
+        return;
+    }
     const el = document.createElement('div');
     let startX = window.innerWidth / 2;
     const startY = window.innerHeight / 2;
-    if (spreadIndex === -1 || spreadIndex === 1) {
-        const spreadAngle = CONFIG.weapons['3x'].spreadAngle * (Math.PI / 180);
-        const vFov = camera.fov * (Math.PI / 180);
-        const aspect = window.innerWidth / window.innerHeight;
-        const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
-        const pixelOffset = Math.tan(spreadAngle) / Math.tan(hFov / 2) * (window.innerWidth / 2);
-        startX += spreadIndex * pixelOffset;
-    }
     el.style.cssText = `
         position: fixed;
         top: ${startY}px;
@@ -16274,14 +16424,18 @@ function updateCrosshairForWeapon(weaponKey) {
     
     const vspread = document.getElementById('crosshair-vspread');
     if (vspread) {
+        vspread.style.display = 'none';
+    }
+    const chCanvas = document.getElementById('crosshair-canvas');
+    if (chCanvas) {
         if (weaponKey === '3x') {
-            vspread.style.display = 'block';
-            if (hasFpsMode) vspread.classList.add('fps-mode');
-            else vspread.classList.remove('fps-mode');
-            updateSpreadCrosshairPositions();
+            chCanvas.style.display = 'block';
+            if (!crosshairCanvas) initCrosshairCanvas();
+            pelletStates[0].timer = 0;
+            pelletStates[1].timer = 0;
+            pelletStates[2].timer = 0;
         } else {
-            vspread.style.display = 'none';
-            vspread.classList.remove('fps-mode');
+            chCanvas.style.display = 'none';
         }
     }
 }
@@ -17577,6 +17731,8 @@ function animate() {
         
         // Render
         renderer.render(scene, camera);
+    
+    updateCrosshairCanvasOverlay(currentTime);
 }
 
 // PERFORMANCE FIX: Cache seaweed and caustic light references to avoid iterating all children every frame
