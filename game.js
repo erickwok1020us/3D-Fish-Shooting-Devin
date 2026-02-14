@@ -9129,6 +9129,30 @@ window.startMultiplayerGame = function(manager) {
     multiplayerMode = true;
     multiplayerManager = manager;
     
+    var _killDebug = { kills: 0, totalReward: 0, totalCost: 0, log: [], el: null };
+    (function() {
+        var d = document.createElement('div');
+        d.id = 'kill-debug-overlay';
+        d.style.cssText = 'position:fixed;top:8px;right:8px;background:rgba(0,0,0,0.75);color:#0f0;font:11px monospace;padding:6px 10px;z-index:99999;pointer-events:none;max-height:260px;overflow:hidden;border-radius:4px;min-width:280px';
+        d.innerHTML = '[RTP Debug] waiting...';
+        document.body.appendChild(d);
+        _killDebug.el = d;
+    })();
+
+    function _updateKillDebugOverlay() {
+        var d = _killDebug;
+        if (!d.el) return;
+        var rtp = d.totalCost > 0 ? ((d.totalReward / d.totalCost) * 100).toFixed(2) : '--';
+        var delta = d.totalReward - d.totalCost;
+        var lines = ['[RTP Debug] kills=' + d.kills + ' RTP=' + rtp + '% delta=' + delta];
+        var recent = d.log.slice(-6);
+        for (var i = recent.length - 1; i >= 0; i--) {
+            var e = recent[i];
+            lines.push('T' + e.tier + ' ' + e.weapon + ' r=' + e.reward + ' c=' + e.cost + ' d=' + e.sessionDelta);
+        }
+        d.el.innerHTML = lines.join('<br>');
+    }
+
     // Setup multiplayer callbacks
     if (multiplayerManager) {
         // Handle game state updates from server
@@ -9147,50 +9171,58 @@ window.startMultiplayerGame = function(manager) {
             if (data.hitByPlayerId === multiplayerManager.playerId) return;
             const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
             if (!fish) return;
-            const inst = fish.userData && fish.userData.fishInstance;
-            if (!inst || !inst.isActive || !inst.glbLoaded || !inst.glbMeshes) return;
-            if (inst._hitFlashActive) return;
-            inst._hitFlashActive = true;
-            inst.glbMeshes.forEach(mesh => {
-                if (mesh.material && 'emissive' in mesh.material) {
-                    if (!mesh._origEmissive) {
-                        mesh._origEmissive = mesh.material.emissive.clone();
-                        mesh._origEmissiveIntensity = mesh.material.emissiveIntensity;
+            if (fish.userData._hitFlashActive) return;
+            fish.userData._hitFlashActive = true;
+            fish.traverse(function(child) {
+                if (child.isMesh && child.material && 'emissive' in child.material) {
+                    if (!child._origEmissive) {
+                        child._origEmissive = child.material.emissive.clone();
+                        child._origEmissiveIntensity = child.material.emissiveIntensity;
                     }
-                    mesh.material.emissive.set(0xffffff);
-                    mesh.material.emissiveIntensity = 1.0;
+                    child.material.emissive.set(0xffffff);
+                    child.material.emissiveIntensity = 1.0;
                 }
             });
-            setTimeout(() => {
-                inst._hitFlashActive = false;
-                if (inst.isActive && inst.glbMeshes) {
-                    inst.glbMeshes.forEach(mesh => {
-                        if (mesh.material && mesh._origEmissive) {
-                            mesh.material.emissive.copy(mesh._origEmissive);
-                            mesh.material.emissiveIntensity = mesh._origEmissiveIntensity;
-                        }
-                    });
-                }
+            setTimeout(function() {
+                if (!fish.parent) return;
+                fish.userData._hitFlashActive = false;
+                fish.traverse(function(child) {
+                    if (child.isMesh && child.material && child._origEmissive) {
+                        child.material.emissive.copy(child._origEmissive);
+                        child.material.emissiveIntensity = child._origEmissiveIntensity;
+                    }
+                });
             }, 80);
         };
 
         multiplayerManager.onFishKilled = function(data) {
             console.log('[GAME] Fish killed event received:', data.fishId, data.typeName, 'killedBy:', data.killedBy, 'reward:', data.reward);
             
+            if (data.killedBy === multiplayerManager.playerId && data.reward) {
+                _killDebug.kills++;
+                _killDebug.totalReward += data.reward;
+                var w = CONFIG.weapons[gameState.currentWeapon] || CONFIG.weapons['1x'];
+                _killDebug.log.push({
+                    tier: data.tier || '?',
+                    weapon: gameState.currentWeapon || '1x',
+                    reward: data.reward,
+                    cost: w.cost,
+                    sessionDelta: _killDebug.totalReward - _killDebug.totalCost
+                });
+                _updateKillDebugOverlay();
+            }
+            
             const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
             if (fish) {
                 console.log('[GAME] Found fish mesh to remove:', data.fishId);
                 
-                // Play death effects
                 spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
                 
-                // Show reward if we killed it (or contributed to the kill)
                 if (data.killedBy === multiplayerManager.playerId) {
                     spawnCoinFlyToScore(fish.position.clone(), data.reward);
                     playSound('coin');
                 }
                 
-                // Remove fish from scene
                 scene.remove(fish);
                 const index = gameState.fish.indexOf(fish);
                 if (index > -1) {
@@ -19059,14 +19091,17 @@ const originalShoot = typeof shoot === 'function' ? shoot : null;
 
 function multiplayerShoot(targetX, targetZ) {
     if (!multiplayerMode || !multiplayerManager) {
-        // Single player mode - use original shoot
         return;
     }
     
-    // Send shoot request to server
     multiplayerManager.shoot(targetX, targetZ);
     
-    // Play local effects immediately for responsiveness
+    var w = CONFIG.weapons[gameState.currentWeapon] || CONFIG.weapons['1x'];
+    if (typeof _killDebug !== 'undefined') {
+        _killDebug.totalCost += w.cost;
+        _updateKillDebugOverlay();
+    }
+    
     playWeaponShot(gameState.currentWeapon);
     spawnMuzzleFlash();
 }
@@ -19101,6 +19136,9 @@ window.cleanupMultiplayerGame = function() {
         if (bulletData && bulletData.group && scene) scene.remove(bulletData.group);
     }
     serverBulletMeshes.clear();
+    
+    var dbgEl = document.getElementById('kill-debug-overlay');
+    if (dbgEl) dbgEl.remove();
     
     console.log('[GAME] Multiplayer cleanup complete');
 };
