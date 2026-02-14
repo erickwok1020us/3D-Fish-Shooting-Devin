@@ -16658,7 +16658,8 @@ function setupEventListeners() {
             // FPS free-look uses higher sensitivity for comfortable gameplay
             // Increased multiplier from 10.0 to 30.0 for better responsiveness
             const fpsLevel = Math.max(1, Math.min(10, gameState.fpsSensitivityLevel || 5));
-            const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 30.0 * 1.2;
+            const scopeSlowdown = gameState.isScoping ? 0.3 : 1.0;
+            const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 30.0 * 1.2 * scopeSlowdown;
             
             // Calculate new yaw (horizontal rotation)
             // Standard FPS controls: mouse right = view right, mouse left = view left
