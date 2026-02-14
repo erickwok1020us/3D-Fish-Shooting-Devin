@@ -516,7 +516,7 @@ const CONFIG = {
         // ECOLOGY: Solitary or mother-calf pairs, cruise at 5-20 km/h
         // SWIMMING: Slow, steady, majestic cruise with minimal direction changes
         blueWhale: { 
-            hp: 800, speedMin: 12, speedMax: 25, reward: 500, size: 140, 
+            hp: 800, speedMin: 15, speedMax: 32, reward: 500, size: 140, 
             color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, 
             pattern: 'cruise', schoolSize: [1, 2], form: 'whale',
             category: 'largePredator',
@@ -527,7 +527,7 @@ const CONFIG = {
         // ECOLOGY: Pods of 5-30, highly intelligent coordinated hunters
         // SWIMMING: Fast, agile, coordinated pack attacks
         killerWhale: { 
-            hp: 700, speedMin: 30, speedMax: 55, reward: 450, size: 120, 
+            hp: 700, speedMin: 38, speedMax: 69, reward: 450, size: 120, 
             color: 0x111111, secondaryColor: 0xffffff, count: 1, 
             pattern: 'burstAttack', schoolSize: [2, 4], form: 'killerWhale',
             category: 'largePredator',
@@ -538,7 +538,7 @@ const CONFIG = {
         // ECOLOGY: Strictly solitary hunters, burst speeds up to 56 km/h
         // SWIMMING: Slow patrol + explosive burst attacks
         greatWhiteShark: { 
-            hp: 600, speedMin: 40, speedMax: 120, reward: 400, size: 100, 
+            hp: 600, speedMin: 50, speedMax: 150, reward: 400, size: 100, 
             color: 0x667788, secondaryColor: 0xcccccc, count: 1, 
             pattern: 'burstAttack', schoolSize: [1, 1], form: 'shark',
             category: 'largePredator',
@@ -549,7 +549,7 @@ const CONFIG = {
         // ECOLOGY: Solitary hunters, burst speeds up to 130 km/h
         // SWIMMING: High-speed sprints, fastest fish in the ocean
         marlin: { 
-            hp: 400, speedMin: 70, speedMax: 200, reward: 300, size: 80, 
+            hp: 400, speedMin: 88, speedMax: 250, reward: 300, size: 80, 
             color: 0x2266aa, secondaryColor: 0x44aaff, count: 2, 
             pattern: 'burstSprint', schoolSize: [1, 2], form: 'marlin',
             category: 'largePredator',
@@ -560,7 +560,7 @@ const CONFIG = {
         // ECOLOGY: School by day (up to 100+), hunt solo at night
         // SWIMMING: S-shaped head sweeping motion for prey detection
         hammerheadShark: { 
-            hp: 450, speedMin: 35, speedMax: 70, reward: 300, size: 85, 
+            hp: 450, speedMin: 44, speedMax: 88, reward: 300, size: 85, 
             color: 0x556677, secondaryColor: 0x889999, count: 3, 
             pattern: 'sShape', schoolSize: [3, 8], form: 'hammerhead',
             category: 'largePredator',
@@ -574,7 +574,7 @@ const CONFIG = {
         // ECOLOGY: Schools of 10-100, cruise at 50-80 km/h, synchronized swimming
         // SWIMMING: Fast, powerful, highly synchronized with school
         yellowfinTuna: { 
-            hp: 200, speedMin: 60, speedMax: 110, reward: 220, size: 50, 
+            hp: 200, speedMin: 75, speedMax: 138, reward: 220, size: 50, 
             color: 0x3355aa, secondaryColor: 0xffdd00, count: 6, 
             pattern: 'synchronizedFast', schoolSize: [6, 15], form: 'tuna',
             category: 'mediumLarge',
@@ -584,7 +584,7 @@ const CONFIG = {
         // ECOLOGY: Small schools of 3-10, surface dwellers, erratic movements
         // SWIMMING: Fast, erratic, unpredictable direction changes
         mahiMahi: { 
-            hp: 160, speedMin: 55, speedMax: 100, reward: 180, size: 45, 
+            hp: 160, speedMin: 69, speedMax: 125, reward: 180, size: 45, 
             color: 0x44aa44, secondaryColor: 0xffcc00, count: 5, 
             pattern: 'irregularTurns', schoolSize: [3, 8], form: 'dolphinfish',
             category: 'mediumLarge',
@@ -594,7 +594,7 @@ const CONFIG = {
         // ECOLOGY: Adults mostly solitary, juveniles in small groups, ambush hunters
         // SWIMMING: Motionless waiting + lightning-fast strikes
         barracuda: { 
-            hp: 180, speedMin: 15, speedMax: 180, reward: 180, size: 55, 
+            hp: 180, speedMin: 19, speedMax: 225, reward: 180, size: 55, 
             color: 0xaabbcc, secondaryColor: 0x667788, count: 4, 
             pattern: 'ambush', schoolSize: [1, 3], form: 'barracuda',
             category: 'mediumLarge',
@@ -604,7 +604,7 @@ const CONFIG = {
         // ECOLOGY: Strictly solitary and territorial, ambush from reef holes
         // SWIMMING: Slow bottom patrol + sudden short bursts
         grouper: { 
-            hp: 250, speedMin: 15, speedMax: 45, reward: 200, size: 60, 
+            hp: 250, speedMin: 19, speedMax: 56, reward: 200, size: 60, 
             color: 0x886644, secondaryColor: 0x553322, count: 3, 
             pattern: 'bottomBurst', schoolSize: [1, 1], form: 'grouper',
             category: 'mediumLarge',
@@ -617,7 +617,7 @@ const CONFIG = {
         // ECOLOGY: Small harems of 3-8, stop-and-go grazing behavior
         // SWIMMING: Stop to graze, swim to next spot, repeat
         parrotfish: { 
-            hp: 120, speedMin: 30, speedMax: 55, reward: 140, size: 35, 
+            hp: 120, speedMin: 38, speedMax: 69, reward: 140, size: 35, 
             color: 0x44ddaa, secondaryColor: 0xff66aa, count: 6, 
             pattern: 'stopAndGo', schoolSize: [3, 6], form: 'parrotfish',
             category: 'reefFish',
@@ -627,7 +627,7 @@ const CONFIG = {
         // ECOLOGY: Monogamous pairs or small groups of 3-5, graceful gliding
         // SWIMMING: Slow, elegant, vertical undulation
         angelfish: { 
-            hp: 90, speedMin: 25, speedMax: 50, reward: 110, size: 30, 
+            hp: 90, speedMin: 31, speedMax: 63, reward: 110, size: 30, 
             color: 0xffdd44, secondaryColor: 0x4488ff, count: 8, 
             pattern: 'elegantGlide', schoolSize: [2, 4], form: 'angelfish',
             category: 'reefFish',
@@ -637,7 +637,7 @@ const CONFIG = {
         // ECOLOGY: Solitary ambush predators, slow deliberate movements
         // SWIMMING: Slow, deliberate, hovering near reef structures
         lionfish: { 
-            hp: 80, speedMin: 20, speedMax: 45, reward: 100, size: 28, 
+            hp: 80, speedMin: 25, speedMax: 56, reward: 100, size: 28, 
             color: 0xcc3333, secondaryColor: 0xffffff, count: 8, 
             pattern: 'ambush', schoolSize: [1, 2], form: 'lionfish',
             category: 'reefFish',
@@ -647,7 +647,7 @@ const CONFIG = {
         // ECOLOGY: Schools of 5-20 for grazing, coordinated movements
         // SWIMMING: Coordinated group movement, gentle up-down motion
         blueTang: { 
-            hp: 60, speedMin: 40, speedMax: 70, reward: 80, size: 20, 
+            hp: 60, speedMin: 50, speedMax: 88, reward: 80, size: 20, 
             color: 0x2288ff, secondaryColor: 0xffff00, count: 12, 
             pattern: 'groupCoordination', schoolSize: [5, 12], form: 'tang',
             category: 'reefFish',
@@ -660,7 +660,7 @@ const CONFIG = {
         // ECOLOGY: Massive schools of 100-1000+, wave-like synchronized movement
         // SWIMMING: Tight synchronized waves, rapid direction changes
         sardine: { 
-            hp: 20, speedMin: 65, speedMax: 100, reward: 30, size: 10, 
+            hp: 20, speedMin: 81, speedMax: 125, reward: 30, size: 10, 
             color: 0xccddee, secondaryColor: 0x88aacc, count: 15, 
             pattern: 'waveFormation', schoolSize: [20, 40], form: 'sardine',
             category: 'smallSchool',
@@ -670,7 +670,7 @@ const CONFIG = {
         // ECOLOGY: Massive schools, form defensive bait balls when threatened
         // SWIMMING: Swirling bait ball formation, very tight grouping
         anchovy: { 
-            hp: 15, speedMin: 70, speedMax: 120, reward: 25, size: 8, 
+            hp: 15, speedMin: 88, speedMax: 150, reward: 25, size: 8, 
             color: 0xaabbcc, secondaryColor: 0x778899, count: 15, 
             pattern: 'baitBall', schoolSize: [25, 45], form: 'anchovy',
             category: 'smallSchool',
@@ -680,7 +680,7 @@ const CONFIG = {
         // ECOLOGY: Family groups of 2-4 around single anemone, territorial
         // SWIMMING: Short darting movements within territory
         clownfish: { 
-            hp: 50, speedMin: 20, speedMax: 40, reward: 70, size: 15, 
+            hp: 50, speedMin: 25, speedMax: 50, reward: 70, size: 15, 
             color: 0xff6600, secondaryColor: 0xffffff, count: 6, 
             pattern: 'territorial', schoolSize: [2, 3], form: 'clownfish',
             category: 'smallSchool',
@@ -690,7 +690,7 @@ const CONFIG = {
         // ECOLOGY: Territorial, loose groups of 3-8 near reef patches
         // SWIMMING: Quick defensive charges, aggressive darting
         damselfish: { 
-            hp: 40, speedMin: 45, speedMax: 75, reward: 55, size: 12, 
+            hp: 40, speedMin: 56, speedMax: 94, reward: 55, size: 12, 
             color: 0x6644ff, secondaryColor: 0xffdd00, count: 12, 
             pattern: 'defensiveCharge', schoolSize: [3, 6], form: 'damselfish',
             category: 'smallSchool',
@@ -703,7 +703,7 @@ const CONFIG = {
         // ECOLOGY: Solitary or small groups of 2-3, slow wing-like flapping
         // SWIMMING: Slow, majestic wing flapping, gentle banking turns
         mantaRay: { 
-            hp: 350, speedMin: 30, speedMax: 55, reward: 280, size: 90, 
+            hp: 350, speedMin: 38, speedMax: 69, reward: 280, size: 90, 
             color: 0x222233, secondaryColor: 0xeeeeee, count: 2, 
             pattern: 'wingGlide', schoolSize: [1, 2], form: 'mantaRay',
             category: 'specialForm',
@@ -713,7 +713,7 @@ const CONFIG = {
         // ECOLOGY: Strictly solitary, slow deliberate movements
         // SWIMMING: Very slow, gentle rotation, fin-propelled
         pufferfish: { 
-            hp: 100, speedMin: 10, speedMax: 30, reward: 120, size: 25, 
+            hp: 100, speedMin: 13, speedMax: 38, reward: 120, size: 25, 
             color: 0xddcc88, secondaryColor: 0x886644, count: 4, 
             pattern: 'slowRotation', schoolSize: [1, 1], form: 'pufferfish',
             category: 'specialForm',
@@ -723,7 +723,7 @@ const CONFIG = {
         // ECOLOGY: Monogamous pairs, vertical drifting, very slow
         // SWIMMING: Vertical posture, dorsal fin vibration, drift with current
         seahorse: { 
-            hp: 80, speedMin: 8, speedMax: 20, reward: 130, size: 20, 
+            hp: 80, speedMin: 10, speedMax: 25, reward: 130, size: 20, 
             color: 0xffaa44, secondaryColor: 0xcc8833, count: 4, 
             pattern: 'verticalDrift', schoolSize: [1, 2], form: 'seahorse',
             category: 'specialForm',
@@ -733,7 +733,7 @@ const CONFIG = {
         // ECOLOGY: Schools of 10-50, surface swimmers, glide to escape predators
         // SWIMMING: Fast swimming + spectacular gliding jumps
         flyingFish: { 
-            hp: 60, speedMin: 80, speedMax: 150, reward: 80, size: 18, 
+            hp: 60, speedMin: 100, speedMax: 188, reward: 80, size: 18, 
             color: 0x4488cc, secondaryColor: 0x88ccff, count: 10, 
             pattern: 'glideJump', schoolSize: [8, 15], form: 'flyingFish',
             category: 'specialForm',
@@ -10673,23 +10673,17 @@ function aimCannon(targetX, targetY) {
     const maxYaw = Math.PI / 2;  // 90 degrees
     
     if (gameState.viewMode === 'fps') {
-        // FPS mode: 40° up ensures platform occupies lower 1/3 of screen
-        // Player cannot see directly overhead
-        minPitch = -30 * (Math.PI / 180);   // -30° (down)
-        maxPitch = 40 * (Math.PI / 180);    // +40° (up) - platform visible at bottom
-        // Limit yaw to ±90° in FPS mode
+        minPitch = FPS_PITCH_MIN;
+        maxPitch = FPS_PITCH_MAX;
         clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, yaw));
     } else {
-        // 3RD PERSON mode: Full range for shooting fish anywhere
-        minPitch = -Math.PI / 2;   // -90° (full downward)
-        maxPitch = Math.PI / 2;    // 90° (full upward)
+        minPitch = -Math.PI / 2;
+        maxPitch = Math.PI / 2;
     }
     
     const clampedPitch = Math.max(minPitch, Math.min(maxPitch, pitch));
     
-    // Issue #10: Apply rotation to cannon group (yaw) and PITCH GROUP (pitch)
-    // The pitch group contains both barrel and muzzle, so they rotate together
-    cannonGroup.rotation.y = clampedYaw;  // Clamped to ±90° in FPS mode
+    cannonGroup.rotation.y = clampedYaw;
     if (cannonPitchGroup) {
         // Issue #10: Rotate pitch group so barrel AND muzzle move together
         cannonPitchGroup.rotation.x = -clampedPitch;
@@ -10757,16 +10751,12 @@ function aimCannonAtFish(fish) {
     const maxYaw = Math.PI / 2;  // 90 degrees
     
     if (gameState.viewMode === 'fps') {
-        // FPS mode: 40° up ensures platform occupies lower 1/3 of screen
-        // Player cannot see directly overhead
-        minPitch = -30 * (Math.PI / 180);   // -30° (down)
-        maxPitch = 40 * (Math.PI / 180);    // +40° (up) - platform visible at bottom
-        // Limit yaw to ±90° in FPS mode
+        minPitch = FPS_PITCH_MIN;
+        maxPitch = FPS_PITCH_MAX;
         clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, yaw));
     } else {
-        // 3RD PERSON mode: Full range for shooting fish anywhere
-        minPitch = -Math.PI / 2;   // -90° (full downward)
-        maxPitch = Math.PI / 2;    // 90° (full upward)
+        minPitch = -Math.PI / 2;
+        maxPitch = Math.PI / 2;
     }
     const clampedPitch = Math.max(minPitch, Math.min(maxPitch, pitch));
     
@@ -12577,27 +12567,23 @@ class Fish {
                 }
                 
                 // Target timeScale based on mode
-                // Idle: very slow animation (0.1) for gentle hovering look
-                // Swim: scale from 0.5 to 1.0 based on speed
-                // Boost: scale from 1.0 to 1.35 when speed exceeds speedMax
+                // Idle: gentle hovering (0.3) - still visibly animated
+                // Swim: scale from 0.7 to 1.2 based on speed - more lively
+                // Boost: scale from 1.2 to 1.6 when speed exceeds speedMax
                 let targetTimeScale;
                 if (this._animMode === 'idle') {
-                    targetTimeScale = 0.1;
+                    targetTimeScale = 0.3;
                 } else {
                     const speed = Math.sqrt(speedSq);
                     const speedRatio = speed / speedMax;
                     
                     if (speedRatio <= 1.0) {
-                        // Normal swim: 0.5 to 1.0 based on speed
-                        targetTimeScale = 0.5 + speedRatio * 0.5;
+                        targetTimeScale = 0.7 + speedRatio * 0.5;
                     } else {
-                        // Boost mode: 1.0 to 1.35 when exceeding speedMax
-                        // Use smoothstep curve to prevent sudden acceleration
-                        // Cap at 1.5x speedMax to avoid extreme values
-                        const boostRatio = Math.min(1, (speedRatio - 1.0) / 0.5); // 0 at speedMax, 1 at 1.5x speedMax
-                        const smoothBoost = boostRatio * boostRatio * (3 - 2 * boostRatio); // smoothstep
-                        const maxBoostTimeScale = 1.35;
-                        targetTimeScale = 1.0 + smoothBoost * (maxBoostTimeScale - 1.0);
+                        const boostRatio = Math.min(1, (speedRatio - 1.0) / 0.5);
+                        const smoothBoost = boostRatio * boostRatio * (3 - 2 * boostRatio);
+                        const maxBoostTimeScale = 1.6;
+                        targetTimeScale = 1.2 + smoothBoost * (maxBoostTimeScale - 1.2);
                     }
                 }
                 
@@ -17274,7 +17260,7 @@ function updateViewModeButton() {
 // FPS rotation limits - user requested: 180° horizontal, 80° vertical
 const FPS_YAW_MAX = 90 * (Math.PI / 180);     // ±90° yaw (180° total horizontal)
 const FPS_PITCH_MIN = -47.5 * (Math.PI / 180);  // -47.5° (look down)
-const FPS_PITCH_MAX = 47.5 * (Math.PI / 180);   // +47.5° (look up) - total 95° vertical
+const FPS_PITCH_MAX = 65 * (Math.PI / 180);   // +65° (look up) - total 112.5° vertical
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
