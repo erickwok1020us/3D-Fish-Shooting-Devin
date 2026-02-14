@@ -9143,8 +9143,35 @@ window.startMultiplayerGame = function(manager) {
             updatePlayersFromServer(data.players);
         };
         
-        // Handle fish killed events
-        // Server sends: fishId, typeName, topContributorId (normalized to killedBy), totalReward (normalized to reward), isBoss, position
+        multiplayerManager.onFishHit = function(data) {
+            const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
+            if (fish && fish.userData && fish.userData.fishInstance) {
+                const inst = fish.userData.fishInstance;
+                if (inst.glbLoaded && inst.glbMeshes) {
+                    inst.glbMeshes.forEach(mesh => {
+                        if (mesh.material && 'emissive' in mesh.material) {
+                            if (!mesh._origEmissive) {
+                                mesh._origEmissive = mesh.material.emissive.clone();
+                                mesh._origEmissiveIntensity = mesh.material.emissiveIntensity;
+                            }
+                            mesh.material.emissive.set(0xffffff);
+                            mesh.material.emissiveIntensity = 1.0;
+                        }
+                    });
+                    setTimeout(() => {
+                        if (inst.isActive && inst.glbMeshes) {
+                            inst.glbMeshes.forEach(mesh => {
+                                if (mesh.material && mesh._origEmissive) {
+                                    mesh.material.emissive.copy(mesh._origEmissive);
+                                    mesh.material.emissiveIntensity = mesh._origEmissiveIntensity;
+                                }
+                            });
+                        }
+                    }, 80);
+                }
+            }
+        };
+
         multiplayerManager.onFishKilled = function(data) {
             console.log('[GAME] Fish killed event received:', data.fishId, data.typeName, 'killedBy:', data.killedBy, 'reward:', data.reward);
             
