@@ -516,7 +516,7 @@ const CONFIG = {
         // ECOLOGY: Solitary or mother-calf pairs, cruise at 5-20 km/h
         // SWIMMING: Slow, steady, majestic cruise with minimal direction changes
         blueWhale: { 
-            hp: 800, speedMin: 15, speedMax: 32, reward: 500, size: 140, 
+            hp: 800, speedMin: 20, speedMax: 42, reward: 500, size: 140, 
             color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, 
             pattern: 'cruise', schoolSize: [1, 2], form: 'whale',
             category: 'largePredator',
@@ -527,7 +527,7 @@ const CONFIG = {
         // ECOLOGY: Pods of 5-30, highly intelligent coordinated hunters
         // SWIMMING: Fast, agile, coordinated pack attacks
         killerWhale: { 
-            hp: 700, speedMin: 38, speedMax: 69, reward: 450, size: 120, 
+            hp: 700, speedMin: 50, speedMax: 88, reward: 450, size: 120, 
             color: 0x111111, secondaryColor: 0xffffff, count: 1, 
             pattern: 'burstAttack', schoolSize: [2, 4], form: 'killerWhale',
             category: 'largePredator',
@@ -538,7 +538,7 @@ const CONFIG = {
         // ECOLOGY: Strictly solitary hunters, burst speeds up to 56 km/h
         // SWIMMING: Slow patrol + explosive burst attacks
         greatWhiteShark: { 
-            hp: 600, speedMin: 50, speedMax: 150, reward: 400, size: 100, 
+            hp: 600, speedMin: 65, speedMax: 188, reward: 400, size: 100, 
             color: 0x667788, secondaryColor: 0xcccccc, count: 1, 
             pattern: 'burstAttack', schoolSize: [1, 1], form: 'shark',
             category: 'largePredator',
@@ -549,7 +549,7 @@ const CONFIG = {
         // ECOLOGY: Solitary hunters, burst speeds up to 130 km/h
         // SWIMMING: High-speed sprints, fastest fish in the ocean
         marlin: { 
-            hp: 400, speedMin: 88, speedMax: 250, reward: 300, size: 80, 
+            hp: 400, speedMin: 110, speedMax: 310, reward: 300, size: 80, 
             color: 0x2266aa, secondaryColor: 0x44aaff, count: 2, 
             pattern: 'burstSprint', schoolSize: [1, 2], form: 'marlin',
             category: 'largePredator',
@@ -560,7 +560,7 @@ const CONFIG = {
         // ECOLOGY: School by day (up to 100+), hunt solo at night
         // SWIMMING: S-shaped head sweeping motion for prey detection
         hammerheadShark: { 
-            hp: 450, speedMin: 44, speedMax: 88, reward: 300, size: 85, 
+            hp: 450, speedMin: 56, speedMax: 110, reward: 300, size: 85, 
             color: 0x556677, secondaryColor: 0x889999, count: 3, 
             pattern: 'sShape', schoolSize: [3, 8], form: 'hammerhead',
             category: 'largePredator',
@@ -647,7 +647,7 @@ const CONFIG = {
         // ECOLOGY: Schools of 5-20 for grazing, coordinated movements
         // SWIMMING: Coordinated group movement, gentle up-down motion
         blueTang: { 
-            hp: 60, speedMin: 50, speedMax: 88, reward: 80, size: 20, 
+            hp: 60, speedMin: 40, speedMax: 70, reward: 80, size: 20, 
             color: 0x2288ff, secondaryColor: 0xffff00, count: 12, 
             pattern: 'groupCoordination', schoolSize: [5, 12], form: 'tang',
             category: 'reefFish',
@@ -660,7 +660,7 @@ const CONFIG = {
         // ECOLOGY: Massive schools of 100-1000+, wave-like synchronized movement
         // SWIMMING: Tight synchronized waves, rapid direction changes
         sardine: { 
-            hp: 20, speedMin: 81, speedMax: 125, reward: 30, size: 10, 
+            hp: 20, speedMin: 65, speedMax: 100, reward: 30, size: 10, 
             color: 0xccddee, secondaryColor: 0x88aacc, count: 15, 
             pattern: 'waveFormation', schoolSize: [20, 40], form: 'sardine',
             category: 'smallSchool',
@@ -670,7 +670,7 @@ const CONFIG = {
         // ECOLOGY: Massive schools, form defensive bait balls when threatened
         // SWIMMING: Swirling bait ball formation, very tight grouping
         anchovy: { 
-            hp: 15, speedMin: 88, speedMax: 150, reward: 25, size: 8, 
+            hp: 15, speedMin: 70, speedMax: 120, reward: 25, size: 8, 
             color: 0xaabbcc, secondaryColor: 0x778899, count: 15, 
             pattern: 'baitBall', schoolSize: [25, 45], form: 'anchovy',
             category: 'smallSchool',
@@ -680,7 +680,7 @@ const CONFIG = {
         // ECOLOGY: Family groups of 2-4 around single anemone, territorial
         // SWIMMING: Short darting movements within territory
         clownfish: { 
-            hp: 50, speedMin: 25, speedMax: 50, reward: 70, size: 15, 
+            hp: 50, speedMin: 20, speedMax: 40, reward: 70, size: 15, 
             color: 0xff6600, secondaryColor: 0xffffff, count: 6, 
             pattern: 'territorial', schoolSize: [2, 3], form: 'clownfish',
             category: 'smallSchool',
@@ -690,7 +690,7 @@ const CONFIG = {
         // ECOLOGY: Territorial, loose groups of 3-8 near reef patches
         // SWIMMING: Quick defensive charges, aggressive darting
         damselfish: { 
-            hp: 40, speedMin: 56, speedMax: 94, reward: 55, size: 12, 
+            hp: 40, speedMin: 45, speedMax: 75, reward: 55, size: 12, 
             color: 0x6644ff, secondaryColor: 0xffdd00, count: 12, 
             pattern: 'defensiveCharge', schoolSize: [3, 6], form: 'damselfish',
             category: 'smallSchool',
@@ -703,7 +703,7 @@ const CONFIG = {
         // ECOLOGY: Solitary or small groups of 2-3, slow wing-like flapping
         // SWIMMING: Slow, majestic wing flapping, gentle banking turns
         mantaRay: { 
-            hp: 350, speedMin: 38, speedMax: 69, reward: 280, size: 90, 
+            hp: 350, speedMin: 50, speedMax: 88, reward: 280, size: 90, 
             color: 0x222233, secondaryColor: 0xeeeeee, count: 2, 
             pattern: 'wingGlide', schoolSize: [1, 2], form: 'mantaRay',
             category: 'specialForm',
@@ -733,7 +733,7 @@ const CONFIG = {
         // ECOLOGY: Schools of 10-50, surface swimmers, glide to escape predators
         // SWIMMING: Fast swimming + spectacular gliding jumps
         flyingFish: { 
-            hp: 60, speedMin: 100, speedMax: 188, reward: 80, size: 18, 
+            hp: 60, speedMin: 80, speedMax: 150, reward: 80, size: 18, 
             color: 0x4488cc, secondaryColor: 0x88ccff, count: 10, 
             pattern: 'glideJump', schoolSize: [8, 15], form: 'flyingFish',
             category: 'specialForm',
@@ -1964,7 +1964,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 45,
-            fpsCameraUpOffset: 15,
+            fpsCameraUpOffset: 55,
             cannonYOffset: 24
         },
         '3x': {
@@ -1982,7 +1982,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 70,
-            fpsCameraUpOffset: 22,
+            fpsCameraUpOffset: 65,
             cannonYOffset: 20
         },
         '5x': {
@@ -1998,7 +1998,7 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 85,
-            fpsCameraUpOffset: 28,
+            fpsCameraUpOffset: 75,
             cannonYOffset: 20
         },
         '8x': {
@@ -2014,7 +2014,7 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 40,
+            fpsCameraUpOffset: 90,
             cannonYOffset: 20
         }
     }
@@ -17381,7 +17381,7 @@ const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5°
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
 const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
 const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
-const FPS_CANNON_SIDE_OFFSET = 15;          // Slight right offset for centered turret positioning
+const FPS_CANNON_SIDE_OFFSET = 5;           // Near-center turret positioning
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
