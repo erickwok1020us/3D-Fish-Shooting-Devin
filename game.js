@@ -6318,13 +6318,22 @@ function update3xSideCrosshairPositions() {
 }
 
 const _hitMarkerProjVec = new THREE.Vector3();
+const HIT_MARKER_MIN_SIZE = 14;
+const HIT_MARKER_MAX_SIZE = 36;
+const HIT_MARKER_NEAR_DIST = 100;
+const HIT_MARKER_FAR_DIST = 800;
 function showHitMarker(spreadIndex, fishWorldPos) {
     const el = document.createElement('div');
     let startX = window.innerWidth / 2;
     let startY = window.innerHeight / 2;
+    let fontSize = 26;
 
     if (fishWorldPos && camera) {
         _hitMarkerProjVec.copy(fishWorldPos);
+        const dist = camera.position.distanceTo(fishWorldPos);
+        const t_dist = Math.max(0, Math.min(1, (dist - HIT_MARKER_NEAR_DIST) / (HIT_MARKER_FAR_DIST - HIT_MARKER_NEAR_DIST)));
+        fontSize = HIT_MARKER_MAX_SIZE - t_dist * (HIT_MARKER_MAX_SIZE - HIT_MARKER_MIN_SIZE);
+
         _hitMarkerProjVec.project(camera);
         const hw = window.innerWidth / 2;
         const hh = window.innerHeight / 2;
@@ -6344,7 +6353,7 @@ function showHitMarker(spreadIndex, fishWorldPos) {
         pointer-events: none;
         z-index: 10000;
         opacity: 1;
-        font-size: 26px;
+        font-size: ${fontSize}px;
         color: #aaffcc;
         font-weight: bold;
         text-shadow: 0 0 8px rgba(170, 255, 204, 0.9), 0 0 3px #fff;
