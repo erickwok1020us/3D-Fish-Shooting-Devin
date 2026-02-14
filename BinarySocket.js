@@ -550,6 +550,11 @@ class BinarySocket {
             case this.PacketId.PLAYER_LEAVE:
                 return this._decodePlayerLeave(view, buffer);
             case this.PacketId.ROOM_STATE:
+                if (buffer.length > 0 && buffer[0] === 0x7B) {
+                    try {
+                        return JSON.parse(new TextDecoder().decode(buffer));
+                    } catch (_) {}
+                }
                 return this._decodeRoomState(view, buffer);
             case this.PacketId.TIME_SYNC_PONG:
                 return this._decodeTimeSyncPong(view, buffer);
@@ -672,9 +677,11 @@ class BinarySocket {
     
     _decodeError(view, buffer) {
         let offset = 0;
-        const code = view.getUint8(offset); offset += 1;
-        const messageBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, 128);
-        const message = new TextDecoder().decode(messageBytes).replace(/\0+$/, '');
+        const code = view.getUint16(offset, false); offset += 2;
+        const messageLength = view.getUint16(offset, false); offset += 2;
+        const safeLen = Math.min(messageLength, buffer.length - offset);
+        const messageBytes = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, safeLen);
+        const message = new TextDecoder().decode(messageBytes);
         return { code, message };
     }
     

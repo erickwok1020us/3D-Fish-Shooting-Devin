@@ -201,10 +201,19 @@ class MultiplayerManager {
         // Room events
         this.binarySocket.on('roomState', (data) => {
             console.log('[MULTIPLAYER] Room state:', data);
+            if (data.state === 'seedRevealed' || data.state === 'receipts') {
+                if (this.onRoomState) this.onRoomState(data);
+                return;
+            }
             this.roomCode = data.roomCode;
             if (data.playerId) this.playerId = data.playerId;
             if (data.slotIndex !== undefined) this.slotIndex = data.slotIndex;
             if (data.isHost !== undefined) this.isHost = data.isHost;
+            this._shootSeq = 0;
+            if (data.rulesHash) this.rulesHash = data.rulesHash;
+            if (data.rulesVersion) this.rulesVersion = data.rulesVersion;
+            if (data.enforcementPhase != null) this.enforcementPhase = data.enforcementPhase;
+            this._sendVersionCheck();
             if (this.onRoomState) this.onRoomState(data);
         });
         
@@ -285,6 +294,8 @@ class MultiplayerManager {
                 if (this.onAnomalyCooldown) this.onAnomalyCooldown({ durationMs: duration });
             } else if (msg === 'ANOMALY_WARNING') {
                 if (this.onAnomalyWarning) this.onAnomalyWarning({});
+            } else if (msg.startsWith('VERSION_MISMATCH')) {
+                if (this.onVersionMismatch) this.onVersionMismatch({ serverVersion: msg.split(':')[1] });
             } else if (msg === 'SEQ_REQUIRED' || msg === 'CLIENT_TIME_REQUIRED' ||
                        msg === 'INVALID_COORDINATES' || msg.includes('REPLAY') ||
                        msg.includes('LAG') || msg.includes('DRIFT')) {
@@ -1108,7 +1119,10 @@ class MultiplayerManager {
     _sendVersionCheck() {
         if (!this.connected || !this.rulesVersion) return;
         if (this.useBinaryProtocol && this.binarySocket) {
-            console.log('[MULTIPLAYER] Version check skipped for binary protocol (server validates per-packet)');
+            this.binarySocket.sendPacket(this.binarySocket.PacketId.ROOM_STATE, {
+                requestType: 'versionCheck',
+                rulesVersion: this.rulesVersion
+            });
         } else if (this.socket) {
             this.socket.emit('versionCheck', { rulesVersion: this.rulesVersion });
         }
