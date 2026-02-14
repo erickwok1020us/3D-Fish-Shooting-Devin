@@ -690,18 +690,9 @@ class MultiplayerManager {
      * Handle fish hit event
      */
     _handleFishHit(data) {
-        // DEBUG: Log every fishHit event received
-        console.log(`[MULTIPLAYER] fishHit received: fishId=${data.fishId}, damage=${data.damage}, newHealth=${data.newHealth}, maxHealth=${data.maxHealth}, hitBy=${data.hitByPlayerId}`);
-        
-        const fish = this.serverFish.get(data.fishId);
-        if (fish) {
-            fish.hp = data.newHealth;
-        }
-        
-        // Trigger hit VFX in game
-        if (this.game && this.game.triggerFishHit) {
-            this.game.triggerFishHit(data.fishId, data.damage, data.hitByPlayerId);
-        }
+        console.log(`[MULTIPLAYER] fishHit received: fishId=${data.fishId}, hitBy=${data.hitByPlayerId}`);
+
+        if (this.onFishHit) this.onFishHit(data);
     }
     
     /**
