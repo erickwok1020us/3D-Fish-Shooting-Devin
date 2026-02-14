@@ -10875,39 +10875,44 @@ function autoFireAtFish(targetFish) {
         
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
         
-        // PERFORMANCE: Reuse pre-allocated vectors instead of clone() + new Vector3()
         fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
         
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+    } else if (weapon.type === 'laser') {
+        fireLaserBeam(muzzlePos, direction, weaponKey);
     } else {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
     
-    // Cannon recoil using proper barrelRecoilState system (avoids position corruption during rapid fire)
+    playWeaponShot(weaponKey);
+    spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+    
+    // Light recoil for auto fire (reduced strength for smoother animation)
     if (cannonBarrel) {
         const weaponConfig = WEAPON_VFX_CONFIG[weaponKey];
         const recoilStrength = weaponConfig ? weaponConfig.recoilStrength : 5;
+        const autoRecoilScale = 0.3;
         
         if (gameState.viewMode === 'fps') {
-            fpsCameraRecoilState.maxPitchOffset = recoilStrength * 0.003;
+            fpsCameraRecoilState.maxPitchOffset = recoilStrength * 0.001;
             fpsCameraRecoilState.active = true;
             fpsCameraRecoilState.phase = 'kick';
             fpsCameraRecoilState.kickStartTime = performance.now();
-            fpsCameraRecoilState.kickDuration = 30 + recoilStrength;
-            fpsCameraRecoilState.returnDuration = 100 + recoilStrength * 4;
+            fpsCameraRecoilState.kickDuration = 20;
+            fpsCameraRecoilState.returnDuration = 60;
         } else {
             const glbCfg = WEAPON_GLB_CONFIG.weapons[weaponKey];
             const correctY = glbCfg && glbCfg.cannonYOffset !== undefined ? glbCfg.cannonYOffset : 20;
             barrelRecoilState.originalPosition.set(0, correctY, 0);
             barrelRecoilState.recoilVector.set(0, -1, 0);
-            barrelRecoilState.recoilDistance = recoilStrength * 2;
+            barrelRecoilState.recoilDistance = recoilStrength * autoRecoilScale;
             barrelRecoilState.active = true;
             barrelRecoilState.phase = 'kick';
             barrelRecoilState.kickStartTime = performance.now();
-            barrelRecoilState.kickDuration = 30 + recoilStrength;
-            barrelRecoilState.returnDuration = 80 + recoilStrength * 3;
+            barrelRecoilState.kickDuration = 20;
+            barrelRecoilState.returnDuration = 60;
         }
     }
     
@@ -17304,7 +17309,7 @@ const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5°
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
 const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
 const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
-const FPS_CANNON_SIDE_OFFSET = 60;          // Horizontal offset for left/right hand positioning
+const FPS_CANNON_SIDE_OFFSET = 40;          // Horizontal offset for left/right hand positioning
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
