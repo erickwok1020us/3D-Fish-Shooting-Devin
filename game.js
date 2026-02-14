@@ -6187,7 +6187,7 @@ const pelletStates = [
     { hit: false, timer: 0 },
     { hit: false, timer: 0 }
 ];
-const CROSSHAIR_B_SPREAD = 120;
+const CROSSHAIR_B_SPREAD = 35;
 let crosshairCanvas = null;
 let crosshairCtx = null;
 let crosshairCanvasLastTime = 0;
@@ -6221,36 +6221,11 @@ function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
 
     const basePulse = 1 + Math.sin(time * 0.004) * 0.04;
 
-    ctx.strokeStyle = 'rgba(170,255,204,0.18)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 6]);
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    ctx.lineTo(pts[2].x, pts[2].y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
     pts.forEach((p, i) => {
-        const state = pelletStates[i];
-        if (state.timer > 0) state.timer -= dt;
-        const isActive = state.timer > 0;
-        const isHit = state.hit;
-        const progress = isActive ? state.timer / 800 : 0;
-
-        let mainColor, glowColor, dotColor;
-        let sizeMultiplier = basePulse;
-
-        if (isActive && isHit) {
-            const ease = Math.sin(progress * Math.PI);
-            mainColor = `rgba(170,255,204,${0.5 + ease * 0.5})`;
-            glowColor = `rgba(170,255,204,${ease * 0.4})`;
-            dotColor = 'rgba(255,255,255,1)';
-            sizeMultiplier = basePulse + ease * 0.5;
-        } else {
-            mainColor = i === 1 ? 'rgba(170,255,204,0.9)' : 'rgba(170,255,204,0.65)';
-            glowColor = 'rgba(170,255,204,0.2)';
-            dotColor = 'rgba(255,255,255,0.9)';
-        }
+        const mainColor = i === 1 ? 'rgba(170,255,204,0.9)' : 'rgba(170,255,204,0.65)';
+        const glowColor = 'rgba(170,255,204,0.2)';
+        const dotColor = 'rgba(255,255,255,0.9)';
+        const sizeMultiplier = basePulse;
 
         const size = (i === 1 ? 20 : 16) * sizeMultiplier;
         const arm = size;
@@ -6276,30 +6251,6 @@ function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
         ctx.fillStyle = dotColor;
         ctx.fill();
 
-        if (isActive && isHit) {
-            const checkS = size * 1.2;
-            const alpha = Math.min(1, progress * 2);
-            const scale = 1 + (1 - Math.min(1, progress * 3)) * 0.3;
-            ctx.save();
-            ctx.translate(p.x, p.y - size * 1.5);
-            ctx.scale(scale, scale);
-            const glowR = checkS * 0.8;
-            const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR);
-            grd.addColorStop(0, `rgba(170,255,204,${alpha * 0.4})`);
-            grd.addColorStop(1, 'rgba(170,255,204,0)');
-            ctx.fillStyle = grd;
-            ctx.fillRect(-glowR, -glowR, glowR * 2, glowR * 2);
-            ctx.strokeStyle = `rgba(170,255,204,${alpha})`;
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.beginPath();
-            ctx.moveTo(-checkS * 0.35, -checkS * 0.02);
-            ctx.lineTo(-checkS * 0.08, checkS * 0.3);
-            ctx.lineTo(checkS * 0.38, -checkS * 0.28);
-            ctx.stroke();
-            ctx.restore();
-        }
     });
 }
 
@@ -6335,12 +6286,6 @@ function updateCrosshairCanvasOverlay(currentTime) {
 }
 
 function showHitMarker(spreadIndex) {
-    if (gameState.currentWeapon === '3x') {
-        const pelletIndex = spreadIndex === -1 ? 0 : spreadIndex === 0 ? 1 : 2;
-        pelletStates[pelletIndex].hit = true;
-        pelletStates[pelletIndex].timer = 800;
-        return;
-    }
     const el = document.createElement('div');
     let startX = window.innerWidth / 2;
     const startY = window.innerHeight / 2;
