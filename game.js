@@ -16622,6 +16622,52 @@ function applyRtpLabels() {
     });
 }
 
+// ==================== SCOPE OVERLAY ====================
+let scopeOverlayEl = null;
+
+function createScopeOverlay() {
+    if (scopeOverlayEl) return scopeOverlayEl;
+    const el = document.createElement('div');
+    el.id = 'scope-overlay';
+    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
+    const inset = 40;
+    const cornerLen = 30;
+    const color = 'rgba(0,255,200,0.5)';
+    const thin = 'rgba(0,255,200,0.15)';
+    const glow = '0 0 6px rgba(0,255,200,0.4)';
+    const shared = `position:absolute;box-shadow:${glow};`;
+    const border = `2px solid ${color}`;
+    const borderThin = `1px solid ${thin}`;
+    el.innerHTML = `
+        <div style="${shared}top:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-left:${border};"></div>
+        <div style="${shared}top:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-right:${border};"></div>
+        <div style="${shared}bottom:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-left:${border};"></div>
+        <div style="${shared}bottom:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-right:${border};"></div>
+        <div style="${shared}top:${inset}px;left:${inset + cornerLen}px;right:${inset + cornerLen}px;height:0;border-top:${borderThin};"></div>
+        <div style="${shared}bottom:${inset}px;left:${inset + cornerLen}px;right:${inset + cornerLen}px;height:0;border-bottom:${borderThin};"></div>
+        <div style="${shared}left:${inset}px;top:${inset + cornerLen}px;bottom:${inset + cornerLen}px;width:0;border-left:${borderThin};"></div>
+        <div style="${shared}right:${inset}px;top:${inset + cornerLen}px;bottom:${inset + cornerLen}px;width:0;border-right:${borderThin};"></div>
+        <div style="position:absolute;top:${inset - 1}px;left:50%;transform:translateX(-50%);width:40px;height:0;border-top:${border};"></div>
+        <div style="position:absolute;bottom:${inset - 1}px;left:50%;transform:translateX(-50%);width:40px;height:0;border-bottom:${border};"></div>
+        <div style="position:absolute;left:${inset - 1}px;top:50%;transform:translateY(-50%);height:40px;width:0;border-left:${border};"></div>
+        <div style="position:absolute;right:${inset - 1}px;top:50%;transform:translateY(-50%);height:40px;width:0;border-right:${border};"></div>
+    `;
+    document.body.appendChild(el);
+    scopeOverlayEl = el;
+    return el;
+}
+
+function showScopeOverlay() {
+    const el = createScopeOverlay();
+    requestAnimationFrame(() => { el.style.opacity = '1'; });
+}
+
+function hideScopeOverlay() {
+    if (scopeOverlayEl) {
+        scopeOverlayEl.style.opacity = '0';
+    }
+}
+
 // ==================== EVENT LISTENERS ====================
 function setupEventListeners() {
     const container = document.getElementById('game-container');
@@ -16834,54 +16880,27 @@ function setupEventListeners() {
             }
             gameState.isScoping = true;
             gameState.scopeTargetFov = 30;
+            showScopeOverlay();
         }
     });
     
     window.addEventListener('mousemove', (e) => {
         if (gameState.isRightDragging) {
-            // Issue 2 Fix: Use per-mode sensitivity from CONFIG
-            // FPS mode uses level-based sensitivity (1-10 levels, each level = 10%)
-            // SAFEGUARD: Ensure fpsSensitivityLevel is always valid (1-10, default 5)
-            const fpsLevel = Math.max(1, Math.min(10, gameState.fpsSensitivityLevel || 5));
-            const rotationSensitivity = gameState.viewMode === 'fps'
-                ? CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10)
-                : CONFIG.camera.rotationSensitivityThirdPerson;
+            if (gameState.viewMode === 'fps') {
+                return;
+            }
+            const rotationSensitivity = CONFIG.camera.rotationSensitivityThirdPerson;
             
-            // Horizontal drag = yaw rotation (UNLIMITED 360°)
-            // FIX: Negate dragDeltaX so drag right = view right (standard FPS controls)
             const dragDeltaX = e.clientX - gameState.rightDragStartX;
             let newYaw = gameState.rightDragStartYaw - dragDeltaX * rotationSensitivity;
             
-            // Normalize yaw to [-PI, PI] to prevent unbounded growth
             while (newYaw > Math.PI) newYaw -= 2 * Math.PI;
             while (newYaw < -Math.PI) newYaw += 2 * Math.PI;
             
-            // Vertical drag = pitch rotation (inverted: drag up = look up)
             const dragDeltaY = e.clientY - gameState.rightDragStartY;
             const newPitch = gameState.rightDragStartPitch - dragDeltaY * rotationSensitivity;
             
-            // Update based on view mode
-            if (gameState.viewMode === 'fps') {
-                // In FPS mode, directly rotate the cannon (camera follows automatically)
-                // Limit yaw to ±90° (180° total) - cannon can only face outward (fish area)
-                // Player cannon is at 6 o'clock, facing -Z (yaw=0), so limit to [-90°, +90°]
-                const maxYaw = Math.PI / 2;  // 90 degrees
-                const clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
-                
-                if (cannonGroup) {
-                    cannonGroup.rotation.y = clampedYaw;
-                }
-                if (cannonPitchGroup) {
-                    // FPS Pitch Limits: Use centralized constants (FPS_PITCH_MIN/MAX)
-                    // Note: cannonPitchGroup.rotation.x = -pitch (negated)
-                    // FPS_PITCH_MIN = -35° (up limit), FPS_PITCH_MAX = +50° (down limit)
-                    // For rotation.x: min = -35° (looking up), max = +50° (looking down)
-                    const minRotationX = -35 * (Math.PI / 180);   // -35° up limit (prevents looking at ceiling)
-                    const maxRotationX = 50 * (Math.PI / 180);    // +50° down limit (generous for fish)
-                    cannonPitchGroup.rotation.x = Math.max(minRotationX, Math.min(maxRotationX, newPitch));
-                }
-                updateFPSCamera();
-            } else {
+            {
                 // Issue #9: NO CLAMPING for yaw - unlimited 360° rotation
                 gameState.targetCameraYaw = newYaw;
                 gameState.cameraYaw = newYaw;
@@ -16900,6 +16919,7 @@ function setupEventListeners() {
             gameState.isRightDragging = false;
             gameState.isScoping = false;
             gameState.scopeTargetFov = gameState.viewMode === 'fps' ? 60 : 75;
+            hideScopeOverlay();
         }
     });
     
