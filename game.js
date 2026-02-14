@@ -6322,7 +6322,16 @@ const HIT_MARKER_MIN_SIZE = 14;
 const HIT_MARKER_MAX_SIZE = 36;
 const HIT_MARKER_NEAR_DIST = 100;
 const HIT_MARKER_FAR_DIST = 800;
-function showHitMarker(spreadIndex, fishWorldPos) {
+const HIT_COMBO_COLORS = [
+    '#ff4444',
+    '#ffaa00',
+    '#ffff00',
+    '#44ff44',
+    '#44ddff',
+    '#aa88ff',
+    '#ff66cc'
+];
+function showHitMarker(spreadIndex, fishWorldPos, fish) {
     const el = document.createElement('div');
     let startX = window.innerWidth / 2;
     let startY = window.innerHeight / 2;
@@ -6345,6 +6354,13 @@ function showHitMarker(spreadIndex, fishWorldPos) {
         }
     }
 
+    let hitCount = 1;
+    if (fish) {
+        fish._comboHitCount = (fish._comboHitCount || 0) + 1;
+        hitCount = fish._comboHitCount;
+    }
+    const comboColor = HIT_COMBO_COLORS[(hitCount - 1) % HIT_COMBO_COLORS.length];
+
     el.style.cssText = `
         position: fixed;
         top: ${startY}px;
@@ -6354,18 +6370,18 @@ function showHitMarker(spreadIndex, fishWorldPos) {
         z-index: 10000;
         opacity: 1;
         font-size: ${fontSize}px;
-        color: #aaffcc;
+        color: ${comboColor};
         font-weight: bold;
-        text-shadow: 0 0 8px rgba(170, 255, 204, 0.9), 0 0 3px #fff;
+        text-shadow: 0 0 8px ${comboColor}99, 0 0 3px #fff;
     `;
-    el.textContent = '\u2714';
+    el.textContent = String(hitCount);
     document.body.appendChild(el);
 
     const start = performance.now();
     const duration = 450;
     function animateMarker(now) {
         const t = Math.min((now - start) / duration, 1);
-        el.style.transform = `translate(calc(-50% + ${t * 30}px), calc(-50% - ${t * 40}px)) scale(${1 + t * 0.3})`;
+        el.style.transform = `translate(calc(-50% + ${t * 40}px), calc(-50% - ${t * 50}px)) scale(${1 + t * 0.3})`;
         el.style.opacity = String(1 - t * t);
         if (t < 1) {
             requestAnimationFrame(animateMarker);
@@ -13758,7 +13774,7 @@ class Fish {
         this.hp -= damage;
         
         const fishPos = this.group ? this.group.position : null;
-        showHitMarker(spreadIndex, fishPos);
+        showHitMarker(spreadIndex, fishPos, this);
         
         if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
@@ -16877,9 +16893,6 @@ function setupEventListeners() {
             const dx = e.clientX - gameState.rightDragStartX;
             const dy = e.clientY - gameState.rightDragStartY;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 5) {
-                toggleCannonSide();
-            }
             gameState.isRightDragging = false;
         }
     });
@@ -16994,9 +17007,6 @@ function setupEventListeners() {
             // H or F1 key: Toggle help panel
             e.preventDefault();
             toggleHelpPanel();
-            return;
-        } else if (e.key === 't' || e.key === 'T') {
-            toggleCannonSide();
             return;
         }
         
@@ -17370,7 +17380,7 @@ const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5°
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
 const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
 const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
-const FPS_CANNON_SIDE_OFFSET = 40;          // Horizontal offset for left/right hand positioning
+const FPS_CANNON_SIDE_OFFSET = 15;          // Slight right offset for centered turret positioning
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
@@ -17438,9 +17448,8 @@ function updateFPSCamera() {
     // Right vector = cross(forward, up) in the horizontal plane
     const rightX = Math.sin(yaw - Math.PI / 2);
     const rightZ = Math.cos(yaw - Math.PI / 2);
-    const sideSign = gameState.fpsCannonSide === 'right' ? -1 : 1;
-    const sideOffsetX = rightX * FPS_CANNON_SIDE_OFFSET * sideSign;
-    const sideOffsetZ = rightZ * FPS_CANNON_SIDE_OFFSET * sideSign;
+    const sideOffsetX = rightX * FPS_CANNON_SIDE_OFFSET * -1;
+    const sideOffsetZ = rightZ * FPS_CANNON_SIDE_OFFSET * -1;
     
     // FIXED camera Y position based on constants - NEVER accumulates
     // Base Y (-337.5) + pitch pivot (35) + actual muzzle Y offset (from weapon GLB config)
