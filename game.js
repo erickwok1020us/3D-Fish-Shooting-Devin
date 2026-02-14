@@ -1955,7 +1955,7 @@ const WEAPON_GLB_CONFIG = {
             cannonNonPlayer: '1x 武器模組(非玩家).glb',
             bullet: '1x 子彈模組',
             hitEffect: '1x 擊中特效',
-            scale: 0.8,
+            scale: 0.65,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
             muzzleOffset: new THREE.Vector3(0, 30, 45),
@@ -1964,7 +1964,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 45,
-            fpsCameraUpOffset: 55,
+            fpsCameraUpOffset: 40,
             cannonYOffset: 24
         },
         '3x': {
@@ -1973,7 +1973,7 @@ const WEAPON_GLB_CONFIG = {
             bullet: '1x 子彈模組',
             bulletTint: 0xffaaaa,
             hitEffect: '3x 擊中特效',
-            scale: 1.0,
+            scale: 0.8,
             bulletScale: 0.5,
             hitEffectScale: 0.5,
             muzzleOffset: new THREE.Vector3(0, 30, 50),
@@ -1982,7 +1982,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 70,
-            fpsCameraUpOffset: 65,
+            fpsCameraUpOffset: 50,
             cannonYOffset: 20
         },
         '5x': {
@@ -1990,7 +1990,7 @@ const WEAPON_GLB_CONFIG = {
             cannonNonPlayer: '5x 武器模組(非玩家).glb',
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
-            scale: 1.2,
+            scale: 1.0,
             bulletScale: 0.5,
             hitEffectScale: 0.7,
             muzzleOffset: new THREE.Vector3(0, 30, 55),
@@ -1998,7 +1998,7 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 85,
-            fpsCameraUpOffset: 75,
+            fpsCameraUpOffset: 60,
             cannonYOffset: 20
         },
         '8x': {
@@ -2006,7 +2006,7 @@ const WEAPON_GLB_CONFIG = {
             cannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
             bullet: '8x 子彈模組',
             hitEffect: '8x 擊中特效',
-            scale: 1.5,
+            scale: 1.2,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
             muzzleOffset: new THREE.Vector3(0, 30, 65),
@@ -2014,7 +2014,7 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 90,
+            fpsCameraUpOffset: 75,
             cannonYOffset: 20
         }
     }
