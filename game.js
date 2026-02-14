@@ -1964,7 +1964,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 45,
-            fpsCameraUpOffset: 40,
+            fpsCameraUpOffset: 75,
             cannonYOffset: 24
         },
         '3x': {
@@ -1982,7 +1982,7 @@ const WEAPON_GLB_CONFIG = {
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 70,
-            fpsCameraUpOffset: 50,
+            fpsCameraUpOffset: 75,
             cannonYOffset: 20
         },
         '5x': {
@@ -1998,7 +1998,7 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 85,
-            fpsCameraUpOffset: 60,
+            fpsCameraUpOffset: 75,
             cannonYOffset: 20
         },
         '8x': {
@@ -6194,7 +6194,15 @@ const pelletStates = [
     { hit: false, timer: 0 },
     { hit: false, timer: 0 }
 ];
-const CROSSHAIR_B_SPREAD = 35;
+function get3xCrosshairSpreadPx() {
+    const spreadDeg = CONFIG.weapons['3x'].spreadAngle;
+    const spreadRad = spreadDeg * Math.PI / 180;
+    const fov = camera ? camera.fov : 60;
+    const halfFovRad = (fov / 2) * Math.PI / 180;
+    const aspect = window.innerWidth / window.innerHeight;
+    const halfHFovRad = Math.atan(Math.tan(halfFovRad) * aspect);
+    return Math.tan(spreadRad) / Math.tan(halfHFovRad) * (window.innerWidth / 2);
+}
 let crosshairCanvas = null;
 let crosshairCtx = null;
 let crosshairCanvasLastTime = 0;
@@ -6219,7 +6227,7 @@ function resizeCrosshairCanvas() {
 }
 
 function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
-    const spread = CROSSHAIR_B_SPREAD * (w / 500);
+    const spread = get3xCrosshairSpreadPx();
     const pts = [
         { x: cx - spread, y: cy },
         { x: cx, y: cy },
@@ -6298,7 +6306,7 @@ function update3xSideCrosshairPositions() {
     const sideR = document.getElementById('crosshair-3x-right');
     if (!sideL || !sideR) return;
     const w = window.innerWidth;
-    const spread = CROSSHAIR_B_SPREAD * (w / 500);
+    const spread = get3xCrosshairSpreadPx();
     let cx, cy;
     if (gameState.viewMode === 'fps') {
         cx = w / 2;
