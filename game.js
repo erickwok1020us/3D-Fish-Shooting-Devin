@@ -10827,6 +10827,10 @@ function aimCannon(targetX, targetY) {
     }
 }
 
+const AUTOFIRE_YAW_LIMIT = 65 * (Math.PI / 180);
+const AUTOFIRE_PITCH_MAX = 55 * (Math.PI / 180);
+const AUTOFIRE_PITCH_MIN = -40 * (Math.PI / 180);
+
 const autoFireState = {
     lockedTarget: null,
     phase: 'idle',
@@ -10912,9 +10916,8 @@ function autoFireTick() {
     const dir = fish.group.position.clone().sub(muzzlePos).normalize();
     const targetYaw = Math.atan2(dir.x, dir.z);
     const targetPitch = Math.asin(dir.y);
-    const maxYaw = Math.PI / 2;
-    const clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, targetYaw));
-    const clampedPitch = Math.max(FPS_PITCH_MIN, Math.min(FPS_PITCH_MAX, targetPitch));
+    const clampedYaw = Math.max(-AUTOFIRE_YAW_LIMIT, Math.min(AUTOFIRE_YAW_LIMIT, targetYaw));
+    const clampedPitch = Math.max(AUTOFIRE_PITCH_MIN, Math.min(AUTOFIRE_PITCH_MAX, targetPitch));
 
     const elapsed = now - autoFireState.phaseStart;
     let canFire = false;
