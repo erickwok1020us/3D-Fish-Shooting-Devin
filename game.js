@@ -10827,6 +10827,10 @@ function aimCannon(targetX, targetY) {
     }
 }
 
+const AUTOFIRE_YAW_LIMIT = 65 * (Math.PI / 180);
+const AUTOFIRE_PITCH_MAX = 55 * (Math.PI / 180);
+const AUTOFIRE_PITCH_MIN = -40 * (Math.PI / 180);
+
 const autoFireState = {
     lockedTarget: null,
     phase: 'idle',
@@ -10854,6 +10858,11 @@ function findNearestFish(muzzlePos) {
         if (!fish.isActive) continue;
         const pos = fish.group.position;
         const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
+        const dir = new THREE.Vector3(dx, dy, dz).normalize();
+        const yaw = Math.atan2(dir.x, dir.z);
+        const pitch = Math.asin(dir.y);
+        if (Math.abs(yaw) > AUTOFIRE_YAW_LIMIT) continue;
+        if (pitch > AUTOFIRE_PITCH_MAX || pitch < AUTOFIRE_PITCH_MIN) continue;
         const distSq = dx*dx + dy*dy + dz*dz;
         if (distSq < bestDistSq) {
             bestDistSq = distSq;
@@ -10912,9 +10921,8 @@ function autoFireTick() {
     const dir = fish.group.position.clone().sub(muzzlePos).normalize();
     const targetYaw = Math.atan2(dir.x, dir.z);
     const targetPitch = Math.asin(dir.y);
-    const maxYaw = Math.PI / 2;
-    const clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, targetYaw));
-    const clampedPitch = Math.max(FPS_PITCH_MIN, Math.min(FPS_PITCH_MAX, targetPitch));
+    const clampedYaw = Math.max(-AUTOFIRE_YAW_LIMIT, Math.min(AUTOFIRE_YAW_LIMIT, targetYaw));
+    const clampedPitch = Math.max(AUTOFIRE_PITCH_MIN, Math.min(AUTOFIRE_PITCH_MAX, targetPitch));
 
     const elapsed = now - autoFireState.phaseStart;
     let canFire = false;
