@@ -471,7 +471,6 @@ const CONFIG = {
         targetY: 0,         // Look at center/upper area of tank
         initialHeight: -380,  // Near bottom of tank (floorY is -450)
         // Issue 2 Fix: Per-mode rotation sensitivity
-        rotationSensitivityThirdPerson: 0.001,  // 3RD PERSON mode sensitivity
         // FPS Sensitivity System: 10 levels (10% to 100%)
         // BUG FIX: Previous tiny values were fighting aimCannon() override
         // Now that aimCannon is disabled in FPS mode, use proper sensitivity
@@ -819,8 +818,6 @@ const gameState = {
     autoShoot: false,
     mouseX: window.innerWidth / 2,
     mouseY: window.innerHeight / 2,
-    // Camera view mode: 'third-person' or 'fps'
-    // Default to FPS mode with 35 degree upward angle for best fish viewing
     viewMode: 'fps',
     // Camera rotation state - horizontal (yaw) and vertical (pitch)
     cameraYaw: 0,
@@ -859,10 +856,6 @@ const gameState = {
     comboTimer: 0,           // Time remaining to continue combo
     comboTimeWindow: 3.0,    // Seconds to get next kill to continue combo
     lastComboBonus: 0,       // Last applied combo bonus percentage
-    // Third-person mouse hover selection + auto-tracking system
-    hoveredFish: null,       // Currently hovered fish (for highlighting)
-    selectedFish: null,      // Currently selected fish (for auto-tracking)
-    lastHoverCheckTime: 0,   // Throttle hover detection to 60fps
     fpsCannonSide: 'right',  // FPS weapon hand side (fixed right)
     isScoping: false,        // Right-click scope zoom active
     scopeTargetFov: 60       // Target FOV for scope zoom (60=normal FPS, 30=zoomed)
@@ -9122,13 +9115,7 @@ function initGameScene() {
         gameState.isLoading = false;
         lastTime = performance.now();
         
-        // Initialize camera based on default view mode
-        // Default is now FPS mode with 35 degree upward angle for optimal fish viewing
-        if (gameState.viewMode === 'fps') {
-            initFPSMode();
-        } else {
-            resetThirdPersonCamera();
-        }
+        initFPSMode();
         
         // Apply RTP labels to weapon buttons if enabled
         applyRtpLabels();
@@ -15023,41 +15010,6 @@ function fireBullet(targetX, targetY) {
     }
     
     const useFpsConvergent = gameState.viewMode === 'fps' && weapon.type !== 'laser';
-    const useThirdPersonInstantHit = gameState.viewMode === 'third-person' && 
-                                      gameState.selectedFish && 
-                                      gameState.selectedFish.isActive &&
-                                      weapon.type !== 'laser';
-    
-    // THIRD-PERSON INSTANT HIT: Fire at selected fish
-    if (useThirdPersonInstantHit) {
-        // Use the dedicated function for third-person instant hit
-        fireAtSelectedFish(weaponKey);
-        
-        // Issue #14: Enhanced muzzle flash VFX
-        spawnMuzzleFlash(weaponKey, muzzlePos, direction);
-        
-        // Issue #14: Start charge effect for 5x and 8x weapons
-        if (weaponKey === '5x' || weaponKey === '8x') {
-            startCannonChargeEffect(weaponKey);
-        }
-        
-        // Issue #14: Enhanced cannon recoil animation
-        const config = WEAPON_VFX_CONFIG[weaponKey];
-        const recoilStrength = config ? config.recoilStrength : 5;
-        
-        if (cannonBarrel) {
-            barrelRecoilState.originalPosition.copy(cannonBarrel.position);
-            barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
-            barrelRecoilState.recoilDistance = recoilStrength * 2;
-            barrelRecoilState.active = true;
-            barrelRecoilState.phase = 'kick';
-            barrelRecoilState.kickStartTime = performance.now();
-            barrelRecoilState.kickDuration = 30 + recoilStrength;
-            barrelRecoilState.returnDuration = 80 + recoilStrength * 3;
-        }
-        
-        return true;
-    }
     
     // Fire based on weapon type
     if (weapon.type === 'spread') {
@@ -15867,238 +15819,6 @@ function spawnVisualBulletConvergent(origin, targetPoint, convergentDirection, w
     }
 }
 
-// ==================== THIRD-PERSON MOUSE HOVER SELECTION + AUTO-TRACKING ====================
-// When mouse hovers over a fish in third-person mode:
-// 1. Highlight the fish (visual feedback)
-// 2. Cannon automatically tracks the selected fish
-// 3. Clicking fires at the selected fish with guaranteed hit
-
-// Temp vectors for hover detection
-const hoverDetectionTempVectors = {
-    rayOrigin: new THREE.Vector3(),
-    rayDirection: new THREE.Vector3(),
-    fishToRay: new THREE.Vector3(),
-    closestPoint: new THREE.Vector3()
-};
-
-// Hover detection tolerance (larger than FPS for easier selection)
-const HOVER_DETECTION_TOLERANCE = 25;
-
-/**
- * Check which fish the mouse is hovering over in third-person mode
- * Uses ray-sphere intersection similar to FPS instant hit detection
- * @param {number} mouseX - Mouse X position in screen coordinates
- * @param {number} mouseY - Mouse Y position in screen coordinates
- * @returns {Fish|null} - The fish being hovered over, or null
- */
-function checkMouseHoverFish(mouseX, mouseY) {
-    if (!camera || !activeFish) return null;
-    
-    // Convert mouse position to normalized device coordinates (-1 to +1)
-    const mouseNDC = new THREE.Vector2(
-        (mouseX / window.innerWidth) * 2 - 1,
-        -(mouseY / window.innerHeight) * 2 + 1
-    );
-    
-    // Set up raycaster from camera through mouse position
-    raycaster.setFromCamera(mouseNDC, camera);
-    const rayOrigin = raycaster.ray.origin;
-    const rayDirection = raycaster.ray.direction;
-    
-    let closestFish = null;
-    let closestDistance = Infinity;
-    
-    for (const fish of activeFish) {
-        if (!fish.isActive) continue;
-        
-        const fishPos = fish.group.position;
-        const halfExt = fish.ellipsoidHalfExtents;
-        const fishYaw = fish._currentYaw || 0;
-        
-        hoverDetectionTempVectors.fishToRay.copy(fishPos).sub(rayOrigin);
-        const tProj = hoverDetectionTempVectors.fishToRay.dot(rayDirection);
-        
-        if (tProj < 0) continue;
-        
-        if (halfExt) {
-            const result = rayHitsEllipsoid(rayOrigin, rayDirection, fishPos, halfExt, fishYaw, HOVER_DETECTION_TOLERANCE);
-            if (result.hit && result.t >= 0 && result.t < closestDistance) {
-                closestDistance = result.t;
-                closestFish = fish;
-            }
-        } else {
-            hoverDetectionTempVectors.closestPoint.copy(rayDirection).multiplyScalar(tProj).add(rayOrigin);
-            const distanceToRay = fishPos.distanceTo(hoverDetectionTempVectors.closestPoint);
-            const fishRadius = fish.boundingRadius || fish.config.size * 0.5;
-            if (distanceToRay <= fishRadius + HOVER_DETECTION_TOLERANCE) {
-                if (tProj < closestDistance) {
-                    closestDistance = tProj;
-                    closestFish = fish;
-                }
-            }
-        }
-    }
-    
-    return closestFish;
-}
-
-/**
- * Update fish highlight effect when hovering
- * Adds a subtle glow/outline to the hovered fish
- * @param {Fish|null} fish - The fish to highlight, or null to clear highlight
- */
-function updateFishHighlight(fish) {
-    // Clear previous highlight
-    if (gameState.hoveredFish && gameState.hoveredFish !== fish) {
-        clearFishHighlight(gameState.hoveredFish);
-    }
-    
-    // Apply new highlight
-    if (fish && fish.isActive) {
-        applyFishHighlight(fish);
-    }
-    
-    gameState.hoveredFish = fish;
-}
-
-/**
- * Apply highlight effect to a fish
- * Uses emissive color boost for a subtle glow effect
- * @param {Fish} fish - The fish to highlight
- */
-function applyFishHighlight(fish) {
-    if (!fish || !fish.group) return;
-    
-    // Store original emissive values if not already stored
-    if (!fish.originalEmissive) {
-        fish.originalEmissive = [];
-        fish.group.traverse((child) => {
-            if (child.isMesh && child.material) {
-                const materials = Array.isArray(child.material) ? child.material : [child.material];
-                materials.forEach((mat, idx) => {
-                    if (mat.emissive) {
-                        fish.originalEmissive.push({
-                            mesh: child,
-                            matIndex: idx,
-                            color: mat.emissive.clone(),
-                            intensity: mat.emissiveIntensity || 0
-                        });
-                    }
-                });
-            }
-        });
-    }
-    
-    // Apply highlight glow (boost emissive)
-    fish.group.traverse((child) => {
-        if (child.isMesh && child.material) {
-            const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((mat) => {
-                if (mat.emissive) {
-                    // Add a cyan/white glow for selection highlight
-                    mat.emissive.setHex(0x00ffff);
-                    mat.emissiveIntensity = 0.3;
-                }
-            });
-        }
-    });
-    
-    fish.isHighlighted = true;
-}
-
-/**
- * Clear highlight effect from a fish
- * Restores original emissive values
- * @param {Fish} fish - The fish to clear highlight from
- */
-function clearFishHighlight(fish) {
-    if (!fish || !fish.group || !fish.originalEmissive) return;
-    
-    // Restore original emissive values
-    fish.originalEmissive.forEach((data) => {
-        if (data.mesh && data.mesh.material) {
-            const materials = Array.isArray(data.mesh.material) ? data.mesh.material : [data.mesh.material];
-            if (materials[data.matIndex]) {
-                materials[data.matIndex].emissive.copy(data.color);
-                materials[data.matIndex].emissiveIntensity = data.intensity;
-            }
-        }
-    });
-    
-    fish.isHighlighted = false;
-}
-
-/**
- * Update third-person auto-tracking system
- * Called from the game loop to smoothly track the selected fish
- */
-function updateThirdPersonAutoTracking() {
-    // Only active in third-person mode when not in AUTO mode
-    if (gameState.viewMode !== 'third-person') return;
-    if (gameState.autoShoot) return;
-    
-    // If we have a selected fish, track it
-    const targetFish = gameState.selectedFish || gameState.hoveredFish;
-    
-    if (targetFish && targetFish.isActive) {
-        // Use existing aimCannonAtFish function for smooth tracking
-        aimCannonAtFish(targetFish);
-    }
-}
-
-/**
- * Handle mouse move for third-person hover detection
- * Called from the mousemove event handler
- * @param {number} mouseX - Mouse X position
- * @param {number} mouseY - Mouse Y position
- */
-function handleThirdPersonHover(mouseX, mouseY) {
-    // Throttle hover detection to ~60fps
-    const now = performance.now();
-    if (now - gameState.lastHoverCheckTime < 16) return;
-    gameState.lastHoverCheckTime = now;
-    
-    // Check which fish is under the mouse
-    const hoveredFish = checkMouseHoverFish(mouseX, mouseY);
-    
-    // Update highlight
-    updateFishHighlight(hoveredFish);
-    
-    // Update selected fish (for auto-tracking)
-    gameState.selectedFish = hoveredFish;
-}
-
-/**
- * Fire at the selected fish in third-person mode
- * Guarantees hit if a fish is selected
- * @param {string} weaponKey - Current weapon key
- * @returns {boolean} - Whether a fish was targeted
- */
-function fireAtSelectedFish(weaponKey) {
-    const targetFish = gameState.selectedFish || gameState.hoveredFish;
-    
-    if (!targetFish || !targetFish.isActive) {
-        return false;
-    }
-    
-    const weapon = CONFIG.weapons[weaponKey];
-    const muzzlePos = new THREE.Vector3();
-    cannonMuzzle.getWorldPosition(muzzlePos);
-    
-    // Calculate direction to fish
-    const direction = targetFish.group.position.clone().sub(muzzlePos).normalize();
-    
-    // Register damage immediately (instant hit)
-    const killed = targetFish.takeDamage(weapon.damage, weaponKey);
-    
-    createHitParticles(targetFish.group.position, weapon.color, 5);
-    playWeaponHitSound(weaponKey);
-    
-    // Spawn visual bullet for feedback
-    spawnVisualBullet(muzzlePos, targetFish.group.position.clone(), weaponKey);
-    
-    return true;
-}
 
 // ==================== 8X LASER WEAPON ====================
 // Instant hitscan laser - damages all fish along the beam path
@@ -16799,30 +16519,6 @@ function setupEventListeners() {
             return;
         }
         
-        // 3RD PERSON MODE: Mouse hover selection + auto-tracking
-        // Check which fish is under the mouse and highlight it
-        handleThirdPersonHover(e.clientX, e.clientY);
-        
-        // If no fish is selected, use traditional aim at mouse position
-        // If a fish is selected, the cannon will auto-track it via updateThirdPersonAutoTracking()
-        if (!gameState.selectedFish) {
-            // PERFORMANCE: Use throttled version to limit calls to once per animation frame
-            // This prevents excessive object allocations and garbage collection pressure
-            aimCannonThrottled(e.clientX, e.clientY);
-        }
-        
-        const crosshair = document.getElementById('crosshair');
-        if (crosshair) {
-            const compensatedPos = getParallaxCompensatedCrosshairPosition(e.clientX, e.clientY);
-            if (compensatedPos) {
-                crosshair.style.left = compensatedPos.x + 'px';
-                crosshair.style.top = compensatedPos.y + 'px';
-            } else {
-                crosshair.style.left = e.clientX + 'px';
-                crosshair.style.top = e.clientY + 'px';
-            }
-            updateSpreadCrosshairPositions();
-        }
     });
     
     // FPS mode: Reset mouse tracking when mouse leaves the container
@@ -16892,7 +16588,7 @@ function setupEventListeners() {
         e.stopPropagation();
         gameState.autoShoot = !gameState.autoShoot;
         const btn = e.target;
-        btn.textContent = gameState.autoShoot ? 'AUTO ON' : 'AUTO OFF';
+        btn.textContent = gameState.autoShoot ? 'AUTO ON (A)' : 'AUTO OFF (A)';
         btn.classList.toggle('active', gameState.autoShoot);
     });
     
@@ -16928,31 +16624,7 @@ function setupEventListeners() {
     
     window.addEventListener('mousemove', (e) => {
         if (gameState.isRightDragging) {
-            if (gameState.viewMode === 'fps') {
-                return;
-            }
-            const rotationSensitivity = CONFIG.camera.rotationSensitivityThirdPerson;
-            
-            const dragDeltaX = e.clientX - gameState.rightDragStartX;
-            let newYaw = gameState.rightDragStartYaw - dragDeltaX * rotationSensitivity;
-            
-            while (newYaw > Math.PI) newYaw -= 2 * Math.PI;
-            while (newYaw < -Math.PI) newYaw += 2 * Math.PI;
-            
-            const dragDeltaY = e.clientY - gameState.rightDragStartY;
-            const newPitch = gameState.rightDragStartPitch - dragDeltaY * rotationSensitivity;
-            
-            {
-                // Issue #9: NO CLAMPING for yaw - unlimited 360° rotation
-                gameState.targetCameraYaw = newYaw;
-                gameState.cameraYaw = newYaw;
-                
-                // Clamp pitch to ±45° (up/down range - keep some limit for vertical)
-                gameState.targetCameraPitch = Math.max(-gameState.maxCameraPitch, Math.min(gameState.maxCameraPitch, newPitch));
-                gameState.cameraPitch = gameState.targetCameraPitch;
-                
-                updateCameraRotation();
-            }
+            return;
         }
     });
     
@@ -16960,7 +16632,7 @@ function setupEventListeners() {
         if (e.button === 2) {  // Right mouse button
             gameState.isRightDragging = false;
             gameState.isScoping = false;
-            gameState.scopeTargetFov = gameState.viewMode === 'fps' ? 60 : 75;
+            gameState.scopeTargetFov = 60;
             hideScopeOverlay();
         }
     });
@@ -16969,26 +16641,11 @@ function setupEventListeners() {
     document.getElementById('center-view-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         centerCameraView();
-        // Update camera based on current view mode
-        if (gameState.viewMode === 'fps') {
-            updateFPSCamera();
-        } else {
-            updateCameraRotation();
-        }
+        updateFPSCamera();
         // FIX: Blur button after click to prevent Space key from re-activating it
         e.currentTarget.blur();
     });
     
-    // VIEW MODE toggle button handler
-    const viewModeBtn = document.getElementById('view-mode-btn');
-    if (viewModeBtn) {
-        viewModeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleViewMode();
-            // FIX: Blur button after click to prevent Space key from re-activating it
-            e.currentTarget.blur();
-        });
-    }
     
     // AUTO SHOOT button handler - also blur after click
     const autoShootBtn = document.getElementById('auto-shoot-btn');
@@ -17001,29 +16658,24 @@ function setupEventListeners() {
     
     // FIX: Prevent Space key from triggering button clicks on keyup
     // Browser default behavior: Space activates focused button on keyup, not keydown
-    // This was causing Space to trigger CENTER VIEW button instead of toggling view mode
     window.addEventListener('keyup', (e) => {
         if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
             e.preventDefault();
             e.stopPropagation();
-            // Also blur any focused button to prevent future issues
             if (document.activeElement && document.activeElement.tagName === 'BUTTON') {
                 document.activeElement.blur();
             }
         }
-    }, true); // Use capture phase to intercept before button handlers
+    }, true);
     
-    // Keyboard controls - Complete shortcut system for FPS mode
-    // In FPS mode, mouse is locked for view control, so keyboard shortcuts are essential
-    // FIX: Use capture phase to ensure shortcuts work even when buttons are focused
+    // Keyboard controls - shortcut system for FPS mode
     window.addEventListener('keydown', (e) => {
-        // Skip shortcuts when typing in input fields
         const target = e.target;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
             return;
         }
         
-        // Weapon switching: 1-5 keys
+        // Weapon switching: 1-4 keys
         if (e.key === '1') {
             selectWeapon('1x');
             highlightButton('.weapon-btn[data-weapon="1x"]');
@@ -17044,81 +16696,44 @@ function setupEventListeners() {
         
         // Function toggle keys
         if (e.key === 'a' || e.key === 'A') {
-            // A key: Toggle AUTO mode
             toggleAutoShoot();
             highlightButton('#auto-shoot-btn');
             return;
-        } else if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
-            // Space key: Toggle view mode (FPS <-> 3RD PERSON)
-            // FIX: Use e.code for reliable detection across keyboard layouts
-            e.preventDefault(); // Prevent page scroll
-            e.stopPropagation(); // Prevent button activation when focused
-            toggleViewMode();
-            highlightButton('#view-mode-btn');
-            return;
         } else if (e.key === 'c' || e.key === 'C') {
-            // C key: Center view
             centerCameraView();
-            if (gameState.viewMode === 'fps') {
-                updateFPSCamera();
-            } else {
-                updateCameraRotation();
-            }
+            updateFPSCamera();
             highlightButton('#center-view-btn');
             return;
+        } else if (e.key === 't' || e.key === 'T') {
+            toggleCannonSide();
+            highlightButton('#hand-side-btn');
+            return;
         } else if (e.key === 'Escape') {
-            // ESC key: Toggle settings panel
             toggleSettingsPanel();
             highlightButton('#settings-container');
             return;
         } else if (e.key === 'h' || e.key === 'H' || e.key === 'F1') {
-            // H or F1 key: Toggle help panel
             e.preventDefault();
             toggleHelpPanel();
             return;
         }
         
-        // Camera rotation with D key (A is now for Auto toggle)
-        // Use Q/E or arrow keys for camera rotation instead
+        // Camera rotation keys
         const rotationSpeed = 0.05;
         const maxYaw = Math.PI / 2;
         
         if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') {
-            // Rotate camera left
-            // FIX: In Three.js, increase yaw = turn left (counter-clockwise from above)
-            if (gameState.viewMode === 'fps') {
-                if (cannonGroup) {
-                    let newYaw = cannonGroup.rotation.y + rotationSpeed;
-                    cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
-                }
-                updateFPSCamera();
-            } else {
-                let newYaw = gameState.cameraYaw + rotationSpeed;
-                if (newYaw > Math.PI) newYaw -= 2 * Math.PI;
-                gameState.targetCameraYaw = newYaw;
-                gameState.cameraYaw = newYaw;
-                updateCameraRotation();
+            if (cannonGroup) {
+                let newYaw = cannonGroup.rotation.y + rotationSpeed;
+                cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
             }
+            updateFPSCamera();
         } else if (e.key === 'd' || e.key === 'D' || e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') {
-            // Rotate camera right
-            // FIX: In Three.js, decrease yaw = turn right (clockwise from above)
-            if (gameState.viewMode === 'fps') {
-                if (cannonGroup) {
-                    let newYaw = cannonGroup.rotation.y - rotationSpeed;
-                    cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
-                }
-                updateFPSCamera();
-            } else {
-                let newYaw = gameState.cameraYaw - rotationSpeed;
-                if (newYaw < -Math.PI) newYaw += 2 * Math.PI;
-                gameState.targetCameraYaw = newYaw;
-                gameState.cameraYaw = newYaw;
-                updateCameraRotation();
+            if (cannonGroup) {
+                let newYaw = cannonGroup.rotation.y - rotationSpeed;
+                cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
             }
-        }else if (e.key === 'v' || e.key === 'V') {
-            // V key also toggles view mode (legacy support)
-            toggleViewMode();
-            highlightButton('#view-mode-btn');
+            updateFPSCamera();
         }
     });
 }
@@ -17154,9 +16769,25 @@ function toggleSettingsPanel() {
 
 // Toggle help panel showing all shortcuts
 function toggleHelpPanel() {
+    // Ensure help styles exist (re-add CSS dynamically)
+    let styleEl = document.getElementById('shortcut-help-styles');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'shortcut-help-styles';
+        styleEl.textContent = `
+#help-panel { position: fixed; right: 20px; bottom: 140px; background: rgba(0,0,0,0.8); border: 1px solid #3a7; border-radius: 10px; padding: 16px; z-index: 10000; display: none; width: 300px; color: #cceeff; }
+#help-panel.visible { display: block; }
+#help-panel .help-row { display:flex; align-items:center; gap:15px; padding:6px 0; color:#cceeff; font-size:14px; }
+#help-panel .key { background: linear-gradient(180deg,#4488cc,#2266aa); color:#fff; padding:4px 12px; border-radius:6px; font-weight:bold; font-size:12px; min-width:60px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.3); }
+#help-close-btn { margin-top:20px; width:100%; padding:12px; background: linear-gradient(180deg,#4488cc,#2266aa); border:none; border-radius:10px; color:#fff; font-size:14px; font-weight:bold; cursor:pointer; transition: all .3s ease; }
+#help-close-btn:hover { background: linear-gradient(180deg,#55aadd,#3388bb); transform: scale(1.02); }
+.shortcut-highlight { animation: shortcut-flash 0.2s ease-out; }
+@keyframes shortcut-flash { from { filter: brightness(1.2); transform: scale(1.02);} to { filter: brightness(1); transform: scale(1);} }
+        `;
+        document.head.appendChild(styleEl);
+    }
     let helpPanel = document.getElementById('help-panel');
     if (!helpPanel) {
-        // Create help panel if it doesn't exist
         helpPanel = document.createElement('div');
         helpPanel.id = 'help-panel';
         helpPanel.innerHTML = `
@@ -17172,7 +16803,6 @@ function toggleHelpPanel() {
                 <div class="help-section">
                     <h4>Controls</h4>
                     <div class="help-row"><span class="key">A</span> Toggle Auto Fire</div>
-                    <div class="help-row"><span class="key">Space</span> Toggle View Mode</div>
                     <div class="help-row"><span class="key">C</span> Center View</div>
                     <div class="help-row"><span class="key">ESC</span> Settings</div>
                     <div class="help-row"><span class="key">H</span> This Help</div>
@@ -17188,7 +16818,6 @@ function toggleHelpPanel() {
         `;
         document.getElementById('ui-overlay').appendChild(helpPanel);
         
-        // Close button handler
         document.getElementById('help-close-btn').addEventListener('click', () => {
             helpPanel.classList.remove('visible');
         });
@@ -17207,7 +16836,7 @@ function highlightButton(selector) {
     }
 }
 
-// Update camera rotation based on yaw and pitch (orbit around cannon at bottom)
+// Update camera rotation based on yaw and pitch(orbit around cannon at bottom)
 function updateCameraRotation() {
     if (!camera) return;
     
@@ -17291,44 +16920,8 @@ function initFPSMode() {
     // Update camera position
     updateFPSCamera();
     
-    // Update view mode button
-    updateViewModeButton();
 }
 
-// Issue 1 Fix: Dedicated reset function for 3RD PERSON camera
-// This sets ABSOLUTE values - no relative adjustments, no snapshots
-// Called on init and every time we switch back from FPS
-// Values MUST match updateCameraRotation() for consistency
-function resetThirdPersonCamera() {
-    // Cannon is now at water middle (Y = 0)
-    const cannonY = CANNON_BASE_Y;  // 0 (water middle)
-    
-    // Camera positioned FAR BEHIND and ABOVE the cannon for arcade fish game view
-    // These values MUST match updateCameraRotation() exactly
-    const cameraDistance = 1300;  // Much further back (was 500)
-    const cameraHeight = cannonY + 550;  // Higher up: 0 + 550 = +550 (above tank center)
-    
-    // Reset all yaw/pitch state to canonical center view
-    gameState.cameraYaw = 0;
-    gameState.cameraPitch = 0;
-    gameState.targetCameraYaw = 0;
-    gameState.targetCameraPitch = 0;
-    
-    // Explicit absolute camera position (yaw=0 means z is negative)
-    const x = 0;
-    const y = cameraHeight;
-    const z = -cameraDistance;
-    camera.position.set(x, y, z);
-    
-    // Look DOWN toward the cannon/platform area
-    // This keeps cannon and blue platform visible at bottom of screen
-    const lookAtY = cannonY + 150;  // -270: between cannon and center
-    camera.lookAt(0, lookAtY, 180);  // Look toward center of tank
-    
-    // Reset FOV to 3RD PERSON default
-    camera.fov = 60;
-    camera.updateProjectionMatrix();
-}
 
 // Center camera view with smooth animation
 function centerCameraView() {
@@ -17342,101 +16935,6 @@ function centerCameraView() {
     // Smooth transition will be handled in animate loop
 }
 
-// Toggle between FPS and third-person view modes
-function toggleViewMode() {
-    const crosshair = document.getElementById('crosshair');
-    
-    if (gameState.viewMode === 'third-person') {
-        gameState.viewMode = 'fps';
-        // Keep cannon visible in FPS mode - gun barrel should be visible
-        if (cannonGroup) {
-            cannonGroup.visible = true;
-            // FPS VIEW Optimization: Reduced scale from 2.5 to 1.5
-            // This makes the gun smaller so it doesn't dominate the screen
-            cannonGroup.scale.set(1.5, 1.5, 1.5);
-            // Hide cannon lights in FPS mode to prevent glare/bloom
-            cannonGroup.children.forEach(child => {
-                if (child.isLight) child.visible = false;
-            });
-        }
-        // Initialize FPS yaw/pitch - cannon should be visible when looking straight ahead
-        // Camera is now positioned BELOW muzzle level, so cannon is visible at pitch=0
-        // Initial pitch set to 0 degrees - looking straight ahead horizontally
-        const FPS_INITIAL_PITCH = 0;  // 0 degrees - looking straight ahead
-        gameState.fpsYaw = 0;
-        gameState.fpsPitch = FPS_INITIAL_PITCH;
-        // Apply initial rotation to cannon (center yaw, slight downward pitch)
-        if (cannonGroup) cannonGroup.rotation.y = 0;
-        if (cannonPitchGroup) cannonPitchGroup.rotation.x = -FPS_INITIAL_PITCH;  // Negative because rotation.x is inverted
-        // Hide mouse cursor in FPS mode (only crosshair visible)
-        const container = document.getElementById('game-container');
-        if (container) container.classList.add('fps-hide-cursor');
-        // Request Pointer Lock to keep mouse inside window
-        if (container && container.requestPointerLock) {
-            container.requestPointerLock();
-        }
-        // Reset FPS mouse tracking (will be initialized on first mouse move)
-        gameState.lastFPSMouseX = null;
-        gameState.lastFPSMouseY = null;
-        // Wider FOV in FPS mode for better fish visibility (視野更廣)
-        camera.fov = 75;
-        camera.updateProjectionMatrix();
-        // FPS MODE: Add CSS class to center crosshair (more robust than JS positioning)
-        if (crosshair) crosshair.classList.add('fps-mode');
-        const vspreadFps = document.getElementById('crosshair-vspread');
-        if (vspreadFps && gameState.currentWeapon === '3x') vspreadFps.classList.add('fps-mode');
-        updateSpreadCrosshairPositions();
-        updateFPSCamera();
-    } else {
-        gameState.viewMode = 'third-person';
-        // Show cannon in third-person mode with normal scale
-        if (cannonGroup) {
-            cannonGroup.visible = true;
-            cannonGroup.scale.set(1.2, 1.2, 1.2);
-            // Reset cannon rotation to center (facing forward)
-            cannonGroup.rotation.y = 0;
-            // Restore cannon lights in 3RD PERSON mode
-            cannonGroup.children.forEach(child => {
-                if (child.isLight) child.visible = true;
-            });
-        }
-        if (cannonPitchGroup) {
-            cannonPitchGroup.rotation.x = 0;
-        }
-        // 3RD PERSON MODE: Remove CSS class so crosshair follows mouse
-        if (crosshair) crosshair.classList.remove('fps-mode');
-        const vspread3rd = document.getElementById('crosshair-vspread');
-        if (vspread3rd) vspread3rd.classList.remove('fps-mode');
-        // Show mouse cursor again in 3RD PERSON mode
-        const container = document.getElementById('game-container');
-        if (container) container.classList.remove('fps-hide-cursor');
-        // Release Pointer Lock when exiting FPS mode
-        if (document.exitPointerLock) {
-            document.exitPointerLock();
-        }
-        // Hide FPS debug overlay when switching to 3RD PERSON mode
-        hideFPSDebugOverlay();
-        
-        // Issue 1 Fix: Use dedicated reset function with ABSOLUTE values
-        // This ensures the camera always returns to the exact same position
-        resetThirdPersonCamera();
-    }
-    updateViewModeButton();
-}
-
-// Update the view mode button text
-function updateViewModeButton() {
-    const btn = document.getElementById('view-mode-btn');
-    if (btn) {
-        if (gameState.viewMode === 'fps') {
-            btn.textContent = 'FPS VIEW (Space)';
-            btn.classList.add('active');
-        } else {
-            btn.textContent = '3RD PERSON (Space)';
-            btn.classList.remove('active');
-        }
-    }
-}
 
 // FPS Pitch Limits - centralized constants (single source of truth)
 // FPS rotation limits - user requested: 180° horizontal, 80° vertical
@@ -17737,17 +17235,15 @@ function animate() {
         camera.updateProjectionMatrix();
     }
     
-    // THIRD-PERSON MODE: Auto-tracking system
-    // When a fish is selected (hovered), cannon automatically tracks it
-    if (gameState.viewMode === 'third-person' && !gameState.autoShoot) {
-        updateThirdPersonAutoTracking();
-    }
-    
-    // Auto-shoot with auto-aim (Issue #3 - fully automatic without mouse following)
+    // Auto-shoot with auto-aim(Issue #3 - fully automatic without mouse following)
     if (gameState.autoShoot) {
         const targetFish = autoAimAtNearestFish();
         if (targetFish) {
             aimCannonAtFish(targetFish);
+            if (gameState.viewMode === 'fps') {
+                // Ensure camera follows the new cannon rotation before firing (laser uses camera ray)
+                updateFPSCamera();
+            }
         }
         autoShootTimer -= deltaTime;
         if (autoShootTimer <= 0) {
@@ -18626,7 +18122,6 @@ const DEFAULT_SETTINGS = {
     // Audio volume settings (0-100%)
     musicVolume: 50,      // Background music volume (default 50%)
     sfxVolume: 70,        // Sound effects volume (default 70%)
-    thirdPersonSensitivity: 1.0,
     // FPS Sensitivity: 10 levels (1-10), where level 10 = 100% of base sensitivity
     // Default is level 5 (50%) for more precise aiming
     fpsSensitivityLevel: 5
@@ -18637,7 +18132,6 @@ let gameSettings = { ...DEFAULT_SETTINGS };
 
 // Base sensitivity values (these are multiplied by the user's sensitivity setting)
 const BASE_SENSITIVITY = {
-    thirdPerson: 0.001,
     fps: 0.000175
 };
 
@@ -18780,14 +18274,7 @@ function applyShadowQuality(quality) {
     saveSettings();
 }
 
-// Apply sensitivity settings
-function applyThirdPersonSensitivity(multiplier) {
-    gameSettings.thirdPersonSensitivity = multiplier;
-    CONFIG.camera.rotationSensitivityThirdPerson = BASE_SENSITIVITY.thirdPerson * multiplier;
-    saveSettings();
-}
-
-// Apply FPS sensitivity level (1-10, where 10 = 100% of base sensitivity)
+// Apply FPS sensitivity level(1-10, where 10 = 100% of base sensitivity)
 function applyFpsSensitivityLevel(level) {
     // Clamp level to 1-10
     level = Math.max(1, Math.min(10, Math.round(level)));
@@ -18894,20 +18381,7 @@ function initSettingsUI() {
         });
     }
     
-    // Third person sensitivity slider
-    const thirdPersonSlider = document.getElementById('third-person-sensitivity');
-    const thirdPersonValue = document.getElementById('third-person-sensitivity-value');
-    if (thirdPersonSlider && thirdPersonValue) {
-        thirdPersonSlider.value = gameSettings.thirdPersonSensitivity;
-        thirdPersonValue.textContent = gameSettings.thirdPersonSensitivity.toFixed(1) + 'x';
-        thirdPersonSlider.addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            thirdPersonValue.textContent = value.toFixed(1) + 'x';
-            applyThirdPersonSensitivity(value);
-        });
-    }
-    
-    // FPS sensitivity slider (10 levels: 1-10, where 10 = 100%)
+    // FPS sensitivity slider(10 levels: 1-10, where 10 = 100%)
     const fpsSlider = document.getElementById('fps-sensitivity');
     const fpsValue = document.getElementById('fps-sensitivity-value');
     if (fpsSlider && fpsValue) {
@@ -18940,7 +18414,6 @@ function applyAllSettings() {
     applyShadowQuality(gameSettings.shadowQuality);
     applyMusicVolumePercent(gameSettings.musicVolume);
     applySfxVolumePercent(gameSettings.sfxVolume);
-    applyThirdPersonSensitivity(gameSettings.thirdPersonSensitivity);
     applyFpsSensitivityLevel(gameSettings.fpsSensitivityLevel || 5);
 }
 
