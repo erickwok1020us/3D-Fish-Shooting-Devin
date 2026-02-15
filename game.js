@@ -10827,86 +10827,133 @@ function aimCannon(targetX, targetY) {
     }
 }
 
-// Auto-aim at nearest fish (for AUTO mode) - Issue #2: 360° rotation support
-function autoAimAtNearestFish() {
-    const muzzlePos = new THREE.Vector3();
-    cannonMuzzle.getWorldPosition(muzzlePos);
-    
-    // Runtime state (lock + hysteresis)
-    const st = autoAimAtNearestFish._state || (autoAimAtNearestFish._state = {
-        current: null,
-        lockUntil: 0,
-        lockMs: 500,
-        hysteresis: 0.8
-    });
-    const now = performance.now();
-    if (st.current && st.current.isActive && now < st.lockUntil) {
-        return st.current;
-    }
-    
-    // Current forward (for front-bias weighting)
-    const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
-    const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
-    const forward = new THREE.Vector3(
-        Math.sin(yaw) * Math.cos(pitch),
-        Math.sin(pitch),
-        Math.cos(yaw) * Math.cos(pitch)
-    ).normalize();
-    
+const autoFireState = {
+    lockedTarget: null,
+    phase: 'idle',
+    phaseStart: 0,
+    INITIAL_LOCK_MS: 250,
+    TRANSITION_MS: 200,
+    currentYaw: 0,
+    currentPitch: 0,
+    initialized: false
+};
+
+function resetAutoFireState() {
+    autoFireState.lockedTarget = null;
+    autoFireState.phase = 'idle';
+    autoFireState.phaseStart = 0;
+    autoFireState.initialized = false;
+}
+
+function findNearestFish(muzzlePos) {
     let best = null;
-    let bestScore = Infinity;
-    let currentDistSq = Infinity;
-    if (st.current && st.current.isActive) {
-        const p = st.current.group.position;
-        const dx = p.x - muzzlePos.x, dy = p.y - muzzlePos.y, dz = p.z - muzzlePos.z;
-        currentDistSq = dx*dx + dy*dy + dz*dz;
-    }
-    
+    let bestDistSq = Infinity;
     for (const fish of activeFish) {
         if (!fish.isActive) continue;
         const pos = fish.group.position;
         const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
         const distSq = dx*dx + dy*dy + dz*dz;
-        
-        const dirToFish = new THREE.Vector3(dx, dy, dz).normalize();
-        const frontDot = Math.max(0, forward.dot(dirToFish));
-        const weight = 0.2 + 0.8 * frontDot; // 前向偏置
-        const score = distSq / weight;
-        
-        if (score < bestScore) {
-            bestScore = score;
+        if (distSq < bestDistSq) {
+            bestDistSq = distSq;
             best = fish;
         }
     }
-    
-    // Hysteresis：非顯著更好不切換
-    if (st.current && st.current.isActive && best && best !== st.current) {
-        if (bestScore >= currentDistSq * st.hysteresis) {
-            return st.current;
-        }
-    }
-    
-    if (best) {
-        st.current = best;
-        st.lockUntil = now + st.lockMs;
-    } else {
-        st.current = null;
-    }
-    return st.current;
+    return best;
 }
 
-// Aim cannon at specific fish - Issue #2: 360° rotation support
-// SMOOTH AUTO-AIM: State for smooth cannon rotation during auto-attack
-// This prevents the "screen cutting" feeling when switching between targets
-const smoothAutoAimState = {
-    targetYaw: 0,
-    targetPitch: 0,
-    currentYaw: 0,
-    currentPitch: 0,
-    initialized: false,
-    // Smooth factor: lower = smoother (2.0 = 更黏，更不猛)
-    smoothSpeed: 2.0
-};
+function autoFireTick() {
+    const now = performance.now();
+    const muzzlePos = new THREE.Vector3();
+    cannonMuzzle.getWorldPosition(muzzlePos);
+
+    if (!autoFireState.initialized) {
+        autoFireState.currentYaw = cannonGroup ? cannonGroup.rotation.y : 0;
+        autoFireState.currentPitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+        autoFireState.initialized = true;
+    }
+
+    if (autoFireState.phase === 'idle') {
+        const nearest = findNearestFish(muzzlePos);
+        if (nearest) {
+            autoFireState.lockedTarget = nearest;
+            autoFireState.phase = 'locking';
+            autoFireState.phaseStart = now;
+        }
+        return { target: null, canFire: false };
+    }
+
+    if (autoFireState.lockedTarget && !autoFireState.lockedTarget.isActive) {
+        const nearest = findNearestFish(muzzlePos);
+        if (nearest) {
+            autoFireState.lockedTarget = nearest;
+            autoFireState.phase = 'transition';
+            autoFireState.phaseStart = now;
+        } else {
+            resetAutoFireState();
+            autoFireState.initialized = true;
+            autoFireState.currentYaw = cannonGroup ? cannonGroup.rotation.y : 0;
+            autoFireState.currentPitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+            return { target: null, canFire: false };
+        }
+    }
+
+    const fish = autoFireState.lockedTarget;
+    if (!fish) {
+        resetAutoFireState();
+        return { target: null, canFire: false };
+    }
+
+    const dir = fish.group.position.clone().sub(muzzlePos).normalize();
+    const targetYaw = Math.atan2(dir.x, dir.z);
+    const targetPitch = Math.asin(dir.y);
+    const maxYaw = Math.PI / 2;
+    const clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, targetYaw));
+    const clampedPitch = Math.max(FPS_PITCH_MIN, Math.min(FPS_PITCH_MAX, targetPitch));
+
+    const elapsed = now - autoFireState.phaseStart;
+    let canFire = false;
+
+    if (autoFireState.phase === 'locking') {
+        const t = Math.min(1, elapsed / autoFireState.INITIAL_LOCK_MS);
+        const ease = t * t * (3 - 2 * t);
+        let yawDiff = clampedYaw - autoFireState.currentYaw;
+        if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
+        if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
+        const pitchDiff = clampedPitch - autoFireState.currentPitch;
+        autoFireState.currentYaw += yawDiff * ease;
+        autoFireState.currentPitch += pitchDiff * ease;
+        if (t >= 1) {
+            autoFireState.phase = 'firing';
+            autoFireState.currentYaw = clampedYaw;
+            autoFireState.currentPitch = clampedPitch;
+            canFire = true;
+        }
+    } else if (autoFireState.phase === 'firing') {
+        autoFireState.currentYaw = clampedYaw;
+        autoFireState.currentPitch = clampedPitch;
+        canFire = true;
+    } else if (autoFireState.phase === 'transition') {
+        const t = Math.min(1, elapsed / autoFireState.TRANSITION_MS);
+        const ease = t * t * (3 - 2 * t);
+        let yawDiff = clampedYaw - autoFireState.currentYaw;
+        if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
+        if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
+        const pitchDiff = clampedPitch - autoFireState.currentPitch;
+        autoFireState.currentYaw += yawDiff * ease;
+        autoFireState.currentPitch += pitchDiff * ease;
+        if (t >= 1) {
+            autoFireState.phase = 'firing';
+            autoFireState.currentYaw = clampedYaw;
+            autoFireState.currentPitch = clampedPitch;
+            canFire = true;
+        }
+    }
+
+    if (cannonGroup) cannonGroup.rotation.y = autoFireState.currentYaw;
+    if (cannonPitchGroup) cannonPitchGroup.rotation.x = -autoFireState.currentPitch;
+
+    return { target: fish, canFire };
+}
 
 function aimCannonAtFish(fish) {
     if (!fish) return;
@@ -10916,16 +10963,12 @@ function aimCannonAtFish(fish) {
     
     const dir = fish.group.position.clone().sub(muzzlePos).normalize();
     
-    // Calculate yaw and pitch from direction
     const yaw = Math.atan2(dir.x, dir.z);
     const pitch = Math.asin(dir.y);
     
-    // FPS mode: Limited to ±90° yaw (180° total) - cannon can only face outward
-    // 3RD PERSON mode: Unlimited 360° rotation
-    // FPS Pitch Limits: Different limits for FPS mode vs 3RD PERSON mode
     let minPitch, maxPitch;
     let clampedYaw = yaw;
-    const maxYaw = Math.PI / 2;  // 90 degrees
+    const maxYaw = Math.PI / 2;
     
     if (gameState.viewMode === 'fps') {
         minPitch = FPS_PITCH_MIN;
@@ -10937,52 +10980,9 @@ function aimCannonAtFish(fish) {
     }
     const clampedPitch = Math.max(minPitch, Math.min(maxPitch, pitch));
     
-    // SMOOTH AUTO-AIM: Use smooth interpolation when in auto-shoot mode
-    // This creates a cinematic camera follow effect instead of instant jumps
-    if (gameState.autoShoot) {
-        // Initialize current values on first call
-        if (!smoothAutoAimState.initialized) {
-            smoothAutoAimState.currentYaw = cannonGroup.rotation.y;
-            smoothAutoAimState.currentPitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
-            smoothAutoAimState.initialized = true;
-        }
-        
-        // Set target values + rate limit（角速度上限）
-        smoothAutoAimState.targetYaw = clampedYaw;
-        smoothAutoAimState.targetPitch = clampedPitch;
-        
-        const dt = 1/60; // ~60 FPS 假設
-        const maxYawStep = THREE.MathUtils.degToRad(45) * dt;   // 每秒 45°
-        const maxPitchStep = THREE.MathUtils.degToRad(30) * dt; // 每秒 30°
-        
-        // 處理跨 -PI/PI 的最短角差
-        let yawDiff = smoothAutoAimState.targetYaw - smoothAutoAimState.currentYaw;
-        if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
-        if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
-        
-        const pitchDiff = smoothAutoAimState.targetPitch - smoothAutoAimState.currentPitch;
-        
-        // 夾角速度
-        const stepYaw = Math.max(-maxYawStep, Math.min(maxYawStep, yawDiff));
-        const stepPitch = Math.max(-maxPitchStep, Math.min(maxPitchStep, pitchDiff));
-        
-        smoothAutoAimState.currentYaw += stepYaw;
-        smoothAutoAimState.currentPitch += stepPitch;
-        
-        // Apply smoothed rotation
-        cannonGroup.rotation.y = smoothAutoAimState.currentYaw;
-        if (cannonPitchGroup) {
-            cannonPitchGroup.rotation.x = -smoothAutoAimState.currentPitch;
-        }
-    } else {
-        // Manual aiming: instant rotation (no smoothing)
-        // Also reset smooth state so next auto-aim starts fresh
-        smoothAutoAimState.initialized = false;
-        
-        cannonGroup.rotation.y = clampedYaw;
-        if (cannonPitchGroup) {
-            cannonPitchGroup.rotation.x = -clampedPitch;
-        }
+    cannonGroup.rotation.y = clampedYaw;
+    if (cannonPitchGroup) {
+        cannonPitchGroup.rotation.x = -clampedPitch;
     }
     
     return dir;
@@ -16631,10 +16631,7 @@ function setupEventListeners() {
     // Auto-shoot toggle
     document.getElementById('auto-shoot-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        gameState.autoShoot = !gameState.autoShoot;
-        const btn = e.target;
-        btn.textContent = gameState.autoShoot ? 'AUTO ON (A)' : 'AUTO OFF (A)';
-        btn.classList.toggle('active', gameState.autoShoot);
+        toggleAutoShoot();
     });
     
     // Window resize
@@ -16769,12 +16766,17 @@ function setupEventListeners() {
 // Toggle AUTO shoot mode
 function toggleAutoShoot() {
     gameState.autoShoot = !gameState.autoShoot;
+    if (!gameState.autoShoot) {
+        resetAutoFireState();
+    } else {
+        resetAutoFireState();
+    }
     const btn = document.getElementById('auto-shoot-btn');
     if (btn) {
         btn.textContent = gameState.autoShoot ? 'AUTO ON (A)' : 'AUTO OFF (A)';
         btn.classList.toggle('active', gameState.autoShoot);
     }
-    playSound('weaponSwitch'); // Audio feedback
+    playSound('weaponSwitch');
 }
 
 function toggleCannonSide() {
@@ -17260,20 +17262,17 @@ function animate() {
         camera.updateProjectionMatrix();
     }
     
-    // Auto-shoot with auto-aim(Issue #3 - fully automatic without mouse following)
     if (gameState.autoShoot) {
-        const targetFish = autoAimAtNearestFish();
-        if (targetFish) {
-            aimCannonAtFish(targetFish);
+        const result = autoFireTick();
+        if (result.target) {
             if (gameState.viewMode === 'fps') {
-                // Ensure camera follows the new cannon rotation before firing (laser uses camera ray)
                 updateFPSCamera();
             }
         }
         autoShootTimer -= deltaTime;
         if (autoShootTimer <= 0) {
-            if (targetFish) {
-                autoFireAtFish(targetFish);
+            if (result.target && result.canFire) {
+                autoFireAtFish(result.target);
             }
             const weapon = CONFIG.weapons[gameState.currentWeapon];
             autoShootTimer = (1 / weapon.shotsPerSecond) + 0.05;
