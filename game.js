@@ -10858,6 +10858,11 @@ function findNearestFish(muzzlePos) {
         if (!fish.isActive) continue;
         const pos = fish.group.position;
         const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
+        const dir = new THREE.Vector3(dx, dy, dz).normalize();
+        const yaw = Math.atan2(dir.x, dir.z);
+        const pitch = Math.asin(dir.y);
+        if (Math.abs(yaw) > AUTOFIRE_YAW_LIMIT) continue;
+        if (pitch > AUTOFIRE_PITCH_MAX || pitch < AUTOFIRE_PITCH_MIN) continue;
         const distSq = dx*dx + dy*dy + dz*dz;
         if (distSq < bestDistSq) {
             bestDistSq = distSq;
