@@ -16704,10 +16704,6 @@ function setupEventListeners() {
             updateFPSCamera();
             highlightButton('#center-view-btn');
             return;
-        } else if (e.key === 't' || e.key === 'T') {
-            toggleCannonSide();
-            highlightButton('#hand-side-btn');
-            return;
         } else if (e.key === 'Escape') {
             toggleSettingsPanel();
             highlightButton('#settings-container');
@@ -16718,23 +16714,6 @@ function setupEventListeners() {
             return;
         }
         
-        // Camera rotation keys
-        const rotationSpeed = 0.05;
-        const maxYaw = Math.PI / 2;
-        
-        if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') {
-            if (cannonGroup) {
-                let newYaw = cannonGroup.rotation.y + rotationSpeed;
-                cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
-            }
-            updateFPSCamera();
-        } else if (e.key === 'd' || e.key === 'D' || e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') {
-            if (cannonGroup) {
-                let newYaw = cannonGroup.rotation.y - rotationSpeed;
-                cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
-            }
-            updateFPSCamera();
-        }
     });
 }
 
@@ -16806,12 +16785,6 @@ function toggleHelpPanel() {
                     <div class="help-row"><span class="key">C</span> Center View</div>
                     <div class="help-row"><span class="key">ESC</span> Settings</div>
                     <div class="help-row"><span class="key">H</span> This Help</div>
-                </div>
-                <div class="help-section">
-                    <h4>Camera</h4>
-                    <div class="help-row"><span class="key">Q/E</span> Rotate Left/Right</div>
-                    <div class="help-row"><span class="key">D</span> Rotate Right</div>
-                    <div class="help-row"><span class="key">Arrows</span> Rotate Camera</div>
                 </div>
                 <button id="help-close-btn">Close (H)</button>
             </div>
@@ -16932,7 +16905,10 @@ function centerCameraView() {
     // Also reset actual yaw/pitch to prevent drift
     gameState.cameraYaw = 0;
     gameState.cameraPitch = 0;
-    // Smooth transition will be handled in animate loop
+    // Apply immediately to cannon in FPS mode
+    if (cannonGroup) cannonGroup.rotation.y = 0;
+    if (cannonPitchGroup) cannonPitchGroup.rotation.x = 0;
+    if (gameState.viewMode === 'fps') updateFPSCamera();
 }
 
 
