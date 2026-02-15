@@ -16749,6 +16749,10 @@ function setupEventListeners() {
             updateFPSCamera();
             highlightButton('#center-view-btn');
             return;
+        } else if (e.key === 't' || e.key === 'T') {
+            toggleCannonSide();
+            highlightButton('#hand-side-btn');
+            return;
         } else if (e.key === 'Escape') {
             toggleSettingsPanel();
             highlightButton('#settings-container');
