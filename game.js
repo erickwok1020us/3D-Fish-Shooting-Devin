@@ -10832,26 +10832,67 @@ function autoAimAtNearestFish() {
     const muzzlePos = new THREE.Vector3();
     cannonMuzzle.getWorldPosition(muzzlePos);
     
-    let bestFish = null;
-    let bestDistSq = Infinity;
+    // Runtime state (lock + hysteresis)
+    const st = autoAimAtNearestFish._state || (autoAimAtNearestFish._state = {
+        current: null,
+        lockUntil: 0,
+        lockMs: 500,
+        hysteresis: 0.8
+    });
+    const now = performance.now();
+    if (st.current && st.current.isActive && now < st.lockUntil) {
+        return st.current;
+    }
     
-    // Issue #2: Find nearest fish in ANY direction (360°)
+    // Current forward (for front-bias weighting)
+    const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
+    const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+    const forward = new THREE.Vector3(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch)
+    ).normalize();
+    
+    let best = null;
+    let bestScore = Infinity;
+    let currentDistSq = Infinity;
+    if (st.current && st.current.isActive) {
+        const p = st.current.group.position;
+        const dx = p.x - muzzlePos.x, dy = p.y - muzzlePos.y, dz = p.z - muzzlePos.z;
+        currentDistSq = dx*dx + dy*dy + dz*dz;
+    }
+    
     for (const fish of activeFish) {
         if (!fish.isActive) continue;
         const pos = fish.group.position;
-        
-        const dx = pos.x - muzzlePos.x;
-        const dy = pos.y - muzzlePos.y;
-        const dz = pos.z - muzzlePos.z;
+        const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
         const distSq = dx*dx + dy*dy + dz*dz;
         
-        if (distSq < bestDistSq) {
-            bestDistSq = distSq;
-            bestFish = fish;
+        const dirToFish = new THREE.Vector3(dx, dy, dz).normalize();
+        const frontDot = Math.max(0, forward.dot(dirToFish));
+        const weight = 0.2 + 0.8 * frontDot; // 前向偏置
+        const score = distSq / weight;
+        
+        if (score < bestScore) {
+            bestScore = score;
+            best = fish;
         }
     }
     
-    return bestFish;
+    // Hysteresis：非顯著更好不切換
+    if (st.current && st.current.isActive && best && best !== st.current) {
+        if (bestScore >= currentDistSq * st.hysteresis) {
+            return st.current;
+        }
+    }
+    
+    if (best) {
+        st.current = best;
+        st.lockUntil = now + st.lockMs;
+    } else {
+        st.current = null;
+    }
+    return st.current;
 }
 
 // Aim cannon at specific fish - Issue #2: 360° rotation support
@@ -10863,9 +10904,8 @@ const smoothAutoAimState = {
     currentYaw: 0,
     currentPitch: 0,
     initialized: false,
-    // Smooth factor: lower = smoother transition (4 = ~250ms to reach target)
-    // Reduced from 8.0 to 4.0 for more cinematic, less jarring rotation
-    smoothSpeed: 4.0
+    // Smooth factor: lower = smoother (2.0 = 更黏，更不猛)
+    smoothSpeed: 2.0
 };
 
 function aimCannonAtFish(fish) {
@@ -10907,22 +10947,27 @@ function aimCannonAtFish(fish) {
             smoothAutoAimState.initialized = true;
         }
         
-        // Set target values
+        // Set target values + rate limit（角速度上限）
         smoothAutoAimState.targetYaw = clampedYaw;
         smoothAutoAimState.targetPitch = clampedPitch;
         
-        // Smooth interpolation using exponential decay (frame-rate independent approximation)
-        // Using a fixed deltaTime estimate since we don't have access to actual deltaTime here
-        const dt = 1/60; // Assume 60fps
-        const smoothFactor = 1 - Math.exp(-smoothAutoAimState.smoothSpeed * dt);
+        const dt = 1/60; // ~60 FPS 假設
+        const maxYawStep = THREE.MathUtils.degToRad(45) * dt;   // 每秒 45°
+        const maxPitchStep = THREE.MathUtils.degToRad(30) * dt; // 每秒 30°
         
-        // Handle yaw wrapping for smooth rotation across -PI/PI boundary
+        // 處理跨 -PI/PI 的最短角差
         let yawDiff = smoothAutoAimState.targetYaw - smoothAutoAimState.currentYaw;
         if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
         if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
         
-        smoothAutoAimState.currentYaw += yawDiff * smoothFactor;
-        smoothAutoAimState.currentPitch += (smoothAutoAimState.targetPitch - smoothAutoAimState.currentPitch) * smoothFactor;
+        const pitchDiff = smoothAutoAimState.targetPitch - smoothAutoAimState.currentPitch;
+        
+        // 夾角速度
+        const stepYaw = Math.max(-maxYawStep, Math.min(maxYawStep, yawDiff));
+        const stepPitch = Math.max(-maxPitchStep, Math.min(maxPitchStep, pitchDiff));
+        
+        smoothAutoAimState.currentYaw += stepYaw;
+        smoothAutoAimState.currentPitch += stepPitch;
         
         // Apply smoothed rotation
         cannonGroup.rotation.y = smoothAutoAimState.currentYaw;
@@ -16718,23 +16763,6 @@ function setupEventListeners() {
             return;
         }
         
-        // Camera rotation keys
-        const rotationSpeed = 0.05;
-        const maxYaw = Math.PI / 2;
-        
-        if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') {
-            if (cannonGroup) {
-                let newYaw = cannonGroup.rotation.y + rotationSpeed;
-                cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
-            }
-            updateFPSCamera();
-        } else if (e.key === 'd' || e.key === 'D' || e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') {
-            if (cannonGroup) {
-                let newYaw = cannonGroup.rotation.y - rotationSpeed;
-                cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
-            }
-            updateFPSCamera();
-        }
     });
 }
 
@@ -16806,12 +16834,6 @@ function toggleHelpPanel() {
                     <div class="help-row"><span class="key">C</span> Center View</div>
                     <div class="help-row"><span class="key">ESC</span> Settings</div>
                     <div class="help-row"><span class="key">H</span> This Help</div>
-                </div>
-                <div class="help-section">
-                    <h4>Camera</h4>
-                    <div class="help-row"><span class="key">Q/E</span> Rotate Left/Right</div>
-                    <div class="help-row"><span class="key">D</span> Rotate Right</div>
-                    <div class="help-row"><span class="key">Arrows</span> Rotate Camera</div>
                 </div>
                 <button id="help-close-btn">Close (H)</button>
             </div>
@@ -16932,7 +16954,10 @@ function centerCameraView() {
     // Also reset actual yaw/pitch to prevent drift
     gameState.cameraYaw = 0;
     gameState.cameraPitch = 0;
-    // Smooth transition will be handled in animate loop
+    // Apply immediately to cannon in FPS mode
+    if (cannonGroup) cannonGroup.rotation.y = 0;
+    if (cannonPitchGroup) cannonPitchGroup.rotation.x = 0;
+    if (gameState.viewMode === 'fps') updateFPSCamera();
 }
 
 
