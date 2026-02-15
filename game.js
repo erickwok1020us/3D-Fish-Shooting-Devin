@@ -11070,7 +11070,9 @@ function autoFireAtFish(targetFish) {
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
     } else if (weapon.type === 'laser') {
-        fireLaserBeam(muzzlePos, direction, weaponKey);
+        const camDir = autoFireTempVectors.camDir || (autoFireTempVectors.camDir = new THREE.Vector3());
+        camera.getWorldDirection(camDir);
+        fireLaserBeam(muzzlePos, camDir, weaponKey);
     } else {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
@@ -16456,6 +16458,25 @@ function applyRtpLabels() {
 // ==================== SCOPE OVERLAY ====================
 let scopeOverlayEl = null;
 
+function isLaserAligned(targetFish) {
+    if (!cannonGroup || !cannonPitchGroup) return true;
+    const muzzlePos = new THREE.Vector3();
+    cannonMuzzle.getWorldPosition(muzzlePos);
+    const aimPos = targetFish.group.position.clone();
+    const dir = aimPos.sub(muzzlePos).normalize();
+    const targetYaw = Math.atan2(dir.x, dir.z);
+    const targetPitch = Math.asin(dir.y);
+    let currYaw = cannonGroup.rotation.y;
+    let currPitch = -cannonPitchGroup.rotation.x;
+    let yawErr = targetYaw - currYaw;
+    if (yawErr > Math.PI) yawErr -= 2*Math.PI;
+    if (yawErr < -Math.PI) yawErr += 2*Math.PI;
+    const pitchErr = targetPitch - currPitch;
+    const yawOk = Math.abs(yawErr) < (2 * Math.PI / 180);   // < 2 degrees
+    const pitchOk = Math.abs(pitchErr) < (2 * Math.PI / 180);
+    return yawOk && pitchOk;
+}
+
 function createScopeOverlay() {
     if (scopeOverlayEl) return scopeOverlayEl;
     const el = document.createElement('div');
@@ -17295,11 +17316,19 @@ function animate() {
         }
         autoShootTimer -= deltaTime;
         if (autoShootTimer <= 0) {
-            if (result.target && result.canFire) {
+            let shouldFire = result.target && result.canFire;
+            if (shouldFire) {
+                const weapon = CONFIG.weapons[gameState.currentWeapon];
+                if (weapon.type === 'laser') {
+                    // Gate laser until aligned to minimize "shooting air"
+                    shouldFire = isLaserAligned(result.target);
+                }
+            }
+            if (shouldFire) {
                 autoFireAtFish(result.target);
             }
-            const weapon = CONFIG.weapons[gameState.currentWeapon];
-            autoShootTimer = (1 / weapon.shotsPerSecond) + 0.05;
+            const weapon2 = CONFIG.weapons[gameState.currentWeapon];
+            autoShootTimer = (1 / weapon2.shotsPerSecond) + 0.05;
         }
     }
     
