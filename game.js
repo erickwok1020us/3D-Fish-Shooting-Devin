@@ -16326,6 +16326,9 @@ function spawnExplosionEffect(center, radius, color) {
 function updateUI() {
     document.getElementById('balance-value').textContent = gameState.balance.toFixed(2);
     document.getElementById('fps-counter').textContent = `FPS: ${Math.round(1 / deltaTime) || 60}`;
+    var _fpsVal = Math.round(1 / deltaTime) || 60;
+    var _fpsEl = document.getElementById('fps-hud-value');
+    if (_fpsEl) _fpsEl.textContent = _fpsVal;
 }
 
 function selectWeapon(weaponKey) {
@@ -16627,7 +16630,7 @@ function setupEventListeners() {
         // Don't shoot if clicking on UI elements
         if (e.target.closest('#weapon-panel') || 
             e.target.closest('#auto-shoot-btn') ||
-            e.target.closest('#settings-container')) {
+            e.target.closest('#settings-hud') || e.target.closest('#right-hud')) {
             return;
         }
         
@@ -16777,7 +16780,7 @@ function setupEventListeners() {
             return;
         } else if (e.key === 'Escape') {
             toggleSettingsPanel();
-            highlightButton('#settings-container');
+            highlightButton('#settings-hud');
             return;
         } else if (e.key === 'h' || e.key === 'H' || e.key === 'F1') {
             e.preventDefault();
@@ -17418,6 +17421,7 @@ function animate() {
     
         // Update Boss Fish Event System (Issue #12)
         updateBossEvent(deltaTime);
+        updateBossHUDPanel();
     
         // Update UI
         updateUI();
@@ -18139,10 +18143,9 @@ function showBossKilledMessage() {
     document.getElementById('boss-desc').textContent = 'Bonus rewards earned!';
     document.getElementById('boss-countdown').textContent = '';
     
-    // Play Boss Dead sound effect from R2
     playBossDeadSound();
+    showBossHUDEndState('BOSS DEFEATED');
     
-    // Hide after 2 seconds
     setTimeout(() => {
         hideBossUI();
     }, 2000);
@@ -18155,11 +18158,95 @@ function showBossEscapedMessage() {
     document.getElementById('boss-alert').style.color = '#ff8844';
     document.getElementById('boss-desc').textContent = 'Better luck next time...';
     document.getElementById('boss-countdown').textContent = '';
+    showBossHUDEndState('TIME UP');
     
-    // Hide after 2 seconds
     setTimeout(() => {
         hideBossUI();
     }, 2000);
+}
+
+// ==================== BOSS HUD PANEL (sci-fi top-center) ====================
+var _bossHudFadeTimer = 0;
+var _bossHudLastState = 'hidden';
+
+function updateBossHUDPanel() {
+    var panel = document.getElementById('boss-panel');
+    if (!panel) return;
+    var inner = document.getElementById('boss-inner');
+    var title = document.getElementById('boss-title');
+    var bar = document.getElementById('boss-bar');
+    var incoming = document.getElementById('boss-incoming');
+    var timer = document.getElementById('boss-timer');
+
+    if (!gameState.isInGameScene) {
+        panel.classList.remove('visible');
+        _bossHudLastState = 'hidden';
+        return;
+    }
+
+    if (_bossHudFadeTimer > 0) {
+        _bossHudFadeTimer -= deltaTime;
+        if (_bossHudFadeTimer <= 0) {
+            panel.classList.remove('visible');
+            _bossHudLastState = 'hidden';
+            inner.classList.remove('gold');
+        }
+        return;
+    }
+
+    if (gameState.bossActive) {
+        if (_bossHudLastState !== 'active') {
+            panel.classList.add('visible');
+            inner.classList.add('gold');
+            title.textContent = 'BOSS TIMER';
+            incoming.style.display = 'none';
+            timer.style.display = 'block';
+            _bossHudLastState = 'active';
+        }
+        var secs = Math.ceil(gameState.bossCountdown);
+        if (secs < 0) secs = 0;
+        timer.textContent = secs + 's';
+        if (secs <= 5) { timer.style.color = '#ff4444'; }
+        else if (secs <= 10) { timer.style.color = '#ffaa44'; }
+        else { timer.style.color = '#ffe9b0'; }
+    } else {
+        var spawnT = gameState.bossSpawnTimer;
+        var totalWait = 45;
+        if (spawnT <= 30 && spawnT > 0) {
+            if (_bossHudLastState !== 'incoming') {
+                panel.classList.add('visible');
+                inner.classList.remove('gold');
+                title.textContent = 'BOSS INCOMING';
+                incoming.style.display = 'block';
+                timer.style.display = 'none';
+                _bossHudLastState = 'incoming';
+            }
+            var pct = Math.max(0, Math.min(100, ((30 - spawnT) / 30) * 100));
+            bar.style.width = pct + '%';
+        } else {
+            if (_bossHudLastState === 'incoming' || _bossHudLastState === 'active') {
+                panel.classList.remove('visible');
+                inner.classList.remove('gold');
+                _bossHudLastState = 'hidden';
+            }
+        }
+    }
+}
+
+function showBossHUDEndState(msg) {
+    var panel = document.getElementById('boss-panel');
+    var inner = document.getElementById('boss-inner');
+    var title = document.getElementById('boss-title');
+    var incoming = document.getElementById('boss-incoming');
+    var timer = document.getElementById('boss-timer');
+    if (!panel) return;
+    panel.classList.add('visible');
+    inner.classList.add('gold');
+    title.textContent = msg;
+    incoming.style.display = 'none';
+    timer.style.display = 'none';
+    _bossHudFadeTimer = 1.5;
+    _bossHudLastState = 'ending';
 }
 
 // ==================== SETTINGS SYSTEM ====================
@@ -18360,7 +18447,7 @@ function applySfxVolumePercent(percent) {
 
 // Initialize settings UI
 function initSettingsUI() {
-    const settingsContainer = document.getElementById('settings-container');
+    const settingsContainer = document.getElementById('settings-hud');
     const settingsPanel = document.getElementById('settings-panel');
     const closeBtn = document.getElementById('settings-close-btn');
     

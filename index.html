@@ -47,103 +47,57 @@
             z-index: 10;
         }
         
-        /* Balance Display - Top Left */
+        /* Sci-Fi HUD base styles */
+        .hud-panel {
+            position: relative;
+            padding: 10px 18px;
+            color: #cfe9ff;
+            letter-spacing: 1px;
+            background: linear-gradient(180deg, rgba(10, 25, 45, 0.55), rgba(5, 15, 30, 0.55));
+            border: 2px solid rgba(80, 180, 255, 0.6);
+            box-shadow: 0 0 18px rgba(80, 180, 255, 0.35), inset 0 0 22px rgba(40, 120, 200, 0.25);
+            clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 18px, 100% 100%, 0 100%);
+            backdrop-filter: blur(2px);
+        }
+        .hud-panel.gold {
+            border-color: rgba(255, 200, 90, 0.8);
+            box-shadow: 0 0 22px rgba(255, 200, 90, 0.5), inset 0 0 24px rgba(250, 180, 60, 0.35);
+            background: linear-gradient(180deg, rgba(40, 30, 5, 0.6), rgba(25, 15, 0, 0.55));
+            color: #ffe9b0;
+        }
+        .hud-title { font-size: 11px; opacity: 0.9; }
+        .hud-value { font-size: 22px; font-weight: 800; text-shadow: 0 0 12px currentColor; }
+
+        /* Left Balance - keep position, apply sci-fi look */
         #balance-display {
             position: absolute;
             top: 20px;
             left: 20px;
-            background: linear-gradient(135deg, rgba(0, 200, 100, 0.3), rgba(0, 150, 80, 0.2));
-            border: 2px solid #00c864;
-            border-radius: 15px;
-            padding: 12px 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            box-shadow: 0 4px 15px rgba(0, 200, 100, 0.3);
         }
+        #balance-display.hud-panel { display: flex; align-items: center; gap: 10px; }
+        #balance-display .balance-icon { width: 22px; height: 22px; background: none; border: 1px solid #59b9ff; border-radius: 4px; color: #59b9ff; font-size: 12px; }
+        #balance-display .balance-value { color: #9fd1ff; font-size: 20px; font-weight: 800; }
+        #balance-display .balance-label { color: #69bfff; font-size: 11px; margin-left: 2px; }
+
+        /* Top center Boss panel */
+        #boss-panel { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: none; min-width: 300px; text-align: center; }
+        #boss-panel.visible { display: block; animation: fadeIn 240ms ease-out; }
+        #boss-panel .hud-title { letter-spacing: 2px; }
+        #boss-panel .timer { font-size: 30px; font-weight: 900; margin-top: 2px; }
+
+        /* Incoming progress */
+        #boss-incoming { margin-top: 4px; height: 10px; position: relative; overflow: hidden; border: 1.5px solid rgba(80, 180, 255, 0.7); border-radius: 3px; }
+        #boss-incoming .bar { height: 100%; width: 0%; background: linear-gradient(90deg, #ffd45e 0%, #ff9a3c 60%, #ff7a1a 100%); box-shadow: 0 0 14px rgba(255, 170, 60, 0.7); position: relative; }
+        #boss-incoming .dot { position: absolute; top: -4px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #fff, #ffd45e 40%, rgba(255, 122, 26, 0.2) 70%, transparent 71%); filter: blur(0.2px); }
+
+        /* Right HUD container */
+        #right-hud { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+        .hud-stat { display: flex; flex-direction: column; align-items: flex-end; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-6px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         
-        #balance-display .balance-icon {
-            width: 28px;
-            height: 28px;
-            background: linear-gradient(135deg, #00c864, #00a050);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            color: white;
-            font-size: 14px;
-        }
-        
-        #balance-display .balance-value {
-            font-size: 22px;
-            font-weight: bold;
-            color: #00ff7f;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        }
-        
-        #balance-display .balance-label {
-            font-size: 12px;
-            color: #88ffaa;
-            margin-left: -8px;
-        }
-        
-        /* Settings Container - Top Right (Issue #19: Unified container) */
-        #settings-container {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: linear-gradient(180deg, rgba(40, 40, 50, 0.95), rgba(20, 20, 30, 0.95));
-            padding: 8px 16px;
-            border-radius: 25px;
-            border: 2px solid rgba(100, 100, 120, 0.5);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            pointer-events: auto;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        #settings-container:hover {
-            background: linear-gradient(180deg, rgba(50, 50, 60, 0.95), rgba(30, 30, 40, 0.95));
-            border-color: rgba(150, 150, 170, 0.6);
-            transform: scale(1.05);
-        }
-        
-        #settings-container .settings-icon {
-            font-size: 22px;
-            color: #aabbcc;
-            transition: all 0.3s ease;
-        }
-        
-        #settings-container:hover .settings-icon {
-            color: #ddeeff;
-            transform: rotate(45deg);
-        }
-        
-        #settings-container .settings-label {
-            font-size: 14px;
-            font-weight: bold;
-            color: #aabbcc;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        
-        /* FPS Counter */
-        #fps-counter {
-            position: absolute;
-            top: 80px;
-            left: 20px;
-            color: #0f0;
-            font-size: 12px;
-            font-family: monospace;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 4px 8px;
-            border-radius: 4px;
-        }
+        /* Settings HUD hover */
+        #settings-hud:hover { border-color: rgba(120, 200, 255, 0.9); }
         
         /* Weapon Panel - Bottom Left (Issue #4 - group all buttons together) */
         #weapon-panel {
@@ -1222,17 +1176,41 @@
     <div id="game-container">
         <!-- UI Overlay -->
         <div id="ui-overlay">
-            <!-- Balance Display - Top Left -->
-            <div id="balance-display">
+            <!-- Balance Display - Top Left (sci-fi HUD) -->
+            <div id="balance-display" class="hud-panel">
                 <div class="balance-icon">$</div>
-                <span class="balance-value" id="balance-value">1000.00</span>
+                <div style="display:flex;flex-direction:column;">
+                    <span class="hud-title">BALANCE</span>
+                    <span class="balance-value" id="balance-value">1000.00</span>
+                </div>
                 <span class="balance-label">USDT</span>
             </div>
-            
-            <!-- Settings Container - Top Right (Issue #19: Unified container) -->
-            <div id="settings-container" onclick="toggleSettingsPanel()">
-                <span class="settings-icon">&#9881;</span>
-                <span class="settings-label">Settings</span>
+
+            <!-- Boss Timer - Top Center (hidden by default) -->
+            <div id="boss-panel">
+                <div id="boss-inner" class="hud-panel">
+                    <div class="hud-title" id="boss-title">BOSS INCOMING</div>
+                    <div id="boss-incoming">
+                        <div class="bar" id="boss-bar"><div class="dot"></div></div>
+                    </div>
+                    <div class="timer" id="boss-timer" style="display:none;">59s</div>
+                </div>
+            </div>
+
+            <!-- Right HUD - Settings / FPS / CPU (sci-fi style) -->
+            <div id="right-hud">
+                <div class="hud-panel hud-stat" id="settings-hud" onclick="toggleSettingsPanel()" style="pointer-events:auto;cursor:pointer;">
+                    <span class="hud-title">SETTINGS</span>
+                    <span class="hud-value" style="font-size:16px;">&#9881;</span>
+                </div>
+                <div class="hud-panel hud-stat" id="fps-hud">
+                    <span class="hud-title">FPS</span>
+                    <span class="hud-value" id="fps-hud-value">60</span>
+                </div>
+                <div class="hud-panel hud-stat" id="cpu-hud">
+                    <span class="hud-title">CPU</span>
+                    <span class="hud-value" id="cpu-hud-value">0%</span>
+                </div>
             </div>
             
             <!-- Settings Panel -->
@@ -1301,8 +1279,8 @@
                 <button id="settings-close-btn">Close</button>
             </div>
             
-            <!-- FPS Counter -->
-            <div id="fps-counter">FPS: 60</div>
+            <!-- FPS Counter (hidden, replaced by right-hud) -->
+            <div id="fps-counter" style="display:none;">FPS: 60</div>
             
             <!-- Instructions -->
             <div id="instructions">
