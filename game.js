@@ -16588,7 +16588,7 @@ function setupEventListeners() {
         e.stopPropagation();
         gameState.autoShoot = !gameState.autoShoot;
         const btn = e.target;
-        btn.textContent = gameState.autoShoot ? 'AUTO ON' : 'AUTO OFF';
+        btn.textContent = gameState.autoShoot ? 'AUTO ON (A)' : 'AUTO OFF (A)';
         btn.classList.toggle('active', gameState.autoShoot);
     });
     
@@ -16656,7 +16656,82 @@ function setupEventListeners() {
         });
     }
     
+    // FIX: Prevent Space key from triggering button clicks on keyup
+    // Browser default behavior: Space activates focused button on keyup, not keydown
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (document.activeElement && document.activeElement.tagName === 'BUTTON') {
+                document.activeElement.blur();
+            }
+        }
+    }, true);
     
+    // Keyboard controls - shortcut system for FPS mode
+    window.addEventListener('keydown', (e) => {
+        const target = e.target;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+            return;
+        }
+        
+        // Weapon switching: 1-4 keys
+        if (e.key === '1') {
+            selectWeapon('1x');
+            highlightButton('.weapon-btn[data-weapon="1x"]');
+            return;
+        } else if (e.key === '2') {
+            selectWeapon('3x');
+            highlightButton('.weapon-btn[data-weapon="3x"]');
+            return;
+        } else if (e.key === '3') {
+            selectWeapon('5x');
+            highlightButton('.weapon-btn[data-weapon="5x"]');
+            return;
+        } else if (e.key === '4') {
+            selectWeapon('8x');
+            highlightButton('.weapon-btn[data-weapon="8x"]');
+            return;
+        }
+        
+        // Function toggle keys
+        if (e.key === 'a' || e.key === 'A') {
+            toggleAutoShoot();
+            highlightButton('#auto-shoot-btn');
+            return;
+        } else if (e.key === 'c' || e.key === 'C') {
+            centerCameraView();
+            updateFPSCamera();
+            highlightButton('#center-view-btn');
+            return;
+        } else if (e.key === 'Escape') {
+            toggleSettingsPanel();
+            highlightButton('#settings-container');
+            return;
+        } else if (e.key === 'h' || e.key === 'H' || e.key === 'F1') {
+            e.preventDefault();
+            toggleHelpPanel();
+            return;
+        }
+        
+        // Camera rotation keys
+        const rotationSpeed = 0.05;
+        const maxYaw = Math.PI / 2;
+        
+        if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') {
+            if (cannonGroup) {
+                let newYaw = cannonGroup.rotation.y + rotationSpeed;
+                cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
+            }
+            updateFPSCamera();
+        } else if (e.key === 'd' || e.key === 'D' || e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') {
+            if (cannonGroup) {
+                let newYaw = cannonGroup.rotation.y - rotationSpeed;
+                cannonGroup.rotation.y = Math.max(-maxYaw, Math.min(maxYaw, newYaw));
+            }
+            updateFPSCamera();
+        }
+    });
 }
 
 // Toggle AUTO shoot mode
@@ -16664,7 +16739,7 @@ function toggleAutoShoot() {
     gameState.autoShoot = !gameState.autoShoot;
     const btn = document.getElementById('auto-shoot-btn');
     if (btn) {
-        btn.textContent = gameState.autoShoot ? 'AUTO ON' : 'AUTO OFF';
+        btn.textContent = gameState.autoShoot ? 'AUTO ON (A)' : 'AUTO OFF (A)';
         btn.classList.toggle('active', gameState.autoShoot);
     }
     playSound('weaponSwitch'); // Audio feedback
@@ -16677,7 +16752,7 @@ function toggleCannonSide() {
     }
     playSound('weaponSwitch');
     const btn = document.getElementById('hand-side-btn');
-    if (btn) btn.textContent = gameState.fpsCannonSide === 'right' ? 'RIGHT HAND' : 'LEFT HAND';
+    if (btn) btn.textContent = (gameState.fpsCannonSide === 'right' ? 'RIGHT HAND' : 'LEFT HAND') + ' (T)';
 }
 
 // Toggle settings panel
@@ -16688,8 +16763,76 @@ function toggleSettingsPanel() {
     }
 }
 
+// Toggle help panel showing all shortcuts
+function toggleHelpPanel() {
+    // Ensure help styles exist (re-add CSS dynamically)
+    let styleEl = document.getElementById('shortcut-help-styles');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'shortcut-help-styles';
+        styleEl.textContent = `
+#help-panel { position: fixed; right: 20px; bottom: 140px; background: rgba(0,0,0,0.8); border: 1px solid #3a7; border-radius: 10px; padding: 16px; z-index: 10000; display: none; width: 300px; color: #cceeff; }
+#help-panel.visible { display: block; }
+#help-panel .help-row { display:flex; align-items:center; gap:15px; padding:6px 0; color:#cceeff; font-size:14px; }
+#help-panel .key { background: linear-gradient(180deg,#4488cc,#2266aa); color:#fff; padding:4px 12px; border-radius:6px; font-weight:bold; font-size:12px; min-width:60px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.3); }
+#help-close-btn { margin-top:20px; width:100%; padding:12px; background: linear-gradient(180deg,#4488cc,#2266aa); border:none; border-radius:10px; color:#fff; font-size:14px; font-weight:bold; cursor:pointer; transition: all .3s ease; }
+#help-close-btn:hover { background: linear-gradient(180deg,#55aadd,#3388bb); transform: scale(1.02); }
+.shortcut-highlight { animation: shortcut-flash 0.2s ease-out; }
+@keyframes shortcut-flash { from { filter: brightness(1.2); transform: scale(1.02);} to { filter: brightness(1); transform: scale(1);} }
+        `;
+        document.head.appendChild(styleEl);
+    }
+    let helpPanel = document.getElementById('help-panel');
+    if (!helpPanel) {
+        helpPanel = document.createElement('div');
+        helpPanel.id = 'help-panel';
+        helpPanel.innerHTML = `
+            <div class="help-content">
+                <h3>Keyboard Shortcuts</h3>
+                <div class="help-section">
+                    <h4>Weapon Selection</h4>
+                    <div class="help-row"><span class="key">1</span> Weapon 1x</div>
+                    <div class="help-row"><span class="key">2</span> Weapon 3x</div>
+                    <div class="help-row"><span class="key">3</span> Weapon 5x</div>
+                    <div class="help-row"><span class="key">4</span> Weapon 8x</div>
+                </div>
+                <div class="help-section">
+                    <h4>Controls</h4>
+                    <div class="help-row"><span class="key">A</span> Toggle Auto Fire</div>
+                    <div class="help-row"><span class="key">C</span> Center View</div>
+                    <div class="help-row"><span class="key">ESC</span> Settings</div>
+                    <div class="help-row"><span class="key">H</span> This Help</div>
+                </div>
+                <div class="help-section">
+                    <h4>Camera</h4>
+                    <div class="help-row"><span class="key">Q/E</span> Rotate Left/Right</div>
+                    <div class="help-row"><span class="key">D</span> Rotate Right</div>
+                    <div class="help-row"><span class="key">Arrows</span> Rotate Camera</div>
+                </div>
+                <button id="help-close-btn">Close (H)</button>
+            </div>
+        `;
+        document.getElementById('ui-overlay').appendChild(helpPanel);
+        
+        document.getElementById('help-close-btn').addEventListener('click', () => {
+            helpPanel.classList.remove('visible');
+        });
+    }
+    helpPanel.classList.toggle('visible');
+}
 
-// Update camera rotation based on yaw and pitch (orbit around cannon at bottom)
+// Visual feedback when pressing shortcut keys
+function highlightButton(selector) {
+    const btn = document.querySelector(selector);
+    if (btn) {
+        btn.classList.add('shortcut-highlight');
+        setTimeout(() => {
+            btn.classList.remove('shortcut-highlight');
+        }, 200);
+    }
+}
+
+// Update camera rotation based on yaw and pitch(orbit around cannon at bottom)
 function updateCameraRotation() {
     if (!camera) return;
     
@@ -17093,6 +17236,10 @@ function animate() {
         const targetFish = autoAimAtNearestFish();
         if (targetFish) {
             aimCannonAtFish(targetFish);
+            if (gameState.viewMode === 'fps') {
+                // Ensure camera follows the new cannon rotation before firing (laser uses camera ray)
+                updateFPSCamera();
+            }
         }
         autoShootTimer -= deltaTime;
         if (autoShootTimer <= 0) {
