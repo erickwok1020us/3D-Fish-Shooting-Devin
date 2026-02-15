@@ -10835,6 +10835,8 @@ const autoFireState = {
     TRANSITION_MS: 200,
     currentYaw: 0,
     currentPitch: 0,
+    startYaw: 0,
+    startPitch: 0,
     initialized: false
 };
 
@@ -10878,6 +10880,8 @@ function autoFireTick() {
             autoFireState.lockedTarget = nearest;
             autoFireState.phase = 'locking';
             autoFireState.phaseStart = now;
+            autoFireState.startYaw = autoFireState.currentYaw;
+            autoFireState.startPitch = autoFireState.currentPitch;
         }
         return { target: null, canFire: false };
     }
@@ -10888,6 +10892,8 @@ function autoFireTick() {
             autoFireState.lockedTarget = nearest;
             autoFireState.phase = 'transition';
             autoFireState.phaseStart = now;
+            autoFireState.startYaw = autoFireState.currentYaw;
+            autoFireState.startPitch = autoFireState.currentPitch;
         } else {
             resetAutoFireState();
             autoFireState.initialized = true;
@@ -10916,12 +10922,11 @@ function autoFireTick() {
     if (autoFireState.phase === 'locking') {
         const t = Math.min(1, elapsed / autoFireState.INITIAL_LOCK_MS);
         const ease = t * t * (3 - 2 * t);
-        let yawDiff = clampedYaw - autoFireState.currentYaw;
-        if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
-        if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
-        const pitchDiff = clampedPitch - autoFireState.currentPitch;
-        autoFireState.currentYaw += yawDiff * ease;
-        autoFireState.currentPitch += pitchDiff * ease;
+        let yawDelta = clampedYaw - autoFireState.startYaw;
+        if (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
+        if (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
+        autoFireState.currentYaw = autoFireState.startYaw + yawDelta * ease;
+        autoFireState.currentPitch = autoFireState.startPitch + (clampedPitch - autoFireState.startPitch) * ease;
         if (t >= 1) {
             autoFireState.phase = 'firing';
             autoFireState.currentYaw = clampedYaw;
@@ -10935,12 +10940,11 @@ function autoFireTick() {
     } else if (autoFireState.phase === 'transition') {
         const t = Math.min(1, elapsed / autoFireState.TRANSITION_MS);
         const ease = t * t * (3 - 2 * t);
-        let yawDiff = clampedYaw - autoFireState.currentYaw;
-        if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
-        if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
-        const pitchDiff = clampedPitch - autoFireState.currentPitch;
-        autoFireState.currentYaw += yawDiff * ease;
-        autoFireState.currentPitch += pitchDiff * ease;
+        let yawDelta = clampedYaw - autoFireState.startYaw;
+        if (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
+        if (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
+        autoFireState.currentYaw = autoFireState.startYaw + yawDelta * ease;
+        autoFireState.currentPitch = autoFireState.startPitch + (clampedPitch - autoFireState.startPitch) * ease;
         if (t >= 1) {
             autoFireState.phase = 'firing';
             autoFireState.currentYaw = clampedYaw;
