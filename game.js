@@ -10827,9 +10827,10 @@ function aimCannon(targetX, targetY) {
     }
 }
 
-const AUTOFIRE_YAW_LIMIT = 65 * (Math.PI / 180);
-const AUTOFIRE_PITCH_MAX = 55 * (Math.PI / 180);
-const AUTOFIRE_PITCH_MIN = -40 * (Math.PI / 180);
+const AUTOFIRE_YAW_LIMIT = 55 * (Math.PI / 180);
+const AUTOFIRE_PITCH_MAX = 50 * (Math.PI / 180);
+const AUTOFIRE_PITCH_MIN = -35 * (Math.PI / 180);
+const AUTOFIRE_TRACK_SPEED = 8.0;
 
 const autoFireState = {
     lockedTarget: null,
@@ -10918,7 +10919,14 @@ function autoFireTick() {
         return { target: null, canFire: false };
     }
 
-    const dir = fish.group.position.clone().sub(muzzlePos).normalize();
+    let aimPos = fish.group.position.clone();
+    const weapon = CONFIG.weapons[gameState.currentWeapon];
+    if (weapon.type !== 'laser' && weapon.speed && fish.velocity) {
+        const dist = muzzlePos.distanceTo(aimPos);
+        const flightTime = dist / weapon.speed;
+        aimPos.add(fish.velocity.clone().multiplyScalar(flightTime));
+    }
+    const dir = aimPos.clone().sub(muzzlePos).normalize();
     const targetYaw = Math.atan2(dir.x, dir.z);
     const targetPitch = Math.asin(dir.y);
     const clampedYaw = Math.max(-AUTOFIRE_YAW_LIMIT, Math.min(AUTOFIRE_YAW_LIMIT, targetYaw));
@@ -10942,8 +10950,13 @@ function autoFireTick() {
             canFire = true;
         }
     } else if (autoFireState.phase === 'firing') {
-        autoFireState.currentYaw = clampedYaw;
-        autoFireState.currentPitch = clampedPitch;
+        const dt = 1 / 60;
+        const factor = 1 - Math.exp(-AUTOFIRE_TRACK_SPEED * dt);
+        let yawDiff = clampedYaw - autoFireState.currentYaw;
+        if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
+        if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
+        autoFireState.currentYaw += yawDiff * factor;
+        autoFireState.currentPitch += (clampedPitch - autoFireState.currentPitch) * factor;
         canFire = true;
     } else if (autoFireState.phase === 'transition') {
         const t = Math.min(1, elapsed / autoFireState.TRANSITION_MS);
