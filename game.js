@@ -868,6 +868,58 @@ const gameState = {
     scopeTargetFov: 60       // Target FOV for scope zoom (60=normal FPS, 30=zoomed)
 };
 
+// ==================== BALANCE AUDIT GUARD (T1 Regression) ====================
+// INVARIANT: In multiplayer mode, gameState.balance may ONLY be set by:
+//   1. onBalanceUpdate (server SSOT): gameState.balance = data.balance
+// INVARIANT: In single-player mode, gameState.balance may ONLY be modified by:
+//   1. fireBullet (cost deduction): gameState.balance -= weapon.cost
+//   2. autoFireAtFish (cost deduction): gameState.balance -= weapon.cost
+//   3. Fish.die() (payout): gameState.balance += win
+// FORBIDDEN: coin-fly animations must NEVER modify balance (LEAK-1 fix)
+// FORBIDDEN: spawnCoinFlyToScore must NEVER add reward to balance
+//
+// To verify: run `node scripts/balance-invariant-check.js` (grep-based static check)
+
+const _balanceAudit = {
+    lastServerBalance: null,
+    serverUpdateCount: 0,
+    enabled: false,
+    log: [],
+    start(initialBalance) {
+        this.lastServerBalance = initialBalance;
+        this.serverUpdateCount = 0;
+        this.enabled = true;
+        this.log = [];
+    },
+    onServerUpdate(serverBalance) {
+        if (!this.enabled) return;
+        this.serverUpdateCount++;
+        const clientBal = gameState.balance;
+        const drift = clientBal - serverBalance;
+        this.lastServerBalance = serverBalance;
+        if (Math.abs(drift) > 0.01) {
+            const entry = {
+                t: Date.now(),
+                server: serverBalance,
+                client: clientBal,
+                drift: drift,
+                updateNum: this.serverUpdateCount
+            };
+            this.log.push(entry);
+            console.warn('[BALANCE-AUDIT] drift detected:', entry);
+        }
+    },
+    getReport() {
+        return {
+            serverUpdates: this.serverUpdateCount,
+            driftEvents: this.log.length,
+            maxDrift: this.log.reduce((m, e) => Math.max(m, Math.abs(e.drift)), 0),
+            log: this.log.slice(-50)
+        };
+    }
+};
+window._balanceAudit = _balanceAudit;
+
 // ==================== GLB FISH MODEL LOADER (PDF Spec Compliant) ====================
 const glbLoaderState = {
     manifest: null,
@@ -8044,11 +8096,7 @@ function triggerCoinCollection() {
                     // Coin reached cannon muzzle - update balance and notify sound system
                     onCoinCollected(); // This will stop the sound when last coin arrives
                     
-                    // Update balance when coin reaches cannon (not on fish death)
-                    if (this.coin.reward > 0) {
-                        gameState.balance += this.coin.reward;
-                        gameState.score += Math.floor(this.coin.reward);
-                    }
+                    // LEAK-1 FIX: coin-fly is visual-only, balance comes from server SSOT
                     
                     spawnScorePopEffect();
                     return false;
@@ -8250,9 +8298,9 @@ function stopCasinoCoinSound() {
     }
 }
 
-// Issue #16: Coin fly animation to cannon muzzle - REFACTORED to use VFX manager
-// PERFORMANCE: Uses Coin.glb model or cached geometry as fallback
-// CASINO EFFECT: Each coin carries a portion of the reward, balance updates when coin reaches cannon
+// VISUAL ONLY: Coin fly animation to cannon muzzle
+// Balance is set exclusively by server balanceUpdate (multiplayer) or die() (single-player)
+// reward param is kept for visual reward popup sizing only — MUST NOT modify gameState.balance
 function spawnCoinFlyToScore(startPosition, coinCount, reward) {
     // FIX: Changed from undefined 'cannon' to 'cannonMuzzle' which is the actual gun barrel tip
     if (!particleGroup || !cannonMuzzle) return;
@@ -8340,10 +8388,7 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                     this.mesh.scale.setScalar(scale);
                     
                     if (t >= 1) {
-                        if (this.reward > 0) {
-                            gameState.balance += this.reward;
-                            gameState.score += Math.floor(this.reward);
-                        }
+                        // LEAK-1 FIX: coin-fly is visual-only, balance comes from server SSOT
                         playCoinReceiveSound();
                         spawnScorePopEffect();
                         return false;
@@ -9241,7 +9286,8 @@ window.startMultiplayerGame = function(manager) {
                 spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
                 
                 if (data.killedBy === multiplayerManager.playerId) {
-                    spawnCoinFlyToScore(fish.position.clone(), data.reward);
+                    const coinCount = (data.reward || 0) >= 50 ? 10 : (data.reward || 0) >= 20 ? 6 : (data.reward || 0) >= 10 ? 3 : 1;
+                    spawnCoinFlyToScore(fish.position.clone(), coinCount, 0);
                     playSound('coin');
                 }
                 
@@ -9258,6 +9304,7 @@ window.startMultiplayerGame = function(manager) {
         
         // Handle balance updates
         multiplayerManager.onBalanceUpdate = function(data) {
+            _balanceAudit.onServerUpdate(data.balance);
             gameState.balance = data.balance;
             updateUI();
         };
@@ -10920,11 +10967,13 @@ function autoFireAtFish(targetFish) {
     // Check cooldown
     if (gameState.cooldown > 0) return false;
     
-    // Check balance
     if (gameState.balance < weapon.cost) return false;
     
-    // Deduct cost
-    gameState.balance -= weapon.cost;
+    // LEAK-2 FIX: in multiplayer, server is SSOT for cost deduction
+    // in single-player, deduct locally (no server)
+    if (!multiplayerMode) {
+        gameState.balance -= weapon.cost;
+    }
     
     // Set cooldown
     gameState.cooldown = 1 / weapon.shotsPerSecond;
@@ -13909,9 +13958,9 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            // Spawn coin visual effect - no sound on collection
+            // Spawn coin visual effect (reward=0, server balanceUpdate is SSOT)
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
-            spawnCoinFlyToScore(deathPosition, coinCount, this.config.reward);
+            spawnCoinFlyToScore(deathPosition, coinCount, 0);
         } else {
             // SINGLE PLAYER MODE: Use local RTP calculation
             // COMBO SYSTEM: Update combo and get bonus
@@ -13950,21 +13999,14 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            // ALWAYS spawn coin visual effect based on fish size - no sound on collection
-            // CASINO EFFECT: Balance updates when coins reach cannon, not on fish death
+            // LEAK-3 FIX: pass actual win (0 when RTP fails), not fishReward
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
-            spawnCoinFlyToScore(deathPosition, coinCount, win > 0 ? win : fishReward);
+            spawnCoinFlyToScore(deathPosition, coinCount, win);
             
-            // Record the win for RTP tracking (bet was already recorded when shot was fired)
-            // NOTE: Balance is now updated when coins reach cannon (in triggerCoinCollection)
-            // This creates a more satisfying casino-like experience
             if (win > 0) {
                 recordWin(win);
-                // Balance update moved to coin collection - happens when coins reach cannon
-                // gameState.balance += win; // REMOVED - now in onCoinCollected()
-                // gameState.score += Math.floor(win); // REMOVED - now in onCoinCollected()
-                
-                // Show reward popup only when actual payout occurs
+                gameState.balance += win;
+                gameState.score += Math.floor(win);
                 showRewardPopup(deathPosition, win);
             }
             // Note: No "miss" sound or gray particles - every kill now has coin feedback
