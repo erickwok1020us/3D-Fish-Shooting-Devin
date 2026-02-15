@@ -515,7 +515,7 @@ const CONFIG = {
         // ECOLOGY: Solitary or mother-calf pairs, cruise at 5-20 km/h
         // SWIMMING: Slow, steady, majestic cruise with minimal direction changes
         blueWhale: { 
-            hp: 800, speedMin: 20, speedMax: 42, reward: 500, size: 140, 
+            hp: 800, speedMin: 25, speedMax: 42, reward: 500, size: 140, 
             color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, 
             pattern: 'cruise', schoolSize: [1, 2], form: 'whale',
             category: 'largePredator',
@@ -548,7 +548,7 @@ const CONFIG = {
         // ECOLOGY: Solitary hunters, burst speeds up to 130 km/h
         // SWIMMING: High-speed sprints, fastest fish in the ocean
         marlin: { 
-            hp: 400, speedMin: 110, speedMax: 310, reward: 300, size: 80, 
+            hp: 400, speedMin: 110, speedMax: 250, reward: 300, size: 80, 
             color: 0x2266aa, secondaryColor: 0x44aaff, count: 2, 
             pattern: 'burstSprint', schoolSize: [1, 2], form: 'marlin',
             category: 'largePredator',
@@ -593,7 +593,7 @@ const CONFIG = {
         // ECOLOGY: Adults mostly solitary, juveniles in small groups, ambush hunters
         // SWIMMING: Motionless waiting + lightning-fast strikes
         barracuda: { 
-            hp: 180, speedMin: 19, speedMax: 225, reward: 180, size: 55, 
+            hp: 180, speedMin: 25, speedMax: 200, reward: 180, size: 55, 
             color: 0xaabbcc, secondaryColor: 0x667788, count: 4, 
             pattern: 'ambush', schoolSize: [1, 3], form: 'barracuda',
             category: 'mediumLarge',
@@ -603,7 +603,7 @@ const CONFIG = {
         // ECOLOGY: Strictly solitary and territorial, ambush from reef holes
         // SWIMMING: Slow bottom patrol + sudden short bursts
         grouper: { 
-            hp: 250, speedMin: 19, speedMax: 56, reward: 200, size: 60, 
+            hp: 250, speedMin: 25, speedMax: 56, reward: 200, size: 60, 
             color: 0x886644, secondaryColor: 0x553322, count: 3, 
             pattern: 'bottomBurst', schoolSize: [1, 1], form: 'grouper',
             category: 'mediumLarge',
@@ -679,7 +679,7 @@ const CONFIG = {
         // ECOLOGY: Family groups of 2-4 around single anemone, territorial
         // SWIMMING: Short darting movements within territory
         clownfish: { 
-            hp: 50, speedMin: 20, speedMax: 40, reward: 70, size: 15, 
+            hp: 50, speedMin: 25, speedMax: 40, reward: 70, size: 15, 
             color: 0xff6600, secondaryColor: 0xffffff, count: 6, 
             pattern: 'territorial', schoolSize: [2, 3], form: 'clownfish',
             category: 'smallSchool',
@@ -712,7 +712,7 @@ const CONFIG = {
         // ECOLOGY: Strictly solitary, slow deliberate movements
         // SWIMMING: Very slow, gentle rotation, fin-propelled
         pufferfish: { 
-            hp: 100, speedMin: 13, speedMax: 38, reward: 120, size: 25, 
+            hp: 100, speedMin: 25, speedMax: 38, reward: 120, size: 25, 
             color: 0xddcc88, secondaryColor: 0x886644, count: 4, 
             pattern: 'slowRotation', schoolSize: [1, 1], form: 'pufferfish',
             category: 'specialForm',
@@ -722,7 +722,7 @@ const CONFIG = {
         // ECOLOGY: Monogamous pairs, vertical drifting, very slow
         // SWIMMING: Vertical posture, dorsal fin vibration, drift with current
         seahorse: { 
-            hp: 80, speedMin: 10, speedMax: 25, reward: 130, size: 20, 
+            hp: 80, speedMin: 25, speedMax: 25, reward: 130, size: 20, 
             color: 0xffaa44, secondaryColor: 0xcc8833, count: 4, 
             pattern: 'verticalDrift', schoolSize: [1, 2], form: 'seahorse',
             category: 'specialForm',
@@ -14064,7 +14064,6 @@ class Fish {
                 recordWin(win);
                 gameState.balance += win;
                 gameState.score += Math.floor(win);
-                showRewardPopup(deathPosition, win);
             }
             // Note: No "miss" sound or gray particles - every kill now has coin feedback
         }
