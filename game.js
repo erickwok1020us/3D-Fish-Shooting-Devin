@@ -11026,16 +11026,13 @@ function autoFireAtFish(targetFish) {
     
     if (gameState.balance < weapon.cost) return false;
     
-    // LEAK-2 FIX: in multiplayer, server is SSOT for cost deduction
-    // in single-player, deduct locally (no server)
     if (!multiplayerMode) {
         gameState.balance -= weapon.cost;
+        recordBet(weaponKey);
     }
     
-    // Set cooldown
     gameState.cooldown = 1 / weapon.shotsPerSecond;
     
-    // Track last weapon used
     gameState.lastWeaponKey = weaponKey;
     
     // PERFORMANCE: Reuse pre-allocated temp vector instead of new Vector3()
@@ -14434,13 +14431,11 @@ function getTargetRTP(effectiveMultiplier) {
 function calculateKillRate(fishReward, weaponKey, fishHP) {
     const weapon = CONFIG.weapons[weaponKey];
     
-    // Calculate expected shots to kill this fish
-    // Use average damage for weapons with variable damage
     const avgDamage = weapon.damage;
-    const shotsToKill = Math.max(1, Math.ceil((fishHP || 100) / avgDamage));
+    const hitsToKill = Math.max(1, Math.ceil((fishHP || 100) / avgDamage));
     
-    // Calculate cost to kill
-    const costToKill = shotsToKill * weapon.cost;
+    const costPerHit = weapon.cost / weapon.multiplier;
+    const costToKill = hitsToKill * costPerHit;
     
     // Calculate effective multiplier (reward / cost)
     const effectiveMultiplier = fishReward / costToKill;
