@@ -14016,6 +14016,7 @@ class Fish {
             // Spawn coin visual effect (reward=0, server balanceUpdate is SSOT)
             const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
             spawnCoinFlyToScore(deathPosition, coinCount, 0);
+            addKillFeedEntry(this.form, this.config.reward);
         } else {
             // SINGLE PLAYER MODE: Use local RTP calculation
             // COMBO SYSTEM: Update combo and get bonus
@@ -14062,9 +14063,9 @@ class Fish {
                 recordWin(win);
                 gameState.balance += win;
                 gameState.score += Math.floor(win);
-                showRewardPopup(deathPosition, win);
-                addKillFeedEntry(this.form, win);
             }
+            
+            addKillFeedEntry(this.form, this.config.reward);
             // Note: No "miss" sound or gray particles - every kill now has coin feedback
         }
         
@@ -16468,7 +16469,7 @@ function renderKillFeed() {
     if (!list) return;
 
     const panel = document.getElementById('kill-feed-panel');
-    if (panel && killFeedRecords.length > 0) {
+    if (panel) {
         panel.style.display = '';
     }
 
