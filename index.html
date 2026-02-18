@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fish Shooter 3D</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -88,125 +89,150 @@
             margin-left: -8px;
         }
         
-        /* Settings Container - Top Right (Issue #19: Unified container) */
+        /* Settings Container - Top Right (Style A: Detailed Gear SVG) */
         #settings-container {
             position: absolute;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: linear-gradient(180deg, rgba(40, 40, 50, 0.95), rgba(20, 20, 30, 0.95));
-            padding: 8px 16px;
-            border-radius: 25px;
-            border: 2px solid rgba(100, 100, 120, 0.5);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            top: 16px;
+            right: 16px;
+            background: linear-gradient(135deg, rgba(0, 18, 40, 0.92), rgba(0, 8, 22, 0.95));
+            border: 1.5px solid rgba(0, 200, 255, 0.35);
+            border-radius: 5px;
+            padding: 6px 16px;
+            min-width: 80px;
+            text-align: center;
             pointer-events: auto;
             cursor: pointer;
             transition: all 0.3s ease;
+            box-shadow: 0 0 12px rgba(0, 200, 255, 0.06);
+            overflow: hidden;
         }
-        
+        #settings-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 15%;
+            right: 15%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.5), transparent);
+        }
         #settings-container:hover {
-            background: linear-gradient(180deg, rgba(50, 50, 60, 0.95), rgba(30, 30, 40, 0.95));
-            border-color: rgba(150, 150, 170, 0.6);
-            transform: scale(1.05);
+            border-color: rgba(0, 200, 255, 0.6);
+            box-shadow: 0 0 20px rgba(0, 200, 255, 0.15);
         }
-        
-        #settings-container .settings-icon {
-            font-size: 22px;
-            color: #aabbcc;
-            transition: all 0.3s ease;
-        }
-        
-        #settings-container:hover .settings-icon {
-            color: #ddeeff;
-            transform: rotate(45deg);
-        }
-        
         #settings-container .settings-label {
-            font-size: 14px;
-            font-weight: bold;
-            color: #aabbcc;
+            font-family: 'Orbitron', monospace;
+            font-size: 7px;
+            letter-spacing: 2px;
+            color: rgba(0, 200, 255, 0.5);
+            display: block;
             text-transform: uppercase;
-            letter-spacing: 1px;
+        }
+        #settings-container .settings-icon-svg {
+            width: 32px;
+            height: 32px;
+            margin: 4px auto;
+            display: block;
+        }
+        #settings-container .settings-icon-svg svg {
+            width: 100%;
+            height: 100%;
+            fill: none;
+            stroke: #00d4ff;
+            stroke-width: 1.5;
+            filter: drop-shadow(0 0 4px rgba(0, 212, 255, 0.5));
+            transition: transform 0.3s ease;
+        }
+        #settings-container:hover .settings-icon-svg svg {
+            transform: rotate(30deg);
         }
         
         
-        /* Kill Feed Panel - Bottom Right (Style C: Framed Panel, scaled ~12%) */
+        /* Kill Feed Panel - Bottom Right (Style B: Tier Accent Bar) */
         #kill-feed-panel {
             position: absolute;
             bottom: 20px;
             right: 20px;
-            width: 264px;
-            background: linear-gradient(180deg, rgba(0, 15, 35, 0.85), rgba(0, 8, 20, 0.8));
-            border: 1.5px solid rgba(0, 180, 255, 0.35);
-            border-radius: 9px;
-            padding: 11px;
+            width: 270px;
+            background: linear-gradient(180deg, rgba(0, 15, 35, 0.88), rgba(0, 8, 20, 0.85));
+            border: 1.5px solid rgba(0, 180, 255, 0.4);
+            border-radius: 10px;
+            padding: 12px;
             pointer-events: none;
             z-index: 11;
-            box-shadow: 0 0 22px rgba(0, 100, 200, 0.15), inset 0 0 16px rgba(0, 60, 120, 0.1);
+            box-shadow: 0 0 25px rgba(0, 100, 200, 0.18), inset 0 0 18px rgba(0, 60, 120, 0.12);
+            font-family: 'Orbitron', monospace;
         }
 
         #kill-feed-panel .kf-corner {
             position: absolute;
-            width: 10px;
-            height: 10px;
-            border-color: rgba(0, 200, 255, 0.5);
+            width: 11px;
+            height: 11px;
+            border-color: rgba(0, 200, 255, 0.6);
             border-style: solid;
         }
-        #kill-feed-panel .kf-corner-tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-radius: 5px 0 0 0; }
-        #kill-feed-panel .kf-corner-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; border-radius: 0 5px 0 0; }
-        #kill-feed-panel .kf-corner-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; border-radius: 0 0 0 5px; }
-        #kill-feed-panel .kf-corner-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-radius: 0 0 5px 0; }
+        #kill-feed-panel .kf-corner-tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-radius: 6px 0 0 0; }
+        #kill-feed-panel .kf-corner-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; border-radius: 0 6px 0 0; }
+        #kill-feed-panel .kf-corner-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; border-radius: 0 0 0 6px; }
+        #kill-feed-panel .kf-corner-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-radius: 0 0 6px 0; }
 
         #kill-feed-panel .kf-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 9px;
-            padding-bottom: 7px;
-            border-bottom: 1px solid rgba(0, 180, 255, 0.2);
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(0, 180, 255, 0.25);
         }
 
         #kill-feed-panel .kf-header-title {
-            font-size: 11px;
-            color: rgba(0, 180, 255, 0.6);
+            font-size: 9px;
+            color: rgba(0, 200, 255, 0.7);
             text-transform: uppercase;
-            letter-spacing: 2.2px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            letter-spacing: 3px;
+            font-family: 'Orbitron', monospace;
         }
 
-        #kill-feed-panel .kf-header-icon {
-            font-size: 14px;
-            color: rgba(0, 180, 255, 0.4);
+        #kill-feed-panel .kf-header-count {
+            font-size: 9px;
+            color: rgba(0, 200, 255, 0.5);
+            letter-spacing: 1px;
+            font-family: 'Orbitron', monospace;
         }
 
         #kill-feed-panel .kf-list {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 5px;
         }
 
         .kill-feed-entry {
             display: flex;
             align-items: center;
-            gap: 11px;
-            padding: 7px 9px;
+            gap: 10px;
+            padding: 7px 10px;
             background: rgba(0, 20, 45, 0.5);
             border-radius: 6px;
-            border: 1px solid transparent;
-            opacity: 0.5;
+            border-left: 3px solid transparent;
+            opacity: 0.45;
             transition: all 0.3s ease;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Orbitron', monospace;
+            position: relative;
+            overflow: hidden;
         }
 
+        .kill-feed-entry.tier-low { border-left-color: #00aaff; }
+        .kill-feed-entry.tier-mid { border-left-color: #00e878; }
+        .kill-feed-entry.tier-high { border-left-color: #ffaa00; }
+
         .kill-feed-entry.latest {
-            border-color: rgba(0, 212, 255, 0.5);
-            background: linear-gradient(135deg, rgba(0, 35, 70, 0.7), rgba(0, 20, 45, 0.6));
-            box-shadow: 0 0 14px rgba(0, 212, 255, 0.2);
             opacity: 1;
-            transform: scale(1.02);
+            background: linear-gradient(135deg, rgba(0, 40, 80, 0.6), rgba(0, 20, 50, 0.5));
+            box-shadow: 0 0 12px rgba(0, 200, 255, 0.12);
             animation: killFeedPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .kill-feed-entry.latest.tier-high {
+            background: linear-gradient(135deg, rgba(40, 30, 0, 0.6), rgba(20, 15, 0, 0.5));
+            box-shadow: 0 0 12px rgba(255, 170, 0, 0.15);
         }
 
         .kill-feed-entry .kf-fish-icon {
@@ -216,16 +242,18 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
+            font-size: 18px;
             flex-shrink: 0;
-            background: rgba(0, 30, 60, 0.6);
-            border: 1px solid rgba(0, 150, 255, 0.2);
+            background: rgba(0, 30, 60, 0.5);
+            border: 1px solid rgba(0, 150, 255, 0.15);
         }
 
         .kill-feed-entry.latest .kf-fish-icon {
-            border-color: rgba(0, 212, 255, 0.5);
-            background: rgba(0, 40, 80, 0.7);
-            box-shadow: 0 0 9px rgba(0, 212, 255, 0.25);
+            border-color: rgba(0, 200, 255, 0.4);
+        }
+        .kill-feed-entry.latest.tier-high .kf-fish-icon {
+            border-color: rgba(255, 170, 0, 0.4);
+            background: rgba(40, 25, 0, 0.5);
         }
 
         .kill-feed-entry .kf-info {
@@ -233,11 +261,11 @@
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: 1px;
+            gap: 2px;
         }
 
         .kill-feed-entry .kf-name {
-            font-size: 12px;
+            font-size: 9px;
             color: #5a9abf;
             white-space: nowrap;
             overflow: hidden;
@@ -247,36 +275,43 @@
         }
 
         .kill-feed-entry.latest .kf-name {
-            color: #a0dfff;
+            color: #a8e4ff;
+        }
+        .kill-feed-entry.latest.tier-high .kf-name {
+            color: #ffd88a;
         }
 
         .kill-feed-entry .kf-reward {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
             color: #00e878;
             text-shadow: 0 0 6px rgba(0, 232, 120, 0.3);
         }
 
         .kill-feed-entry.latest .kf-reward {
-            font-size: 18px;
+            font-size: 17px;
             color: #00ff88;
-            text-shadow: 0 0 11px rgba(0, 255, 136, 0.5);
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+        }
+        .kill-feed-entry.latest.tier-high .kf-reward {
+            color: #ffaa00;
+            text-shadow: 0 0 8px rgba(255, 170, 0, 0.4);
         }
 
         @keyframes killFeedPop {
             0% { opacity: 0; transform: scale(0.85) translateY(10px); }
             60% { opacity: 1; transform: scale(1.05) translateY(-2px); }
-            100% { opacity: 1; transform: scale(1.02) translateY(0); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
         }
 
         @keyframes killFeedFadeOut {
-            from { opacity: 0.5; max-height: 55px; margin-bottom: 6px; padding: 7px 9px; }
-            to { opacity: 0; max-height: 0; margin-bottom: 0; padding: 0 9px; }
+            from { opacity: 0.45; max-height: 55px; margin-bottom: 5px; padding: 7px 10px; }
+            to { opacity: 0; max-height: 0; margin-bottom: 0; padding: 0 10px; }
         }
 
         @media (max-width: 768px) {
             #kill-feed-panel {
-                width: 210px;
+                width: 220px;
                 bottom: 100px;
                 right: 10px;
                 padding: 8px;
@@ -311,71 +346,204 @@
             border-radius: 4px;
         }
         
-        /* Weapon Panel - Bottom Left (Issue #4 - group all buttons together) */
+        /* Weapon Panel - Bottom Left (Sci-Fi with Digital LED 4-digit ammo) */
         #weapon-panel {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            display: flex;
-            gap: 8px;
+            bottom: 16px;
+            left: 16px;
+            width: 280px;
+            font-family: 'Orbitron', monospace;
             pointer-events: auto;
         }
-        
-        .weapon-group {
-            display: flex;
-            gap: 8px;
+        #weapon-panel .wp-outer {
+            position: relative;
+            background: linear-gradient(170deg, rgba(0, 18, 40, 0.94), rgba(0, 8, 22, 0.97));
+            border: 1.5px solid rgba(0, 200, 255, 0.35);
+            border-radius: 8px;
+            padding: 14px 16px;
+            overflow: hidden;
+            box-shadow: 0 0 25px rgba(0, 150, 255, 0.06);
         }
-        
-        .weapon-btn {
-            width: 70px;
-            height: 70px;
-            border-radius: 12px;
-            border: 3px solid #444;
-            background: linear-gradient(180deg, rgba(40, 40, 50, 0.95), rgba(20, 20, 30, 0.95));
-            cursor: pointer;
+        #weapon-panel .wp-outer::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1.5px;
+            background: linear-gradient(90deg, transparent 5%, #00d4ff 25%, #00d4ff 75%, transparent 95%);
+            box-shadow: 0 0 10px #00d4ff;
+        }
+        #weapon-panel .wp-header {
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        #weapon-panel .wp-dot {
+            width: 5px; height: 5px;
+            background: #00d4ff;
+            box-shadow: 0 0 6px #00d4ff;
+            border-radius: 1px;
+            transform: rotate(45deg);
+        }
+        #weapon-panel .wp-title {
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: #00d4ff;
+            text-shadow: 0 0 6px rgba(0, 200, 255, 0.3);
+        }
+        #weapon-panel .wp-line {
+            flex: 1; height: 1px;
+            background: linear-gradient(90deg, rgba(0, 200, 255, 0.3), transparent);
+        }
+        #weapon-panel .wp-weapons {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .weapon-btn {
+            flex: 1;
+            position: relative;
+            height: 40px;
+            background: rgba(0, 20, 50, 0.5);
+            border: 1px solid rgba(0, 180, 255, 0.18);
+            border-radius: 7px;
+            display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s ease;
-            position: relative;
+            cursor: pointer;
+            transition: all 0.2s ease;
         }
-        
-        .weapon-btn:hover {
-            transform: scale(1.1);
-            border-color: #666;
-        }
-        
-        .weapon-btn.active {
-            border-color: #00ff88;
-            box-shadow: 0 0 25px rgba(0, 255, 136, 0.6);
-        }
-        
-        .weapon-btn .weapon-icon {
-            font-size: 20px;
-            margin-bottom: 2px;
-        }
-        
         .weapon-btn .multiplier {
-            font-size: 18px;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 0 10px currentColor;
+            font-family: 'Orbitron', monospace;
+            font-size: 15px;
+            font-weight: 900;
+            color: rgba(0, 180, 255, 0.3);
         }
-        
-        .weapon-btn .cost {
-            font-size: 9px;
-            color: #aaa;
-            margin-top: 1px;
+        .weapon-btn:hover {
+            border-color: rgba(0, 200, 255, 0.4);
+            background: rgba(0, 30, 70, 0.4);
         }
-        
-        .weapon-btn[data-weapon="1x"] { --weapon-color: #66ff66; }
-        .weapon-btn[data-weapon="3x"] { --weapon-color: #ffaa00; }
-        .weapon-btn[data-weapon="5x"] { --weapon-color: #00aaff; }
-        .weapon-btn[data-weapon="8x"] { --weapon-color: #ff44ff; }
-        
+        .weapon-btn.active {
+            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.2), rgba(0, 60, 120, 0.1));
+            border-color: #00d4ff;
+            box-shadow: 0 0 15px rgba(0, 200, 255, 0.12);
+        }
         .weapon-btn.active .multiplier {
-            color: var(--weapon-color);
+            color: #00ffff;
+            text-shadow: 0 0 12px rgba(0, 255, 255, 0.5);
+        }
+        .weapon-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px; left: 15%; right: 15%;
+            height: 2px;
+            background: #00d4ff;
+            box-shadow: 0 0 8px #00d4ff;
+            border-radius: 1px;
+        }
+        /* Digital LED 4-digit ammo display */
+        #digi-ammo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            padding: 6px 0;
+        }
+        #digi-ammo .digi-ammo-wrap {
+            position: relative;
+            padding-top: 14px;
+        }
+        #digi-ammo .digi-ammo-label {
+            font-size: 7px;
+            letter-spacing: 2px;
+            color: rgba(0, 200, 255, 0.45);
+            position: absolute;
+            top: 0; left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+        }
+        #digi-ammo .digi-ammo-digits {
+            display: flex;
+            gap: 3px;
+            align-items: center;
+        }
+        .digi-digit {
+            width: 28px; height: 38px;
+            background: rgba(0, 12, 30, 0.85);
+            border: 1.5px solid rgba(0, 180, 255, 0.2);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', monospace;
+            font-size: 22px;
+            font-weight: 900;
+            color: #00ffff;
+            text-shadow: 0 0 12px rgba(0, 255, 255, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        .digi-digit::before {
+            content: '';
+            position: absolute;
+            top: 49%; left: 0; right: 0;
+            height: 1px;
+            background: rgba(0, 0, 0, 0.4);
+        }
+        .digi-digit::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 45%;
+            background: linear-gradient(180deg, rgba(0, 200, 255, 0.05), transparent);
+        }
+        #digi-ammo .digi-ammo-bar {
+            width: 100%; height: 3px;
+            background: rgba(0, 25, 50, 0.4);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        #digi-ammo .digi-ammo-bar-fill {
+            height: 100%; width: 75%;
+            background: linear-gradient(90deg, #0088bb, #00d4ff);
+            border-radius: 2px;
+            box-shadow: 0 0 4px rgba(0, 200, 255, 0.3);
+            transition: width 0.3s ease, background 0.3s ease;
+        }
+        #weapon-panel .wp-auto {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0, 200, 255, 0.1);
+        }
+        #weapon-panel .auto-label {
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: rgba(0, 255, 100, 0.65);
+        }
+        #weapon-panel .auto-pill {
+            display: flex;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 255, 100, 0.3);
+        }
+        #weapon-panel .auto-pill .opt {
+            padding: 3px 12px;
+            font-family: 'Orbitron', monospace;
+            font-size: 7px;
+            letter-spacing: 1px;
+            color: rgba(0, 255, 100, 0.3);
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            transition: all 0.2s;
+        }
+        #weapon-panel .auto-pill .opt.on {
+            background: rgba(0, 255, 100, 0.15);
+            color: #00ff66;
+            text-shadow: 0 0 6px rgba(0, 255, 100, 0.4);
         }
         
         /* Auto-shoot Toggle, Center View, and View Mode - Bottom Right */
@@ -1395,7 +1563,7 @@
                 <span class="balance-label">USDT</span>
             </div>
             
-            <!-- Kill Feed Panel - Bottom Right (Style C: Framed Panel) -->
+            <!-- Kill Feed Panel - Bottom Right (Style B: Tier Accent Bar) -->
             <div id="kill-feed-panel" style="display:none;">
                 <div class="kf-corner kf-corner-tl"></div>
                 <div class="kf-corner kf-corner-tr"></div>
@@ -1403,15 +1571,20 @@
                 <div class="kf-corner kf-corner-br"></div>
                 <div class="kf-header">
                     <div class="kf-header-title">Kill Log</div>
-                    <div class="kf-header-icon">&#9876;</div>
+                    <div class="kf-header-count" id="kill-feed-count">0/4</div>
                 </div>
                 <div class="kf-list" id="kill-feed-list"></div>
             </div>
             
-            <!-- Settings Container - Top Right (Issue #19: Unified container) -->
+            <!-- Settings Container - Top Right (Style A: Detailed Gear SVG) -->
             <div id="settings-container" onclick="toggleSettingsPanel()">
-                <span class="settings-icon">&#9881;</span>
-                <span class="settings-label">Settings</span>
+                <span class="settings-label">SETTINGS</span>
+                <div class="settings-icon-svg">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z" fill="none" stroke="#00d4ff" stroke-width="1.2"/>
+                        <circle cx="12" cy="12" r="2.2" fill="none" stroke="#00d4ff" stroke-width="1"/>
+                    </svg>
+                </div>
             </div>
             
             <!-- Settings Panel -->
@@ -1490,37 +1663,41 @@
                 Select weapon below
             </div>
             
-            <!-- Auto-shoot Toggle, View Mode, and Center View - Bottom Right -->
-            <div id="auto-shoot-container">
+            <!-- Auto-shoot Toggle, View Mode, and Center View - Bottom Right (hidden, replaced by weapon panel pill) -->
+            <div id="auto-shoot-container" style="display:none;">
                 <button id="auto-shoot-btn">AUTO OFF (A)</button>
                 <button id="center-view-btn">CENTER VIEW (C)</button>
             </div>
             
-            <!-- Weapon Panel - Updated: 4 weapons only (1x, 3x, 5x, 8x) -->
+            <!-- Weapon Panel - Sci-Fi with Digital LED 4-digit ammo -->
             <div id="weapon-panel">
-                <div class="weapon-group">
-                    <button class="weapon-btn active" data-weapon="1x">
-                        <span class="weapon-icon">&#x2022;</span>
-                        <span class="multiplier">1x</span>
-                        <span class="cost">1 USDT</span>
-                    </button>
-                    <button class="weapon-btn" data-weapon="3x">
-                        <span class="weapon-icon">&#x2234;</span>
-                        <span class="multiplier">3x</span>
-                        <span class="cost">3 USDT</span>
-                    </button>
-                </div>
-                <div class="weapon-group">
-                    <button class="weapon-btn" data-weapon="5x">
-                        <span class="weapon-icon">&#x26A1;</span>
-                        <span class="multiplier">5x</span>
-                        <span class="cost">5 USDT</span>
-                    </button>
-                    <button class="weapon-btn" data-weapon="8x">
-                        <span class="weapon-icon">&#x1F4A3;</span>
-                        <span class="multiplier">8x</span>
-                        <span class="cost">8 USDT</span>
-                    </button>
+                <div class="wp-outer">
+                    <div class="wp-header"><div class="wp-dot"></div><div class="wp-title">BET MULTIPLIER</div><div class="wp-line"></div></div>
+                    <div class="wp-weapons">
+                        <button class="weapon-btn active" data-weapon="1x"><span class="multiplier">1x</span></button>
+                        <button class="weapon-btn" data-weapon="3x"><span class="multiplier">3x</span></button>
+                        <button class="weapon-btn" data-weapon="5x"><span class="multiplier">5x</span></button>
+                        <button class="weapon-btn" data-weapon="8x"><span class="multiplier">8x</span></button>
+                    </div>
+                    <div id="digi-ammo">
+                        <div class="digi-ammo-wrap">
+                            <div class="digi-ammo-label">AMMO</div>
+                            <div class="digi-ammo-digits">
+                                <div class="digi-digit" id="digi-d0">1</div>
+                                <div class="digi-digit" id="digi-d1">0</div>
+                                <div class="digi-digit" id="digi-d2">0</div>
+                                <div class="digi-digit" id="digi-d3">0</div>
+                            </div>
+                            <div class="digi-ammo-bar"><div class="digi-ammo-bar-fill" id="digi-ammo-bar-fill"></div></div>
+                        </div>
+                    </div>
+                    <div class="wp-auto">
+                        <div class="auto-label">AUTO FIRE</div>
+                        <div class="auto-pill" id="auto-pill">
+                            <button class="opt on" id="auto-off-btn">OFF</button>
+                            <button class="opt" id="auto-on-btn">ON</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
