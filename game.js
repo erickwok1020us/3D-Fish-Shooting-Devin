@@ -7864,7 +7864,7 @@ function spawnCoinBurst(position, count) {
 const coinCollectionSystem = {
     waitingCoins: [],           // Coins waiting to be collected
     collectionTimer: 0,         // Time until next collection
-    collectionInterval: 8000,   // Wait 8 seconds AFTER collection finishes before next collection
+    collectionInterval: 4000,   // Wait 4 seconds before coins fly to cannon
     isCollecting: false,        // Whether collection animation is in progress
     initialized: false,
     pendingReward: 0,           // Total reward waiting to be collected (balance updates on coin arrival)
@@ -7882,7 +7882,11 @@ function spawnWaitingCoin(position, rewardPerCoin = 0) {
     if (!particleGroup) return;
     
     const useCoinGLB = coinGLBState.loaded && coinGLBState.model;
-    if (!useCoinGLB) return; // Only support GLB coins for this system
+    if (!useCoinGLB) return;
+    
+    if (coinCollectionSystem.waitingCoins.length === 0 && !coinCollectionSystem.isCollecting) {
+        coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval;
+    }
     
     const coinModel = cloneCoinModel();
     if (!coinModel) return;
@@ -8087,11 +8091,9 @@ function triggerCoinCollection() {
                 
                 if (t >= 1) {
                     // Coin reached cannon muzzle - update balance and notify sound system
-                    onCoinCollected(); // This will stop the sound when last coin arrives
+                    onCoinCollected();
                     
                     // LEAK-1 FIX: coin-fly is visual-only, balance comes from server SSOT
-                    
-                    spawnScorePopEffect();
                     return false;
                 }
                 return true;
@@ -8381,9 +8383,7 @@ function spawnCoinFlyToScore(startPosition, coinCount, reward) {
                     this.mesh.scale.setScalar(scale);
                     
                     if (t >= 1) {
-                        // LEAK-1 FIX: coin-fly is visual-only, balance comes from server SSOT
                         playCoinReceiveSound();
-                        spawnScorePopEffect();
                         return false;
                     }
                     return true;
@@ -9273,8 +9273,10 @@ window.startMultiplayerGame = function(manager) {
                 spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
                 
                 if (data.killedBy === multiplayerManager.playerId) {
-                    const coinCount = (data.reward || 0) >= 50 ? 10 : (data.reward || 0) >= 20 ? 6 : (data.reward || 0) >= 10 ? 3 : 1;
-                    spawnCoinFlyToScore(fish.position.clone(), coinCount, 0);
+                    const coinCount = (data.reward || 0) >= 50 ? 3 : (data.reward || 0) >= 20 ? 2 : 1;
+                    for (let ci = 0; ci < coinCount; ci++) {
+                        spawnWaitingCoin(fish.position.clone(), 0);
+                    }
                     playSound('coin');
                 }
                 
@@ -14013,9 +14015,10 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            // Spawn coin visual effect (reward=0, server balanceUpdate is SSOT)
-            const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
-            spawnCoinFlyToScore(deathPosition, coinCount, 0);
+            const coinCount = fishSize === 'boss' ? 3 : fishSize === 'large' ? 2 : 1;
+            for (let ci = 0; ci < coinCount; ci++) {
+                spawnWaitingCoin(deathPosition, 0);
+            }
             addKillFeedEntry(this.form, this.config.reward);
         } else {
             // SINGLE PLAYER MODE: Use local RTP calculation
@@ -14055,9 +14058,10 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            // LEAK-3 FIX: pass actual win (0 when RTP fails), not fishReward
-            const coinCount = fishSize === 'boss' ? 10 : fishSize === 'large' ? 6 : fishSize === 'medium' ? 3 : 1;
-            spawnCoinFlyToScore(deathPosition, coinCount, win);
+            const coinCount = fishSize === 'boss' ? 3 : fishSize === 'large' ? 2 : 1;
+            for (let ci = 0; ci < coinCount; ci++) {
+                spawnWaitingCoin(deathPosition, 0);
+            }
             
             if (win > 0) {
                 recordWin(win);
