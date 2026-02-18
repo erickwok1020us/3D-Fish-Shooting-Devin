@@ -6383,6 +6383,7 @@ const HIT_COMBO_COLORS = [
     '#ff66cc'
 ];
 function showHitMarker(spreadIndex, fishWorldPos, fish) {
+    return;
     const el = document.createElement('div');
     let startX = window.innerWidth / 2;
     let startY = window.innerHeight / 2;
