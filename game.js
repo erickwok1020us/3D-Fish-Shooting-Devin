@@ -772,7 +772,7 @@ const CONFIG = {
             convergenceDistance: 1400
         },
         '8x': {
-            multiplier: 8, cost: 8, 
+            multiplier: 8, cost: 8, speed: 6000,
             damage: 350, shotsPerSecond: 1.67,
             type: 'laser', piercing: true, laserWidth: 8,
             color: 0xff4444, size: 16,
@@ -10827,9 +10827,9 @@ function aimCannon(targetX, targetY) {
     }
 }
 
-const AUTOFIRE_YAW_LIMIT = 55 * (Math.PI / 180);
-const AUTOFIRE_PITCH_MAX = 50 * (Math.PI / 180);
-const AUTOFIRE_PITCH_MIN = -35 * (Math.PI / 180);
+const AUTOFIRE_YAW_LIMIT = 46.75 * (Math.PI / 180);
+const AUTOFIRE_PITCH_MAX = 42.5 * (Math.PI / 180);
+const AUTOFIRE_PITCH_MIN = -29.75 * (Math.PI / 180);
 const AUTOFIRE_TRACK_SPEED = 8.0;
 
 const autoFireState = {
@@ -10921,7 +10921,7 @@ function autoFireTick() {
 
     let aimPos = fish.group.position.clone();
     const weapon = CONFIG.weapons[gameState.currentWeapon];
-    if (weapon.type !== 'laser' && weapon.speed && fish.velocity) {
+    if (weapon.speed && fish.velocity) {
         const dist = muzzlePos.distanceTo(aimPos);
         const flightTime = dist / weapon.speed;
         aimPos.add(fish.velocity.clone().multiplyScalar(flightTime));
@@ -11067,7 +11067,9 @@ function autoFireAtFish(targetFish) {
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
     } else if (weapon.type === 'laser') {
-        fireLaserBeam(muzzlePos, direction, weaponKey);
+        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        spawnLaserBeamEffect(muzzlePos, muzzlePos.clone().add(direction.clone().multiplyScalar(3000)), weapon.color, weapon.laserWidth || 8);
+        triggerScreenShakeWithStrength(8, 100);
     } else {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
@@ -11075,7 +11077,7 @@ function autoFireAtFish(targetFish) {
     playWeaponShot(weaponKey);
     spawnMuzzleFlash(weaponKey, muzzlePos, direction);
     
-    // Light recoil for auto fire (reduced strength for smoother animation)
+    // Light recoil for auto fire(reduced strength for smoother animation)
     if (cannonBarrel) {
         const weaponConfig = WEAPON_VFX_CONFIG[weaponKey];
         const recoilStrength = weaponConfig ? weaponConfig.recoilStrength : 5;
@@ -14623,8 +14625,8 @@ class Bullet {
         this.origin.copy(origin);
         
         // SIMPLIFIED: All weapons fire straight - no parabolic trajectory
-        // 1x, 3x, 5x (rocket): straight projectile
-        // 8x (laser): handled by fireLaserBeam(), not Bullet class
+        // 1x, 3x, 5x (rocket): straight projectile at speed 2000
+        // 8x (laser): straight projectile at speed 6000 with piercing
         this.velocity.copy(direction).normalize().multiplyScalar(weapon.speed);
         
         this.spreadIndex = 0;
@@ -14677,7 +14679,7 @@ class Bullet {
             this.glbModel.rotation.copy(glbConfig.bulletRotationFix);
         }
         
-        const isProjectile = (weapon.type === 'projectile' || weapon.type === 'spread' || weapon.type === 'rocket');
+        const isProjectile = (weapon.type === 'projectile' || weapon.type === 'spread' || weapon.type === 'rocket' || weapon.type === 'laser');
         if (isProjectile) {
             const vfx = WEAPON_VFX_CONFIG[weaponKey];
             this.glowTrailMat.color.setHex(vfx ? vfx.trailColor : 0xffffff);
@@ -14826,6 +14828,13 @@ class Bullet {
                         triggerScreenFlash(0xff00ff, 0.3);  // Purple flash
                     }
                     
+                } else if (weapon.type === 'laser') {
+                    const killed = fish.takeDamage(weapon.damage, this.weaponKey);
+                    
+                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
+                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
+                    playWeaponHitSound(this.weaponKey);
+                    continue;
                 } else {
                     // Standard projectile or spread: single target damage
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey, this.spreadIndex);
@@ -15074,7 +15083,7 @@ function fireBullet(targetX, targetY) {
         }
     }
     
-    const useFpsConvergent = gameState.viewMode === 'fps' && weapon.type !== 'laser';
+    const useFpsConvergent = gameState.viewMode === 'fps';
     
     // Fire based on weapon type
     if (weapon.type === 'spread') {
@@ -15105,10 +15114,14 @@ function fireBullet(targetX, targetY) {
         }
         
     } else if (weapon.type === 'laser') {
-        // 8x LASER: Instant hitscan - no bullet travel, immediate hit detection
-        // Fire a ray from muzzle in direction, damage all fish along the path
-        // Laser already uses hitscan, no need for FPS instant hit
-        fireLaserBeam(muzzlePos, direction, weaponKey);
+        // 8x LASER: Projectile with speed 6000, piercing through fish
+        if (useFpsConvergent) {
+            fireWithConvergentDirection(muzzlePos, direction, weaponKey);
+        } else {
+            spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        }
+        spawnLaserBeamEffect(muzzlePos, muzzlePos.clone().add(direction.clone().multiplyScalar(3000)), weapon.color, weapon.laserWidth || 8);
+        triggerScreenShakeWithStrength(8, 100);
         
     } else if (weapon.type === 'rocket') {
         // 5x ROCKET: Straight line projectile with explosion on impact
