@@ -11068,7 +11068,6 @@ function autoFireAtFish(targetFish) {
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
     } else if (weapon.type === 'laser') {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
-        spawnLaserBeamEffect(muzzlePos, muzzlePos.clone().add(direction.clone().multiplyScalar(3000)), weapon.color, weapon.laserWidth || 8);
         triggerScreenShakeWithStrength(8, 100);
     } else {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
@@ -17448,12 +17447,13 @@ function animate() {
             }
         }
         autoShootTimer -= deltaTime;
-        if (autoShootTimer <= 0) {
+        if (autoShootTimer <= 0 && gameState.cooldown <= 0) {
             if (result.target && result.canFire) {
                 autoFireAtFish(result.target);
             }
             const weapon = CONFIG.weapons[gameState.currentWeapon];
-            autoShootTimer = (1 / weapon.shotsPerSecond) + 0.05;
+            const autoFireSlowdown = 1.6;
+            autoShootTimer = ((1 / weapon.shotsPerSecond) + 0.05) * autoFireSlowdown;
         }
     }
     
