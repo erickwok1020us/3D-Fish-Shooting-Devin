@@ -16337,8 +16337,21 @@ function spawnExplosionEffect(center, radius, color) {
 }
 
 // ==================== UI FUNCTIONS ====================
+let _lastBalanceForFlash = null;
 function updateUI() {
-    document.getElementById('balance-value').textContent = gameState.balance.toFixed(2);
+    const balanceEl = document.getElementById('balance-value');
+    const newBalance = gameState.balance.toFixed(2);
+    balanceEl.textContent = newBalance;
+    
+    if (_lastBalanceForFlash !== null && _lastBalanceForFlash !== newBalance) {
+        const bd = document.getElementById('balance-display');
+        if (bd) {
+            bd.classList.add('balance-flash');
+            setTimeout(() => bd.classList.remove('balance-flash'), 400);
+        }
+    }
+    _lastBalanceForFlash = newBalance;
+    
     document.getElementById('fps-counter').textContent = `FPS: ${Math.round(1 / deltaTime) || 60}`;
     updateDigiAmmoDisplay();
 }
@@ -17736,40 +17749,45 @@ function createBossWaitingUI() {
     bossWaitingUI.id = 'boss-waiting-timer';
     bossWaitingUI.style.cssText = `
         position: fixed;
-        top: 20px;
+        top: 16px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 900;
         pointer-events: none;
         text-align: center;
         display: none;
-        background: linear-gradient(180deg, rgba(255, 200, 0, 0.3), rgba(200, 150, 0, 0.2));
-        border: 2px solid #ffcc00;
-        border-radius: 10px;
-        padding: 10px 30px;
-        box-shadow: 0 0 20px rgba(255, 200, 0, 0.4);
+        background: linear-gradient(180deg, rgba(0, 15, 35, 0.92), rgba(0, 8, 22, 0.95));
+        border: 1.5px solid rgba(255, 200, 0, 0.45);
+        border-radius: 8px;
+        padding: 8px 24px;
+        box-shadow: 0 0 20px rgba(255, 200, 0, 0.15);
+        font-family: 'Orbitron', monospace;
     `;
     
     // Timer text
     const timerText = document.createElement('div');
     timerText.id = 'boss-waiting-text';
     timerText.style.cssText = `
-        font-size: 18px;
-        font-weight: bold;
+        font-size: 16px;
+        font-weight: 700;
+        font-family: 'Orbitron', monospace;
         color: #ffdd00;
-        text-shadow: 0 0 10px #ffaa00, 2px 2px 4px #000;
+        text-shadow: 0 0 8px rgba(255, 200, 0, 0.4);
+        letter-spacing: 2px;
     `;
     bossWaitingUI.appendChild(timerText);
     
     // Label text
     const labelText = document.createElement('div');
     labelText.style.cssText = `
-        font-size: 12px;
-        color: #ffffff;
-        text-shadow: 1px 1px 2px #000;
+        font-size: 7px;
+        font-family: 'Orbitron', monospace;
+        color: rgba(255, 200, 0, 0.5);
+        letter-spacing: 2px;
+        text-transform: uppercase;
         margin-top: 4px;
     `;
-    labelText.textContent = 'Next Boss In';
+    labelText.textContent = 'NEXT BOSS';
     bossWaitingUI.appendChild(labelText);
     
     document.body.appendChild(bossWaitingUI);
@@ -17791,17 +17809,20 @@ function updateBossWaitingTimerUI(secondsLeft) {
         
         // Change color as time gets closer to boss spawn
         if (s <= 20) {
-            bossWaitingUI.style.borderColor = '#ff6600';
-            bossWaitingUI.style.boxShadow = '0 0 25px rgba(255, 100, 0, 0.5)';
+            bossWaitingUI.style.borderColor = 'rgba(255, 100, 0, 0.6)';
+            bossWaitingUI.style.boxShadow = '0 0 25px rgba(255, 100, 0, 0.2)';
             if (timerText) timerText.style.color = '#ff8800';
+            if (timerText) timerText.style.textShadow = '0 0 10px rgba(255, 100, 0, 0.5)';
         } else if (s <= 30) {
-            bossWaitingUI.style.borderColor = '#ffaa00';
-            bossWaitingUI.style.boxShadow = '0 0 22px rgba(255, 170, 0, 0.45)';
+            bossWaitingUI.style.borderColor = 'rgba(255, 170, 0, 0.5)';
+            bossWaitingUI.style.boxShadow = '0 0 22px rgba(255, 170, 0, 0.18)';
             if (timerText) timerText.style.color = '#ffcc00';
+            if (timerText) timerText.style.textShadow = '0 0 8px rgba(255, 200, 0, 0.4)';
         } else {
-            bossWaitingUI.style.borderColor = '#ffcc00';
-            bossWaitingUI.style.boxShadow = '0 0 20px rgba(255, 200, 0, 0.4)';
+            bossWaitingUI.style.borderColor = 'rgba(255, 200, 0, 0.45)';
+            bossWaitingUI.style.boxShadow = '0 0 20px rgba(255, 200, 0, 0.15)';
             if (timerText) timerText.style.color = '#ffdd00';
+            if (timerText) timerText.style.textShadow = '0 0 8px rgba(255, 200, 0, 0.4)';
         }
     } else {
         bossWaitingUI.style.display = 'none';
