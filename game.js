@@ -16419,22 +16419,8 @@ function updateSpreadCrosshairPositions() {
 }
 
 function showRewardPopup(position, amount) {
-    // Project 3D position to screen
-    const vector = position.clone();
-    vector.project(camera);
-    
-    const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
-    const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
-    
-    const popup = document.createElement('div');
-    popup.className = 'reward-popup';
-    // Issue #6: Show whole numbers only, no decimals
-    popup.textContent = `+${Math.round(amount)}`;
-    popup.style.left = x + 'px';
-    popup.style.top = y + 'px';
-    document.getElementById('ui-overlay').appendChild(popup);
-    
-    setTimeout(() => popup.remove(), 1500);
+    // Disabled: floating reward numbers removed per user request
+    return;
 }
 
 const KILL_FEED_MAX = 4;
@@ -17452,8 +17438,7 @@ function animate() {
                 autoFireAtFish(result.target);
             }
             const weapon = CONFIG.weapons[gameState.currentWeapon];
-            const autoFireSlowdown = 1.6;
-            autoShootTimer = ((1 / weapon.shotsPerSecond) + 0.05) * autoFireSlowdown;
+            autoShootTimer = 1 / weapon.shotsPerSecond;
         }
     }
     
