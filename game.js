@@ -14064,6 +14064,7 @@ class Fish {
                 gameState.balance += win;
                 gameState.score += Math.floor(win);
                 showRewardPopup(deathPosition, win);
+                addKillFeedEntry(this.form, win);
             }
             // Note: No "miss" sound or gray particles - every kill now has coin feedback
         }
@@ -16432,6 +16433,78 @@ function showRewardPopup(position, amount) {
     document.getElementById('ui-overlay').appendChild(popup);
     
     setTimeout(() => popup.remove(), 1500);
+}
+
+const KILL_FEED_MAX = 4;
+const killFeedRecords = [];
+
+const FISH_FORM_ICONS = {
+    whale: '\u{1F40B}', killerWhale: '\u{1F42C}', shark: '\u{1F988}',
+    marlin: '\u{1F41F}', hammerhead: '\u{1F988}', tuna: '\u{1F41F}',
+    barracuda: '\u{1F41F}', mantaRay: '\u{1F41F}', lionfish: '\u{1F420}',
+    angelfish: '\u{1F420}', butterflyFish: '\u{1F420}', parrotfish: '\u{1F420}',
+    clownfish: '\u{1F420}', damselfish: '\u{1F420}', seahorse: '\u{1F40E}',
+    sardine: '\u{1F41F}', anchovy: '\u{1F41F}', herring: '\u{1F41F}',
+    flyingFish: '\u{1F41F}', silverside: '\u{1F41F}'
+};
+
+function formatFishName(form) {
+    if (!form) return 'FISH';
+    return form.replace(/([A-Z])/g, ' $1').trim().toUpperCase();
+}
+
+function addKillFeedEntry(fishForm, rewardAmount) {
+    const list = document.getElementById('kill-feed-list');
+    if (!list) return;
+
+    const icon = FISH_FORM_ICONS[fishForm] || '\u{1F41F}';
+    const name = formatFishName(fishForm);
+
+    killFeedRecords.push({ icon, name, reward: rewardAmount });
+
+    if (killFeedRecords.length > KILL_FEED_MAX) {
+        killFeedRecords.shift();
+    }
+
+    renderKillFeed();
+}
+
+function renderKillFeed() {
+    const list = document.getElementById('kill-feed-list');
+    if (!list) return;
+
+    const panel = document.getElementById('kill-feed-panel');
+    if (panel && killFeedRecords.length > 0) {
+        panel.style.display = '';
+    }
+
+    list.innerHTML = '';
+
+    killFeedRecords.forEach((record, i) => {
+        const entry = document.createElement('div');
+        entry.className = 'kill-feed-entry' + (i === killFeedRecords.length - 1 ? ' latest' : '');
+
+        const iconEl = document.createElement('div');
+        iconEl.className = 'kf-fish-icon';
+        iconEl.textContent = record.icon;
+
+        const info = document.createElement('div');
+        info.className = 'kf-info';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'kf-name';
+        nameEl.textContent = record.name;
+
+        const rewardEl = document.createElement('div');
+        rewardEl.className = 'kf-reward';
+        rewardEl.textContent = '+' + Math.round(record.reward);
+
+        info.appendChild(nameEl);
+        info.appendChild(rewardEl);
+        entry.appendChild(iconEl);
+        entry.appendChild(info);
+        list.appendChild(entry);
+    });
 }
 
 // Issue 4: Apply RTP labels to weapon buttons (for testing/debugging)
