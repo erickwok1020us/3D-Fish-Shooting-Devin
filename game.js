@@ -16335,6 +16335,7 @@ function spawnExplosionEffect(center, radius, color) {
 function updateUI() {
     document.getElementById('balance-value').textContent = gameState.balance.toFixed(2);
     document.getElementById('fps-counter').textContent = `FPS: ${Math.round(1 / deltaTime) || 60}`;
+    updateDigiAmmoDisplay();
 }
 
 function selectWeapon(weaponKey) {
@@ -16361,6 +16362,8 @@ function selectWeapon(weaponKey) {
     
     // Issue #16: Update crosshair size based on weapon spread
     updateCrosshairForWeapon(weaponKey);
+    
+    updateDigiAmmoDisplay();
 }
 
 // Issue #16 CORRECTION: Simple crosshair color update (no size change - all weapons 100% accurate)
@@ -16469,6 +16472,12 @@ function addKillFeedEntry(fishForm, rewardAmount) {
     renderKillFeed();
 }
 
+function getKillFeedTier(reward) {
+    if (reward >= 200) return 'tier-high';
+    if (reward >= 100) return 'tier-mid';
+    return 'tier-low';
+}
+
 function renderKillFeed() {
     const list = document.getElementById('kill-feed-list');
     if (!list) return;
@@ -16478,11 +16487,18 @@ function renderKillFeed() {
         panel.style.display = '';
     }
 
+    const countEl = document.getElementById('kill-feed-count');
+    if (countEl) {
+        countEl.textContent = killFeedRecords.length + '/' + KILL_FEED_MAX;
+    }
+
     list.innerHTML = '';
 
     killFeedRecords.forEach((record, i) => {
+        const tier = getKillFeedTier(record.reward);
+        const isLatest = i === killFeedRecords.length - 1;
         const entry = document.createElement('div');
-        entry.className = 'kill-feed-entry' + (i === killFeedRecords.length - 1 ? ' latest' : '');
+        entry.className = 'kill-feed-entry ' + tier + (isLatest ? ' latest' : '');
 
         const iconEl = document.createElement('div');
         iconEl.className = 'kf-fish-icon';
@@ -16505,6 +16521,43 @@ function renderKillFeed() {
         entry.appendChild(info);
         list.appendChild(entry);
     });
+}
+
+function updateDigiAmmoDisplay() {
+    const weapon = CONFIG.weapons[gameState.currentWeapon];
+    if (!weapon) return;
+    const ammo = Math.min(9999, Math.max(0, Math.floor(gameState.balance / weapon.cost)));
+    const str = String(ammo).padStart(4, '0');
+    for (let i = 0; i < 4; i++) {
+        const el = document.getElementById('digi-d' + i);
+        if (el) el.textContent = str[i];
+    }
+    const barFill = document.getElementById('digi-ammo-bar-fill');
+    if (barFill) {
+        const pct = Math.min(100, (ammo / 100) * 100);
+        barFill.style.width = pct + '%';
+        if (pct >= 50) {
+            barFill.style.background = 'linear-gradient(90deg, #0088bb, #00d4ff)';
+        } else if (pct >= 25) {
+            barFill.style.background = 'linear-gradient(90deg, #bb8800, #ffcc00)';
+        } else {
+            barFill.style.background = 'linear-gradient(90deg, #bb2200, #ff4444)';
+        }
+    }
+}
+
+function syncAutoPillUI() {
+    const onBtn = document.getElementById('auto-on-btn');
+    const offBtn = document.getElementById('auto-off-btn');
+    if (onBtn && offBtn) {
+        if (gameState.autoShoot) {
+            onBtn.classList.add('on');
+            offBtn.classList.remove('on');
+        } else {
+            offBtn.classList.add('on');
+            onBtn.classList.remove('on');
+        }
+    }
 }
 
 // Issue 4: Apply RTP labels to weapon buttons (for testing/debugging)
@@ -16734,11 +16787,29 @@ function setupEventListeners() {
         });
     });
     
-    // Auto-shoot toggle
-    document.getElementById('auto-shoot-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleAutoShoot();
-    });
+    // Auto-shoot toggle (legacy button)
+    const legacyAutoBtn = document.getElementById('auto-shoot-btn');
+    if (legacyAutoBtn) {
+        legacyAutoBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleAutoShoot();
+        });
+    }
+    // Auto-fire pill in new weapon panel
+    const autoOnBtn = document.getElementById('auto-on-btn');
+    const autoOffBtn = document.getElementById('auto-off-btn');
+    if (autoOnBtn) {
+        autoOnBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!gameState.autoShoot) toggleAutoShoot();
+        });
+    }
+    if (autoOffBtn) {
+        autoOffBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (gameState.autoShoot) toggleAutoShoot();
+        });
+    }
     
     // Window resize
     window.addEventListener('resize', () => {
@@ -16882,6 +16953,7 @@ function toggleAutoShoot() {
         btn.textContent = gameState.autoShoot ? 'AUTO ON (A)' : 'AUTO OFF (A)';
         btn.classList.toggle('active', gameState.autoShoot);
     }
+    syncAutoPillUI();
     playSound('weaponSwitch');
 }
 
