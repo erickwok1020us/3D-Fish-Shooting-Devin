@@ -48,45 +48,61 @@
             z-index: 10;
         }
         
-        /* Balance Display - Top Left */
+        /* Balance Display - Top Left (Sci-Fi Orbitron) */
         #balance-display {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            background: linear-gradient(135deg, rgba(0, 200, 100, 0.3), rgba(0, 150, 80, 0.2));
-            border: 2px solid #00c864;
-            border-radius: 15px;
-            padding: 12px 24px;
+            top: 16px;
+            left: 16px;
+            background: linear-gradient(135deg, rgba(0, 18, 40, 0.92), rgba(0, 8, 22, 0.95));
+            border: 1.5px solid rgba(0, 200, 255, 0.35);
+            border-radius: 5px;
+            padding: 8px 18px;
             display: flex;
             align-items: center;
-            gap: 12px;
-            box-shadow: 0 4px 15px rgba(0, 200, 100, 0.3);
+            gap: 10px;
+            box-shadow: 0 0 12px rgba(0, 200, 255, 0.06);
+            font-family: 'Orbitron', monospace;
+            overflow: hidden;
+        }
+        #balance-display::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 15%; right: 15%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.5), transparent);
         }
         
         #balance-display .balance-icon {
-            width: 28px;
-            height: 28px;
-            background: linear-gradient(135deg, #00c864, #00a050);
+            width: 24px;
+            height: 24px;
+            background: transparent;
+            border: 1.5px solid rgba(0, 200, 255, 0.5);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: bold;
-            color: white;
-            font-size: 14px;
+            font-weight: 700;
+            color: #00d4ff;
+            font-size: 12px;
+            font-family: 'Orbitron', monospace;
+            text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
         }
         
         #balance-display .balance-value {
-            font-size: 22px;
-            font-weight: bold;
-            color: #00ff7f;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            font-size: 20px;
+            font-weight: 700;
+            color: #00ffcc;
+            text-shadow: 0 0 10px rgba(0, 255, 204, 0.4);
+            font-family: 'Orbitron', monospace;
         }
         
         #balance-display .balance-label {
-            font-size: 12px;
-            color: #88ffaa;
-            margin-left: -8px;
+            font-size: 7px;
+            letter-spacing: 2px;
+            color: rgba(0, 200, 255, 0.5);
+            margin-left: -6px;
+            font-family: 'Orbitron', monospace;
+            text-transform: uppercase;
         }
         
         /* Settings Container - Top Right (Style A: Detailed Gear SVG) */
@@ -333,17 +349,19 @@
             }
         }
 
-        /* FPS Counter */
+        /* FPS Counter (Sci-Fi Orbitron) */
         #fps-counter {
             position: absolute;
-            top: 80px;
-            left: 20px;
-            color: #0f0;
-            font-size: 12px;
-            font-family: monospace;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 4px 8px;
-            border-radius: 4px;
+            top: 68px;
+            left: 16px;
+            color: rgba(0, 200, 255, 0.6);
+            font-size: 9px;
+            font-family: 'Orbitron', monospace;
+            letter-spacing: 1.5px;
+            background: linear-gradient(135deg, rgba(0, 18, 40, 0.85), rgba(0, 8, 22, 0.88));
+            border: 1px solid rgba(0, 200, 255, 0.2);
+            border-radius: 3px;
+            padding: 4px 10px;
         }
         
         /* Weapon Panel - Bottom Left (Sci-Fi with Digital LED 4-digit ammo) */
@@ -910,22 +928,7 @@
             animation: vspreadFire 0.15s ease-out;
         }
         
-        /* Reward Animation */
-        .reward-popup {
-            position: absolute;
-            font-size: 24px;
-            font-weight: bold;
-            color: #00ff7f;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 127, 0.5);
-            pointer-events: none;
-            animation: rewardFloat 1.5s ease-out forwards;
-            z-index: 100;
-        }
-        
-        @keyframes rewardFloat {
-            0% { opacity: 1; transform: translateY(0) scale(1); }
-            100% { opacity: 0; transform: translateY(-80px) scale(1.5); }
-        }
+        /* Reward Animation - DISABLED (floating numbers removed) */
         
         /* Video Background for Home/Loading screens */
         /* Video is BEHIND the lobby UI (z-index 999 < lobby's 1000) */
