@@ -759,7 +759,7 @@ const CONFIG = {
         // ECOLOGY: Massive schools of 100-1000+, wave-like synchronized movement
         // SWIMMING: Tight synchronized waves, rapid direction changes
         sardine: { 
-            hp: 20, speedMin: 65, speedMax: 100, reward: 30, size: 10, 
+            hp: 20, speedMin: 45, speedMax: 70, reward: 30, size: 10,
             color: 0xccddee, secondaryColor: 0x88aacc, count: 15, 
             pattern: 'waveFormation', schoolSize: [20, 40], form: 'sardine',
             category: 'smallSchool',
@@ -769,7 +769,7 @@ const CONFIG = {
         // ECOLOGY: Massive schools, form defensive bait balls when threatened
         // SWIMMING: Swirling bait ball formation, very tight grouping
         anchovy: { 
-            hp: 15, speedMin: 70, speedMax: 120, reward: 25, size: 8, 
+            hp: 15, speedMin: 50, speedMax: 85, reward: 25, size: 8,
             color: 0xaabbcc, secondaryColor: 0x778899, count: 15, 
             pattern: 'baitBall', schoolSize: [25, 45], form: 'anchovy',
             category: 'smallSchool',
@@ -789,7 +789,7 @@ const CONFIG = {
         // ECOLOGY: Territorial, loose groups of 3-8 near reef patches
         // SWIMMING: Quick defensive charges, aggressive darting
         damselfish: { 
-            hp: 40, speedMin: 45, speedMax: 75, reward: 55, size: 12, 
+            hp: 40, speedMin: 35, speedMax: 60, reward: 55, size: 12,
             color: 0x6644ff, secondaryColor: 0xffdd00, count: 12, 
             pattern: 'defensiveCharge', schoolSize: [3, 6], form: 'damselfish',
             category: 'smallSchool',
@@ -2107,7 +2107,7 @@ const WEAPON_GLB_CONFIG = {
             cannonNonPlayer: '1x 武器模組(非玩家).glb',
             bullet: '1x 子彈模組',
             hitEffect: '1x 擊中特效',
-            scale: 0.9,
+            scale: 1.0,
             bulletScale: 0.5,
             hitEffectScale: 1.0,
             muzzleOffset: new THREE.Vector3(0, 25, 55),
@@ -2116,8 +2116,8 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            fpsCameraBackDist: 95,
-            fpsCameraUpOffset: 70,
+            fpsCameraBackDist: 115,
+            fpsCameraUpOffset: 75,
             emissiveBoost: 0.4
         },
         '3x': {
@@ -2135,8 +2135,8 @@ const WEAPON_GLB_CONFIG = {
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
-            fpsCameraBackDist: 105,
-            fpsCameraUpOffset: 70,
+            fpsCameraBackDist: 125,
+            fpsCameraUpOffset: 75,
             emissiveBoost: 0.4
         },
         '5x': {
@@ -2152,8 +2152,8 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 80,
+            fpsCameraBackDist: 150,
+            fpsCameraUpOffset: 85,
             emissiveBoost: 0.4
         },
         '8x': {
@@ -2169,8 +2169,8 @@ const WEAPON_GLB_CONFIG = {
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 70,
+            fpsCameraBackDist: 150,
+            fpsCameraUpOffset: 75,
             emissiveBoost: 0.3
         }
     }
@@ -7188,24 +7188,19 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish) {
     // Position at hit location
     hitEffectModel.position.copy(hitPos);
     
-    // Orient the hit effect to match the fish's facing direction so it looks
-    // like the explosion is happening ON the fish body, not as a flat 2D billboard.
-    if (hitFish && hitFish.group) {
-        hitEffectModel.quaternion.copy(hitFish.group.quaternion);
-        
-        if (glbConfig.hitEffectRotationFix) {
-            hitEffectTempVectors.rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
-            hitEffectModel.quaternion.multiply(hitEffectTempVectors.rotationFixQuat);
-        }
-    } else if (bulletDirection) {
+    // Orient the hit effect based on bullet direction, using the fish's Y-rotation
+    // (yaw) so the explosion aligns horizontally with the fish body.
+    if (bulletDirection) {
         hitEffectTempVectors.dir.copy(bulletDirection).normalize();
         hitEffectTempVectors.targetPos.copy(hitPos).add(hitEffectTempVectors.dir);
         hitEffectModel.lookAt(hitEffectTempVectors.targetPos);
-        
-        if (glbConfig.hitEffectRotationFix) {
-            hitEffectTempVectors.rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
-            hitEffectModel.quaternion.multiply(hitEffectTempVectors.rotationFixQuat);
-        }
+    }
+    if (hitFish && hitFish.group) {
+        hitEffectModel.rotation.y = hitFish.group.rotation.y;
+    }
+    if (glbConfig.hitEffectRotationFix) {
+        hitEffectTempVectors.rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
+        hitEffectModel.quaternion.multiply(hitEffectTempVectors.rotationFixQuat);
     }
     
     // Add to scene
@@ -10425,7 +10420,9 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         weaponGLBState.currentWeaponModel = newCannon;
         weaponGLBState.currentWeaponKey = weaponKey;
         
-        // Safety: Reset barrel position to config value (prevents drift from recoil corruption)
+        // Safety: Reset scale and position to config values on every switch
+        const switchScale = glbConfig.scale;
+        newCannon.scale.set(switchScale, switchScale, switchScale);
         const yOff = glbConfig.cannonYOffset !== undefined ? glbConfig.cannonYOffset : 20;
         newCannon.position.set(0, yOff, 0);
         
@@ -11041,7 +11038,7 @@ function resetAutoFireState() {
 
 function findNearestFish(muzzlePos) {
     let best = null;
-    let bestDistSq = Infinity;
+    let bestScore = Infinity;
     for (const fish of activeFish) {
         if (!fish.isActive) continue;
         const pos = fish.group.position;
@@ -11051,9 +11048,12 @@ function findNearestFish(muzzlePos) {
         const pitch = Math.asin(dir.y);
         if (Math.abs(yaw) > AUTOFIRE_YAW_LIMIT) continue;
         if (pitch > AUTOFIRE_PITCH_MAX || pitch < AUTOFIRE_PITCH_MIN) continue;
-        const distSq = dx*dx + dy*dy + dz*dz;
-        if (distSq < bestDistSq) {
-            bestDistSq = distSq;
+        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        const angleDev = Math.abs(yaw) + Math.abs(pitch);
+        const fishSpeed = fish.speed || 50;
+        const score = dist + angleDev * 300 + fishSpeed * 3;
+        if (score < bestScore) {
+            bestScore = score;
             best = fish;
         }
     }
