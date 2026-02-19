@@ -889,7 +889,20 @@
         @keyframes dotPulse { 0% { transform: translate(-50%,-50%) scale(2.2); opacity: 1; filter: brightness(2); } 100% { transform: translate(-50%,-50%) scale(1); opacity: 1; filter: brightness(1); } }
         #crosshair.firing .crosshair-dot { animation: dotPulse 0.2s ease-out; }
         
-        /* 3x side crosshairs (DOM-based, same style as #crosshair) */
+        /* Tech Circle firing animation (Design D for 1x/5x) */
+        #crosshair.firing .tech-circle-svg {
+            animation: techCircleFire 0.2s ease-out;
+        }
+        @keyframes techCircleFire {
+            0% { transform: scale(0.82); filter: drop-shadow(0 0 8px rgba(0,255,200,0.8)) brightness(2); }
+            100% { transform: scale(1); filter: drop-shadow(0 0 3px rgba(0,255,200,0.4)) brightness(1); }
+        }
+        /* Ring Flash hit feedback glow */
+        #crosshair.hit-flash .tech-circle-svg {
+            filter: drop-shadow(0 0 8px rgba(0,255,200,0.9)) brightness(1.5) !important;
+        }
+        
+        /* 3x side crosshairs(DOM-based, same style as #crosshair) */
         .crosshair-3x-side {
             position: fixed;
             width: 40px;
@@ -1547,7 +1560,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #362</div>
+    <div id="pr-version-tag">PR #363</div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">

@@ -6544,7 +6544,38 @@ function showHitMarker(spreadIndex, fishWorldPos, fish) {
     requestAnimationFrame(animateMarker);
 }
 
-// Temp vectors for muzzle flash barrel direction calculation (avoid per-shot allocations)
+let _lastRingFlashTime = 0;
+function showCrosshairRingFlash() {
+    const now = performance.now();
+    if (now - _lastRingFlashTime < 150) return;
+    _lastRingFlashTime = now;
+    const chEl = document.getElementById('crosshair');
+    let cx, cy;
+    if (gameState.viewMode === 'fps') {
+        cx = window.innerWidth / 2;
+        cy = window.innerHeight / 2;
+    } else {
+        cx = chEl ? (parseFloat(chEl.style.left) || window.innerWidth / 2) : window.innerWidth / 2;
+        cy = chEl ? (parseFloat(chEl.style.top) || window.innerHeight / 2) : window.innerHeight / 2;
+    }
+    const ring = document.createElement('div');
+    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:28px;height:28px;border:1.5px solid rgba(0,255,200,0.7);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 8px rgba(0,255,200,0.5),inset 0 0 4px rgba(0,255,200,0.2);`;
+    document.body.appendChild(ring);
+    if (chEl) {
+        chEl.classList.add('hit-flash');
+        setTimeout(function() { chEl.classList.remove('hit-flash'); }, 300);
+    }
+    const startT = performance.now();
+    function animRing(t) {
+        const p = Math.min((t - startT) / 300, 1);
+        ring.style.transform = `translate(-50%,-50%) scale(${1 + p * 0.8})`;
+        ring.style.opacity = String(1 - p * p);
+        if (p < 1) requestAnimationFrame(animRing); else ring.remove();
+    }
+    requestAnimationFrame(animRing);
+}
+
+// Temp vectors for muzzle flash barrel direction calculation(avoid per-shot allocations)
 const muzzleFlashTemp = {
     barrelForward: new THREE.Vector3(),
     worldQuat: new THREE.Quaternion(),
@@ -14002,6 +14033,7 @@ class Fish {
         
         const fishPos = this.group ? this.group.position : null;
         showHitMarker(spreadIndex, fishPos, this);
+        showCrosshairRingFlash();
         
         if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
@@ -16492,18 +16524,45 @@ function selectWeapon(weaponKey) {
     updateDigiAmmoDisplay();
 }
 
+function createTechCircleSVG() {
+    const s = 48, c = 24, r = 14;
+    const col = 'rgba(0,255,200,';
+    let d = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + ' ' + s + '" class="tech-circle-svg" style="overflow:visible;filter:drop-shadow(0 0 3px ' + col + '0.4));">';
+    d += '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + col + '0.45)" stroke-width="1"/>';
+    var cardinals = [[c, c - r + 3, c, c - r - 5], [c + r - 3, c, c + r + 5, c], [c, c + r - 3, c, c + r + 5], [c - r + 3, c, c - r - 5, c]];
+    for (var i = 0; i < cardinals.length; i++) {
+        var p = cardinals[i];
+        d += '<line x1="' + p[0] + '" y1="' + p[1] + '" x2="' + p[2] + '" y2="' + p[3] + '" stroke="' + col + '0.85)" stroke-width="1.5"/>';
+    }
+    var diags = [45, 135, 225, 315];
+    for (var j = 0; j < diags.length; j++) {
+        var rad = (diags[j] - 90) * Math.PI / 180;
+        d += '<line x1="' + (c + Math.cos(rad) * (r - 1)).toFixed(1) + '" y1="' + (c + Math.sin(rad) * (r - 1)).toFixed(1) + '" x2="' + (c + Math.cos(rad) * (r + 3)).toFixed(1) + '" y2="' + (c + Math.sin(rad) * (r + 3)).toFixed(1) + '" stroke="' + col + '0.35)" stroke-width="0.8"/>';
+    }
+    d += '<circle cx="' + c + '" cy="' + c + '" r="1.5" fill="#fff" class="tech-dot"/>';
+    d += '</svg>';
+    return d;
+}
+
 // Issue #16 CORRECTION: Simple crosshair color update (no size change - all weapons 100% accurate)
 function updateCrosshairForWeapon(weaponKey) {
     const crosshair = document.getElementById('crosshair');
     if (!crosshair) return;
     
-    crosshair.style.width = '40px';
-    crosshair.style.height = '40px';
-    
     const hasFpsMode = crosshair.classList.contains('fps-mode');
     crosshair.className = 'weapon-' + weaponKey;
     if (hasFpsMode) {
         crosshair.classList.add('fps-mode');
+    }
+    
+    if (weaponKey === '1x' || weaponKey === '5x') {
+        crosshair.style.width = '48px';
+        crosshair.style.height = '48px';
+        crosshair.innerHTML = createTechCircleSVG();
+    } else {
+        crosshair.style.width = '40px';
+        crosshair.style.height = '40px';
+        crosshair.innerHTML = '<div class="crosshair-dot"></div><div class="crosshair-line top"></div><div class="crosshair-line bottom"></div><div class="crosshair-line left"></div><div class="crosshair-line right"></div>';
     }
     
     const vspread = document.getElementById('crosshair-vspread');
