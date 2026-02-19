@@ -11,9 +11,9 @@ const PANORAMA_CONFIG = {
     imageUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/background.jpg',
     // Fallback to local image if R2 fails
     fallbackUrl: 'assets/underwater_panorama.jpg',
-    fogColor: 0x0a4d6c,
-    fogNear: 600,
-    fogFar: 3500,
+    fogColor: 0x064a5e,
+    fogNear: 400,
+    fogFar: 2800,
     // Sky-sphere settings
     skySphere: {
         radius: 4000,           // Large sphere to encompass entire scene
@@ -33,11 +33,11 @@ const PANORAMA_CONFIG = {
     },
     dynamicEffects: {
         floatingParticles: true,
-        particleCount: 80,
+        particleCount: 200,
         particleMinSize: 1,
-        particleMaxSize: 4,
-        particleSpeed: 0.15,
-        particleSpread: 1500
+        particleMaxSize: 5,
+        particleSpeed: 0.12,
+        particleSpread: 1800
     }
 };
 
@@ -358,26 +358,31 @@ function createUnderwaterParticles() {
     const particleCount = config.particleCount;
     const spread = config.particleSpread;
     
-    // Create particle geometry using BufferGeometry for performance
     const positions = new Float32Array(particleCount * 3);
     const sizes = new Float32Array(particleCount);
     const velocities = [];
     
     for (let i = 0; i < particleCount; i++) {
-        // Random position within spread area
         positions[i * 3] = (Math.random() - 0.5) * spread;
         positions[i * 3 + 1] = (Math.random() - 0.5) * spread;
         positions[i * 3 + 2] = (Math.random() - 0.5) * spread;
         
-        // Random size
-        sizes[i] = config.particleMinSize + Math.random() * (config.particleMaxSize - config.particleMinSize);
-        
-        // Store velocity for animation (mostly upward drift like bubbles)
-        velocities.push({
-            x: (Math.random() - 0.5) * 0.1,
-            y: config.particleSpeed * (0.5 + Math.random() * 0.5),
-            z: (Math.random() - 0.5) * 0.1
-        });
+        const isBubble = Math.random() < 0.3;
+        if (isBubble) {
+            sizes[i] = 2 + Math.random() * 3;
+            velocities.push({
+                x: (Math.random() - 0.5) * 0.08,
+                y: config.particleSpeed * (0.6 + Math.random() * 0.6),
+                z: (Math.random() - 0.5) * 0.08
+            });
+        } else {
+            sizes[i] = config.particleMinSize + Math.random() * 2;
+            velocities.push({
+                x: (Math.random() - 0.5) * 0.15,
+                y: (Math.random() - 0.5) * config.particleSpeed * 0.3,
+                z: (Math.random() - 0.5) * 0.15
+            });
+        }
     }
     
     const geometry = new THREE.BufferGeometry();
@@ -391,18 +396,19 @@ function createUnderwaterParticles() {
     ctx.beginPath();
     ctx.arc(16, 16, 14, 0, Math.PI * 2);
     const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 14);
-    grad.addColorStop(0, 'rgba(255,255,255,0.8)');
-    grad.addColorStop(0.5, 'rgba(170,221,255,0.4)');
-    grad.addColorStop(1, 'rgba(170,221,255,0)');
+    grad.addColorStop(0, 'rgba(255,255,255,0.7)');
+    grad.addColorStop(0.3, 'rgba(180,220,240,0.4)');
+    grad.addColorStop(0.7, 'rgba(140,200,230,0.15)');
+    grad.addColorStop(1, 'rgba(140,200,230,0)');
     ctx.fillStyle = grad;
     ctx.fill();
     const bubbleTexture = new THREE.CanvasTexture(bubbleCanvas);
 
     const material = new THREE.PointsMaterial({
-        color: 0xaaddff,
+        color: 0x99ccee,
         size: 3,
         transparent: true,
-        opacity: 0.4,
+        opacity: 0.35,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         sizeAttenuation: true,
@@ -414,7 +420,7 @@ function createUnderwaterParticles() {
     underwaterParticleSystem.userData.spread = spread;
     scene.add(underwaterParticleSystem);
     
-    console.log(`[PANORAMA] Created ${particleCount} floating underwater particles`);
+    console.log(`[PANORAMA] Created ${particleCount} floating underwater particles (bubbles + plankton)`);
 }
 
 // Update floating particles animation (called from animate loop)
@@ -447,6 +453,100 @@ function updateUnderwaterParticles(deltaTime) {
     }
     
     underwaterParticleSystem.geometry.attributes.position.needsUpdate = true;
+}
+
+// ==================== UNDERWATER GOD RAYS (Light Shafts from Surface) ====================
+let godRayGroup = null;
+const GOD_RAY_CONFIG = {
+    count: 5,
+    topY: 800,
+    bottomY: -600,
+    spread: 1600,
+    minWidth: 40,
+    maxWidth: 120,
+    color: 0x6ec8e8,
+    opacity: 0.06,
+    driftSpeed: 0.08,
+    pulseSpeed: 0.3
+};
+
+function createGodRays() {
+    godRayGroup = new THREE.Group();
+    godRayGroup.name = 'godRays';
+
+    for (let i = 0; i < GOD_RAY_CONFIG.count; i++) {
+        const w = GOD_RAY_CONFIG.minWidth + Math.random() * (GOD_RAY_CONFIG.maxWidth - GOD_RAY_CONFIG.minWidth);
+        const h = GOD_RAY_CONFIG.topY - GOD_RAY_CONFIG.bottomY;
+        const geo = new THREE.PlaneGeometry(w, h);
+        const mat = new THREE.MeshBasicMaterial({
+            color: GOD_RAY_CONFIG.color,
+            transparent: true,
+            opacity: GOD_RAY_CONFIG.opacity * (0.6 + Math.random() * 0.4),
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            fog: false
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        const xPos = (Math.random() - 0.5) * GOD_RAY_CONFIG.spread;
+        mesh.position.set(xPos, (GOD_RAY_CONFIG.topY + GOD_RAY_CONFIG.bottomY) / 2, (Math.random() - 0.5) * 400);
+        mesh.rotation.z = (Math.random() - 0.5) * 0.15;
+        mesh.userData.baseX = xPos;
+        mesh.userData.baseOpacity = mat.opacity;
+        mesh.userData.phase = Math.random() * Math.PI * 2;
+        mesh.userData.driftPhase = Math.random() * Math.PI * 2;
+        mesh.renderOrder = -500;
+        godRayGroup.add(mesh);
+    }
+    scene.add(godRayGroup);
+    console.log(`[ATMOSPHERE] Created ${GOD_RAY_CONFIG.count} god ray light shafts`);
+}
+
+function updateGodRays(time) {
+    if (!godRayGroup) return;
+    for (let i = 0; i < godRayGroup.children.length; i++) {
+        const ray = godRayGroup.children[i];
+        ray.position.x = ray.userData.baseX + Math.sin(time * GOD_RAY_CONFIG.driftSpeed + ray.userData.driftPhase) * 60;
+        const pulse = 0.7 + 0.3 * Math.sin(time * GOD_RAY_CONFIG.pulseSpeed + ray.userData.phase);
+        ray.material.opacity = ray.userData.baseOpacity * pulse;
+    }
+}
+
+// ==================== UNDERWATER CSS OVERLAY (Vignette + Color Tint) ====================
+function createUnderwaterOverlay() {
+    if (document.getElementById('underwater-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'underwater-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        pointer-events: none;
+        z-index: 5;
+        background: radial-gradient(ellipse at center,
+            rgba(4,60,80,0) 0%,
+            rgba(4,60,80,0) 50%,
+            rgba(3,40,58,0.18) 75%,
+            rgba(2,25,40,0.35) 100%
+        );
+        mix-blend-mode: multiply;
+    `;
+    document.body.appendChild(overlay);
+
+    const tint = document.createElement('div');
+    tint.id = 'underwater-tint';
+    tint.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        pointer-events: none;
+        z-index: 4;
+        background: linear-gradient(180deg,
+            rgba(20,80,110,0.08) 0%,
+            rgba(6,74,94,0.04) 40%,
+            rgba(4,50,70,0.10) 100%
+        );
+    `;
+    document.body.appendChild(tint);
+    console.log('[ATMOSPHERE] Created underwater CSS overlay (vignette + tint)');
 }
 
 // ==================== GAME CONFIGURATION ====================
@@ -9028,6 +9128,9 @@ function initGameScene() {
     const antialias = quality !== 'low';  // Disable antialiasing for low quality
     renderer = new THREE.WebGLRenderer({ antialias: antialias });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.95;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     
     // Apply quality-based pixel ratio
     const baseRatio = window.devicePixelRatio || 1;
@@ -9069,6 +9172,12 @@ function initGameScene() {
     
     // Create floating underwater particles for dynamic atmosphere
     createUnderwaterParticles();
+    
+    // Create underwater god rays (light shafts from surface)
+    createGodRays();
+    
+    // Create CSS underwater overlay (vignette + color tint)
+    createUnderwaterOverlay();
     
     updateLoadingProgress(92, 'Pre-initializing effect pools...');
     // PERFORMANCE FIX: Pre-initialize ALL pools to avoid any first-use stutter
@@ -9766,14 +9875,14 @@ function createLights() {
     
     console.log(`[LIGHTS] Creating lights for ${quality} quality`);
     
-    const ambientIntensity = quality === 'low' ? 0.6 : 0.5;
-    const ambientLight = new THREE.AmbientLight(0xffffff, ambientIntensity);
+    const ambientIntensity = quality === 'low' ? 0.5 : 0.4;
+    const ambientLight = new THREE.AmbientLight(0x88bbcc, ambientIntensity);
     scene.add(ambientLight);
     
-    const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x001530, quality === 'low' ? 0.5 : 0.6);
+    const hemiLight = new THREE.HemisphereLight(0x6EB5D0, 0x001828, quality === 'low' ? 0.5 : 0.65);
     scene.add(hemiLight);
     
-    const sunLight = new THREE.DirectionalLight(0xaaddff, quality === 'low' ? 0.5 : 0.7);
+    const sunLight = new THREE.DirectionalLight(0x8ec8e8, quality === 'low' ? 0.6 : 0.8);
     sunLight.position.set(width * 0.3, floorY + height + 500, -depth * 0.3);
     sunLight.target.position.set(0, 0, 0);
     sunLight.castShadow = shadowsEnabled;
@@ -9790,7 +9899,7 @@ function createLights() {
     scene.add(sunLight);
     scene.add(sunLight.target);
     
-    const tankLight = new THREE.SpotLight(0xaaddff, 1.5, 1500, Math.PI / 3, 0.3, 1);
+    const tankLight = new THREE.SpotLight(0x7abce0, 1.5, 1500, Math.PI / 3, 0.3, 1);
     tankLight.position.set(0, floorY + height + 400, 0);
     tankLight.target.position.set(0, floorY + height / 2, 0);
     tankLight.castShadow = false;
@@ -9798,28 +9907,28 @@ function createLights() {
     scene.add(tankLight.target);
     
     if (quality !== 'low') {
-        const upperLight1 = new THREE.PointLight(0xaaddff, 1.2, 800);
+        const upperLight1 = new THREE.PointLight(0x7abce0, 1.2, 800);
         upperLight1.position.set(-width * 0.4, floorY + height * 0.7, -depth * 0.3);
         scene.add(upperLight1);
         
-        const upperLight2 = new THREE.PointLight(0xaaddff, 1.2, 800);
+        const upperLight2 = new THREE.PointLight(0x7abce0, 1.2, 800);
         upperLight2.position.set(width * 0.4, floorY + height * 0.7, depth * 0.3);
         scene.add(upperLight2);
         
-        const leftLight = new THREE.SpotLight(0xffffff, 0.6, 1200, Math.PI / 4, 0.5, 1);
+        const leftLight = new THREE.SpotLight(0x8ec8e8, 0.6, 1200, Math.PI / 4, 0.5, 1);
         leftLight.position.set(-width * 0.8, floorY + height / 2, 0);
         leftLight.target.position.set(0, floorY + height / 2, 0);
         scene.add(leftLight);
         scene.add(leftLight.target);
         
         if (quality === 'high') {
-            const rightLight = new THREE.SpotLight(0xffffff, 0.6, 1200, Math.PI / 4, 0.5, 1);
+            const rightLight = new THREE.SpotLight(0x8ec8e8, 0.6, 1200, Math.PI / 4, 0.5, 1);
             rightLight.position.set(width * 0.8, floorY + height / 2, 0);
             rightLight.target.position.set(0, floorY + height / 2, 0);
             scene.add(rightLight);
             scene.add(rightLight.target);
             
-            const frontLight = new THREE.SpotLight(0xffffff, 0.5, 1500, Math.PI / 4, 0.5, 1);
+            const frontLight = new THREE.SpotLight(0x8ec8e8, 0.5, 1500, Math.PI / 4, 0.5, 1);
             frontLight.position.set(0, 100, -900);
             frontLight.target.position.set(0, floorY + height / 2, 0);
             scene.add(frontLight);
@@ -17418,6 +17527,9 @@ function animate() {
     
     // Update panorama sky-sphere animation (slow rotation + bobbing)
     updatePanoramaAnimation(deltaTime);
+    
+    // Update underwater god rays (light shaft drift + pulse)
+    updateGodRays(currentTime / 1000);
     
     // Smooth camera transitions (for CENTER VIEW button and auto-panning)
     updateSmoothCameraTransition(deltaTime);
