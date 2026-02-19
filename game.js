@@ -16708,8 +16708,9 @@ function createScopeOverlay() {
     const el = document.createElement('div');
     el.id = 'scope-overlay';
     el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
-    const inset = 40;
-    const cornerLen = 30;
+    const inset = 52;
+    const cornerLen = 27;
+    const tickLen = 36;
     const color = 'rgba(0,255,200,0.5)';
     const thin = 'rgba(0,255,200,0.15)';
     const glow = '0 0 6px rgba(0,255,200,0.4)';
@@ -16725,10 +16726,10 @@ function createScopeOverlay() {
         <div style="${shared}bottom:${inset}px;left:${inset + cornerLen}px;right:${inset + cornerLen}px;height:0;border-bottom:${borderThin};"></div>
         <div style="${shared}left:${inset}px;top:${inset + cornerLen}px;bottom:${inset + cornerLen}px;width:0;border-left:${borderThin};"></div>
         <div style="${shared}right:${inset}px;top:${inset + cornerLen}px;bottom:${inset + cornerLen}px;width:0;border-right:${borderThin};"></div>
-        <div style="position:absolute;top:${inset - 1}px;left:50%;transform:translateX(-50%);width:40px;height:0;border-top:${border};"></div>
-        <div style="position:absolute;bottom:${inset - 1}px;left:50%;transform:translateX(-50%);width:40px;height:0;border-bottom:${border};"></div>
-        <div style="position:absolute;left:${inset - 1}px;top:50%;transform:translateY(-50%);height:40px;width:0;border-left:${border};"></div>
-        <div style="position:absolute;right:${inset - 1}px;top:50%;transform:translateY(-50%);height:40px;width:0;border-right:${border};"></div>
+        <div style="position:absolute;top:${inset - 1}px;left:50%;transform:translateX(-50%);width:${tickLen}px;height:0;border-top:${border};"></div>
+        <div style="position:absolute;bottom:${inset - 1}px;left:50%;transform:translateX(-50%);width:${tickLen}px;height:0;border-bottom:${border};"></div>
+        <div style="position:absolute;left:${inset - 1}px;top:50%;transform:translateY(-50%);height:${tickLen}px;width:0;border-left:${border};"></div>
+        <div style="position:absolute;right:${inset - 1}px;top:50%;transform:translateY(-50%);height:${tickLen}px;width:0;border-right:${border};"></div>
     `;
     document.body.appendChild(el);
     scopeOverlayEl = el;
