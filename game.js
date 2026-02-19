@@ -898,10 +898,12 @@ const CONFIG = {
     
     // Boids settings - adjusted for 1.5x tank
     boids: {
-        separationDistance: 50,
+        separationDistance: 80,
         cohesionDistance: 180,
-        separationWeight: 1.5,
-        cohesionWeight: 0.8
+        separationWeight: 2.5,
+        cohesionWeight: 0.8,
+        crossSeparationWeight: 3.0,
+        crossSeparationSizeFactor: 0.7
     }
 };
 
@@ -13048,13 +13050,11 @@ class Fish {
         const shouldUpdateBoids = this.boidsFrameCounter % boidsUpdateInterval === 0;
         
         if (shouldUpdateBoids) {
-            // Use per-species boidsStrength from config for precise control
-            // 0 = strictly solitary, 0.3 = weak, 1.0 = normal, 2.0 = tight, 3.0+ = bait ball
+            this.applyCrossSeparation();
             const boidsStrength = this.config.boidsStrength !== undefined ? this.config.boidsStrength : 1.0;
             if (boidsStrength > 0) {
                 this.applyBoids(allFish, boidsStrength);
             }
-            // Skip boids entirely for strictly solitary fish (boidsStrength = 0)
         }
         
         // Apply boundary forces
@@ -13771,6 +13771,45 @@ class Fish {
                 this.acceleration.z += toTargetZ * leaderFollowStrength;
             }
         }
+    }
+    
+    applyCrossSeparation() {
+        const myPos = this.group.position;
+        const mySize = this.config.size || 20;
+        const nearbyFish = getNearbyFish(this);
+        const sizeFactor = CONFIG.boids.crossSeparationSizeFactor;
+        const weight = CONFIG.boids.crossSeparationWeight;
+        
+        let pushX = 0, pushY = 0, pushZ = 0;
+        
+        for (let i = 0; i < nearbyFish.length; i++) {
+            const other = nearbyFish[i];
+            if (other === this || !other.isActive) continue;
+            
+            const otherPos = other.group.position;
+            const otherSize = other.config.size || 20;
+            const minDist = (mySize + otherSize) * sizeFactor;
+            const minDistSq = minDist * minDist;
+            
+            const dx = myPos.x - otherPos.x;
+            const dy = myPos.y - otherPos.y;
+            const dz = myPos.z - otherPos.z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            
+            if (distSq < minDistSq && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                const overlap = 1.0 - dist / minDist;
+                const force = overlap * overlap * weight;
+                const invDist = 1.0 / dist;
+                pushX += dx * invDist * force;
+                pushY += dy * invDist * force;
+                pushZ += dz * invDist * force;
+            }
+        }
+        
+        this.acceleration.x += pushX;
+        this.acceleration.y += pushY * 0.5;
+        this.acceleration.z += pushZ;
     }
     
     applyBoundaryForces() {
