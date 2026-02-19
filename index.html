@@ -897,9 +897,9 @@
             0% { transform: scale(0.82); filter: drop-shadow(0 0 8px rgba(0,255,200,0.8)) brightness(2); }
             100% { transform: scale(1); filter: drop-shadow(0 0 3px rgba(0,255,200,0.4)) brightness(1); }
         }
-        /* Ring Flash hit feedback glow */
+        /* Ring Flash hit feedback glow - HIGH CONTRAST yellow/white flash */
         #crosshair.hit-flash .tech-circle-svg {
-            filter: drop-shadow(0 0 8px rgba(0,255,200,0.9)) brightness(1.5) !important;
+            filter: drop-shadow(0 0 12px rgba(255,255,100,1)) drop-shadow(0 0 20px rgba(255,200,0,0.9)) brightness(2.5) !important;
         }
         
         .crosshair-3x-side {
@@ -914,7 +914,7 @@
             animation: techCircleFire 0.2s ease-out;
         }
         .crosshair-3x-side.hit-flash .tech-circle-svg {
-            filter: drop-shadow(0 0 10px rgba(0,255,200,1)) brightness(2) !important;
+            filter: drop-shadow(0 0 12px rgba(255,255,100,1)) drop-shadow(0 0 20px rgba(255,200,0,0.9)) brightness(2.5) !important;
         }
 
         /* 3x Forward-Scatter Reticle (overlays base crosshair) */
