@@ -898,10 +898,17 @@ const CONFIG = {
     
     // Boids settings - adjusted for 1.5x tank
     boids: {
-        separationDistance: 50,
+        separationDistance: 80,
         cohesionDistance: 180,
-        separationWeight: 1.5,
+        separationWeight: 2.5,
         cohesionWeight: 0.8
+    },
+    dodge: {
+        detectSizeFactor: 0.85,
+        speedBoostFactor: 1.3,
+        lateralStrength: 40,
+        decayRate: 2.5,
+        rampUpRate: 6.0
     }
 };
 
@@ -13079,13 +13086,11 @@ class Fish {
         const shouldUpdateBoids = this.boidsFrameCounter % boidsUpdateInterval === 0;
         
         if (shouldUpdateBoids) {
-            // Use per-species boidsStrength from config for precise control
-            // 0 = strictly solitary, 0.3 = weak, 1.0 = normal, 2.0 = tight, 3.0+ = bait ball
+            this.applyDodgeManeuver(deltaTime);
             const boidsStrength = this.config.boidsStrength !== undefined ? this.config.boidsStrength : 1.0;
             if (boidsStrength > 0) {
                 this.applyBoids(allFish, boidsStrength);
             }
-            // Skip boids entirely for strictly solitary fish (boidsStrength = 0)
         }
         
         // Apply boundary forces
@@ -13148,9 +13153,12 @@ class Fish {
         // Limit speed based on pattern
         let maxSpeed = this.speed;
         if (this.patternState.phase === 'burst') {
-            maxSpeed = this.config.speedMax * 1.5; // Burst speed
+            maxSpeed = this.config.speedMax * 1.5;
         } else if (this.patternState.phase === 'stop') {
-            maxSpeed = this.speed * 0.1; // Almost stopped
+            maxSpeed = this.speed * 0.1;
+        }
+        if (this._dodgeIntensity > 0.01) {
+            maxSpeed *= 1.0 + (CONFIG.dodge.speedBoostFactor - 1.0) * this._dodgeIntensity;
         }
         
         const currentSpeedFinal = this.velocity.length();
@@ -13800,6 +13808,79 @@ class Fish {
                 this.acceleration.x += toTargetX * leaderFollowStrength;
                 this.acceleration.y += toTargetY * leaderFollowStrength * 0.5; // Less vertical following
                 this.acceleration.z += toTargetZ * leaderFollowStrength;
+            }
+        }
+    }
+    
+    applyDodgeManeuver(deltaTime) {
+        const myPos = this.group.position;
+        const mySize = this.config.size || 20;
+        const myVel = this.velocity;
+        const nearbyFish = getNearbyFish(this);
+        const detectFactor = CONFIG.dodge.detectSizeFactor;
+        const lateralStr = CONFIG.dodge.lateralStrength;
+        
+        if (!this._dodgeIntensity) this._dodgeIntensity = 0;
+        if (!this._dodgeLateralX) this._dodgeLateralX = 0;
+        if (!this._dodgeLateralZ) this._dodgeLateralZ = 0;
+        
+        let closestOverlap = 0;
+        let bestLateralX = 0;
+        let bestLateralZ = 0;
+        
+        const mySpeed = Math.sqrt(myVel.x * myVel.x + myVel.z * myVel.z);
+        let fwdX = 0, fwdZ = 1;
+        if (mySpeed > 1) {
+            fwdX = myVel.x / mySpeed;
+            fwdZ = myVel.z / mySpeed;
+        }
+        
+        for (let i = 0; i < nearbyFish.length; i++) {
+            const other = nearbyFish[i];
+            if (other === this || !other.isActive) continue;
+            
+            const otherPos = other.group.position;
+            const otherSize = other.config.size || 20;
+            const detectDist = (mySize + otherSize) * detectFactor;
+            
+            const dx = myPos.x - otherPos.x;
+            const dy = myPos.y - otherPos.y;
+            const dz = myPos.z - otherPos.z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            const detectDistSq = detectDist * detectDist;
+            
+            if (distSq < detectDistSq && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                const overlap = 1.0 - dist / detectDist;
+                
+                if (overlap > closestOverlap) {
+                    closestOverlap = overlap;
+                    const perpX = -fwdZ;
+                    const perpZ = fwdX;
+                    const side = dx * perpX + dz * perpZ;
+                    const sign = side >= 0 ? 1 : -1;
+                    bestLateralX = perpX * sign;
+                    bestLateralZ = perpZ * sign;
+                }
+            }
+        }
+        
+        if (closestOverlap > 0.01) {
+            const targetIntensity = Math.min(closestOverlap * 2, 1.0);
+            this._dodgeIntensity = Math.min(this._dodgeIntensity + CONFIG.dodge.rampUpRate * deltaTime, targetIntensity);
+            this._dodgeLateralX = bestLateralX;
+            this._dodgeLateralZ = bestLateralZ;
+        } else {
+            this._dodgeIntensity = Math.max(0, this._dodgeIntensity - CONFIG.dodge.decayRate * deltaTime);
+        }
+        
+        if (this._dodgeIntensity > 0.001) {
+            const smooth = this._dodgeIntensity * this._dodgeIntensity * (3 - 2 * this._dodgeIntensity);
+            this.acceleration.x += this._dodgeLateralX * lateralStr * smooth;
+            this.acceleration.z += this._dodgeLateralZ * lateralStr * smooth;
+            if (mySpeed > 1) {
+                this.acceleration.x += fwdX * lateralStr * 0.5 * smooth;
+                this.acceleration.z += fwdZ * lateralStr * 0.5 * smooth;
             }
         }
     }
