@@ -772,8 +772,8 @@ const CONFIG = {
             convergenceDistance: 1400
         },
         '8x': {
-            multiplier: 8, cost: 8, speed: 6000,
-            damage: 350, shotsPerSecond: 1.67,
+            multiplier: 8, cost: 8,
+            damage: 350, shotsPerSecond: 1.0,
             type: 'laser', piercing: true, laserWidth: 8,
             color: 0xff4444, size: 16,
             cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
@@ -5119,7 +5119,7 @@ const AUDIO_CONFIG = {
         hit8x: 0.7,
         bossTime: 0.5,
         bossDead: 0.7,
-        coinDrop: 0.6,      // Volume for coin drop sound
+        coinDrop: 0.51,     // Volume for coin drop sound (reduced 15%)
         coinReceive: 0.6,
         coinCasino: 0.5,
         background: 0.3,
@@ -11070,14 +11070,15 @@ function autoFireAtFish(targetFish) {
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
     } else if (weapon.type === 'laser') {
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
-        triggerScreenShakeWithStrength(8, 100);
+        fireLaserBeam(muzzlePos, direction, weaponKey);
     } else {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
     
     playWeaponShot(weaponKey);
-    spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+    if (weapon.type !== 'laser') {
+        spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+    }
     
     if (weaponKey === '5x' || weaponKey === '8x') {
         startCannonChargeEffect(weaponKey);
@@ -15124,16 +15125,8 @@ function fireBullet(targetX, targetY) {
         }
         
     } else if (weapon.type === 'laser') {
-        // 8x LASER: Projectile with speed 6000, piercing through fish
-        // FIX: Removed duplicate spawnLaserBeamEffect - the projectile already provides
-        // visual feedback via its glow trail. The extra instant beam created a "double shot"
-        // visual that made one click look like burst fire.
-        if (useFpsConvergent) {
-            fireWithConvergentDirection(muzzlePos, direction, weaponKey);
-        } else {
-            spawnBulletFromDirection(muzzlePos, direction, weaponKey);
-        }
-        triggerScreenShakeWithStrength(8, 100);
+        // 8x LASER: Hitscan with piercing - instant raycast damages all fish along beam
+        fireLaserBeam(muzzlePos, direction, weaponKey);
         
     } else if (weapon.type === 'rocket') {
         // 5x ROCKET: Straight line projectile with explosion on impact
@@ -15152,9 +15145,10 @@ function fireBullet(targetX, targetY) {
         }
     }
     
-    // Issue #14: Enhanced muzzle flash VFX
-    // PERFORMANCE: spawnMuzzleFlash copies values internally, no need to clone
-    spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+    // Issue #14: Enhanced muzzle flash VFX (laser has its own muzzle flash in beam effect)
+    if (weapon.type !== 'laser') {
+        spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+    }
     
     // Issue #14: Start charge effect for 5x and 8x weapons (visual only, doesn't delay shot)
     if (weaponKey === '5x' || weaponKey === '8x') {
@@ -15930,8 +15924,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
     
     const laserDirection = direction.clone().normalize();
     
-    // Play laser sound
-    playSound('explosion'); // TODO: Add dedicated laser sound
+    // Sound is handled by the caller (fireBullet/autoFireAtFish call playWeaponShot)
     
     // FPS MODE FIX: Use camera position as ray origin for hit detection.
     // The muzzle is offset from the camera (below and in front). If we raycast
@@ -16178,7 +16171,7 @@ function spawnLaserBeamEffect(start, end, color, width) {
         ringMaterial: ringMaterial,
         particleGeometry: particleGeometry,
         sparkGeometry: sparkGeometry,
-        duration: 400, // Longer duration for dramatic effect
+        duration: 800, // 0.8s beam display duration
         pulsePhase: 0,
         
         update(dt, elapsed) {
