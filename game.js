@@ -2107,17 +2107,18 @@ const WEAPON_GLB_CONFIG = {
             cannonNonPlayer: '1x 武器模組(非玩家).glb',
             bullet: '1x 子彈模組',
             hitEffect: '1x 擊中特效',
-            scale: 0.9,  // Increased from 0.8 for better visibility
+            scale: 0.9,
             bulletScale: 0.5,
             hitEffectScale: 1.0,
-            muzzleOffset: new THREE.Vector3(0, 25, 55),  // Adjusted for proper muzzle alignment
+            muzzleOffset: new THREE.Vector3(0, 25, 55),
+            cannonYOffset: 20,
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 95,
-            fpsCameraUpOffset: 65,
-            emissiveBoost: 0.4  // Brighter glow for visibility
+            fpsCameraUpOffset: 70,
+            emissiveBoost: 0.4
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -2125,49 +2126,52 @@ const WEAPON_GLB_CONFIG = {
             bullet: '1x 子彈模組',
             bulletTint: 0xffaaaa,
             hitEffect: '3x 擊中特效',
-            scale: 1.1,  // Increased from 1.0 for better visibility
+            scale: 1.1,
             bulletScale: 0.6,
             hitEffectScale: 1.2,
-            muzzleOffset: new THREE.Vector3(0, 25, 60),  // Adjusted for proper muzzle alignment
+            muzzleOffset: new THREE.Vector3(0, 25, 60),
+            cannonYOffset: 20,
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 105,
             fpsCameraUpOffset: 70,
-            emissiveBoost: 0.4  // Brighter glow for visibility
+            emissiveBoost: 0.4
         },
         '5x': {
             cannon: '5x 武器模組',
             cannonNonPlayer: '5x 武器模組(非玩家).glb',
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
-            scale: 1.3,  // Increased from 1.2 for better visibility
+            scale: 1.3,
             bulletScale: 0.7,
             hitEffectScale: 1.5,
-            muzzleOffset: new THREE.Vector3(0, 25, 65),  // Adjusted for proper muzzle alignment
+            muzzleOffset: new THREE.Vector3(0, 25, 65),
+            cannonYOffset: 20,
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
             fpsCameraUpOffset: 80,
-            emissiveBoost: 0.4  // Brighter glow for visibility
+            emissiveBoost: 0.4
         },
         '8x': {
             cannon: '8x 武器模組',
             cannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
             bullet: '8x 子彈模組',
             hitEffect: '8x 擊中特效',
-            scale: 1.0,  // Reduced from 1.5 to not block laser view
+            scale: 1.0,
             bulletScale: 0.9,
             hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 20, 50),  // Adjusted for proper muzzle alignment, lower profile
+            muzzleOffset: new THREE.Vector3(0, 25, 50),
+            cannonYOffset: 20,
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 150,  // Reduced from 190 for better laser visibility
-            fpsCameraUpOffset: 80,   // Reduced from 100 for better laser visibility
-            emissiveBoost: 0.3  // Slightly less glow to not compete with laser
+            fpsCameraBackDist: 130,
+            fpsCameraUpOffset: 70,
+            emissiveBoost: 0.3
         }
     }
 };
@@ -7096,7 +7100,7 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     
     // Try to spawn GLB hit effect first
     if (weaponGLBState.enabled && glbConfig) {
-        const glbSpawned = await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection);
+        const glbSpawned = await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish);
         if (glbSpawned) {
             // GLB effect spawned, still add some procedural effects for extra visual impact
             if (weaponKey === '5x' || weaponKey === '8x') {
@@ -7163,14 +7167,13 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
 // Spawn GLB hit effect model - REFACTORED to use VFX manager
 // PERFORMANCE: Synchronous hit effect spawning using pre-cloned pool
 // Eliminates: async/await, model.clone(), material.clone(), traverse(), disposeObject3D()
-function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
+function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish) {
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!glbConfig) return false;
     
     // Get pre-cloned hit effect from pool (synchronous, no async needed)
     const poolItem = getHitEffectFromPool(weaponKey);
     if (!poolItem) {
-        // Pool exhausted - this should be rare if pool size is adequate
         console.warn(`[WEAPON-GLB] Hit effect pool exhausted for ${weaponKey}`);
         return false;
     }
@@ -7185,24 +7188,24 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection) {
     // Position at hit location
     hitEffectModel.position.copy(hitPos);
     
-    // Orient the hit effect based on bullet direction
-    if (bulletDirection) {
-        // PERFORMANCE: Use temp vectors instead of clone()
-        hitEffectTempVectors.dir.copy(bulletDirection).normalize();
+    // Orient the hit effect to match the fish's facing direction so it looks
+    // like the explosion is happening ON the fish body, not as a flat 2D billboard.
+    if (hitFish && hitFish.group) {
+        hitEffectModel.quaternion.copy(hitFish.group.quaternion);
         
-        // Use lookAt() to align the model's +Z axis to bullet direction
-        hitEffectTempVectors.targetPos.copy(hitPos).add(hitEffectTempVectors.dir);
-        hitEffectModel.lookAt(hitEffectTempVectors.targetPos);
-        
-        // If hitEffectRotationFix is defined, apply additional rotation to correct model's orientation
         if (glbConfig.hitEffectRotationFix) {
             hitEffectTempVectors.rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
             hitEffectModel.quaternion.multiply(hitEffectTempVectors.rotationFixQuat);
         }
+    } else if (bulletDirection) {
+        hitEffectTempVectors.dir.copy(bulletDirection).normalize();
+        hitEffectTempVectors.targetPos.copy(hitPos).add(hitEffectTempVectors.dir);
+        hitEffectModel.lookAt(hitEffectTempVectors.targetPos);
         
-        // Offset slightly along bullet direction to prevent z-fighting with fish geometry
-        // PERFORMANCE: Use addScaledVector instead of clone().multiplyScalar()
-        hitEffectModel.position.addScaledVector(hitEffectTempVectors.dir, 5);
+        if (glbConfig.hitEffectRotationFix) {
+            hitEffectTempVectors.rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
+            hitEffectModel.quaternion.multiply(hitEffectTempVectors.rotationFixQuat);
+        }
     }
     
     // Add to scene
@@ -10429,6 +10432,7 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         // Cancel any active barrel recoil to prevent stale animation on new weapon
         barrelRecoilState.active = false;
         barrelRecoilState.phase = 'idle';
+        barrelRecoilState.originalPosition.set(0, yOff, 0);
         
         // Update muzzle position based on GLB config
         if (cannonMuzzle && glbConfig.muzzleOffset) {
@@ -11231,16 +11235,6 @@ function autoFireAtFish(targetFish) {
         Math.sin(pitch),
         Math.cos(yaw) * Math.cos(pitch)
     ).normalize();
-    
-    if (weapon.type === 'laser' && gameState.viewMode === 'fps' && targetFish && targetFish.group) {
-        var fishPos = targetFish.group.position;
-        if (targetFish.velocity && weapon.speed) {
-            var dist = camera.position.distanceTo(fishPos);
-            var ft = dist / weapon.speed;
-            fishPos = fishPos.clone().add(targetFish.velocity.clone().multiplyScalar(ft));
-        }
-        direction.copy(fishPos).sub(camera.position).normalize();
-    }
     
     if (weapon.type === 'spread') {
         // 3x weapon: Fire 3 bullets in fan spread pattern
