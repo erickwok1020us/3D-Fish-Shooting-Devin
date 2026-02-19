@@ -2109,15 +2109,15 @@ const WEAPON_GLB_CONFIG = {
             hitEffect: '1x 擊中特效',
             scale: 1.0,
             bulletScale: 0.5,
-            hitEffectScale: 1.0,
-            muzzleOffset: new THREE.Vector3(0, 25, 55),
-            cannonYOffset: 20,
+            hitEffectScale: 0.6,
+            muzzleOffset: new THREE.Vector3(0, 30, 55),
+            cannonYOffset: 35,
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
+            hitEffectRotationFix: false,
             hitEffectPlanar: true,
             fpsCameraBackDist: 115,
-            fpsCameraUpOffset: 75,
+            fpsCameraUpOffset: 80,
             emissiveBoost: 0.4
         },
         '3x': {
@@ -2128,12 +2128,12 @@ const WEAPON_GLB_CONFIG = {
             hitEffect: '3x 擊中特效',
             scale: 1.1,
             bulletScale: 0.6,
-            hitEffectScale: 1.2,
-            muzzleOffset: new THREE.Vector3(0, 25, 60),
+            hitEffectScale: 0.7,
+            muzzleOffset: new THREE.Vector3(0, 30, 60),
             cannonYOffset: 20,
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
+            hitEffectRotationFix: false,
             hitEffectPlanar: true,
             fpsCameraBackDist: 125,
             fpsCameraUpOffset: 75,
@@ -2146,11 +2146,12 @@ const WEAPON_GLB_CONFIG = {
             hitEffect: '5x 擊中特效',
             scale: 1.3,
             bulletScale: 0.7,
-            hitEffectScale: 1.5,
-            muzzleOffset: new THREE.Vector3(0, 25, 65),
+            hitEffectScale: 0.9,
+            muzzleOffset: new THREE.Vector3(0, 30, 65),
             cannonYOffset: 20,
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            hitEffectRotationFix: false,
             hitEffectPlanar: false,
             fpsCameraBackDist: 150,
             fpsCameraUpOffset: 85,
@@ -2163,11 +2164,12 @@ const WEAPON_GLB_CONFIG = {
             hitEffect: '8x 擊中特效',
             scale: 1.0,
             bulletScale: 0.9,
-            hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 25, 50),
+            hitEffectScale: 1.2,
+            muzzleOffset: new THREE.Vector3(0, 30, 50),
             cannonYOffset: 20,
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+            hitEffectRotationFix: false,
             hitEffectPlanar: false,
             fpsCameraBackDist: 150,
             fpsCameraUpOffset: 75,
@@ -5638,11 +5640,11 @@ function playWeaponShot(weaponKey) {
     
     const soundKey = soundKeyMap[weaponKey];
     if (soundKey && audioBufferCache.has(soundKey)) {
-        playMP3Sound(soundKey);
+        const volumeMap = { '1x': 1.0, '3x': 1.0, '5x': 1.0, '8x': 0.5 };
+        playMP3Sound(soundKey, volumeMap[weaponKey] || 1.0);
         
-        // 8x weapon still triggers screen shake
         if (weaponKey === '8x') {
-            triggerScreenShakeWithStrength(10, 300);
+            triggerScreenShakeWithStrength(6, 200);
         }
     } else {
         // Fallback to synthesized sounds if MP3 not loaded
@@ -5715,19 +5717,19 @@ function playWeaponShotSynthesized(weaponKey) {
             break;
             
         case '8x':
-            playNoise(200, 1, 0.4, 0.3, 'lowpass');
+            playNoise(200, 1, 0.4, 0.15, 'lowpass');
             const osc8 = audioContext.createOscillator();
             const gain8 = audioContext.createGain();
             osc8.type = 'sawtooth';
             osc8.frequency.setValueAtTime(150, now);
-            osc8.frequency.exponentialRampToValueAtTime(30, now + 0.4);
-            gain8.gain.setValueAtTime(0.25, now);
-            gain8.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+            osc8.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+            gain8.gain.setValueAtTime(0.12, now);
+            gain8.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
             osc8.connect(gain8);
             gain8.connect(sfxGain);
             osc8.start(now);
-            osc8.stop(now + 0.4);
-            triggerScreenShakeWithStrength(10, 300);
+            osc8.stop(now + 0.3);
+            triggerScreenShakeWithStrength(6, 200);
             break;
             
         default:
@@ -7188,28 +7190,19 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish) {
     // Position at hit location
     hitEffectModel.position.copy(hitPos);
     
-    // Orient the hit effect based on bullet direction, using the fish's Y-rotation
-    // (yaw) so the explosion aligns horizontally with the fish body.
-    if (bulletDirection) {
-        hitEffectTempVectors.dir.copy(bulletDirection).normalize();
-        hitEffectTempVectors.targetPos.copy(hitPos).add(hitEffectTempVectors.dir);
-        hitEffectModel.lookAt(hitEffectTempVectors.targetPos);
+    if (camera) {
+        hitEffectModel.lookAt(camera.position);
     }
-    if (hitFish && hitFish.group) {
-        hitEffectModel.rotation.y = hitFish.group.rotation.y;
-    }
-    if (glbConfig.hitEffectRotationFix) {
-        hitEffectTempVectors.rotationFixQuat.setFromEuler(glbConfig.hitEffectRotationFix);
-        hitEffectModel.quaternion.multiply(hitEffectTempVectors.rotationFixQuat);
-    }
+    // Add slight random rotation around the facing axis for visual variety
+    hitEffectModel.rotateZ(Math.random() * Math.PI * 2);
     
     // Add to scene
     scene.add(hitEffectModel);
     
     // Register with VFX manager instead of using own RAF loop
-    const duration = 800; // 800ms animation
-    const initialScale = scale * 0.5;
-    const maxScale = scale * 1.5;
+    const duration = 400; // 400ms animation (shorter, snappier)
+    const initialScale = scale * 0.3;
+    const maxScale = scale * 1.0;
     
     addVfxEffect({
         type: 'glbHitEffect',
@@ -11038,7 +11031,7 @@ function resetAutoFireState() {
 
 function findNearestFish(muzzlePos) {
     let best = null;
-    let bestScore = Infinity;
+    let bestDist = Infinity;
     for (const fish of activeFish) {
         if (!fish.isActive) continue;
         const pos = fish.group.position;
@@ -11048,12 +11041,9 @@ function findNearestFish(muzzlePos) {
         const pitch = Math.asin(dir.y);
         if (Math.abs(yaw) > AUTOFIRE_YAW_LIMIT) continue;
         if (pitch > AUTOFIRE_PITCH_MAX || pitch < AUTOFIRE_PITCH_MIN) continue;
-        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-        const angleDev = Math.abs(yaw) + Math.abs(pitch);
-        const fishSpeed = fish.speed || 50;
-        const score = dist + angleDev * 300 + fishSpeed * 3;
-        if (score < bestScore) {
-            bestScore = score;
+        const dist = dx*dx + dy*dy + dz*dz;
+        if (dist < bestDist) {
+            bestDist = dist;
             best = fish;
         }
     }
