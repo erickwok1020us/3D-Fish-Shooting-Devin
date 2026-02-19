@@ -2107,16 +2107,17 @@ const WEAPON_GLB_CONFIG = {
             cannonNonPlayer: '1x 武器模組(非玩家).glb',
             bullet: '1x 子彈模組',
             hitEffect: '1x 擊中特效',
-            scale: 0.8,
+            scale: 0.9,  // Increased from 0.8 for better visibility
             bulletScale: 0.5,
             hitEffectScale: 1.0,
-            muzzleOffset: new THREE.Vector3(0, 25, 60),
+            muzzleOffset: new THREE.Vector3(0, 25, 55),  // Adjusted for proper muzzle alignment
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 95,
-            fpsCameraUpOffset: 65
+            fpsCameraUpOffset: 65,
+            emissiveBoost: 0.4  // Brighter glow for visibility
         },
         '3x': {
             cannon: '3x 武器模組',
@@ -2124,46 +2125,49 @@ const WEAPON_GLB_CONFIG = {
             bullet: '1x 子彈模組',
             bulletTint: 0xffaaaa,
             hitEffect: '3x 擊中特效',
-            scale: 1.0,
+            scale: 1.1,  // Increased from 1.0 for better visibility
             bulletScale: 0.6,
             hitEffectScale: 1.2,
-            muzzleOffset: new THREE.Vector3(0, 25, 65),
+            muzzleOffset: new THREE.Vector3(0, 25, 60),  // Adjusted for proper muzzle alignment
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectRotationFix: new THREE.Euler(-Math.PI / 2, 0, 0),
             hitEffectPlanar: true,
             fpsCameraBackDist: 105,
-            fpsCameraUpOffset: 70
+            fpsCameraUpOffset: 70,
+            emissiveBoost: 0.4  // Brighter glow for visibility
         },
         '5x': {
             cannon: '5x 武器模組',
             cannonNonPlayer: '5x 武器模組(非玩家).glb',
             bullet: '5x 子彈模組',
             hitEffect: '5x 擊中特效',
-            scale: 1.2,
+            scale: 1.3,  // Increased from 1.2 for better visibility
             bulletScale: 0.7,
             hitEffectScale: 1.5,
-            muzzleOffset: new THREE.Vector3(0, 25, 70),
+            muzzleOffset: new THREE.Vector3(0, 25, 65),  // Adjusted for proper muzzle alignment
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
             fpsCameraBackDist: 130,
-            fpsCameraUpOffset: 80
+            fpsCameraUpOffset: 80,
+            emissiveBoost: 0.4  // Brighter glow for visibility
         },
         '8x': {
             cannon: '8x 武器模組',
             cannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
             bullet: '8x 子彈模組',
             hitEffect: '8x 擊中特效',
-            scale: 1.5,
+            scale: 1.0,  // Reduced from 1.5 to not block laser view
             bulletScale: 0.9,
             hitEffectScale: 2.0,
-            muzzleOffset: new THREE.Vector3(0, 25, 80),
+            muzzleOffset: new THREE.Vector3(0, 20, 50),  // Adjusted for proper muzzle alignment, lower profile
             cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
             hitEffectPlanar: false,
-            fpsCameraBackDist: 190,
-            fpsCameraUpOffset: 100
+            fpsCameraBackDist: 150,  // Reduced from 190 for better laser visibility
+            fpsCameraUpOffset: 80,   // Reduced from 100 for better laser visibility
+            emissiveBoost: 0.3  // Slightly less glow to not compete with laser
         }
     }
 };
@@ -2866,15 +2870,16 @@ async function loadWeaponGLB(weaponKey, type) {
                             child.material.side = THREE.DoubleSide;
                             
                             if (child.material.metalness !== undefined) {
-                                child.material.metalness = 0.1;
+                                child.material.metalness = 0.15;
                             }
                             if (child.material.roughness !== undefined) {
-                                child.material.roughness = 0.8;
+                                child.material.roughness = 0.7;
                             }
                             
+                            var emBoost = config.emissiveBoost || 0.2;
                             if (child.material.emissive) {
-                                child.material.emissive.setHex(0x111111);
-                                child.material.emissiveIntensity = 0.2;
+                                child.material.emissive.setHex(0x222222);
+                                child.material.emissiveIntensity = emBoost;
                             }
                         }
                     }
@@ -6589,7 +6594,7 @@ function showCrosshairRingFlash(spreadIndex) {
         }
     }
     const ring = document.createElement('div');
-    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:28px;height:28px;border:1.5px solid rgba(0,255,200,0.7);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 8px rgba(0,255,200,0.5),inset 0 0 4px rgba(0,255,200,0.2);`;
+    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:32px;height:32px;border:2px solid rgba(255,255,100,0.95);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 12px rgba(255,200,0,0.9),0 0 20px rgba(255,255,100,0.6),inset 0 0 6px rgba(255,255,200,0.4);`;
     document.body.appendChild(ring);
     if (targetEl) {
         targetEl.classList.add('hit-flash');
@@ -10297,7 +10302,12 @@ function createCannon() {
     // Issue #10: Cannon muzzle point (for bullet spawning) - child of pitch group
     // This ensures muzzle rotates with barrel when pitching
     cannonMuzzle = new THREE.Object3D();
-    cannonMuzzle.position.set(0, 25, 60);  // At end of barrel along +Z axis
+    var initMuzzleConfig = WEAPON_GLB_CONFIG.weapons['1x'];
+    if (initMuzzleConfig && initMuzzleConfig.muzzleOffset) {
+        cannonMuzzle.position.copy(initMuzzleConfig.muzzleOffset);
+    } else {
+        cannonMuzzle.position.set(0, 25, 55);
+    }
     cannonPitchGroup.add(cannonMuzzle);
     
     // Build initial cannon geometry (async - will load GLB if available)
@@ -17445,6 +17455,16 @@ function initFPSMode() {
     if (vspreadInit && gameState.currentWeapon === '3x') vspreadInit.classList.add('fps-mode');
     
     updateCrosshairForWeapon(gameState.currentWeapon || '1x');
+    
+    // Ensure initial weapon HUD is fully synced (model + crosshair + ammo + button highlight)
+    gameState.currentWeapon = gameState.currentWeapon || '1x';
+    document.querySelectorAll('.weapon-btn').forEach(function(btn) {
+        btn.classList.remove('active');
+        if (btn.dataset.weapon === gameState.currentWeapon) {
+            btn.classList.add('active');
+        }
+    });
+    updateDigiAmmoDisplay();
     
     // Update camera position
     updateFPSCamera();
