@@ -6552,25 +6552,48 @@ function showHitMarker(spreadIndex, fishWorldPos, fish) {
 }
 
 let _lastRingFlashTime = 0;
-function showCrosshairRingFlash() {
+let _lastRingFlashTimeLeft = 0;
+let _lastRingFlashTimeRight = 0;
+function showCrosshairRingFlash(spreadIndex) {
     const now = performance.now();
-    if (now - _lastRingFlashTime < 150) return;
-    _lastRingFlashTime = now;
-    const chEl = document.getElementById('crosshair');
-    let cx, cy;
-    if (gameState.viewMode === 'fps') {
-        cx = window.innerWidth / 2;
-        cy = window.innerHeight / 2;
+    var targetEl = null;
+    var cx, cy;
+    var is3x = gameState.currentWeapon === '3x';
+
+    if (is3x && spreadIndex === -1) {
+        if (now - _lastRingFlashTimeLeft < 150) return;
+        _lastRingFlashTimeLeft = now;
+        targetEl = document.getElementById('crosshair-3x-left');
+    } else if (is3x && spreadIndex === 1) {
+        if (now - _lastRingFlashTimeRight < 150) return;
+        _lastRingFlashTimeRight = now;
+        targetEl = document.getElementById('crosshair-3x-right');
     } else {
-        cx = chEl ? (parseFloat(chEl.style.left) || window.innerWidth / 2) : window.innerWidth / 2;
-        cy = chEl ? (parseFloat(chEl.style.top) || window.innerHeight / 2) : window.innerHeight / 2;
+        if (now - _lastRingFlashTime < 150) return;
+        _lastRingFlashTime = now;
+        targetEl = document.getElementById('crosshair');
+    }
+
+    if (targetEl) {
+        cx = parseFloat(targetEl.style.left);
+        cy = parseFloat(targetEl.style.top);
+    }
+    if (!cx || !cy) {
+        if (gameState.viewMode === 'fps') {
+            cx = window.innerWidth / 2;
+            cy = window.innerHeight / 2;
+        } else {
+            var chEl = document.getElementById('crosshair');
+            cx = chEl ? (parseFloat(chEl.style.left) || window.innerWidth / 2) : window.innerWidth / 2;
+            cy = chEl ? (parseFloat(chEl.style.top) || window.innerHeight / 2) : window.innerHeight / 2;
+        }
     }
     const ring = document.createElement('div');
     ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:28px;height:28px;border:1.5px solid rgba(0,255,200,0.7);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 8px rgba(0,255,200,0.5),inset 0 0 4px rgba(0,255,200,0.2);`;
     document.body.appendChild(ring);
-    if (chEl) {
-        chEl.classList.add('hit-flash');
-        setTimeout(function() { chEl.classList.remove('hit-flash'); }, 300);
+    if (targetEl) {
+        targetEl.classList.add('hit-flash');
+        setTimeout(function() { targetEl.classList.remove('hit-flash'); }, 300);
     }
     const startT = performance.now();
     function animRing(t) {
@@ -11189,22 +11212,26 @@ function autoFireAtFish(targetFish) {
     const muzzlePos = autoFireTempVectors.muzzlePos;
     cannonMuzzle.getWorldPosition(muzzlePos);
     
-    // FIX: Calculate bullet direction from cannon's CURRENT visual rotation
-    // This ensures bullets always fire where the cannon is visually pointing
     const direction = autoFireTempVectors.direction;
     const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
     const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
     
-    // Convert yaw/pitch to direction vector
-    // yaw: rotation around Y axis (left/right)
-    // pitch: rotation around X axis (up/down)
     direction.set(
         Math.sin(yaw) * Math.cos(pitch),
         Math.sin(pitch),
         Math.cos(yaw) * Math.cos(pitch)
     ).normalize();
     
-    // Fire based on weapon type
+    if (weapon.type === 'laser' && gameState.viewMode === 'fps' && targetFish && targetFish.group) {
+        var fishPos = targetFish.group.position;
+        if (targetFish.velocity && weapon.speed) {
+            var dist = camera.position.distanceTo(fishPos);
+            var ft = dist / weapon.speed;
+            fishPos = fishPos.clone().add(targetFish.velocity.clone().multiplyScalar(ft));
+        }
+        direction.copy(fishPos).sub(camera.position).normalize();
+    }
+    
     if (weapon.type === 'spread') {
         // 3x weapon: Fire 3 bullets in fan spread pattern
         const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
@@ -14114,7 +14141,7 @@ class Fish {
         
         const fishPos = this.group ? this.group.position : null;
         showHitMarker(spreadIndex, fishPos, this);
-        showCrosshairRingFlash();
+        showCrosshairRingFlash(spreadIndex);
         
         if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
@@ -16605,27 +16632,58 @@ function selectWeapon(weaponKey) {
     updateDigiAmmoDisplay();
 }
 
-function createTechCircleSVG() {
-    const s = 48, c = 24, r = 14;
-    const col = 'rgba(0,255,200,';
-    let d = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + ' ' + s + '" class="tech-circle-svg" style="overflow:visible;filter:drop-shadow(0 0 3px ' + col + '0.4));">';
-    d += '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + col + '0.45)" stroke-width="1"/>';
-    var cardinals = [[c, c - r + 3, c, c - r - 5], [c + r - 3, c, c + r + 5, c], [c, c + r - 3, c, c + r + 5], [c - r + 3, c, c - r - 5, c]];
+function createTechCircleSVG(size) {
+    var s = size || 48;
+    var c = s / 2, r = s * 14 / 48;
+    var col = 'rgba(0,255,200,';
+    var sw = s / 48;
+    var d = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + ' ' + s + '" class="tech-circle-svg" style="overflow:visible;filter:drop-shadow(0 0 3px ' + col + '0.4));">';
+    d += '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + col + '0.45)" stroke-width="' + (1 * sw).toFixed(2) + '"/>';
+    var cardinals = [[c, c - r + 3 * sw, c, c - r - 5 * sw], [c + r - 3 * sw, c, c + r + 5 * sw, c], [c, c + r - 3 * sw, c, c + r + 5 * sw], [c - r + 3 * sw, c, c - r - 5 * sw, c]];
     for (var i = 0; i < cardinals.length; i++) {
         var p = cardinals[i];
-        d += '<line x1="' + p[0] + '" y1="' + p[1] + '" x2="' + p[2] + '" y2="' + p[3] + '" stroke="' + col + '0.85)" stroke-width="1.5"/>';
+        d += '<line x1="' + p[0].toFixed(1) + '" y1="' + p[1].toFixed(1) + '" x2="' + p[2].toFixed(1) + '" y2="' + p[3].toFixed(1) + '" stroke="' + col + '0.85)" stroke-width="' + (1.5 * sw).toFixed(2) + '"/>';
     }
     var diags = [45, 135, 225, 315];
     for (var j = 0; j < diags.length; j++) {
         var rad = (diags[j] - 90) * Math.PI / 180;
-        d += '<line x1="' + (c + Math.cos(rad) * (r - 1)).toFixed(1) + '" y1="' + (c + Math.sin(rad) * (r - 1)).toFixed(1) + '" x2="' + (c + Math.cos(rad) * (r + 3)).toFixed(1) + '" y2="' + (c + Math.sin(rad) * (r + 3)).toFixed(1) + '" stroke="' + col + '0.35)" stroke-width="0.8"/>';
+        d += '<line x1="' + (c + Math.cos(rad) * (r - 1 * sw)).toFixed(1) + '" y1="' + (c + Math.sin(rad) * (r - 1 * sw)).toFixed(1) + '" x2="' + (c + Math.cos(rad) * (r + 3 * sw)).toFixed(1) + '" y2="' + (c + Math.sin(rad) * (r + 3 * sw)).toFixed(1) + '" stroke="' + col + '0.35)" stroke-width="' + (0.8 * sw).toFixed(2) + '"/>';
     }
-    d += '<circle cx="' + c + '" cy="' + c + '" r="1.5" fill="#fff" class="tech-dot"/>';
+    d += '<circle cx="' + c + '" cy="' + c + '" r="' + (1.5 * sw).toFixed(2) + '" fill="#fff" class="tech-dot"/>';
     d += '</svg>';
     return d;
 }
 
-// Issue #16 CORRECTION: Simple crosshair color update (no size change - all weapons 100% accurate)
+function createLaserTechCircleSVG() {
+    var s = 44, c = 22, r = 13;
+    var col = 'rgba(0,255,200,';
+    var d = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + ' ' + s + '" class="tech-circle-svg" style="overflow:visible;filter:drop-shadow(0 0 4px ' + col + '0.5));">';
+    d += '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + col + '0.5)" stroke-width="0.8" stroke-dasharray="3 2"/>';
+    d += '<circle cx="' + c + '" cy="' + c + '" r="' + (r - 4) + '" fill="none" stroke="' + col + '0.25)" stroke-width="0.6"/>';
+    var arms = [[c, c - r + 2, c, c - r - 6], [c + r - 2, c, c + r + 6, c], [c, c + r - 2, c, c + r + 6], [c - r + 2, c, c - r - 6, c]];
+    for (var i = 0; i < arms.length; i++) {
+        var p = arms[i];
+        d += '<line x1="' + p[0] + '" y1="' + p[1] + '" x2="' + p[2] + '" y2="' + p[3] + '" stroke="' + col + '0.9)" stroke-width="1.2"/>';
+    }
+    var corners = [45, 135, 225, 315];
+    for (var j = 0; j < corners.length; j++) {
+        var rad = (corners[j] - 90) * Math.PI / 180;
+        var ix = c + Math.cos(rad) * (r - 2);
+        var iy = c + Math.sin(rad) * (r - 2);
+        var ox = c + Math.cos(rad) * (r + 4);
+        var oy = c + Math.sin(rad) * (r + 4);
+        d += '<line x1="' + ix.toFixed(1) + '" y1="' + iy.toFixed(1) + '" x2="' + ox.toFixed(1) + '" y2="' + oy.toFixed(1) + '" stroke="' + col + '0.45)" stroke-width="0.7"/>';
+    }
+    var chevW = 3.5, chevH = 2;
+    d += '<polyline points="' + (c - chevW) + ',' + (c - r - 3 + chevH) + ' ' + c + ',' + (c - r - 3) + ' ' + (c + chevW) + ',' + (c - r - 3 + chevH) + '" fill="none" stroke="' + col + '0.6)" stroke-width="0.8"/>';
+    d += '<polyline points="' + (c - chevW) + ',' + (c + r + 3 - chevH) + ' ' + c + ',' + (c + r + 3) + ' ' + (c + chevW) + ',' + (c + r + 3 - chevH) + '" fill="none" stroke="' + col + '0.6)" stroke-width="0.8"/>';
+    d += '<line x1="' + (c - 2) + '" y1="' + c + '" x2="' + (c + 2) + '" y2="' + c + '" stroke="' + col + '0.7)" stroke-width="0.8"/>';
+    d += '<line x1="' + c + '" y1="' + (c - 2) + '" x2="' + c + '" y2="' + (c + 2) + '" stroke="' + col + '0.7)" stroke-width="0.8"/>';
+    d += '<circle cx="' + c + '" cy="' + c + '" r="1" fill="rgba(255,255,255,0.9)"/>';
+    d += '</svg>';
+    return d;
+}
+
 function updateCrosshairForWeapon(weaponKey) {
     const crosshair = document.getElementById('crosshair');
     if (!crosshair) return;
@@ -16639,7 +16697,15 @@ function updateCrosshairForWeapon(weaponKey) {
     if (weaponKey === '1x' || weaponKey === '5x') {
         crosshair.style.width = '48px';
         crosshair.style.height = '48px';
-        crosshair.innerHTML = createTechCircleSVG();
+        crosshair.innerHTML = createTechCircleSVG(48);
+    } else if (weaponKey === '3x') {
+        crosshair.style.width = '40px';
+        crosshair.style.height = '40px';
+        crosshair.innerHTML = createTechCircleSVG(40);
+    } else if (weaponKey === '8x') {
+        crosshair.style.width = '44px';
+        crosshair.style.height = '44px';
+        crosshair.innerHTML = createLaserTechCircleSVG();
     } else {
         crosshair.style.width = '40px';
         crosshair.style.height = '40px';
@@ -16657,8 +16723,14 @@ function updateCrosshairForWeapon(weaponKey) {
     const sideL = document.getElementById('crosshair-3x-left');
     const sideR = document.getElementById('crosshair-3x-right');
     if (weaponKey === '3x') {
-        if (sideL) sideL.style.display = 'block';
-        if (sideR) sideR.style.display = 'block';
+        if (sideL) {
+            sideL.style.display = 'block';
+            sideL.innerHTML = createTechCircleSVG(36);
+        }
+        if (sideR) {
+            sideR.style.display = 'block';
+            sideR.innerHTML = createTechCircleSVG(36);
+        }
         update3xSideCrosshairPositions();
     } else {
         if (sideL) sideL.style.display = 'none';
