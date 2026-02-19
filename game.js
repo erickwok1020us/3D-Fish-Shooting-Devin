@@ -7190,8 +7190,6 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish) {
     // Position at hit location
     hitEffectModel.position.copy(hitPos);
     
-    // Simple hit effect orientation: face the camera so effect always looks correct
-    // This avoids all rotation/flip issues from complex quaternion math
     if (camera) {
         hitEffectModel.lookAt(camera.position);
     }
