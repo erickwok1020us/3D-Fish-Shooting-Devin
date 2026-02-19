@@ -48,23 +48,34 @@
             z-index: 10;
         }
         
-        /* Balance Display - Top Left (Sci-Fi Orbitron) */
+        /* Balance Display - Top Left (Cyberpunk Orbitron) */
         #balance-display {
             position: absolute;
             top: 16px;
             left: 16px;
-            background: linear-gradient(135deg, rgba(0, 18, 40, 0.92), rgba(0, 8, 22, 0.95));
-            border: 1.5px solid rgba(0, 200, 255, 0.35);
+            background: linear-gradient(135deg, rgba(0, 18, 40, 0.94), rgba(0, 8, 22, 0.97));
+            border: 2px solid rgba(0, 200, 255, 0.4);
             border-radius: 8px;
-            padding: 8px 18px;
+            padding: 10px 20px;
             display: flex;
             align-items: center;
             gap: 10px;
-            box-shadow: 0 0 12px rgba(0, 200, 255, 0.06);
+            box-shadow: 0 0 18px rgba(0, 200, 255, 0.1), inset 0 0 20px rgba(0, 100, 200, 0.05);
             font-family: 'Orbitron', monospace;
-            overflow: hidden;
+            overflow: visible;
             transition: box-shadow 0.3s ease;
         }
+        #balance-display .bd-corner {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-color: rgba(0, 255, 204, 0.6);
+            border-style: solid;
+        }
+        #balance-display .bd-corner-tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-radius: 6px 0 0 0; }
+        #balance-display .bd-corner-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; border-radius: 0 6px 0 0; }
+        #balance-display .bd-corner-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; border-radius: 0 0 0 6px; }
+        #balance-display .bd-corner-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-radius: 0 0 6px 0; }
         #balance-display.balance-flash {
             box-shadow: 0 0 20px rgba(0, 255, 204, 0.35), 0 0 40px rgba(0, 255, 204, 0.15);
             border-color: rgba(0, 255, 204, 0.6);
@@ -78,33 +89,36 @@
         }
         
         #balance-display .balance-icon {
-            width: 24px;
-            height: 24px;
-            background: transparent;
-            border: 1.5px solid rgba(0, 200, 255, 0.5);
+            width: 28px;
+            height: 28px;
+            background: rgba(0, 212, 255, 0.06);
+            border: 2px solid rgba(0, 200, 255, 0.6);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 700;
+            font-weight: 900;
             color: #00d4ff;
-            font-size: 12px;
+            font-size: 14px;
             font-family: 'Orbitron', monospace;
-            text-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+            text-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+            box-shadow: 0 0 8px rgba(0, 212, 255, 0.2), inset 0 0 6px rgba(0, 212, 255, 0.1);
         }
         
         #balance-display .balance-value {
-            font-size: 20px;
-            font-weight: 700;
+            font-size: 24px;
+            font-weight: 900;
             color: #00ffcc;
-            text-shadow: 0 0 10px rgba(0, 255, 204, 0.4);
+            text-shadow: 0 0 14px rgba(0, 255, 204, 0.5), 0 0 30px rgba(0, 255, 204, 0.15);
             font-family: 'Orbitron', monospace;
+            -webkit-text-stroke: 0.5px rgba(0, 255, 204, 0.3);
         }
         
         #balance-display .balance-label {
-            font-size: 7px;
+            font-size: 8px;
+            font-weight: 700;
             letter-spacing: 2px;
-            color: rgba(0, 200, 255, 0.5);
+            color: rgba(0, 200, 255, 0.6);
             margin-left: -6px;
             font-family: 'Orbitron', monospace;
             text-transform: uppercase;
@@ -115,8 +129,8 @@
             position: absolute;
             top: 16px;
             right: 16px;
-            background: linear-gradient(135deg, rgba(0, 18, 40, 0.92), rgba(0, 8, 22, 0.95));
-            border: 1.5px solid rgba(0, 200, 255, 0.35);
+            background: linear-gradient(135deg, rgba(0, 18, 40, 0.94), rgba(0, 8, 22, 0.97));
+            border: 2px solid rgba(0, 200, 255, 0.4);
             border-radius: 8px;
             padding: 6px 16px;
             min-width: 80px;
@@ -124,7 +138,7 @@
             pointer-events: auto;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 0 12px rgba(0, 200, 255, 0.06);
+            box-shadow: 0 0 18px rgba(0, 200, 255, 0.1), inset 0 0 15px rgba(0, 100, 200, 0.05);
             overflow: hidden;
         }
         #settings-container::before {
@@ -173,14 +187,14 @@
             position: absolute;
             bottom: 16px;
             right: 16px;
-            width: 270px;
-            background: linear-gradient(180deg, rgba(0, 15, 35, 0.88), rgba(0, 8, 20, 0.85));
-            border: 1.5px solid rgba(0, 180, 255, 0.4);
+            width: 280px;
+            background: linear-gradient(180deg, rgba(0, 15, 35, 0.9), rgba(0, 8, 20, 0.88));
+            border: 2px solid rgba(0, 180, 255, 0.45);
             border-radius: 8px;
             padding: 12px;
             pointer-events: none;
             z-index: 11;
-            box-shadow: 0 0 25px rgba(0, 100, 200, 0.18), inset 0 0 18px rgba(0, 60, 120, 0.12);
+            box-shadow: 0 0 28px rgba(0, 100, 200, 0.2), inset 0 0 20px rgba(0, 60, 120, 0.12);
             font-family: 'Orbitron', monospace;
         }
 
@@ -206,11 +220,13 @@
         }
 
         #kill-feed-panel .kf-header-title {
-            font-size: 9px;
-            color: rgba(0, 200, 255, 0.7);
+            font-size: 10px;
+            font-weight: 700;
+            color: rgba(0, 200, 255, 0.8);
             text-transform: uppercase;
             letter-spacing: 3px;
             font-family: 'Orbitron', monospace;
+            text-shadow: 0 0 6px rgba(0, 200, 255, 0.3);
         }
 
         #kill-feed-panel .kf-header-count {
@@ -287,6 +303,7 @@
 
         .kill-feed-entry .kf-name {
             font-size: 9px;
+            font-weight: 600;
             color: #5a9abf;
             white-space: nowrap;
             overflow: hidden;
@@ -297,26 +314,32 @@
 
         .kill-feed-entry.latest .kf-name {
             color: #a8e4ff;
+            font-weight: 700;
+            font-size: 10px;
+            text-shadow: 0 0 4px rgba(168, 228, 255, 0.2);
         }
         .kill-feed-entry.latest.tier-high .kf-name {
             color: #ffd88a;
         }
 
         .kill-feed-entry .kf-reward {
-            font-size: 15px;
-            font-weight: 700;
+            font-size: 16px;
+            font-weight: 800;
             color: #00e878;
-            text-shadow: 0 0 6px rgba(0, 232, 120, 0.3);
+            text-shadow: 0 0 8px rgba(0, 232, 120, 0.35);
         }
 
         .kill-feed-entry.latest .kf-reward {
-            font-size: 17px;
+            font-size: 20px;
+            font-weight: 900;
             color: #00ff88;
-            text-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+            text-shadow: 0 0 14px rgba(0, 255, 136, 0.5), 0 0 28px rgba(0, 255, 136, 0.15);
+            -webkit-text-stroke: 0.3px rgba(0, 255, 136, 0.2);
         }
         .kill-feed-entry.latest.tier-high .kf-reward {
             color: #ffaa00;
-            text-shadow: 0 0 8px rgba(255, 170, 0, 0.4);
+            font-weight: 900;
+            text-shadow: 0 0 14px rgba(255, 170, 0, 0.5), 0 0 28px rgba(255, 170, 0, 0.15);
         }
 
         @keyframes killFeedPop {
@@ -357,16 +380,17 @@
         /* FPS Counter (Sci-Fi Orbitron) - Secondary info, dimmer */
         #fps-counter {
             position: absolute;
-            top: 68px;
+            top: 72px;
             left: 16px;
-            color: rgba(0, 200, 255, 0.45);
-            font-size: 8px;
+            color: rgba(0, 200, 255, 0.5);
+            font-size: 9px;
+            font-weight: 600;
             font-family: 'Orbitron', monospace;
             letter-spacing: 1.5px;
-            background: linear-gradient(135deg, rgba(0, 18, 40, 0.75), rgba(0, 8, 22, 0.78));
-            border: 1px solid rgba(0, 200, 255, 0.15);
+            background: linear-gradient(135deg, rgba(0, 18, 40, 0.8), rgba(0, 8, 22, 0.82));
+            border: 1px solid rgba(0, 200, 255, 0.18);
             border-radius: 5px;
-            padding: 3px 10px;
+            padding: 4px 12px;
         }
         
         /* Weapon Panel - Bottom Left (Sci-Fi with Digital LED 4-digit ammo) */
@@ -381,11 +405,11 @@
         #weapon-panel .wp-outer {
             position: relative;
             background: linear-gradient(170deg, rgba(0, 18, 40, 0.94), rgba(0, 8, 22, 0.97));
-            border: 1.5px solid rgba(0, 200, 255, 0.35);
+            border: 2px solid rgba(0, 200, 255, 0.4);
             border-radius: 8px;
             padding: 14px 16px;
             overflow: hidden;
-            box-shadow: 0 0 25px rgba(0, 150, 255, 0.06);
+            box-shadow: 0 0 28px rgba(0, 150, 255, 0.1), inset 0 0 20px rgba(0, 100, 200, 0.05);
         }
         #weapon-panel .wp-outer::before {
             content: '';
@@ -409,10 +433,11 @@
             transform: rotate(45deg);
         }
         #weapon-panel .wp-title {
-            font-size: 9px;
+            font-size: 10px;
+            font-weight: 700;
             letter-spacing: 3px;
             color: #00d4ff;
-            text-shadow: 0 0 6px rgba(0, 200, 255, 0.3);
+            text-shadow: 0 0 8px rgba(0, 200, 255, 0.4);
         }
         #weapon-panel .wp-line {
             flex: 1; height: 1px;
@@ -438,9 +463,9 @@
         }
         .weapon-btn .multiplier {
             font-family: 'Orbitron', monospace;
-            font-size: 15px;
+            font-size: 17px;
             font-weight: 900;
-            color: rgba(0, 180, 255, 0.3);
+            color: rgba(0, 180, 255, 0.35);
         }
         .weapon-btn:hover {
             border-color: rgba(0, 200, 255, 0.4);
@@ -453,7 +478,8 @@
         }
         .weapon-btn.active .multiplier {
             color: #00ffff;
-            text-shadow: 0 0 12px rgba(0, 255, 255, 0.5);
+            text-shadow: 0 0 14px rgba(0, 255, 255, 0.6), 0 0 28px rgba(0, 255, 255, 0.15);
+            -webkit-text-stroke: 0.3px rgba(0, 255, 255, 0.2);
         }
         .weapon-btn.active::after {
             content: '';
@@ -491,18 +517,18 @@
             align-items: center;
         }
         .digi-digit {
-            width: 28px; height: 38px;
-            background: rgba(0, 12, 30, 0.85);
-            border: 1.5px solid rgba(0, 180, 255, 0.2);
+            width: 30px; height: 42px;
+            background: rgba(0, 12, 30, 0.9);
+            border: 2px solid rgba(0, 180, 255, 0.25);
             border-radius: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-family: 'Orbitron', monospace;
-            font-size: 22px;
+            font-size: 26px;
             font-weight: 900;
             color: #00ffff;
-            text-shadow: 0 0 12px rgba(0, 255, 255, 0.5);
+            text-shadow: 0 0 14px rgba(0, 255, 255, 0.6), 0 0 28px rgba(0, 255, 255, 0.15);
             position: relative;
             overflow: hidden;
         }
@@ -542,9 +568,11 @@
             border-top: 1px solid rgba(0, 200, 255, 0.1);
         }
         #weapon-panel .auto-label {
-            font-size: 9px;
+            font-size: 10px;
+            font-weight: 700;
             letter-spacing: 2px;
-            color: rgba(0, 255, 100, 0.65);
+            color: rgba(0, 255, 100, 0.7);
+            text-shadow: 0 0 6px rgba(0, 255, 100, 0.2);
         }
         #weapon-panel .auto-pill {
             display: flex;
@@ -649,7 +677,8 @@
         
         #settings-panel h3 {
             color: #00d4ff;
-            font-size: 11px;
+            font-size: 13px;
+            font-weight: 700;
             font-family: 'Orbitron', monospace;
             margin-bottom: 20px;
             text-align: center;
@@ -657,7 +686,7 @@
             letter-spacing: 3px;
             border-bottom: 1px solid rgba(0, 200, 255, 0.2);
             padding-bottom: 12px;
-            text-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+            text-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
         }
         
         .settings-group {
@@ -666,12 +695,12 @@
         
         .settings-group label {
             display: block;
-            color: rgba(0, 200, 255, 0.6);
-            font-size: 9px;
+            color: rgba(0, 200, 255, 0.65);
+            font-size: 10px;
             font-family: 'Orbitron', monospace;
             letter-spacing: 1px;
             margin-bottom: 8px;
-            font-weight: 500;
+            font-weight: 600;
             text-transform: uppercase;
         }
         
@@ -1114,13 +1143,14 @@
             position: absolute;
             top: 72px;
             right: 16px;
-            color: rgba(0, 200, 255, 0.4);
+            color: rgba(0, 200, 255, 0.45);
             font-size: 9px;
+            font-weight: 500;
             font-family: 'Orbitron', monospace;
             letter-spacing: 0.5px;
             text-align: right;
-            background: linear-gradient(135deg, rgba(0, 18, 40, 0.75), rgba(0, 8, 22, 0.78));
-            border: 1px solid rgba(0, 200, 255, 0.12);
+            background: linear-gradient(135deg, rgba(0, 18, 40, 0.8), rgba(0, 8, 22, 0.82));
+            border: 1px solid rgba(0, 200, 255, 0.15);
             border-radius: 5px;
             padding: 6px 12px;
             line-height: 1.6;
@@ -1212,12 +1242,13 @@
             bottom: 8px;
             right: 16px;
             font-size: 8px;
-            color: rgba(0, 200, 255, 0.25);
+            font-weight: 600;
+            color: rgba(0, 200, 255, 0.3);
             font-family: 'Orbitron', monospace;
             letter-spacing: 1.5px;
             z-index: 1001;
             pointer-events: none;
-            text-shadow: 0 0 4px rgba(0, 200, 255, 0.1);
+            text-shadow: 0 0 6px rgba(0, 200, 255, 0.15);
         }
 
         /* ============ MULTIPLAYER LOBBY STYLES ============ */
@@ -1516,7 +1547,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #358</div>
+    <div id="pr-version-tag">PR #359</div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
@@ -1590,6 +1621,10 @@
         <div id="ui-overlay">
             <!-- Balance Display - Top Left -->
             <div id="balance-display">
+                <div class="bd-corner bd-corner-tl"></div>
+                <div class="bd-corner bd-corner-tr"></div>
+                <div class="bd-corner bd-corner-bl"></div>
+                <div class="bd-corner bd-corner-br"></div>
                 <div class="balance-icon">$</div>
                 <span class="balance-value" id="balance-value">1000.00</span>
                 <span class="balance-label">USDT</span>

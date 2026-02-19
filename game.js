@@ -11079,6 +11079,10 @@ function autoFireAtFish(targetFish) {
     playWeaponShot(weaponKey);
     spawnMuzzleFlash(weaponKey, muzzlePos, direction);
     
+    if (weaponKey === '5x' || weaponKey === '8x') {
+        startCannonChargeEffect(weaponKey);
+    }
+    
     // Light recoil for auto fire(reduced strength for smoother animation)
     if (cannonBarrel) {
         const weaponConfig = WEAPON_VFX_CONFIG[weaponKey];
@@ -15121,12 +15125,14 @@ function fireBullet(targetX, targetY) {
         
     } else if (weapon.type === 'laser') {
         // 8x LASER: Projectile with speed 6000, piercing through fish
+        // FIX: Removed duplicate spawnLaserBeamEffect - the projectile already provides
+        // visual feedback via its glow trail. The extra instant beam created a "double shot"
+        // visual that made one click look like burst fire.
         if (useFpsConvergent) {
             fireWithConvergentDirection(muzzlePos, direction, weaponKey);
         } else {
             spawnBulletFromDirection(muzzlePos, direction, weaponKey);
         }
-        spawnLaserBeamEffect(muzzlePos, muzzlePos.clone().add(direction.clone().multiplyScalar(3000)), weapon.color, weapon.laserWidth || 8);
         triggerScreenShakeWithStrength(8, 100);
         
     } else if (weapon.type === 'rocket') {
@@ -17757,10 +17763,10 @@ function createBossWaitingUI() {
         text-align: center;
         display: none;
         background: linear-gradient(180deg, rgba(0, 15, 35, 0.92), rgba(0, 8, 22, 0.95));
-        border: 1.5px solid rgba(255, 200, 0, 0.45);
+        border: 2px solid rgba(255, 200, 0, 0.5);
         border-radius: 8px;
-        padding: 8px 24px;
-        box-shadow: 0 0 20px rgba(255, 200, 0, 0.15);
+        padding: 10px 28px;
+        box-shadow: 0 0 24px rgba(255, 200, 0, 0.18), inset 0 0 15px rgba(255, 200, 0, 0.05);
         font-family: 'Orbitron', monospace;
     `;
     
@@ -17768,21 +17774,23 @@ function createBossWaitingUI() {
     const timerText = document.createElement('div');
     timerText.id = 'boss-waiting-text';
     timerText.style.cssText = `
-        font-size: 16px;
-        font-weight: 700;
+        font-size: 20px;
+        font-weight: 900;
         font-family: 'Orbitron', monospace;
         color: #ffdd00;
-        text-shadow: 0 0 8px rgba(255, 200, 0, 0.4);
+        text-shadow: 0 0 12px rgba(255, 200, 0, 0.5), 0 0 24px rgba(255, 200, 0, 0.15);
         letter-spacing: 2px;
+        -webkit-text-stroke: 0.5px rgba(255, 200, 0, 0.3);
     `;
     bossWaitingUI.appendChild(timerText);
     
     // Label text
     const labelText = document.createElement('div');
     labelText.style.cssText = `
-        font-size: 7px;
+        font-size: 8px;
+        font-weight: 700;
         font-family: 'Orbitron', monospace;
-        color: rgba(255, 200, 0, 0.5);
+        color: rgba(255, 200, 0, 0.6);
         letter-spacing: 2px;
         text-transform: uppercase;
         margin-top: 4px;
