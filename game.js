@@ -17372,6 +17372,8 @@ function initFPSMode() {
     const vspreadInit = document.getElementById('crosshair-vspread');
     if (vspreadInit && gameState.currentWeapon === '3x') vspreadInit.classList.add('fps-mode');
     
+    updateCrosshairForWeapon(gameState.currentWeapon || '1x');
+    
     // Update camera position
     updateFPSCamera();
     
