@@ -925,16 +925,6 @@ const CONFIG = {
             category: 'mediumLarge',
             boidsStrength: 1.0  // Loose schooling
         },
-        // 7. Barracuda - Long silver ambush predator
-        // ECOLOGY: Adults mostly solitary, juveniles in small groups, ambush hunters
-        // SWIMMING: Motionless waiting + lightning-fast strikes
-        barracuda: { 
-            hp: 180, speedMin: 19, speedMax: 225, reward: 180, size: 55, 
-            color: 0xaabbcc, secondaryColor: 0x667788, count: 4, 
-            pattern: 'ambush', schoolSize: [1, 3], form: 'barracuda',
-            category: 'mediumLarge',
-            boidsStrength: 0.2  // Mostly solitary adults
-        },
         // 8. Grouper - Wide thick body, bottom dweller
         // ECOLOGY: Strictly solitary and territorial, ambush from reef holes
         // SWIMMING: Slow bottom patrol + sudden short bursts
@@ -1032,7 +1022,7 @@ const CONFIG = {
             boidsStrength: 0.8  // Loose territorial grouping
         },
         
-        // ==================== SPECIAL FORM FISH (2 species) ====================
+        // ==================== SPECIAL FORM FISH (3 species) ====================
         // Unique body shapes and swimming styles
         // 17. Manta Ray - Flat wing-shaped, graceful gliders
         // ECOLOGY: Solitary or small groups of 2-3, slow wing-like flapping
@@ -1043,6 +1033,16 @@ const CONFIG = {
             pattern: 'wingGlide', schoolSize: [1, 2], form: 'mantaRay',
             category: 'specialForm',
             boidsStrength: 0.3  // Mostly solitary, occasional pairs
+        },
+        // 18. Pufferfish - Round inflatable body, slow swimmers
+        // ECOLOGY: Strictly solitary, slow deliberate movements
+        // SWIMMING: Very slow, gentle rotation, fin-propelled
+        pufferfish: { 
+            hp: 100, speedMin: 13, speedMax: 38, reward: 120, size: 25, 
+            color: 0xddcc88, secondaryColor: 0x886644, count: 4, 
+            pattern: 'slowRotation', schoolSize: [1, 1], form: 'pufferfish',
+            category: 'specialForm',
+            boidsStrength: 0  // Strictly solitary
         },
         // 19. Seahorse - Vertical posture, curled tail
         // ECOLOGY: Monogamous pairs, vertical drifting, very slow
@@ -1704,7 +1704,7 @@ function analyzeSceneTriangles() {
         
         if (allNames.includes('fish') || allNames.includes('sardine') || allNames.includes('shark') || 
             allNames.includes('whale') || allNames.includes('tuna') || allNames.includes('manta') ||
-            allNames.includes('barracuda') || allNames.includes('grouper') || allNames.includes('clown') ||
+            allNames.includes('puffer') || allNames.includes('grouper') || allNames.includes('clown') ||
             allNames.includes('angel') || allNames.includes('tang') || allNames.includes('lion') ||
             allNames.includes('parrot') || allNames.includes('puffer') || allNames.includes('seahorse') ||
             allNames.includes('anchovy') || allNames.includes('damsel') || allNames.includes('marlin') ||
@@ -2526,7 +2526,7 @@ const FISH_ELLIPSOID_RATIOS = {
     hammerhead:  [0.56, 0.32, 0.54],
     tuna:        [0.48, 0.30, 0.30],
     dolphinfish: [0.48, 0.30, 0.30],
-    barracuda:   [0.62, 0.28, 0.28],
+    pufferfish:  [0.42, 0.42, 0.42],
     grouper:     [0.46, 0.36, 0.36],
     parrotfish:  [0.50, 0.40, 0.36],
     angelfish:   [0.42, 0.50, 0.30],
@@ -11585,8 +11585,8 @@ class Fish {
             case 'dolphinfish':
                 this.createDolphinfishMesh(size, bodyMaterial, secondaryMaterial);
                 break;
-            case 'barracuda':
-                this.createBarracudaMesh(size, bodyMaterial, secondaryMaterial);
+            case 'pufferfish':
+                this.createPufferfishMesh(size, bodyMaterial, secondaryMaterial);
                 break;
             case 'grouper':
                 this.createGrouperMesh(size, bodyMaterial, secondaryMaterial);
@@ -12113,38 +12113,43 @@ class Fish {
         this.addEyes(size, 0.5, 0.15);
     }
     
-    // Barracuda - Long, slender, silver
-    createBarracudaMesh(size, bodyMaterial, secondaryMaterial) {
-        // Very elongated body
-        const bodyGeometry = new THREE.SphereGeometry(size / 2, 16, 12);
-        bodyGeometry.scale(3, 0.4, 0.4);
+    // Pufferfish - Round ball with spikes
+    createPufferfishMesh(size, bodyMaterial, secondaryMaterial) {
+        const bodyGeometry = new THREE.SphereGeometry(size / 2, 16, 16);
         this.body = new THREE.Mesh(bodyGeometry, bodyMaterial);
         this.body.castShadow = true;
         this.group.add(this.body);
         
-        // Pointed head with underbite
-        const headGeometry = new THREE.ConeGeometry(size * 0.15, size * 0.4, 8);
-        const head = new THREE.Mesh(headGeometry, bodyMaterial);
-        head.rotation.z = -Math.PI / 2;
-        head.position.x = size * 1.2;
-        this.group.add(head);
+        for (let i = 0; i < 20; i++) {
+            const spikeGeometry = new THREE.ConeGeometry(size * 0.03, size * 0.15, 4);
+            const spike = new THREE.Mesh(spikeGeometry, secondaryMaterial);
+            const phi = Math.acos(2 * Math.random() - 1);
+            const theta = Math.random() * Math.PI * 2;
+            spike.position.set(
+                size * 0.45 * Math.sin(phi) * Math.cos(theta),
+                size * 0.45 * Math.sin(phi) * Math.sin(theta),
+                size * 0.45 * Math.cos(phi)
+            );
+            spike.lookAt(0, 0, 0);
+            spike.rotation.x += Math.PI;
+            this.group.add(spike);
+        }
         
-        // Small dorsal fins (two)
-        [0.2, -0.3].forEach(xPos => {
-            const dorsalGeometry = new THREE.ConeGeometry(size * 0.08, size * 0.2, 4);
-            const dorsal = new THREE.Mesh(dorsalGeometry, secondaryMaterial);
-            dorsal.position.set(size * xPos, size * 0.25, 0);
-            this.group.add(dorsal);
+        const finGeometry = new THREE.SphereGeometry(size * 0.08, 8, 8);
+        finGeometry.scale(1, 1.5, 0.3);
+        [-1, 1].forEach(side => {
+            const fin = new THREE.Mesh(finGeometry, bodyMaterial);
+            fin.position.set(0, 0, side * size * 0.4);
+            this.group.add(fin);
         });
         
-        // Forked tail
-        const tailGeometry = new THREE.ConeGeometry(size * 0.15, size * 0.3, 4);
+        const tailGeometry = new THREE.SphereGeometry(size * 0.1, 8, 8);
+        tailGeometry.scale(0.8, 1.2, 0.3);
         this.tail = new THREE.Mesh(tailGeometry, bodyMaterial);
-        this.tail.rotation.z = Math.PI / 2;
-        this.tail.position.x = -size * 1.2;
+        this.tail.position.x = -size * 0.4;
         this.group.add(this.tail);
         
-        this.addEyes(size, 0.9, 0.08);
+        this.addEyes(size, 0.25, 0.2);
     }
     
     // Grouper - Wide, thick body
@@ -13455,7 +13460,7 @@ class Fish {
                 
             case 'burstAttack':
             case 'burstSprint':
-                // Burst sprint pattern (shark, marlin, barracuda)
+                // Burst sprint pattern (shark, marlin)
                 this.patternState.burstTimer -= deltaTime;
                 if (this.patternState.burstTimer <= 0) {
                     if (this.patternState.phase === 'normal') {
@@ -13622,8 +13627,8 @@ class Fish {
                 break;
                 
             case 'ambush':
-                // Slow cruise + explosive strike (barracuda)
-                // Barracudas cruise slowly while scanning, then strike at prey
+                // Slow cruise + explosive strike
+                // Ambush predators cruise slowly while scanning, then strike at prey
                 // Initialize ambush state if needed
                 if (!this.patternState.ambushPhase) {
                     this.patternState.ambushPhase = 'cruise';
@@ -16902,8 +16907,8 @@ const FISH_KILLLOG_IMAGES = {
     lionfish:    KILLLOG_IMG_BASE + 'lionfish_killlog.png',
     parrotfish:  KILLLOG_IMG_BASE + 'Parrotfish_killlog.png',
     grouper:     KILLLOG_IMG_BASE + 'Grouper%20fish_killlog.png',
-    barracuda:   null,
-    dolphinfish: KILLLOG_IMG_BASE + 'Mahi-Mahi_killlog.png',
+    pufferfish:  KILLLOG_IMG_BASE + 'Pufferfish_killlog.png',
+    dolphinfish:KILLLOG_IMG_BASE + 'Mahi-Mahi_killlog.png',
     tuna:        KILLLOG_IMG_BASE + 'Yellowfin%20Tuna_killlog.png',
     marlin:      KILLLOG_IMG_BASE + 'Marlin%20fish_killlog.png',
     shark:       KILLLOG_IMG_BASE + 'Great%20White%20Shark_killlog.png',
@@ -16924,7 +16929,7 @@ function addKillFeedEntry(fishForm, rewardAmount) {
     if (!list) return;
 
     const imageUrl = FISH_KILLLOG_IMAGES[fishForm] || null;
-    if (!imageUrl) return; // skip entry if no dedicated killlog image (e.g., barracuda)
+    if (!imageUrl) return;
     const name = formatFishName(fishForm);
 
     killFeedRecords.push({ imageUrl, name, reward: rewardAmount });
