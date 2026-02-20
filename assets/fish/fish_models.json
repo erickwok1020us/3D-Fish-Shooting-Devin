@@ -90,13 +90,6 @@
       "name": "Epic Fish (Medium-Large Pelagic)",
       "variants": [
         {
-          "id": "barracuda_01",
-          "form": "barracuda",
-          "url": "Barracuda.glb",
-          "scale": 0.16,
-          "fallbackColor": "#C0C0C0"
-        },
-        {
           "id": "dolphinfish_01",
           "form": "dolphinfish",
           "url": "Mahi-Mahi.glb",
@@ -167,6 +160,13 @@
     "special": {
       "name": "Special Form Fish",
       "variants": [
+        {
+          "id": "pufferfish_01",
+          "form": "pufferfish",
+          "url": "Pufferfish.glb",
+          "scale": 0.12,
+          "fallbackColor": "#DDCC88"
+        },
         {
           "id": "seahorse_01",
           "form": "seahorse",
