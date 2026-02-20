@@ -1266,7 +1266,7 @@ function createGlbDebugDisplay() {
         debugDiv.id = 'glb-debug-display';
         debugDiv.style.cssText = `
             position: fixed;
-            bottom: 240px;
+            top: 80px;
             left: 10px;
             background: rgba(0, 0, 0, 0.8);
             color: #00ff00;
@@ -1277,7 +1277,7 @@ function createGlbDebugDisplay() {
             border-radius: 4px;
             z-index: 10000;
             max-width: 200px;
-            max-height: 25vh;
+            max-height: 30vh;
             overflow-y: auto;
             pointer-events: none;
         `;
@@ -1357,7 +1357,7 @@ function createPerfDisplay() {
         perfDiv.id = 'perf-display';
         perfDiv.style.cssText = `
             position: fixed;
-            top: 60px;
+            top: calc(80px + 30vh + 10px);
             left: 10px;
             background: rgba(0, 0, 0, 0.85);
             color: #00ff00;
