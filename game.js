@@ -1032,7 +1032,7 @@ const CONFIG = {
             boidsStrength: 0.8  // Loose territorial grouping
         },
         
-        // ==================== SPECIAL FORM FISH (4 species) ====================
+        // ==================== SPECIAL FORM FISH (2 species) ====================
         // Unique body shapes and swimming styles
         // 17. Manta Ray - Flat wing-shaped, graceful gliders
         // ECOLOGY: Solitary or small groups of 2-3, slow wing-like flapping
@@ -1044,16 +1044,6 @@ const CONFIG = {
             category: 'specialForm',
             boidsStrength: 0.3  // Mostly solitary, occasional pairs
         },
-        // 18. Pufferfish - Round inflatable body, slow swimmers
-        // ECOLOGY: Strictly solitary, slow deliberate movements
-        // SWIMMING: Very slow, gentle rotation, fin-propelled
-        pufferfish: { 
-            hp: 100, speedMin: 13, speedMax: 38, reward: 120, size: 25, 
-            color: 0xddcc88, secondaryColor: 0x886644, count: 4, 
-            pattern: 'slowRotation', schoolSize: [1, 1], form: 'pufferfish',
-            category: 'specialForm',
-            boidsStrength: 0  // Strictly solitary
-        },
         // 19. Seahorse - Vertical posture, curled tail
         // ECOLOGY: Monogamous pairs, vertical drifting, very slow
         // SWIMMING: Vertical posture, dorsal fin vibration, drift with current
@@ -1063,16 +1053,6 @@ const CONFIG = {
             pattern: 'verticalDrift', schoolSize: [1, 2], form: 'seahorse',
             category: 'specialForm',
             boidsStrength: 1.2  // Monogamous pair bonding
-        },
-        // 20. Flying Fish - Large pectoral fins for gliding
-        // ECOLOGY: Schools of 10-50, surface swimmers, glide to escape predators
-        // SWIMMING: Fast swimming + spectacular gliding jumps
-        flyingFish: { 
-            hp: 60, speedMin: 80, speedMax: 150, reward: 80, size: 18, 
-            color: 0x4488cc, secondaryColor: 0x88ccff, count: 10, 
-            pattern: 'glideJump', schoolSize: [8, 15], form: 'flyingFish',
-            category: 'specialForm',
-            boidsStrength: 2.0  // Strong schooling for predator evasion
         },
         
         // ==================== SPECIAL ABILITY FISH (Phase 2 - Reserved for future GLB models) ====================
@@ -2557,9 +2537,7 @@ const FISH_ELLIPSOID_RATIOS = {
     clownfish:   [0.52, 0.46, 0.38],
     damselfish:  [0.52, 0.46, 0.38],
     mantaRay:    [0.38, 0.22, 0.54],
-    pufferfish:  [0.42, 0.42, 0.42],
     seahorse:    [0.34, 0.58, 0.36],
-    flyingFish:  [0.62, 0.38, 0.48],
     crab:        [0.38, 0.34, 0.44],
     eel:         [0.66, 0.32, 0.32],
     turtle:      [0.44, 0.36, 0.48],
@@ -3975,7 +3953,6 @@ const FISH_BEHAVIOR_CONFIG = {
         seahorse: { depthBand: 'bottom', verticalAmplitude: 8 },
         // Surface dwellers
         mahiMahi: { depthBand: 'surface', verticalAmplitude: 35 },
-        flyingFish: { depthBand: 'surface', verticalAmplitude: 50 },
         // Full column predators
         blueWhale: { depthBand: 'fullColumn', verticalAmplitude: 60, noiseScale: 0.002 },
         greatWhiteShark: { depthBand: 'fullColumn', verticalAmplitude: 45 },
@@ -11639,14 +11616,8 @@ class Fish {
             case 'mantaRay':
                 this.createMantaRayMesh(size, bodyMaterial, secondaryMaterial);
                 break;
-            case 'pufferfish':
-                this.createPufferfishMesh(size, bodyMaterial, secondaryMaterial);
-                break;
             case 'seahorse':
                 this.createSeahorseMesh(size, bodyMaterial, secondaryMaterial);
-                break;
-            case 'flyingFish':
-                this.createFlyingFishMesh(size, bodyMaterial, secondaryMaterial);
                 break;
             // Phase 2: Special Ability Fish
             case 'crab':
@@ -12497,50 +12468,6 @@ class Fish {
         });
     }
     
-    // Pufferfish - Round ball with spikes
-    createPufferfishMesh(size, bodyMaterial, secondaryMaterial) {
-        // Round ball body
-        const bodyGeometry = new THREE.SphereGeometry(size / 2, 16, 16);
-        this.body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        this.body.castShadow = true;
-        this.group.add(this.body);
-        
-        // Spikes all around
-        for (let i = 0; i < 20; i++) {
-            const spikeGeometry = new THREE.ConeGeometry(size * 0.03, size * 0.15, 4);
-            const spike = new THREE.Mesh(spikeGeometry, secondaryMaterial);
-            
-            const phi = Math.acos(2 * Math.random() - 1);
-            const theta = Math.random() * Math.PI * 2;
-            
-            spike.position.set(
-                size * 0.45 * Math.sin(phi) * Math.cos(theta),
-                size * 0.45 * Math.sin(phi) * Math.sin(theta),
-                size * 0.45 * Math.cos(phi)
-            );
-            spike.lookAt(0, 0, 0);
-            spike.rotation.x += Math.PI;
-            this.group.add(spike);
-        }
-        
-        // Small fins
-        const finGeometry = new THREE.SphereGeometry(size * 0.08, 8, 8);
-        finGeometry.scale(1, 1.5, 0.3);
-        [-1, 1].forEach(side => {
-            const fin = new THREE.Mesh(finGeometry, bodyMaterial);
-            fin.position.set(0, 0, side * size * 0.4);
-            this.group.add(fin);
-        });
-        
-        // Small tail
-        const tailGeometry = new THREE.SphereGeometry(size * 0.1, 8, 8);
-        tailGeometry.scale(0.8, 1.2, 0.3);
-        this.tail = new THREE.Mesh(tailGeometry, bodyMaterial);
-        this.tail.position.x = -size * 0.4;
-        this.group.add(this.tail);
-        
-        this.addEyes(size, 0.25, 0.2);
-    }
     
     // Seahorse - Vertical S-shape
     createSeahorseMesh(size, bodyMaterial, secondaryMaterial) {
@@ -12588,40 +12515,6 @@ class Fish {
         this.group.rotation.z = Math.PI / 6;
     }
     
-    // Flying Fish - Large pectoral fins
-    createFlyingFishMesh(size, bodyMaterial, secondaryMaterial) {
-        // Streamlined body
-        const bodyGeometry = new THREE.SphereGeometry(size / 2, 16, 12);
-        bodyGeometry.scale(1.8, 0.5, 0.4);
-        this.body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        this.body.castShadow = true;
-        this.group.add(this.body);
-        
-        // Large wing-like pectoral fins
-        [-1, 1].forEach(side => {
-            const wingGeometry = new THREE.BoxGeometry(size * 0.6, size * 0.02, size * 0.4);
-            const wing = new THREE.Mesh(wingGeometry, secondaryMaterial);
-            wing.position.set(size * 0.1, 0, side * size * 0.35);
-            wing.rotation.x = side * 0.3;
-            this.group.add(wing);
-        });
-        
-        // Forked tail (lower lobe longer)
-        const tailGeometry = new THREE.ConeGeometry(size * 0.12, size * 0.3, 4);
-        this.tail = new THREE.Mesh(tailGeometry, bodyMaterial);
-        this.tail.rotation.z = Math.PI / 2;
-        this.tail.position.x = -size * 0.7;
-        this.group.add(this.tail);
-        
-        // Lower tail lobe (longer)
-        const lowerTailGeometry = new THREE.ConeGeometry(size * 0.08, size * 0.25, 4);
-        const lowerTail = new THREE.Mesh(lowerTailGeometry, bodyMaterial);
-        lowerTail.rotation.z = Math.PI / 2 + 0.5;
-        lowerTail.position.set(-size * 0.65, -size * 0.1, 0);
-        this.group.add(lowerTail);
-        
-        this.addEyes(size, 0.5, 0.1);
-    }
     
     // ==================== SPECIAL ABILITY FISH MESHES (Phase 2) ====================
     
@@ -17005,7 +16898,7 @@ const FISH_FORM_ICONS = {
     angelfish: '\u{1F420}', butterflyFish: '\u{1F420}', parrotfish: '\u{1F420}',
     clownfish: '\u{1F420}', damselfish: '\u{1F420}', seahorse: '\u{1F40E}',
     sardine: '\u{1F41F}', anchovy: '\u{1F41F}', herring: '\u{1F41F}',
-    flyingFish: '\u{1F41F}', silverside: '\u{1F41F}'
+    silverside: '\u{1F41F}'
 };
 
 function formatFishName(form) {
