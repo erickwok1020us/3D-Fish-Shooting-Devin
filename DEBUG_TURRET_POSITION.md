@@ -266,3 +266,81 @@ The current layout is **reasonable for an arcade fish-shooting game** with a bot
 - Change fish minY from -170 to -220 (by adjusting the margin from 250 to 200)
 - Effect: more fish at eye-level, denser shooting feel
 - Risk: fish may clip into the cannon platform visually
+
+---
+
+## 10. Plan B: Unified Weapon Init / Switch Flow (PR #373)
+
+### Problem
+
+Despite fixing scale (Bug A) and cannonYOffset (Bug B) in PR #372, the turret "sinking" bug persisted. Root cause: `createCannon()` and `selectWeapon()` used **different code paths** to set up the weapon barrel, muzzle, scale, and UI state. Any divergence between init and switch causes transform inconsistency.
+
+### Solution: Single Unified Code Path
+
+Split `createCannon()` into two functions and create a **single authoritative function** for weapon application:
+
+```
+createCannonBase()        -- builds structure only (platform, rings, lights, groups)
+                             NO weapon barrel, NO muzzle position, cannon hidden
+applyWeaponToCannon(key)  -- THE single unified path for ALL weapon application
+                             sets barrel, muzzle, scale, UI, crosshair, ammo display
+```
+
+### New Flow
+
+```
+Game Start:
+  initGameScene()
+    -> createCannonBase()          // structure only, cannonGroup.visible = false
+    -> setupEventListeners()
+    -> animate()                   // render loop starts (fish swim in background)
+    -> showWeaponPicker()          // overlay shown, HUD hidden
+
+Player Picks Weapon (e.g. "1x"):
+  onInitialWeaponSelected('1x')
+    -> applyWeaponToCannon('1x')   // <-- THE UNIFIED PATH
+    -> cannonGroup.visible = true
+    -> gameState.weaponSelected = true
+    -> hide weapon picker overlay
+    -> show HUD
+
+Player Switches Weapon (e.g. to "3x"):
+  selectWeapon('3x')
+    -> applyWeaponToCannon('3x')   // <-- SAME UNIFIED PATH
+    -> playSound('weaponSwitch')
+    -> playWeaponSwitchAnimation('3x')
+```
+
+### applyWeaponToCannon(weaponKey) -- What It Does
+
+1. `gameState.currentWeapon = weaponKey`
+2. `buildCannonGeometryForWeapon(weaponKey)` -- barrel model
+3. Set `cannonMuzzle.position` from `WEAPON_GLB_CONFIG.weapons[weaponKey].muzzleOffset`
+4. Enforce `cannonGroup.scale.set(1.2, 1.2, 1.2)` -- authoritative scale
+5. Update weapon button UI (active class)
+6. `updateCrosshairForWeapon(weaponKey)`
+7. `updateDigiAmmoDisplay()`
+8. Log `[PLAN-B][APPLY]` with full transform snapshot
+
+### Guards
+
+- `fireBullet()`: returns false if `!gameState.weaponSelected`
+- `autoFireTick()`: returns immediately if `!gameState.weaponSelected`
+- `selectWeapon()`: returns immediately if `!gameState.weaponSelected`
+
+### Transform Comparison: 1x Init vs 1x Switch
+
+Both paths now call `applyWeaponToCannon('1x')`, so transforms are **identical**:
+
+| Property | Init (onInitialWeaponSelected) | Switch (selectWeapon) |
+|----------|-------------------------------|----------------------|
+| cannonGroup.position | (0, -337.5, -500) | (0, -337.5, -500) |
+| cannonGroup.scale | (1.2, 1.2, 1.2) | (1.2, 1.2, 1.2) |
+| cannonPitchGroup.position | (0, 25, 0) | (0, 25, 0) |
+| cannonMuzzle.position | muzzleOffset from config | muzzleOffset from config |
+| cannonBarrel | from buildCannonGeometryForWeapon | from buildCannonGeometryForWeapon |
+| Code path | applyWeaponToCannon | applyWeaponToCannon |
+
+### Backward Compatibility
+
+`createCannon()` is preserved as a wrapper that calls `createCannonBase()` + `applyWeaponToCannon('1x')` + sets visible + sets weaponSelected. Any external code calling `createCannon()` still works.

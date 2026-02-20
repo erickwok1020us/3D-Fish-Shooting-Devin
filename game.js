@@ -1139,7 +1139,8 @@ const gameState = {
     lastComboBonus: 0,       // Last applied combo bonus percentage
     fpsCannonSide: 'right',  // FPS weapon hand side (fixed right)
     isScoping: false,        // Right-click scope zoom active
-    scopeTargetFov: 60       // Target FOV for scope zoom (60=normal FPS, 30=zoomed)
+    scopeTargetFov: 60,      // Target FOV for scope zoom (60=normal FPS, 30=zoomed)
+    weaponSelected: false    // Plan B: true after player picks initial weapon
 };
 
 // ==================== BALANCE AUDIT GUARD (T1 Regression) ====================
@@ -9278,10 +9279,9 @@ function initGameScene() {
     updateLoadingProgress(50, 'Setting up lights...');
     createLights();
     
-    updateLoadingProgress(60, 'Creating cannon...');
-    createCannon();
+    updateLoadingProgress(60, 'Creating cannon base...');
+    createCannonBase();
     
-    // Create static decorative cannons at 3, 6, 9 o'clock positions
     createAllCannons();
     
     updateLoadingProgress(70, 'Spawning fish...');
@@ -9339,7 +9339,7 @@ function initGameScene() {
     
     updateLoadingProgress(100, 'Ready!');
     
-    setTimeout(() => {
+    setTimeout(function() {
         if (loadingScreen) {
             loadingScreen.style.display = 'none';
         }
@@ -9348,15 +9348,52 @@ function initGameScene() {
         
         initFPSMode();
         
-        // Apply RTP labels to weapon buttons if enabled
         applyRtpLabels();
         
-        // Initialize settings UI and apply saved settings
         initSettingsUI();
         applyAllSettings();
         
         animate();
+        
+        showWeaponPicker();
     }, 500);
+}
+
+function showWeaponPicker() {
+    var overlay = document.getElementById('weapon-picker-overlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+    }
+    var uiOverlay = document.getElementById('ui-overlay');
+    if (uiOverlay) {
+        uiOverlay.style.pointerEvents = 'none';
+        uiOverlay.style.opacity = '0';
+    }
+    console.log('[PLAN-B] Weapon picker shown. Cannon hidden. Waiting for player selection.');
+}
+
+function onInitialWeaponSelected(weaponKey) {
+    applyWeaponToCannon(weaponKey);
+    
+    cannonGroup.visible = true;
+    gameState.weaponSelected = true;
+    
+    var overlay = document.getElementById('weapon-picker-overlay');
+    if (overlay) {
+        overlay.style.opacity = '0';
+        setTimeout(function() { overlay.style.display = 'none'; }, 400);
+    }
+    var uiOverlay = document.getElementById('ui-overlay');
+    if (uiOverlay) {
+        uiOverlay.style.pointerEvents = '';
+        uiOverlay.style.opacity = '1';
+    }
+    
+    if (gameState.viewMode === 'fps') {
+        updateFPSCamera();
+    }
+    
+    console.log('[PLAN-B] Initial weapon selected: ' + weaponKey + '. Cannon visible. Game ready.');
 }
 
 // Start single player game - called from lobby
@@ -10268,32 +10305,24 @@ function createAllCannons() {
     );
 }
 
-function createCannon() {
+function createCannonBase() {
     cannonGroup = new THREE.Group();
     
-    // Issue #13: Cannon base structure corrected
-    // REMOVED: The upper disc (base cylinder at y=20) that was blocking barrel rotation
-    // KEPT: The middle platform and cyan ring
-    
-    // Middle platform - the grey/blue platform structure (RESTORED)
-    const platformGeometry = new THREE.CylinderGeometry(60, 70, 18, 16);
-    const platformMaterial = new THREE.MeshBasicMaterial({
-        color: 0x6699bb  // Medium blue - always visible
+    var platformGeometry = new THREE.CylinderGeometry(60, 70, 18, 16);
+    var platformMaterial = new THREE.MeshBasicMaterial({
+        color: 0x6699bb
     });
-    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+    var platform = new THREE.Mesh(platformGeometry, platformMaterial);
     platform.position.y = 5;
     cannonGroup.add(platform);
     
-    // SCI-FI DUAL-LAYER BASE RING - Futuristic energy ring with segments
-    // Layer 1: Core ring with segmented texture pattern
     if (!cannonBaseRingSegmentTexture) {
         cannonBaseRingSegmentTexture = createSciFiRingTexture();
     }
     
-    // Use RingGeometry for flat sci-fi look (better texture mapping than torus)
-    const coreRingGeometry = new THREE.RingGeometry(60, 85, 64);
-    const coreRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0x44ddff,  // Bright cyan - weapon color
+    var coreRingGeometry = new THREE.RingGeometry(60, 85, 64);
+    var coreRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0x44ddff,
         map: cannonBaseRingSegmentTexture,
         transparent: true,
         opacity: 0.9,
@@ -10302,15 +10331,14 @@ function createCannon() {
     });
     cannonBaseRingCore = new THREE.Mesh(coreRingGeometry, coreRingMaterial);
     cannonBaseRingCore.name = 'cannonBaseRingCore';
-    cannonBaseRingCore.rotation.x = -Math.PI / 2;  // Lay flat
+    cannonBaseRingCore.rotation.x = -Math.PI / 2;
     cannonBaseRingCore.position.y = 3;
     cannonBaseRingCore.renderOrder = 1;
     cannonGroup.add(cannonBaseRingCore);
     
-    // Layer 2: Outer glow ring (larger, additive blending for energy effect)
-    const glowRingGeometry = new THREE.RingGeometry(55, 95, 64);
-    const glowRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0x44ddff,  // Same color, will glow
+    var glowRingGeometry = new THREE.RingGeometry(55, 95, 64);
+    var glowRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0x44ddff,
         transparent: true,
         opacity: 0.35,
         side: THREE.DoubleSide,
@@ -10319,67 +10347,87 @@ function createCannon() {
     });
     cannonBaseRingGlow = new THREE.Mesh(glowRingGeometry, glowRingMaterial);
     cannonBaseRingGlow.name = 'cannonBaseRingGlow';
-    cannonBaseRingGlow.rotation.x = -Math.PI / 2;  // Lay flat
+    cannonBaseRingGlow.rotation.x = -Math.PI / 2;
     cannonBaseRingGlow.position.y = 2;
     cannonBaseRingGlow.renderOrder = 0;
     cannonGroup.add(cannonBaseRingGlow);
     
-    // Layer 3: Black inner disk to cover gray platform area (radius 54.5 to avoid Z-fighting with glow ring inner radius 55)
-    // NOTE: Platform is at y=5 with height 18, so top is at y=14. Disk must be ABOVE platform to cover it
-    // IMPORTANT: depthWrite must be true so the disk properly occludes the platform behind it
-    const innerDiskGeometry = new THREE.CircleGeometry(54.5, 64);
-    const innerDiskMaterial = new THREE.MeshBasicMaterial({
-        color: 0x000000,  // Pure black
+    var innerDiskGeometry = new THREE.CircleGeometry(54.5, 64);
+    var innerDiskMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,
         side: THREE.DoubleSide,
-        depthWrite: true  // Must be true to occlude platform behind it
+        depthWrite: true
     });
     cannonBaseRingInnerDisk = new THREE.Mesh(innerDiskGeometry, innerDiskMaterial);
     cannonBaseRingInnerDisk.name = 'cannonBaseRingInnerDisk';
-    cannonBaseRingInnerDisk.rotation.x = -Math.PI / 2;  // Lay flat
-    cannonBaseRingInnerDisk.position.y = 14.5;  // Above platform top (y=14) to cover gray area
-    cannonBaseRingInnerDisk.renderOrder = 2;  // Render after rings (core=1, glow=0) to ensure it's on top
+    cannonBaseRingInnerDisk.rotation.x = -Math.PI / 2;
+    cannonBaseRingInnerDisk.position.y = 14.5;
+    cannonBaseRingInnerDisk.renderOrder = 2;
     cannonGroup.add(cannonBaseRingInnerDisk);
     
-    // Debug logging for sci-fi ring verification
     console.log('[CANNON] Sci-fi ring created: core=' + (cannonBaseRingCore ? 'OK' : 'FAIL') + 
                 ', glow=' + (cannonBaseRingGlow ? 'OK' : 'FAIL') + 
                 ', innerDisk=' + (cannonBaseRingInnerDisk ? 'OK' : 'FAIL'));
-    console.log('[CANNON] cannonGroup children count:', cannonGroup.children.length);
     
-    // Issue #10: Create pitch group - this rotates for vertical aiming
-    // Both barrel and muzzle are children of this group so they rotate together
     cannonPitchGroup = new THREE.Group();
     cannonPitchGroup.position.y = 25;
     cannonGroup.add(cannonPitchGroup);
     
-    // Cannon body group (will be replaced per weapon) - child of pitch group
     cannonBodyGroup = new THREE.Group();
     cannonPitchGroup.add(cannonBodyGroup);
     
-    // Issue #10: Cannon muzzle point (for bullet spawning) - child of pitch group
-    // This ensures muzzle rotates with barrel when pitching
     cannonMuzzle = new THREE.Object3D();
-    var initMuzzleConfig = WEAPON_GLB_CONFIG.weapons['1x'];
-    if (initMuzzleConfig && initMuzzleConfig.muzzleOffset) {
-        cannonMuzzle.position.copy(initMuzzleConfig.muzzleOffset);
+    cannonMuzzle.position.set(0, 0, 0);
+    cannonPitchGroup.add(cannonMuzzle);
+    
+    preloadAllWeapons();
+    
+    cannonGroup.position.set(0, CANNON_BASE_Y, -CANNON_RING_RADIUS_Z);
+    cannonGroup.scale.set(1.2, 1.2, 1.2);
+    cannonGroup.visible = false;
+    scene.add(cannonGroup);
+    
+    var cannonPointLight = new THREE.PointLight(0xffffff, 3.0, 800);
+    cannonPointLight.position.set(0, 50, 0);
+    cannonGroup.add(cannonPointLight);
+    
+    var cannonFrontLight = new THREE.PointLight(0xaaddff, 2.0, 600);
+    cannonFrontLight.position.set(0, 30, 100);
+    cannonGroup.add(cannonFrontLight);
+    
+    var cannonSpotLight = new THREE.SpotLight(0xffffff, 2.5, 1000, Math.PI / 4, 0.5, 1);
+    cannonSpotLight.position.set(0, CANNON_BASE_Y + 200, -200);
+    cannonSpotLight.target = cannonGroup;
+    scene.add(cannonSpotLight);
+    
+    console.log('[PLAN-B] createCannonBase() complete. Cannon hidden until weapon selection.');
+}
+
+function applyWeaponToCannon(weaponKey) {
+    gameState.currentWeapon = weaponKey;
+    
+    buildCannonGeometryForWeapon(weaponKey);
+    
+    var glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
+    if (cannonMuzzle && glbConfig && glbConfig.muzzleOffset) {
+        cannonMuzzle.position.copy(glbConfig.muzzleOffset);
     } else {
         cannonMuzzle.position.set(0, 25, 55);
     }
-    cannonPitchGroup.add(cannonMuzzle);
     
-    // Build initial cannon geometry (async - will load GLB if available)
-    buildCannonGeometryForWeapon('1x');
+    cannonGroup.scale.set(1.2, 1.2, 1.2);
     
-    // Start preloading all weapon GLB models in background
-    preloadAllWeapons();
+    document.querySelectorAll('.weapon-btn').forEach(function(btn) {
+        btn.classList.remove('active');
+        if (btn.dataset.weapon === weaponKey) {
+            btn.classList.add('active');
+        }
+    });
     
-    // Position player cannon at 12 o'clock (Z negative) on platform EDGE
-    // Uses CANNON_BASE_Y for water middle height, CANNON_RING_RADIUS_Z for front/back positioning
-    cannonGroup.position.set(0, CANNON_BASE_Y, -CANNON_RING_RADIUS_Z);  // 12 o'clock position (bottom edge)
-    cannonGroup.scale.set(1.2, 1.2, 1.2);  // Slightly larger for visibility
-    scene.add(cannonGroup);
+    updateCrosshairForWeapon(weaponKey);
+    updateDigiAmmoDisplay();
     
-    console.log('[TURRET-DEBUG][INIT] createCannon() complete:', {
+    console.log('[PLAN-B][APPLY] applyWeaponToCannon(' + weaponKey + '):', {
         cannonGroup_pos: cannonGroup.position.toArray(),
         cannonGroup_scale: cannonGroup.scale.toArray(),
         cannonGroup_rot: [cannonGroup.rotation.x, cannonGroup.rotation.y, cannonGroup.rotation.z],
@@ -10387,24 +10435,16 @@ function createCannon() {
         pitchGroup_rot: [cannonPitchGroup.rotation.x, cannonPitchGroup.rotation.y, cannonPitchGroup.rotation.z],
         barrel_pos: cannonBarrel ? cannonBarrel.position.toArray() : 'N/A',
         muzzle_pos: cannonMuzzle ? cannonMuzzle.position.toArray() : 'N/A',
-        weapon: gameState.currentWeapon
+        weapon: weaponKey,
+        source: 'applyWeaponToCannon (unified path)'
     });
-    
-    // Add STRONG point light directly on cannon for visibility
-    const cannonPointLight = new THREE.PointLight(0xffffff, 3.0, 800);
-    cannonPointLight.position.set(0, 50, 0);
-    cannonGroup.add(cannonPointLight);
-    
-    // Add second point light from front
-    const cannonFrontLight = new THREE.PointLight(0xaaddff, 2.0, 600);
-    cannonFrontLight.position.set(0, 30, 100);
-    cannonGroup.add(cannonFrontLight);
-    
-    // Add spotlight from behind camera pointing at cannon
-    const cannonSpotLight = new THREE.SpotLight(0xffffff, 2.5, 1000, Math.PI / 4, 0.5, 1);
-    cannonSpotLight.position.set(0, CANNON_BASE_Y + 200, -200);  // Use CANNON_BASE_Y for water middle
-    cannonSpotLight.target = cannonGroup;
-    scene.add(cannonSpotLight);
+}
+
+function createCannon() {
+    createCannonBase();
+    applyWeaponToCannon('1x');
+    cannonGroup.visible = true;
+    gameState.weaponSelected = true;
 }
 
 // PERFORMANCE FIX: Properly dispose Three.js objects including nested meshes in GLB models
@@ -11234,7 +11274,7 @@ const autoFireState = TargetingService.state;
 
 function resetAutoFireState() { TargetingService.reset(); }
 function findNearestFish(muzzlePos) { return TargetingService.findNearest(muzzlePos); }
-function autoFireTick() { return TargetingService.tick(); }
+function autoFireTick() { if (!gameState.weaponSelected) return; return TargetingService.tick(); }
 
 function aimCannonAtFish(fish) {
     if (!fish) return;
@@ -15230,9 +15270,8 @@ function spawnBulletFromDirection(origin, direction, weaponKey, spreadIndex) {
 }
 
 function fireBullet(targetX, targetY) {
-    // FIX: Prevent shooting when not in game scene (e.g., in lobby/menu)
-    // This prevents players from accidentally spending money when clicking menu buttons
     if (!gameState.isInGameScene) return false;
+    if (!gameState.weaponSelected) return false;
     
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
@@ -16676,42 +16715,17 @@ function updateUI() {
 }
 
 function selectWeapon(weaponKey) {
-    gameState.currentWeapon = weaponKey;
+    if (!gameState.weaponSelected) return;
     
-    // Issue #6: Play weapon switch sound
+    applyWeaponToCannon(weaponKey);
+    
     playSound('weaponSwitch');
-    
-    document.querySelectorAll('.weapon-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.weapon === weaponKey) {
-            btn.classList.add('active');
-        }
-    });
-    
-    updateCannonVisual();
     
     if (gameState.viewMode === 'fps') {
         updateFPSCamera();
     }
     
-    // Issue #14: Play weapon switch animation with ring color change
     playWeaponSwitchAnimation(weaponKey);
-    
-    // Issue #16: Update crosshair size based on weapon spread
-    updateCrosshairForWeapon(weaponKey);
-    
-    updateDigiAmmoDisplay();
-    
-    console.log('[TURRET-DEBUG][SWITCH] selectWeapon(' + weaponKey + ') complete:', {
-        cannonGroup_pos: cannonGroup ? cannonGroup.position.toArray() : 'N/A',
-        cannonGroup_scale: cannonGroup ? cannonGroup.scale.toArray() : 'N/A',
-        cannonGroup_rot: cannonGroup ? [cannonGroup.rotation.x, cannonGroup.rotation.y, cannonGroup.rotation.z] : 'N/A',
-        pitchGroup_pos: cannonPitchGroup ? cannonPitchGroup.position.toArray() : 'N/A',
-        pitchGroup_rot: cannonPitchGroup ? [cannonPitchGroup.rotation.x, cannonPitchGroup.rotation.y, cannonPitchGroup.rotation.z] : 'N/A',
-        barrel_pos: cannonBarrel ? cannonBarrel.position.toArray() : 'N/A',
-        muzzle_pos: cannonMuzzle ? cannonMuzzle.position.toArray() : 'N/A',
-        weapon: weaponKey
-    });
 }
 
 function createTechCircleSVG(size) {
