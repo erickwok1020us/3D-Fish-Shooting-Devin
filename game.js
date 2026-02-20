@@ -18199,7 +18199,8 @@ function createBossWaitingUI() {
         position: fixed;
         top: 16px;
         left: 50%;
-        transform: translateX(-50%);
+        transform: translateX(-50%) scale(1.1);
+        transform-origin: top center;
         z-index: 900;
         pointer-events: none;
         text-align: center;
