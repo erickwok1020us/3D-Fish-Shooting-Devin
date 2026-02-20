@@ -570,7 +570,7 @@ const WEAPON_CONFIG = {
         glbHitEffect: '1x 擊中特效',
         scale: 1.0, bulletScale: 0.5, hitEffectScale: 0.6,
         muzzleOffset: new THREE.Vector3(0, 30, 55),
-        cannonYOffset: 35,
+        cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         hitEffectRotationFix: false, hitEffectPlanar: true,
@@ -600,7 +600,7 @@ const WEAPON_CONFIG = {
         glbHitEffect: '3x 擊中特效',
         scale: 1.1, bulletScale: 0.6, hitEffectScale: 0.7,
         muzzleOffset: new THREE.Vector3(0, 30, 60),
-        cannonYOffset: 20,
+        cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         hitEffectRotationFix: false, hitEffectPlanar: true,
@@ -630,7 +630,7 @@ const WEAPON_CONFIG = {
         glbHitEffect: '5x 擊中特效',
         scale: 1.3, bulletScale: 0.7, hitEffectScale: 0.9,
         muzzleOffset: new THREE.Vector3(0, 30, 65),
-        cannonYOffset: 20,
+        cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         hitEffectRotationFix: false, hitEffectPlanar: false,
@@ -660,7 +660,7 @@ const WEAPON_CONFIG = {
         glbHitEffect: '8x 擊中特效',
         scale: 1.0, bulletScale: 0.9, hitEffectScale: 1.2,
         muzzleOffset: new THREE.Vector3(0, 30, 50),
-        cannonYOffset: 20,
+        cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         hitEffectRotationFix: false, hitEffectPlanar: false,
@@ -8959,9 +8959,7 @@ function playWeaponSwitchAnimation(weaponKey) {
     weaponSwitchAnimationId++;
     const currentAnimationId = weaponSwitchAnimationId;
     
-    // FIX: Use fixed base scale (1, 1, 1) instead of cloning current scale
-    // This prevents scale accumulation when rapidly switching weapons
-    const baseScale = 1.0;
+    const baseScale = 1.2;
     
     // Cannon transformation animation (slight bounce)
     cannonGroup.scale.set(
@@ -10175,7 +10173,8 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
         const cachedModel = weaponGLBState.cannonCache.get(nonPlayerCacheKey);
         if (cachedModel) {
             const clonedModel = cachedModel.clone();
-            clonedModel.position.set(0, 20, 0);
+            const npYOff = glbConfig.cannonYOffset !== undefined ? glbConfig.cannonYOffset : 25;
+            clonedModel.position.set(0, npYOff, 0);
             clonedModel.scale.setScalar(glbConfig.scale);
             if (glbConfig.cannonRotationFix) {
                 clonedModel.rotation.copy(glbConfig.cannonRotationFix);
@@ -10204,7 +10203,8 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
             if (model && barrelGroup.parent) {
                 barrelGroup.clear();
                 const clonedModel = model.clone();
-                clonedModel.position.set(0, 20, 0);
+                const npYOff2 = glbConfig.cannonYOffset !== undefined ? glbConfig.cannonYOffset : 25;
+                clonedModel.position.set(0, npYOff2, 0);
                 clonedModel.scale.setScalar(glbConfig.scale);
                 if (glbConfig.cannonRotationFix) {
                     clonedModel.rotation.copy(glbConfig.cannonRotationFix);
@@ -10349,7 +10349,7 @@ function createCannon() {
     // Issue #10: Create pitch group - this rotates for vertical aiming
     // Both barrel and muzzle are children of this group so they rotate together
     cannonPitchGroup = new THREE.Group();
-    cannonPitchGroup.position.y = 35;
+    cannonPitchGroup.position.y = 25;
     cannonGroup.add(cannonPitchGroup);
     
     // Cannon body group (will be replaced per weapon) - child of pitch group
@@ -10378,6 +10378,17 @@ function createCannon() {
     cannonGroup.position.set(0, CANNON_BASE_Y, -CANNON_RING_RADIUS_Z);  // 12 o'clock position (bottom edge)
     cannonGroup.scale.set(1.2, 1.2, 1.2);  // Slightly larger for visibility
     scene.add(cannonGroup);
+    
+    console.log('[TURRET-DEBUG][INIT] createCannon() complete:', {
+        cannonGroup_pos: cannonGroup.position.toArray(),
+        cannonGroup_scale: cannonGroup.scale.toArray(),
+        cannonGroup_rot: [cannonGroup.rotation.x, cannonGroup.rotation.y, cannonGroup.rotation.z],
+        pitchGroup_pos: cannonPitchGroup.position.toArray(),
+        pitchGroup_rot: [cannonPitchGroup.rotation.x, cannonPitchGroup.rotation.y, cannonPitchGroup.rotation.z],
+        barrel_pos: cannonBarrel ? cannonBarrel.position.toArray() : 'N/A',
+        muzzle_pos: cannonMuzzle ? cannonMuzzle.position.toArray() : 'N/A',
+        weapon: gameState.currentWeapon
+    });
     
     // Add STRONG point light directly on cannon for visibility
     const cannonPointLight = new THREE.PointLight(0xffffff, 3.0, 800);
@@ -10636,7 +10647,7 @@ async function buildCannonGeometryForWeapon(weaponKey) {
         
         // Create a barrel group to hold all 3 barrels - they rotate together
         const barrelGroup = new THREE.Group();
-        barrelGroup.position.y = 20;
+        barrelGroup.position.y = 25;
         
         // Create 3 barrels inside the group
         // Issue #10: Rotate geometry so +Z is forward
@@ -16690,6 +16701,17 @@ function selectWeapon(weaponKey) {
     updateCrosshairForWeapon(weaponKey);
     
     updateDigiAmmoDisplay();
+    
+    console.log('[TURRET-DEBUG][SWITCH] selectWeapon(' + weaponKey + ') complete:', {
+        cannonGroup_pos: cannonGroup ? cannonGroup.position.toArray() : 'N/A',
+        cannonGroup_scale: cannonGroup ? cannonGroup.scale.toArray() : 'N/A',
+        cannonGroup_rot: cannonGroup ? [cannonGroup.rotation.x, cannonGroup.rotation.y, cannonGroup.rotation.z] : 'N/A',
+        pitchGroup_pos: cannonPitchGroup ? cannonPitchGroup.position.toArray() : 'N/A',
+        pitchGroup_rot: cannonPitchGroup ? [cannonPitchGroup.rotation.x, cannonPitchGroup.rotation.y, cannonPitchGroup.rotation.z] : 'N/A',
+        barrel_pos: cannonBarrel ? cannonBarrel.position.toArray() : 'N/A',
+        muzzle_pos: cannonMuzzle ? cannonMuzzle.position.toArray() : 'N/A',
+        weapon: weaponKey
+    });
 }
 
 function createTechCircleSVG(size) {
@@ -17593,7 +17615,7 @@ function updateFPSCamera() {
     //
     // Known constants:
     // - CANNON_BASE_Y = -337.5 (cannon base position)
-    // - cannonPitchGroup.position.y = 35 (pitch pivot height)
+    // - cannonPitchGroup.position.y = 25 (pitch pivot height)
     // - cannonMuzzle.position.y = 25 (muzzle height relative to pitch group)
     // - Total muzzle Y = -337.5 + 35 + 25 = -277.5
     
