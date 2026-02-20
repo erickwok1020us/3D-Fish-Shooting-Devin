@@ -11488,6 +11488,9 @@ class Fish {
         this.freezeTimer = 0;
         this.isActive = false;
         
+        this.rtpFishId = nextRTPFishId();
+        this.rtpTier = getFishRTPTier(tier);
+        
         // STUCK FISH DETECTION: Track position to detect fish that stop moving
         this.lastPosition = new THREE.Vector3();
         this.stuckTimer = 0;
@@ -14263,16 +14266,11 @@ class Fish {
     }
     
     takeDamage(damage, weaponKey, spreadIndex) {
-        // BUG FIX: Guard against taking damage when already dead
-        // This prevents multiple die() calls and duplicate respawn timers
         if (!this.isActive) return false;
         
         // Phase 2: Shield Turtle - check if fish has shield
         if (this.config.ability === 'shield' && this.shieldHP > 0) {
-            // Damage shield first
             this.shieldHP -= damage;
-            
-            // Shield hit effect
             if (this.shieldBubble) {
                 this.shieldBubble.material.emissiveIntensity = 1.0;
                 setTimeout(() => {
@@ -14280,29 +14278,25 @@ class Fish {
                         this.shieldBubble.material.emissiveIntensity = 0.3;
                     }
                 }, 100);
-                
-                // Update shield opacity based on remaining HP
                 const shieldPercent = Math.max(0, this.shieldHP / this.config.shieldHP);
                 this.shieldBubble.material.opacity = 0.3 * shieldPercent;
-                
-                // Shield broken
                 if (this.shieldHP <= 0) {
                     this.shieldBubble.visible = false;
-                    // Play shield break sound
                     playImpactSound('shieldBreak');
-                    // Screen flash for shield break
                     triggerScreenFlash(0x00ffff, 0.2);
                 }
             }
-            return false; // Shield absorbed damage, fish not killed
+            return false;
         }
         
+        // HP is visual only - track for visual feedback but does NOT determine death
         this.hp -= damage;
         
         const fishPos = this.group ? this.group.position : null;
         showHitMarker(spreadIndex, fishPos, this);
         showCrosshairRingFlash(spreadIndex);
         
+        // Visual hit flash
         if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
                 if (mesh.material && 'emissive' in mesh.material) {
@@ -14339,17 +14333,28 @@ class Fish {
             }, 80);
         }
         
-        if (this.hp <= 0) {
-            this.die(weaponKey);
-            return true;
+        // RTP-based death: Only in single-player mode, for single-target weapons (1x, 3x spread)
+        // Multi-target weapons (5x AOE, 8x laser) are handled in triggerExplosion/fireLaserBeam
+        if (!multiplayerMode) {
+            const weapon = CONFIG.weapons[weaponKey];
+            if (weapon && (weapon.type === 'projectile' || weapon.type === 'spread')) {
+                const perShotCostFp = Math.floor(weapon.cost / weapon.multiplier) * RTP_MONEY_SCALE;
+                const result = clientRTPEngine.handleSingleTargetHit(
+                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, perShotCostFp, this.rtpTier
+                );
+                if (result.kill) {
+                    this.die(weaponKey, result.reward);
+                    return true;
+                }
+            }
+            // For rocket/aoe/laser/chain types, RTP is handled at the caller level
+            // For ability chain damage, no RTP roll (cost=0 means no budget)
         }
+        
         return false;
     }
     
-    die(weaponKey) {
-        // POOL CORRUPTION FIX: Guard against duplicate die() calls
-        // This can happen if multiple bullets hit the same fish in the same frame
-        // or if chain damage effects hit an already-dead fish
+    die(weaponKey, rtpReward) {
         if (!this.isActive) {
             console.warn('[FISH] die() called on already-dead fish, skipping');
             return;
@@ -14436,11 +14441,9 @@ class Fish {
             }
             addKillFeedEntry(this.form, this.config.reward);
         } else {
-            // SINGLE PLAYER MODE: every kill awards the fish's full reward
             updateComboOnKill();
             
-            const fishReward = this.config.reward;
-            const win = fishReward;
+            const win = (typeof rtpReward === 'number' && rtpReward > 0) ? rtpReward : 0;
             
             // Determine fish size from tier (used for visual effects)
             let fishSize = 'small';
@@ -14632,7 +14635,8 @@ class Fish {
             return;
         }
         
-        // Issue #1: Respawn fish in full 3D space around cannon (immersive 360°)
+        this.rtpFishId = nextRTPFishId();
+        
         const position = getRandomFishPositionIn3DSpace();
         this.spawn(position);
         // BUG FIX: Only push if not already in activeFish to prevent duplicates
@@ -14787,114 +14791,233 @@ function updateDynamicFishSpawn(deltaTime) {
 // ==================== RTP (RETURN TO PLAYER) SYSTEM ====================
 // Casino-standard RTP calculation: RTP = (Total Wins / Total Bets) * 100%
 // ==================== RTP SYSTEM (FIXED) ====================
-// 
-// CORRECTED RTP CALCULATION:
-// The fish reward is in COINS (40-500), not a multiplier.
-// We calculate the effective multiplier as: reward / expectedCostToKill
-// 
-// Example: 100 HP fish with 150 coin reward, using 1x weapon (100 damage, 1 cost)
-// - Shots to kill: ceil(100/100) = 1 shot
-// - Cost to kill: 1 * 1 = 1 coin
-// - Effective multiplier: 150 / 1 = 150x
-// - Kill rate for 93% RTP: 0.93 / 150 = 0.62%
-//
-// This ensures RTP is calculated based on actual cost, not just reward amount.
+// ==================== CLIENT-SIDE RTP ENGINE (RTPPhase1) ====================
+// Embedded from server-side RTPPhase1.js for unified single-player/multiplayer RTP.
+// Uses Math.random() instead of CSPRNG (client-side only).
+// All values are STATIC LOOKUP from RTP System Bible.
+const RTP_MONEY_SCALE = 1000;
+const RTP_SCALE = 10000;
+const RTP_WEIGHT_SCALE = 1000000;
+const RTP_PROGRESS_SCALE = 1000000;
+const RTP_P_SCALE = 1000000;
+const RTP_K = 1.2;
+const RTP_AOE_MAX_TARGETS = 8;
+const RTP_LASER_MAX_TARGETS = 6;
+const RTP_RAMP_START = 800000;
 
-const RTP_CONFIG = {
-    // Target RTP by effective multiplier (reward / cost-to-kill)
-    // Higher multiplier = slightly higher RTP to encourage targeting big fish
-    targetRTP: {
-        small: 0.91,    // Small fish (multiplier < 50): 91% RTP
-        medium: 0.93,   // Medium fish (multiplier 50-150): 93% RTP  
-        large: 0.94,    // Large fish (multiplier 150-300): 94% RTP
-        boss: 0.95      // Boss fish (multiplier > 300): 95% RTP
-    },
-    // Dynamic RTP adjustment bounds (90-96% market standard)
-    minRTP: 0.88,     // Minimum RTP (88%) - increase kill rate if below
-    maxRTP: 0.97,     // Maximum RTP (97%) - decrease kill rate if above
-    // Tracking
-    sessionStats: {
-        totalBets: 0,
-        totalWins: 0,
-        shotsFired: 0,
-        fishKilled: 0
-    }
+const RTP_TIER_CONFIG = {
+    1: { rtpTierFp: 9000, n1Fp: 6000, rewardFp: 4500, pityCompFp: 367403 },
+    2: { rtpTierFp: 9200, n1Fp: 10000, rewardFp: 7666, pityCompFp: 343881 },
+    3: { rtpTierFp: 9300, n1Fp: 16000, rewardFp: 12400, pityCompFp: 331913 },
+    4: { rtpTierFp: 9400, n1Fp: 30000, rewardFp: 23500, pityCompFp: 323159 },
+    5: { rtpTierFp: 9450, n1Fp: 45000, rewardFp: 35437, pityCompFp: 319944 },
+    6: { rtpTierFp: 9500, n1Fp: 120000, rewardFp: 95000, pityCompFp: 316012 }
 };
 
-// Get RTP target based on effective multiplier (reward / cost-to-kill)
-function getTargetRTP(effectiveMultiplier) {
-    if (effectiveMultiplier > 300) {
-        return RTP_CONFIG.targetRTP.boss;      // 95% for boss fish
-    } else if (effectiveMultiplier > 150) {
-        return RTP_CONFIG.targetRTP.large;     // 94% for large fish
-    } else if (effectiveMultiplier >= 50) {
-        return RTP_CONFIG.targetRTP.medium;    // 93% for medium fish
-    } else {
-        return RTP_CONFIG.targetRTP.small;     // 91% for small fish
-    }
+const FISH_SPECIES_TO_RTP_TIER = {
+    sardine: 1, anchovy: 1,
+    damselfish: 2, clownfish: 2, blueTang: 2,
+    lionfish: 3, angelfish: 3, pufferfish: 3, seahorse: 3, parrotfish: 3,
+    mahiMahi: 4, grouper: 4, yellowfinTuna: 4, mantaRay: 4,
+    marlin: 5, hammerheadShark: 5,
+    greatWhiteShark: 6, killerWhale: 6, blueWhale: 6
+};
+
+function getFishRTPTier(species) {
+    return FISH_SPECIES_TO_RTP_TIER[species] || 1;
 }
 
-// Calculate kill rate based on fish reward and weapon used
-// FIXED: Now properly accounts for cost-to-kill the fish
-function calculateKillRate(fishReward, weaponKey, fishHP) {
-    const weapon = CONFIG.weapons[weaponKey];
-    
-    const avgDamage = weapon.damage;
-    const hitsToKill = Math.max(1, Math.ceil((fishHP || 100) / avgDamage));
-    
-    const costPerHit = weapon.cost / weapon.multiplier;
-    const costToKill = hitsToKill * costPerHit;
-    
-    // Calculate effective multiplier (reward / cost)
-    const effectiveMultiplier = fishReward / costToKill;
-    
-    // Get target RTP based on effective multiplier
-    const targetRTP = getTargetRTP(effectiveMultiplier);
-    
-    // Kill rate formula: killRate = targetRTP / effectiveMultiplier
-    // This ensures: Expected Value = killRate * reward = targetRTP * costToKill
-    let killRate = targetRTP / effectiveMultiplier;
-    
-    // Dynamic adjustment based on current session RTP
-    const currentRTP = getCurrentSessionRTP();
-    if (currentRTP > 0) {
-        if (currentRTP > RTP_CONFIG.maxRTP) {
-            // Player winning too much - reduce kill rate by 10%
-            killRate *= 0.9;
-        } else if (currentRTP < RTP_CONFIG.minRTP) {
-            // Player losing too much - increase kill rate by 10%
-            killRate *= 1.1;
+let rtpFishIdCounter = 0;
+function nextRTPFishId() {
+    return 'f' + (++rtpFishIdCounter);
+}
+
+class ClientRTPPhase1 {
+    constructor() {
+        this.states = new Map();
+    }
+
+    _stateKey(playerId, fishId) {
+        return playerId + ':' + fishId;
+    }
+
+    _getOrCreateState(playerId, fishId) {
+        const key = this._stateKey(playerId, fishId);
+        let state = this.states.get(key);
+        if (!state) {
+            state = { sumCostFp: 0, budgetRemainingFp: 0, killed: false };
+            this.states.set(key, state);
+        }
+        return state;
+    }
+
+    clearFishStates(fishId) {
+        const suffix = ':' + fishId;
+        for (const key of this.states.keys()) {
+            if (key.endsWith(suffix)) {
+                this.states.delete(key);
+            }
         }
     }
-    
-    // Clamp kill rate to reasonable bounds (1% to 95%)
-    // Minimum 1% ensures players always have a chance to win
-    return Math.max(0.01, Math.min(0.95, killRate));
+
+    handleSingleTargetHit(playerId, fishId, weaponCostFp, tier) {
+        const config = RTP_TIER_CONFIG[tier];
+        if (!config) return { kill: false, error: 'invalid_tier' };
+
+        const state = this._getOrCreateState(playerId, fishId);
+        if (state.killed) return { kill: false, reason: 'already_killed' };
+
+        const budgetTotalFp = Math.floor(weaponCostFp * config.rtpTierFp / RTP_SCALE);
+        state.budgetRemainingFp += budgetTotalFp;
+        state.sumCostFp += weaponCostFp;
+
+        if (state.sumCostFp >= config.n1Fp) {
+            return this._executeKill(state, config, fishId, 'hard_pity');
+        }
+
+        const pBaseRawFp = Math.min(RTP_P_SCALE, Math.floor(budgetTotalFp * RTP_P_SCALE / config.rewardFp));
+        const pBaseFp = Math.floor(pBaseRawFp * config.pityCompFp / RTP_P_SCALE);
+        const progressFp = Math.floor(state.sumCostFp * RTP_PROGRESS_SCALE / config.n1Fp);
+        const rFp = progressFp <= RTP_RAMP_START ? 0
+            : Math.min(RTP_PROGRESS_SCALE, Math.floor((progressFp - RTP_RAMP_START) * RTP_PROGRESS_SCALE / (RTP_PROGRESS_SCALE - RTP_RAMP_START)));
+        const aFp = Math.floor(pBaseFp / 2);
+        const pFp = Math.min(RTP_P_SCALE, pBaseFp + Math.floor(aFp * rFp / RTP_PROGRESS_SCALE));
+
+        const rand = Math.floor(Math.random() * RTP_P_SCALE);
+        if (rand < pFp) {
+            return this._executeKill(state, config, fishId, 'probability');
+        }
+        return { kill: false, reason: 'roll_failed', pFp };
+    }
+
+    handleMultiTargetHit(playerId, hitList, weaponCostFp, weaponType) {
+        if (!hitList || hitList.length === 0) return [];
+
+        const maxTargets = weaponType === 'laser' ? RTP_LASER_MAX_TARGETS : RTP_AOE_MAX_TARGETS;
+        const trimmedList = hitList.slice(0, maxTargets);
+        const n = trimmedList.length;
+
+        const rawWeights = new Array(n);
+        let rawSum = 0;
+        for (let i = 0; i < n; i++) {
+            if (weaponType === 'laser') {
+                rawWeights[i] = Math.floor(RTP_WEIGHT_SCALE / (i + 1));
+            } else {
+                const dist = Math.max(trimmedList[i].distance, 1);
+                rawWeights[i] = Math.floor(RTP_WEIGHT_SCALE / dist);
+            }
+            rawSum += rawWeights[i];
+        }
+        if (rawSum === 0) rawSum = 1;
+
+        const weightsFp = new Array(n);
+        let weightSum = 0;
+        for (let i = 0; i < n - 1; i++) {
+            weightsFp[i] = Math.floor(rawWeights[i] * RTP_WEIGHT_SCALE / rawSum);
+            weightSum += weightsFp[i];
+        }
+        weightsFp[n - 1] = RTP_WEIGHT_SCALE - weightSum;
+
+        let rtpWeightedFp = 0;
+        for (let i = 0; i < n; i++) {
+            const tierConfig = RTP_TIER_CONFIG[trimmedList[i].tier];
+            if (!tierConfig) continue;
+            rtpWeightedFp += Math.floor(weightsFp[i] * tierConfig.rtpTierFp / RTP_WEIGHT_SCALE);
+        }
+
+        const budgetTotalFp = Math.floor(weaponCostFp * rtpWeightedFp / RTP_SCALE);
+        const budgetAllocFp = new Array(n);
+        let budgetAllocSum = 0;
+        for (let i = 0; i < n - 1; i++) {
+            budgetAllocFp[i] = Math.floor(budgetTotalFp * weightsFp[i] / RTP_WEIGHT_SCALE);
+            budgetAllocSum += budgetAllocFp[i];
+        }
+        budgetAllocFp[n - 1] = budgetTotalFp - budgetAllocSum;
+
+        const results = [];
+        for (let i = 0; i < n; i++) {
+            const entry = trimmedList[i];
+            const config = RTP_TIER_CONFIG[entry.tier];
+            if (!config) {
+                results.push({ fishId: entry.fishId, kill: false, reason: 'invalid_tier' });
+                continue;
+            }
+
+            const state = this._getOrCreateState(playerId, entry.fishId);
+            if (state.killed) {
+                results.push({ fishId: entry.fishId, kill: false, reason: 'already_killed' });
+                continue;
+            }
+
+            const costIFp = Math.floor(weaponCostFp * weightsFp[i] / RTP_WEIGHT_SCALE);
+            state.sumCostFp += costIFp;
+            state.budgetRemainingFp += budgetAllocFp[i];
+
+            if (state.sumCostFp >= config.n1Fp) {
+                results.push(this._executeKill(state, config, entry.fishId, 'hard_pity'));
+                continue;
+            }
+
+            const pBaseRawIFp = Math.min(RTP_P_SCALE, Math.floor(budgetAllocFp[i] * RTP_P_SCALE / config.rewardFp));
+            const pBaseIFp = Math.floor(pBaseRawIFp * config.pityCompFp / RTP_P_SCALE);
+            const progressIFp = Math.floor(state.sumCostFp * RTP_PROGRESS_SCALE / config.n1Fp);
+            const rIFp = progressIFp <= RTP_RAMP_START ? 0
+                : Math.min(RTP_PROGRESS_SCALE, Math.floor((progressIFp - RTP_RAMP_START) * RTP_PROGRESS_SCALE / (RTP_PROGRESS_SCALE - RTP_RAMP_START)));
+            const aIFp = Math.floor(pBaseIFp / 2);
+            const pIFp = Math.min(RTP_P_SCALE, pBaseIFp + Math.floor(aIFp * rIFp / RTP_PROGRESS_SCALE));
+
+            const randI = Math.floor(Math.random() * RTP_P_SCALE);
+            if (randI < pIFp) {
+                results.push(this._executeKill(state, config, entry.fishId, 'probability'));
+            } else {
+                results.push({ fishId: entry.fishId, kill: false, reason: 'roll_failed', pFp: pIFp });
+            }
+        }
+        return results;
+    }
+
+    _executeKill(state, config, fishId, reason) {
+        state.budgetRemainingFp -= config.rewardFp;
+        state.killed = true;
+        return {
+            fishId,
+            kill: true,
+            reason,
+            rewardFp: config.rewardFp,
+            reward: config.rewardFp / RTP_MONEY_SCALE
+        };
+    }
 }
 
-// Get current session RTP
-function getCurrentSessionRTP() {
-    if (RTP_CONFIG.sessionStats.totalBets <= 0) return 0;
-    return RTP_CONFIG.sessionStats.totalWins / RTP_CONFIG.sessionStats.totalBets;
-}
+const clientRTPEngine = new ClientRTPPhase1();
+const CLIENT_RTP_PLAYER_ID = 'local';
 
-// Record a bet (shot fired)
+const RTP_SESSION_STATS = {
+    totalBets: 0,
+    totalWins: 0,
+    shotsFired: 0,
+    fishKilled: 0
+};
+
 function recordBet(weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
     const betAmount = weapon.cost;
-    RTP_CONFIG.sessionStats.totalBets += betAmount;
-    RTP_CONFIG.sessionStats.shotsFired++;
+    RTP_SESSION_STATS.totalBets += betAmount;
+    RTP_SESSION_STATS.shotsFired++;
 }
 
-// Record a win (fish killed)
 function recordWin(amount) {
-    RTP_CONFIG.sessionStats.totalWins += amount;
-    RTP_CONFIG.sessionStats.fishKilled++;
+    RTP_SESSION_STATS.totalWins += amount;
+    RTP_SESSION_STATS.fishKilled++;
 }
 
-// Get RTP stats for debugging/display
+function getCurrentSessionRTP() {
+    if (RTP_SESSION_STATS.totalBets <= 0) return 0;
+    return RTP_SESSION_STATS.totalWins / RTP_SESSION_STATS.totalBets;
+}
+
 function getRTPStats() {
-    const stats = RTP_CONFIG.sessionStats;
+    const stats = RTP_SESSION_STATS;
     return {
         totalBets: stats.totalBets.toFixed(2),
         totalWins: stats.totalWins.toFixed(2),
@@ -16382,19 +16505,35 @@ function fireLaserBeam(origin, direction, weaponKey) {
         laserEndPoint = laserTempVectors.rayEnd.clone();
     }
     
-    // Damage all fish hit by the laser
-    for (const hit of hitFish) {
-        const killed = hit.fish.takeDamage(damage, weaponKey);
-        
-        createHitParticles(hit.hitPoint, weapon.color, 8);
-        playWeaponHitSound(weaponKey);
+    if (hitFish.length > 0 && !multiplayerMode) {
+        const weaponCostFp = weapon.cost * RTP_MONEY_SCALE;
+        const rtpHitList = hitFish.map((h, i) => ({
+            fishId: h.fish.rtpFishId,
+            tier: h.fish.rtpTier,
+            distance: i + 1
+        }));
+        const results = clientRTPEngine.handleMultiTargetHit(
+            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponCostFp, 'laser'
+        );
+        for (let i = 0; i < hitFish.length; i++) {
+            const hit = hitFish[i];
+            const result = results[i];
+            hit.fish.hp -= damage;
+            createHitParticles(hit.hitPoint, weapon.color, 8);
+            playWeaponHitSound(weaponKey);
+            if (result && result.kill && hit.fish.isActive) {
+                hit.fish.die(weaponKey, result.reward);
+            }
+        }
+    } else {
+        for (const hit of hitFish) {
+            hit.fish.takeDamage(damage, weaponKey);
+            createHitParticles(hit.hitPoint, weapon.color, 8);
+            playWeaponHitSound(weaponKey);
+        }
     }
     
-    // Visual beam: from muzzle (origin) to end point on camera ray
-    // This creates a natural convergent beam from cannon to crosshair target
     spawnLaserBeamEffect(origin, laserEndPoint, weapon.color, laserWidth);
-    
-    // Screen shake for powerful laser
     triggerScreenShakeWithStrength(8, 100);
 }
 
@@ -16650,9 +16789,7 @@ function spawnLaserBeamEffect(start, end, color, width) {
     });
 }
 
-// AOE Explosion Effect (for 5x rocket weapon now)
 function triggerExplosion(center, weaponKey) {
-    // Issue #6: Play explosion sound
     playSound('explosion');
     
     const weapon = CONFIG.weapons[weaponKey];
@@ -16660,24 +16797,57 @@ function triggerExplosion(center, weaponKey) {
     const damageCenter = weapon.damage || 250;
     const damageEdge = weapon.damageEdge || 100;
     
-    // Spawn explosion visual
     spawnExplosionEffect(center, aoeRadius, weapon.color);
     
-    // Damage all fish within radius
-    let hitAny = false;
+    const hitFishList = [];
     for (const fish of activeFish) {
         if (!fish.isActive) continue;
-        
         const distance = center.distanceTo(fish.group.position);
         if (distance <= aoeRadius) {
-            const t = distance / aoeRadius;
-            const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
+            hitFishList.push({ fish, distance });
+        }
+    }
+    
+    if (hitFishList.length === 0) return;
+    
+    let hitAny = false;
+    
+    if (!multiplayerMode) {
+        const weaponCostFp = weapon.cost * RTP_MONEY_SCALE;
+        const rtpHitList = hitFishList.map(h => ({
+            fishId: h.fish.rtpFishId,
+            tier: h.fish.rtpTier,
+            distance: h.distance
+        }));
+        const results = clientRTPEngine.handleMultiTargetHit(
+            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponCostFp, 'aoe'
+        );
+        for (let i = 0; i < hitFishList.length; i++) {
+            const fish = hitFishList[i].fish;
+            const result = results[i];
             
-            fish.takeDamage(damage, weaponKey);
+            const t = hitFishList[i].distance / aoeRadius;
+            const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
+            fish.hp -= damage;
+            
+            const fishPos = fish.group ? fish.group.position : null;
             createHitParticles(fish.group.position, weapon.color, 3);
+            hitAny = true;
+            
+            if (result && result.kill && fish.isActive) {
+                fish.die(weaponKey, result.reward);
+            }
+        }
+    } else {
+        for (const h of hitFishList) {
+            const t = h.distance / aoeRadius;
+            const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
+            h.fish.takeDamage(damage, weaponKey);
+            createHitParticles(h.fish.group.position, weapon.color, 3);
             hitAny = true;
         }
     }
+    
     if (hitAny) {
         playWeaponHitSound(weaponKey);
     }
