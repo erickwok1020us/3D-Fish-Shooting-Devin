@@ -575,15 +575,9 @@
             padding-top: 8px;
             border-top: 1px solid rgba(0, 200, 255, 0.1);
         }
-        #weapon-panel .wp-hint {
-            margin-top: 6px;
-            font-family: 'Orbitron', monospace;
-            font-size: 9px;
-            letter-spacing: 1.5px;
-            color: rgba(0, 200, 255, 0.6);
-            text-shadow: 0 0 6px rgba(0, 200, 255, 0.2);
-            pointer-events: none;
-        }
+        #weapon-panel .auto-left { display: flex; align-items: center; gap: 8px; }
+        #weapon-panel .auto-sep { color: rgba(0, 200, 255, 0.55); font-size: 10px; }
+        #weapon-panel .auto-kbd { font-family: 'Orbitron', monospace; font-size: 9px; letter-spacing: 1.5px; color: rgba(0, 200, 255, 0.8); text-shadow: 0 0 6px rgba(0, 200, 255, 0.2); }
         #weapon-panel .auto-label {
             font-size: 10px;
             font-weight: 700;
@@ -1803,13 +1797,12 @@
                         </div>
                     </div>
                     <div class="wp-auto">
-                        <div class="auto-label">AUTO FIRE</div>
+                        <div class="auto-left"><div class="auto-label">AUTO FIRE</div><span class="auto-sep">:</span><span class="auto-kbd">A</span></div>
                         <div class="auto-pill" id="auto-pill">
                             <button class="opt on" id="auto-off-btn">OFF</button>
                             <button class="opt" id="auto-on-btn">ON</button>
                         </div>
                     </div>
-                    <div class="wp-hint">Auto Fire：按 A</div>
                 </div>
             </div>
         </div>
