@@ -14233,7 +14233,7 @@ class Fish {
             if (distSq < shellSq && distSq > 0.01) {
                 const dist = Math.sqrt(distSq);
                 const penetration = shell - dist;
-                const t = penetration / margin;
+                const t = Math.min(penetration / margin, 1.0);
                 const strength = t * t * cfg.avoidStrength;
                 const invDist = 1 / dist;
                 fx += dx * invDist * strength;
@@ -14249,7 +14249,7 @@ class Fish {
             if (distSq < shellSq && distSq > 0.01) {
                 const dist = Math.sqrt(distSq);
                 const penetration = shell - dist;
-                const t = penetration / margin;
+                const t = Math.min(penetration / margin, 1.0);
                 const strength = t * t * cfg.predictiveStrength;
                 const invDist = 1 / dist;
                 fx += dx * invDist * strength;
