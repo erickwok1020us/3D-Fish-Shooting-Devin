@@ -16891,14 +16891,27 @@ function showRewardPopup(position, amount) {
 const KILL_FEED_MAX = 4;
 const killFeedRecords = [];
 
-const FISH_FORM_ICONS = {
-    whale: '\u{1F40B}', killerWhale: '\u{1F42C}', shark: '\u{1F988}',
-    marlin: '\u{1F41F}', hammerhead: '\u{1F988}', tuna: '\u{1F41F}',
-    barracuda: '\u{1F41F}', mantaRay: '\u{1F41F}', lionfish: '\u{1F420}',
-    angelfish: '\u{1F420}', butterflyFish: '\u{1F420}', parrotfish: '\u{1F420}',
-    clownfish: '\u{1F420}', damselfish: '\u{1F420}', seahorse: '\u{1F40E}',
-    sardine: '\u{1F41F}', anchovy: '\u{1F41F}', herring: '\u{1F41F}',
-    silverside: '\u{1F41F}'
+const KILLLOG_IMG_BASE = 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish%20Model%20Killlog%20pic/';
+const FISH_KILLLOG_IMAGES = {
+    sardine:     KILLLOG_IMG_BASE + 'Sardine%20fish_killlog.png',
+    anchovy:     KILLLOG_IMG_BASE + 'Anchovy_killlog.png',
+    clownfish:   KILLLOG_IMG_BASE + 'Clownfish_killlog.png',
+    damselfish:  KILLLOG_IMG_BASE + 'Damselfish_killlog.png',
+    angelfish:   KILLLOG_IMG_BASE + 'angelfish_killlog.png',
+    tang:        KILLLOG_IMG_BASE + 'Blue%20Tang_killlog.png',
+    lionfish:    KILLLOG_IMG_BASE + 'lionfish_killlog.png',
+    parrotfish:  KILLLOG_IMG_BASE + 'Parrotfish_killlog.png',
+    grouper:     KILLLOG_IMG_BASE + 'Grouper%20fish_killlog.png',
+    barracuda:   null,
+    dolphinfish: KILLLOG_IMG_BASE + 'Mahi-Mahi_killlog.png',
+    tuna:        KILLLOG_IMG_BASE + 'Yellowfin%20Tuna_killlog.png',
+    marlin:      KILLLOG_IMG_BASE + 'Marlin%20fish_killlog.png',
+    shark:       KILLLOG_IMG_BASE + 'Great%20White%20Shark_killlog.png',
+    hammerhead:  KILLLOG_IMG_BASE + 'Hammerhead%20Shark_killlog.png',
+    whale:       KILLLOG_IMG_BASE + 'Blue%20Whale_killlog.png',
+    killerWhale: KILLLOG_IMG_BASE + 'Killer%20Whale_killlog.png',
+    mantaRay:    KILLLOG_IMG_BASE + 'Manta%20ray_killlog.png',
+    seahorse:    KILLLOG_IMG_BASE + 'Seahorse_killlog.png'
 };
 
 function formatFishName(form) {
@@ -16910,10 +16923,10 @@ function addKillFeedEntry(fishForm, rewardAmount) {
     const list = document.getElementById('kill-feed-list');
     if (!list) return;
 
-    const icon = FISH_FORM_ICONS[fishForm] || '\u{1F41F}';
+    const imageUrl = FISH_KILLLOG_IMAGES[fishForm] || null;
     const name = formatFishName(fishForm);
 
-    killFeedRecords.push({ icon, name, reward: rewardAmount });
+    killFeedRecords.push({ imageUrl, name, reward: rewardAmount });
 
     if (killFeedRecords.length > KILL_FEED_MAX) {
         killFeedRecords.shift();
@@ -16952,7 +16965,15 @@ function renderKillFeed() {
 
         const iconEl = document.createElement('div');
         iconEl.className = 'kf-fish-icon';
-        iconEl.textContent = record.icon;
+        if (record.imageUrl) {
+            const img = document.createElement('img');
+            img.src = record.imageUrl;
+            img.alt = record.name;
+            img.draggable = false;
+            iconEl.appendChild(img);
+        } else {
+            iconEl.textContent = '\u{1F41F}';
+        }
 
         const info = document.createElement('div');
         info.className = 'kf-info';
