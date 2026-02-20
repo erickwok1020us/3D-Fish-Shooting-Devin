@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "description": "Fish GLB model manifest for 3D Fish Shooting game - 20 species with R2 Cloud Models",
+  "description": "Fish GLB model manifest for 3D Fish Shooting game - 19 species with R2 Cloud Models",
   "r2BaseUrl": "https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/",
   "constraints": {
     "maxFileSizeMB": 15,
@@ -78,13 +78,6 @@
           "fallbackColor": "#32CD32"
         },
         {
-          "id": "pufferfish_01",
-          "form": "pufferfish",
-          "url": "Pufferfish.glb",
-          "scale": 0.14,
-          "fallbackColor": "#FFDAB9"
-        },
-        {
           "id": "grouper_01",
           "form": "grouper",
           "url": "Grouper fish.glb",
@@ -109,13 +102,6 @@
           "url": "Mahi-Mahi.glb",
           "scale": 0.16,
           "fallbackColor": "#00CED1"
-        },
-        {
-          "id": "flyingfish_01",
-          "form": "flyingFish",
-          "url": "Flying Fish.glb",
-          "scale": 0.14,
-          "fallbackColor": "#87CEEB"
         }
       ]
     },
