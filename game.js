@@ -6695,7 +6695,7 @@ function showCrosshairRingFlash(spreadIndex) {
         }
     }
     const ring = document.createElement('div');
-    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:32px;height:32px;border:2px solid rgba(255,255,100,0.95);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 12px rgba(255,200,0,0.9),0 0 20px rgba(255,255,100,0.6),inset 0 0 6px rgba(255,255,200,0.4);`;
+    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:32px;height:32px;border:2px solid rgba(255,20,60,0.95);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 12px rgba(255,20,60,0.9),0 0 20px rgba(255,60,80,0.6),inset 0 0 6px rgba(255,120,120,0.4);`;
     document.body.appendChild(ring);
     if (targetEl) {
         targetEl.classList.add('hit-flash');
@@ -11384,13 +11384,13 @@ function autoFireAtFish(targetFish) {
         // 3x weapon: Fire 3 bullets in fan spread pattern
         const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
         
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        spawnBulletFromDirection(muzzlePos, direction, weaponKey, 0);
         
         fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey);
+        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
         
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey);
+        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
     } else if (weapon.type === 'laser') {
         fireLaserBeam(muzzlePos, direction, weaponKey);
     } else {
