@@ -17009,7 +17009,8 @@ function updateUI() {
     }
     _lastBalanceForFlash = newBalance;
     
-    document.getElementById('fps-counter').textContent = `FPS: ${Math.round(1 / deltaTime) || 60}`;
+    const fpsEl = document.getElementById('fps-counter');
+    if (fpsEl) fpsEl.textContent = `FPS: ${Math.round(1 / deltaTime) || 60}`;
     updateDigiAmmoDisplay();
 }
 
