@@ -11217,6 +11217,7 @@ const TargetingService = {
         pitchMax:   42.5  * (Math.PI / 180),
         pitchMin:  -29.75 * (Math.PI / 180),
         trackSpeed: 8.0,
+        maxRotSpeed: 2.0,
         initialLockMs: 250,
         transitionMs:  200,
     },
@@ -11251,7 +11252,9 @@ const TargetingService = {
 
     findNearest(muzzlePos) {
         const c = this.config;
+        let bestBoss = null, bestBossDist = Infinity;
         let best = null, bestDist = Infinity;
+        let second = null, secondDist = Infinity;
         for (const fish of activeFish) {
             if (!fish.isActive) continue;
             const pos = fish.group.position;
@@ -11262,9 +11265,19 @@ const TargetingService = {
             if (Math.abs(yaw) > c.yawLimit) continue;
             if (pitch > c.pitchMax || pitch < c.pitchMin) continue;
             const dist = dx * dx + dy * dy + dz * dz;
-            if (dist < bestDist) { bestDist = dist; best = fish; }
+            if (fish.isBoss) {
+                if (dist < bestBossDist) { bestBossDist = dist; bestBoss = fish; }
+                continue;
+            }
+            if (dist < bestDist) {
+                second = best; secondDist = bestDist;
+                best = fish; bestDist = dist;
+            } else if (dist < secondDist) {
+                second = fish; secondDist = dist;
+            }
         }
-        return best;
+        if (bestBoss) return { primary: bestBoss, fallback: best || second };
+        return { primary: best, fallback: second };
     },
 
     _smoothstep(t) { return t * t * (3 - 2 * t); },
@@ -11275,18 +11288,50 @@ const TargetingService = {
         return delta;
     },
 
+    _pickTarget(muzzlePos) {
+        const result = this.findNearest(muzzlePos);
+        return result.primary;
+    },
+
+    _pickFallback(muzzlePos) {
+        const result = this.findNearest(muzzlePos);
+        return result.primary || result.fallback;
+    },
+
+    _clampRotDelta(delta, maxStep) {
+        if (delta >  maxStep) return maxStep;
+        if (delta < -maxStep) return -maxStep;
+        return delta;
+    },
+
+    _lastTick: 0,
+
     tick() {
         const now = performance.now();
+        const dt = this._lastTick ? Math.min((now - this._lastTick) / 1000, 0.1) : 1 / 60;
+        this._lastTick = now;
         const muzzlePos = new THREE.Vector3();
         cannonMuzzle.getWorldPosition(muzzlePos);
         const c = this.config, s = this.state;
+        const maxStep = c.maxRotSpeed * dt;
 
         this._initFromCannon();
 
+        if (gameState.bossActive && s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
+            const bossCheck = this.findNearest(muzzlePos);
+            if (bossCheck.primary && bossCheck.primary.isBoss) {
+                s.lockedTarget = bossCheck.primary;
+                s.phase = 'transition';
+                s.phaseStart = now;
+                s.startYaw = s.currentYaw;
+                s.startPitch = s.currentPitch;
+            }
+        }
+
         if (s.phase === 'idle') {
-            const nearest = this.findNearest(muzzlePos);
-            if (nearest) {
-                s.lockedTarget = nearest;
+            const target = this._pickTarget(muzzlePos);
+            if (target) {
+                s.lockedTarget = target;
                 s.phase = 'locking';
                 s.phaseStart = now;
                 s.startYaw = s.currentYaw;
@@ -11296,9 +11341,9 @@ const TargetingService = {
         }
 
         if (s.lockedTarget && !s.lockedTarget.isActive) {
-            const nearest = this.findNearest(muzzlePos);
-            if (nearest) {
-                s.lockedTarget = nearest;
+            const next = this._pickFallback(muzzlePos);
+            if (next) {
+                s.lockedTarget = next;
                 s.phase = 'transition';
                 s.phaseStart = now;
                 s.startYaw = s.currentYaw;
@@ -11329,20 +11374,32 @@ const TargetingService = {
         if (s.phase === 'locking') {
             const t = Math.min(1, elapsed / c.initialLockMs);
             const ease = this._smoothstep(t);
-            s.currentYaw   = s.startYaw   + this._wrapDelta(clampedYaw   - s.startYaw)   * ease;
-            s.currentPitch = s.startPitch  + (clampedPitch - s.startPitch) * ease;
-            if (t >= 1) { s.phase = 'firing'; s.currentYaw = clampedYaw; s.currentPitch = clampedPitch; canFire = true; }
+            let dYaw   = this._wrapDelta(clampedYaw   - s.startYaw)   * ease;
+            let dPitch = (clampedPitch - s.startPitch) * ease;
+            dYaw   = this._clampRotDelta(dYaw,   maxStep * 3);
+            dPitch = this._clampRotDelta(dPitch, maxStep * 3);
+            s.currentYaw   = s.startYaw   + dYaw;
+            s.currentPitch = s.startPitch  + dPitch;
+            if (t >= 1) { s.phase = 'firing'; canFire = true; }
         } else if (s.phase === 'firing') {
             const factor = 1 - Math.exp(-c.trackSpeed / 60);
-            s.currentYaw   += this._wrapDelta(clampedYaw - s.currentYaw)   * factor;
-            s.currentPitch += (clampedPitch - s.currentPitch) * factor;
+            let dYaw   = this._wrapDelta(clampedYaw - s.currentYaw)   * factor;
+            let dPitch = (clampedPitch - s.currentPitch) * factor;
+            dYaw   = this._clampRotDelta(dYaw,   maxStep);
+            dPitch = this._clampRotDelta(dPitch, maxStep);
+            s.currentYaw   += dYaw;
+            s.currentPitch += dPitch;
             canFire = true;
         } else if (s.phase === 'transition') {
             const t = Math.min(1, elapsed / c.transitionMs);
             const ease = this._smoothstep(t);
-            s.currentYaw   = s.startYaw   + this._wrapDelta(clampedYaw   - s.startYaw)   * ease;
-            s.currentPitch = s.startPitch  + (clampedPitch - s.startPitch) * ease;
-            if (t >= 1) { s.phase = 'firing'; s.currentYaw = clampedYaw; s.currentPitch = clampedPitch; canFire = true; }
+            let dYaw   = this._wrapDelta(clampedYaw   - s.startYaw)   * ease;
+            let dPitch = (clampedPitch - s.startPitch) * ease;
+            dYaw   = this._clampRotDelta(dYaw,   maxStep * 3);
+            dPitch = this._clampRotDelta(dPitch, maxStep * 3);
+            s.currentYaw   = s.startYaw   + dYaw;
+            s.currentPitch = s.startPitch  + dPitch;
+            if (t >= 1) { s.phase = 'firing'; canFire = true; }
         }
 
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
@@ -11360,7 +11417,7 @@ const AUTOFIRE_TRACK_SPEED = TargetingService.config.trackSpeed;
 const autoFireState = TargetingService.state;
 
 function resetAutoFireState() { TargetingService.reset(); }
-function findNearestFish(muzzlePos) { return TargetingService.findNearest(muzzlePos); }
+function findNearestFish(muzzlePos) { return TargetingService.findNearest(muzzlePos).primary; }
 function autoFireTick() { if (!gameState.weaponSelected) return; return TargetingService.tick(); }
 
 function aimCannonAtFish(fish) {
