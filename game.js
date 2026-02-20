@@ -14404,11 +14404,11 @@ class Fish {
             }, 80);
         }
         
-        // RTP-based death: Only in single-player mode, for single-target weapons (1x, 3x spread)
-        // Multi-target weapons (5x AOE, 8x laser) are handled in triggerExplosion/fireLaserBeam
         if (!multiplayerMode) {
             const weapon = CONFIG.weapons[weaponKey];
-            if (weapon && (weapon.type === 'projectile' || weapon.type === 'spread')) {
+            if (!weapon) {
+                console.warn(`[RTP] takeDamage: no weapon found for key='${weaponKey}'`);
+            } else if (weapon.type === 'projectile' || weapon.type === 'spread') {
                 const perShotCostFp = Math.floor(weapon.cost / weapon.multiplier) * RTP_MONEY_SCALE;
                 const result = clientRTPEngine.handleSingleTargetHit(
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, perShotCostFp, this.rtpTier
@@ -14417,9 +14417,11 @@ class Fish {
                     this.die(weaponKey, result.reward);
                     return true;
                 }
+            } else {
+                console.log(`[RTP] takeDamage: weapon type='${weapon.type}' handled at caller level`);
             }
-            // For rocket/aoe/laser/chain types, RTP is handled at the caller level
-            // For ability chain damage, no RTP roll (cost=0 means no budget)
+        } else {
+            console.log(`[RTP] takeDamage: skipped - multiplayerMode=${multiplayerMode}`);
         }
         
         return false;
@@ -14933,7 +14935,10 @@ class ClientRTPPhase1 {
 
     handleSingleTargetHit(playerId, fishId, weaponCostFp, tier) {
         const config = RTP_TIER_CONFIG[tier];
-        if (!config) return { kill: false, error: 'invalid_tier' };
+        if (!config) {
+            console.warn(`[RTP] invalid tier=${tier} for fish=${fishId}`);
+            return { kill: false, error: 'invalid_tier' };
+        }
 
         const state = this._getOrCreateState(playerId, fishId);
         if (state.killed) return { kill: false, reason: 'already_killed' };
@@ -14942,7 +14947,11 @@ class ClientRTPPhase1 {
         state.budgetRemainingFp += budgetTotalFp;
         state.sumCostFp += weaponCostFp;
 
+        const shotNum = Math.round(state.sumCostFp / weaponCostFp);
+        const n1Shots = Math.ceil(config.n1Fp / weaponCostFp);
+
         if (state.sumCostFp >= config.n1Fp) {
+            console.log(`[RTP] KILL(hard_pity) fish=${fishId} tier=${tier} shot=${shotNum}/${n1Shots} sumCost=${state.sumCostFp} n1=${config.n1Fp}`);
             return this._executeKill(state, config, fishId, 'hard_pity');
         }
 
@@ -14955,6 +14964,7 @@ class ClientRTPPhase1 {
         const pFp = Math.min(RTP_P_SCALE, pBaseFp + Math.floor(aFp * rFp / RTP_PROGRESS_SCALE));
 
         const rand = Math.floor(Math.random() * RTP_P_SCALE);
+        console.log(`[RTP] fish=${fishId} T${tier} shot=${shotNum}/${n1Shots} cost=${weaponCostFp} budget=${state.budgetRemainingFp} pFp=${pFp} (${(pFp/10000).toFixed(2)}%) rand=${rand} ${rand < pFp ? 'KILL' : 'miss'}`);
         if (rand < pFp) {
             return this._executeKill(state, config, fishId, 'probability');
         }
