@@ -9355,7 +9355,7 @@ function initGameScene() {
         
         animate();
         
-        showWeaponPicker();
+        createCannon();
     }, 500);
 }
 
