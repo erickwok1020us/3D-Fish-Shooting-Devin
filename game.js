@@ -9921,7 +9921,8 @@ let terrainObstacles = [];
 function extractTerrainObstacles(mapScene) {
     terrainObstacles = [];
     const aq = CONFIG.aquarium;
-    const fishMinY = aq.floorY + aq.marginY;
+    const fa = CONFIG.fishArena;
+    const fishMinY = aq.floorY + fa.marginY;
     const gridSize = 60;
     const v = new THREE.Vector3();
     const grid = {};
