@@ -160,11 +160,13 @@
         }
         #settings-container .settings-label {
             font-family: 'Orbitron', monospace;
-            font-size: 7px;
+            font-size: 9px;
+            font-weight: 700;
             letter-spacing: 2px;
-            color: rgba(0, 200, 255, 0.5);
+            color: rgba(0, 200, 255, 0.6);
             display: block;
             text-transform: uppercase;
+            text-shadow: 0 0 6px rgba(0, 212, 255, 0.3);
         }
         #settings-container .settings-icon-svg {
             width: 32px;
@@ -390,20 +392,8 @@
             }
         }
 
-        /* FPS Counter (Sci-Fi Orbitron) - Secondary info, dimmer */
         #fps-counter {
-            position: absolute;
-            top: 72px;
-            left: 16px;
-            color: rgba(0, 200, 255, 0.5);
-            font-size: 9px;
-            font-weight: 600;
-            font-family: 'Orbitron', monospace;
-            letter-spacing: 1.5px;
-            background: linear-gradient(135deg, rgba(0, 18, 40, 0.8), rgba(0, 8, 22, 0.82));
-            border: 1px solid rgba(0, 200, 255, 0.18);
-            border-radius: 5px;
-            padding: 4px 12px;
+            display: none;
         }
         
         /* Weapon Panel - Bottom Left (Sci-Fi with Digital LED 4-digit ammo) */
@@ -1681,7 +1671,7 @@
                     </svg>
                 </div>
             </div>
-            <div id="esc-hint" style="position:absolute;top:72px;right:16px;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:rgba(0,200,255,0.4);text-align:center;pointer-events:none;">Press ESC for menu</div>
+            <div id="esc-hint" style="position:absolute;top:72px;right:16px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;color:rgba(0,200,255,0.5);text-align:center;pointer-events:none;text-shadow:0 0 6px rgba(0,212,255,0.3);">ESC</div>
             
             <!-- Settings Panel -->
             <div id="settings-panel">
@@ -1750,7 +1740,6 @@
             </div>
             
             <!-- FPS Counter -->
-            <div id="fps-counter">FPS: 60</div>
             
             
             <!-- Auto-shoot Toggle, View Mode, and Center View - Bottom Right (hidden, replaced by weapon panel pill) -->
