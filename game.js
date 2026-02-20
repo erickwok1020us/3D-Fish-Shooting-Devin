@@ -11304,9 +11304,12 @@ const TargetingService = {
         return delta;
     },
 
+    _lastTick: 0,
+
     tick() {
         const now = performance.now();
-        const dt = 1 / 60;
+        const dt = this._lastTick ? Math.min((now - this._lastTick) / 1000, 0.1) : 1 / 60;
+        this._lastTick = now;
         const muzzlePos = new THREE.Vector3();
         cannonMuzzle.getWorldPosition(muzzlePos);
         const c = this.config, s = this.state;
@@ -11314,7 +11317,7 @@ const TargetingService = {
 
         this._initFromCannon();
 
-        if (s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
+        if (gameState.bossActive && s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
             const bossCheck = this.findNearest(muzzlePos);
             if (bossCheck.primary && bossCheck.primary.isBoss) {
                 s.lockedTarget = bossCheck.primary;
