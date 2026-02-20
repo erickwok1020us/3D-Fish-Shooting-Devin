@@ -1111,6 +1111,13 @@ const CONFIG = {
         lateralStrength: 40,
         decayRate: 2.5,
         rampUpRate: 6.0
+    },
+    terrainAvoidance: {
+        minObstacleRadius: 15,
+        avoidMargin: 40,
+        avoidStrength: 120,
+        lookAheadTime: 1.2,
+        predictiveStrength: 60
     }
 };
 
@@ -9908,6 +9915,57 @@ function optimizeStaticObjects(object) {
     console.log(`[PERF] Optimized ${optimizedCount} static objects (matrixAutoUpdate=false)`);
 }
 
+// ==================== TERRAIN OBSTACLE SYSTEM ====================
+let terrainObstacles = [];
+
+function extractTerrainObstacles(mapScene) {
+    terrainObstacles = [];
+    const aq = CONFIG.aquarium;
+    const fa = CONFIG.fishArena;
+    const fishMinY = aq.floorY + fa.marginY;
+    const gridSize = 60;
+    const v = new THREE.Vector3();
+    const grid = {};
+
+    mapScene.traverse((obj) => {
+        if (!obj.isMesh) return;
+        obj.updateMatrixWorld(true);
+        const pos = obj.geometry.attributes.position;
+        if (!pos) return;
+        for (let i = 0; i < pos.count; i++) {
+            v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+            v.applyMatrix4(obj.matrixWorld);
+            const gx = Math.floor(v.x / gridSize);
+            const gz = Math.floor(v.z / gridSize);
+            const key = gx + ',' + gz;
+            if (!grid[key]) grid[key] = { maxY: -Infinity, sumX: 0, sumY: 0, sumZ: 0, count: 0 };
+            const cell = grid[key];
+            if (v.y > cell.maxY) cell.maxY = v.y;
+            cell.sumX += v.x;
+            cell.sumZ += v.z;
+            if (v.y > fishMinY) { cell.sumY += v.y; }
+            cell.count++;
+        }
+    });
+
+    for (const cell of Object.values(grid)) {
+        if (cell.maxY <= fishMinY) continue;
+        const cx = cell.sumX / cell.count;
+        const cz = cell.sumZ / cell.count;
+        const height = cell.maxY - fishMinY;
+        const cy = (fishMinY + cell.maxY) * 0.5;
+        const radius = Math.max(gridSize * 0.5, height * 0.5) + 10;
+        terrainObstacles.push({ x: cx, y: cy, z: cz, radius: radius });
+    }
+
+    if (terrainObstacles.length > 200) {
+        terrainObstacles.sort((a, b) => b.radius - a.radius);
+        terrainObstacles.length = 200;
+    }
+
+    console.log(`[TERRAIN] Extracted ${terrainObstacles.length} heightmap obstacles for fish avoidance (gridSize=${gridSize}, fishMinY=${fishMinY})`);
+}
+
 // ==================== CLEAN AQUARIUM SCENE ====================
 function createTunnelScene() {
     // Renamed but kept for compatibility - now creates aquarium
@@ -9923,6 +9981,8 @@ function createAquariumScene() {
         // Scale and position the map to fit aquarium bounds
         scaleAndPositionMap(mapScene);
         tunnelGroup.add(mapScene);
+        
+        extractTerrainObstacles(mapScene);
         
         // Enhanced debug logging for map verification
         const mapBox = new THREE.Box3().setFromObject(mapScene);
@@ -13268,6 +13328,7 @@ class Fish {
         
         // Apply boundary forces
         this.applyBoundaryForces();
+        this.applyTerrainAvoidance();
         
         // Update velocity (using addScaledVector to avoid clone() allocation)
         this.velocity.addScaledVector(this.acceleration, deltaTime);
@@ -14145,6 +14206,61 @@ class Fish {
         }
         
         this.acceleration.addScaledVector(force, 60);
+    }
+    
+    applyTerrainAvoidance() {
+        if (terrainObstacles.length === 0) return;
+        const cfg = CONFIG.terrainAvoidance;
+        const pos = this.group.position;
+        const vel = this.velocity;
+        const margin = cfg.avoidMargin;
+        const laTime = cfg.lookAheadTime;
+        const predX = pos.x + vel.x * laTime;
+        const predY = pos.y + vel.y * laTime;
+        const predZ = pos.z + vel.z * laTime;
+        let fx = 0, fy = 0, fz = 0;
+
+        for (let i = 0; i < terrainObstacles.length; i++) {
+            const ob = terrainObstacles[i];
+            const shell = ob.radius + margin;
+            const shellSq = shell * shell;
+
+            let dx = pos.x - ob.x;
+            let dy = pos.y - ob.y;
+            let dz = pos.z - ob.z;
+            let distSq = dx * dx + dy * dy + dz * dz;
+
+            if (distSq < shellSq && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                const penetration = shell - dist;
+                const t = Math.min(penetration / margin, 1.0);
+                const strength = t * t * cfg.avoidStrength;
+                const invDist = 1 / dist;
+                fx += dx * invDist * strength;
+                fy += dy * invDist * strength;
+                fz += dz * invDist * strength;
+            }
+
+            dx = predX - ob.x;
+            dy = predY - ob.y;
+            dz = predZ - ob.z;
+            distSq = dx * dx + dy * dy + dz * dz;
+
+            if (distSq < shellSq && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                const penetration = shell - dist;
+                const t = Math.min(penetration / margin, 1.0);
+                const strength = t * t * cfg.predictiveStrength;
+                const invDist = 1 / dist;
+                fx += dx * invDist * strength;
+                fy += dy * invDist * strength;
+                fz += dz * invDist * strength;
+            }
+        }
+
+        this.acceleration.x += fx;
+        this.acceleration.y += fy;
+        this.acceleration.z += fz;
     }
     
     updateRotation(deltaTime) {
