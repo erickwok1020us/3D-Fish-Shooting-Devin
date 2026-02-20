@@ -448,16 +448,16 @@ function updateUnderwaterParticles(deltaTime) {
 // ==================== UNDERWATER GOD RAYS (Light Shafts from Surface) ====================
 let godRayGroup = null;
 const GOD_RAY_CONFIG = {
-    count: 5,
+    count: 4,
     topY: 800,
     bottomY: -600,
-    spread: 1600,
-    minWidth: 40,
-    maxWidth: 120,
-    color: 0x6ec8e8,
-    opacity: 0.06,
-    driftSpeed: 0.08,
-    pulseSpeed: 0.3
+    spread: 1800,
+    minWidth: 50,
+    maxWidth: 140,
+    color: 0x80d8f0,
+    opacity: 0.035,
+    driftSpeed: 0.06,
+    pulseSpeed: 0.2
 };
 
 function createGodRays() {
@@ -513,30 +513,68 @@ function createUnderwaterOverlay() {
         pointer-events: none;
         z-index: 5;
         background: radial-gradient(ellipse at center,
-            rgba(4,60,80,0) 0%,
-            rgba(4,60,80,0) 50%,
-            rgba(3,40,58,0.18) 75%,
-            rgba(2,25,40,0.35) 100%
+            rgba(10,80,100,0) 0%,
+            rgba(10,80,100,0) 55%,
+            rgba(8,60,80,0.08) 80%,
+            rgba(5,40,60,0.15) 100%
         );
         mix-blend-mode: multiply;
     `;
     document.body.appendChild(overlay);
+    console.log('[ATMOSPHERE] Created underwater CSS overlay (light vignette)');
+}
 
-    const tint = document.createElement('div');
-    tint.id = 'underwater-tint';
-    tint.style.cssText = `
-        position: fixed;
-        top: 0; left: 0; width: 100%; height: 100%;
-        pointer-events: none;
-        z-index: 4;
-        background: linear-gradient(180deg,
-            rgba(20,80,110,0.08) 0%,
-            rgba(6,74,94,0.04) 40%,
-            rgba(4,50,70,0.10) 100%
-        );
-    `;
-    document.body.appendChild(tint);
-    console.log('[ATMOSPHERE] Created underwater CSS overlay (vignette + tint)');
+let causticsPlane = null;
+let causticsCanvas = null;
+let causticsCtx = null;
+let causticsTexture = null;
+
+function createCaustics() {
+    causticsCanvas = document.createElement('canvas');
+    causticsCanvas.width = 256;
+    causticsCanvas.height = 256;
+    causticsCtx = causticsCanvas.getContext('2d');
+    causticsTexture = new THREE.CanvasTexture(causticsCanvas);
+    causticsTexture.wrapS = THREE.RepeatWrapping;
+    causticsTexture.wrapT = THREE.RepeatWrapping;
+    causticsTexture.repeat.set(3, 3);
+
+    const { width, depth, floorY } = CONFIG.aquarium;
+    const geo = new THREE.PlaneGeometry(width * 1.5, depth * 1.5);
+    const mat = new THREE.MeshBasicMaterial({
+        map: causticsTexture,
+        transparent: true,
+        opacity: 0.12,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    causticsPlane = new THREE.Mesh(geo, mat);
+    causticsPlane.rotation.x = -Math.PI / 2;
+    causticsPlane.position.y = floorY + 10;
+    causticsPlane.renderOrder = -400;
+    scene.add(causticsPlane);
+    console.log('[ATMOSPHERE] Created caustics light pattern on floor');
+}
+
+function updateCaustics(time) {
+    if (!causticsCtx) return;
+    const w = 256, h = 256;
+    causticsCtx.clearRect(0, 0, w, h);
+    const t = time * 0.4;
+    for (let i = 0; i < 18; i++) {
+        const cx = (w / 2) + Math.sin(t + i * 1.3) * (w * 0.35);
+        const cy = (h / 2) + Math.cos(t * 0.7 + i * 0.9) * (h * 0.35);
+        const r = 30 + Math.sin(t * 0.5 + i * 2.1) * 15;
+        const grad = causticsCtx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        grad.addColorStop(0, 'rgba(180,230,255,0.25)');
+        grad.addColorStop(0.5, 'rgba(150,210,240,0.10)');
+        grad.addColorStop(1, 'rgba(120,200,230,0)');
+        causticsCtx.fillStyle = grad;
+        causticsCtx.beginPath();
+        causticsCtx.arc(cx, cy, r, 0, Math.PI * 2);
+        causticsCtx.fill();
+    }
+    causticsTexture.needsUpdate = true;
 }
 
 // ==================== UNIFIED WEAPON CONFIGURATION ====================
@@ -9280,9 +9318,9 @@ function initGameScene() {
     // Create floating underwater particles for dynamic atmosphere
     createUnderwaterParticles();
     
-    // God rays and CSS overlay disabled (reverted to brighter version)
-    // createGodRays();
-    // createUnderwaterOverlay();
+    createGodRays();
+    createUnderwaterOverlay();
+    createCaustics();
     
     updateLoadingProgress(92, 'Pre-initializing effect pools...');
     // PERFORMANCE FIX: Pre-initialize ALL pools to avoid any first-use stutter
@@ -10389,19 +10427,13 @@ function createCannonBase() {
     cannonGroup.visible = false;
     scene.add(cannonGroup);
     
-    var cannonPointLight = new THREE.PointLight(0xffffff, 3.0, 800);
+    var cannonPointLight = new THREE.PointLight(0xffffff, 0.8, 300);
     cannonPointLight.position.set(0, 50, 0);
     cannonGroup.add(cannonPointLight);
     
-    var cannonFrontLight = new THREE.PointLight(0xaaddff, 2.0, 600);
+    var cannonFrontLight = new THREE.PointLight(0xaaddff, 0.5, 250);
     cannonFrontLight.position.set(0, 30, 100);
     cannonGroup.add(cannonFrontLight);
-    
-    var cannonSpotLight = new THREE.SpotLight(0xffffff, 2.5, 1000, Math.PI / 4, 0.5, 1);
-    cannonSpotLight.position.set(0, CANNON_BASE_Y + 200, -200);
-    cannonSpotLight.target = cannonGroup;
-    cannonSpotLight.visible = false;
-    scene.add(cannonSpotLight);
     
     console.log('[PLAN-B] createCannonBase() complete. Cannon hidden until weapon selection.');
 }
@@ -17868,8 +17900,8 @@ function animate() {
     // Update panorama sky-sphere animation (slow rotation + bobbing)
     updatePanoramaAnimation(deltaTime);
     
-    // God rays disabled (reverted to brighter version)
-    // updateGodRays(currentTime / 1000);
+    updateGodRays(currentTime / 1000);
+    updateCaustics(currentTime / 1000);
     
     // Smooth camera transitions (for CENTER VIEW button and auto-panning)
     updateSmoothCameraTransition(deltaTime);
