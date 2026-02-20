@@ -14883,19 +14883,19 @@ const RTP_P_SCALE = 1000000;
 const RTP_K = 1.2;
 const RTP_AOE_MAX_TARGETS = 8;
 const RTP_LASER_MAX_TARGETS = 6;
-const RTP_RAMP_START = 300000;
+const RTP_RAMP_START = 200000;
 const RTP_RAMP_AMP = 5;
 const RTP_BASE_P_BOOST = 1500000;
-const RTP_MULTI_TARGET_P_BOOST = 1300000;
+const RTP_MULTI_TARGET_P_BOOST = 2500000;
 const RTP_LUCKY_CRIT_P = 2000;
 
 const RTP_TIER_CONFIG = {
-    1: { rtpTierFp: 9000, n1Fp: 6000, rewardFp: 4500, pityCompFp: 126088 },
-    2: { rtpTierFp: 9200, n1Fp: 10000, rewardFp: 7666, pityCompFp: 120448 },
-    3: { rtpTierFp: 9300, n1Fp: 16000, rewardFp: 12400, pityCompFp: 112504 },
-    4: { rtpTierFp: 9400, n1Fp: 30000, rewardFp: 23500, pityCompFp: 102275 },
-    5: { rtpTierFp: 9450, n1Fp: 45000, rewardFp: 35437, pityCompFp: 93326 },
-    6: { rtpTierFp: 9500, n1Fp: 120000, rewardFp: 95000, pityCompFp: 44045 }
+    1: { rtpTierFp: 9000, n1Fp: 10000, rewardFp: 6940, pityCompFp: 162492 },
+    2: { rtpTierFp: 9200, n1Fp: 15000, rewardFp: 10411, pityCompFp: 155148 },
+    3: { rtpTierFp: 9300, n1Fp: 22000, rewardFp: 15364, pityCompFp: 148338 },
+    4: { rtpTierFp: 9400, n1Fp: 40000, rewardFp: 27904, pityCompFp: 141657 },
+    5: { rtpTierFp: 9450, n1Fp: 60000, rewardFp: 41909, pityCompFp: 131718 },
+    6: { rtpTierFp: 9500, n1Fp: 120000, rewardFp: 82773, pityCompFp: 109818 }
 };
 
 const FISH_SPECIES_TO_RTP_TIER = {
