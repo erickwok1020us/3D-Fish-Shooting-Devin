@@ -549,6 +549,214 @@ function createUnderwaterOverlay() {
     console.log('[ATMOSPHERE] Created underwater CSS overlay (vignette + tint)');
 }
 
+// ==================== UNIFIED WEAPON CONFIGURATION ====================
+// Single source of truth for ALL weapon parameters.
+// To adjust any weapon, edit ONLY this object.
+// Legacy configs (CONFIG.weapons, WEAPON_GLB_CONFIG, WEAPON_VFX_CONFIG) are
+// auto-generated from WEAPON_CONFIG for backward compatibility.
+const WEAPON_CONFIG = {
+    '1x': {
+        multiplier: 1, cost: 1, damage: 100, shotsPerSecond: 2.5,
+        type: 'projectile', speed: 2000,
+        piercing: false, spreadAngle: 0, aoeRadius: 0, damageEdge: 0, laserWidth: 0,
+        convergenceDistance: 1400,
+
+        soundVolume: 1.0,
+        fireScreenShake: { strength: 0, duration: 0 },
+
+        glbCannon: '1x 武器模組',
+        glbCannonNonPlayer: '1x 武器模組(非玩家).glb',
+        glbBullet: '1x 子彈模組',
+        glbHitEffect: '1x 擊中特效',
+        scale: 1.0, bulletScale: 0.5, hitEffectScale: 0.6,
+        muzzleOffset: new THREE.Vector3(0, 30, 55),
+        cannonYOffset: 35,
+        cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+        bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+        hitEffectRotationFix: false, hitEffectPlanar: true,
+        bulletTint: null,
+        fpsCameraBackDist: 115, fpsCameraUpOffset: 80,
+        emissiveBoost: 0.4,
+
+        color: 0xcccccc, size: 0.8,
+        cannonColor: 0xcccccc, cannonEmissive: 0x666666,
+        muzzleColor: 0x88ddff, trailColor: 0xffffff,
+        hitColor: 0x88ddff, ringColor: 0xffffff,
+        recoilStrength: 5, screenShakeOnHit: 0.5,
+        chargeTime: 0,
+    },
+    '3x': {
+        multiplier: 3, cost: 3, damage: 100, shotsPerSecond: 2.5,
+        type: 'spread', speed: 2000,
+        piercing: false, spreadAngle: 15, aoeRadius: 0, damageEdge: 0, laserWidth: 0,
+        convergenceDistance: 1400,
+
+        soundVolume: 1.0,
+        fireScreenShake: { strength: 0, duration: 0 },
+
+        glbCannon: '3x 武器模組',
+        glbCannonNonPlayer: '3x 武器模組(非玩家).glb',
+        glbBullet: '1x 子彈模組',
+        glbHitEffect: '3x 擊中特效',
+        scale: 1.1, bulletScale: 0.6, hitEffectScale: 0.7,
+        muzzleOffset: new THREE.Vector3(0, 30, 60),
+        cannonYOffset: 20,
+        cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+        bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+        hitEffectRotationFix: false, hitEffectPlanar: true,
+        bulletTint: 0xffaaaa,
+        fpsCameraBackDist: 125, fpsCameraUpOffset: 75,
+        emissiveBoost: 0.4,
+
+        color: 0xffaaaa, size: 0.8,
+        cannonColor: 0xff8888, cannonEmissive: 0xff6666,
+        muzzleColor: 0xffaaaa, trailColor: 0xffbbbb,
+        hitColor: 0xffaaaa, ringColor: 0xffaaaa,
+        recoilStrength: 8, screenShakeOnHit: 1.0,
+        chargeTime: 0,
+    },
+    '5x': {
+        multiplier: 5, cost: 5, damage: 200, shotsPerSecond: 2.5,
+        type: 'rocket', speed: 2000,
+        piercing: false, spreadAngle: 0, aoeRadius: 120, damageEdge: 80, laserWidth: 0,
+        convergenceDistance: 1400,
+
+        soundVolume: 1.0,
+        fireScreenShake: { strength: 0, duration: 0 },
+
+        glbCannon: '5x 武器模組',
+        glbCannonNonPlayer: '5x 武器模組(非玩家).glb',
+        glbBullet: '5x 子彈模組',
+        glbHitEffect: '5x 擊中特效',
+        scale: 1.3, bulletScale: 0.7, hitEffectScale: 0.9,
+        muzzleOffset: new THREE.Vector3(0, 30, 65),
+        cannonYOffset: 20,
+        cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+        bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+        hitEffectRotationFix: false, hitEffectPlanar: false,
+        bulletTint: null,
+        fpsCameraBackDist: 150, fpsCameraUpOffset: 85,
+        emissiveBoost: 0.4,
+
+        color: 0xffdd00, size: 0.8,
+        cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
+        muzzleColor: 0xffdd00, trailColor: 0xffcc00,
+        hitColor: 0xffdd00, ringColor: 0xffdd00,
+        recoilStrength: 12, screenShakeOnHit: 1.5,
+        chargeTime: 0.2,
+    },
+    '8x': {
+        multiplier: 8, cost: 8, damage: 350, shotsPerSecond: 1.0,
+        type: 'laser', speed: 0,
+        piercing: true, spreadAngle: 0, aoeRadius: 0, damageEdge: 0, laserWidth: 8,
+        convergenceDistance: 1400,
+
+        soundVolume: 0.5,
+        fireScreenShake: { strength: 6, duration: 200 },
+
+        glbCannon: '8x 武器模組',
+        glbCannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
+        glbBullet: '8x 子彈模組',
+        glbHitEffect: '8x 擊中特效',
+        scale: 1.0, bulletScale: 0.9, hitEffectScale: 1.2,
+        muzzleOffset: new THREE.Vector3(0, 30, 50),
+        cannonYOffset: 20,
+        cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+        bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
+        hitEffectRotationFix: false, hitEffectPlanar: false,
+        bulletTint: null,
+        fpsCameraBackDist: 150, fpsCameraUpOffset: 75,
+        emissiveBoost: 0.3,
+
+        color: 0xff4444, size: 16,
+        cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
+        muzzleColor: 0xff4400, trailColor: 0xff6600,
+        hitColor: 0xff2200, ringColor: 0xff2200,
+        recoilStrength: 15, screenShakeOnHit: 3,
+        chargeTime: 0.3,
+    },
+};
+
+function _buildLegacyWeaponsConfig() {
+    const result = {};
+    for (const [key, w] of Object.entries(WEAPON_CONFIG)) {
+        const entry = {
+            multiplier: w.multiplier, cost: w.cost,
+            damage: w.damage, shotsPerSecond: w.shotsPerSecond,
+            type: w.type, color: w.color, size: w.size,
+            cannonColor: w.cannonColor, cannonEmissive: w.cannonEmissive,
+            convergenceDistance: w.convergenceDistance,
+        };
+        if (w.speed > 0) entry.speed = w.speed;
+        if (w.type === 'spread') entry.spreadAngle = w.spreadAngle;
+        if (w.type === 'rocket') { entry.aoeRadius = w.aoeRadius; entry.damageEdge = w.damageEdge; }
+        if (w.type === 'laser') { entry.piercing = w.piercing; entry.laserWidth = w.laserWidth; }
+        result[key] = entry;
+    }
+    return result;
+}
+
+function _buildLegacyGLBWeapons() {
+    const result = {};
+    for (const [key, w] of Object.entries(WEAPON_CONFIG)) {
+        const entry = {
+            cannon: w.glbCannon,
+            cannonNonPlayer: w.glbCannonNonPlayer,
+            bullet: w.glbBullet,
+            hitEffect: w.glbHitEffect,
+            scale: w.scale, bulletScale: w.bulletScale, hitEffectScale: w.hitEffectScale,
+            muzzleOffset: w.muzzleOffset,
+            cannonYOffset: w.cannonYOffset,
+            cannonRotationFix: w.cannonRotationFix,
+            bulletRotationFix: w.bulletRotationFix,
+            hitEffectRotationFix: w.hitEffectRotationFix,
+            hitEffectPlanar: w.hitEffectPlanar,
+            fpsCameraBackDist: w.fpsCameraBackDist,
+            fpsCameraUpOffset: w.fpsCameraUpOffset,
+            emissiveBoost: w.emissiveBoost,
+        };
+        if (w.bulletTint) entry.bulletTint = w.bulletTint;
+        result[key] = entry;
+    }
+    return result;
+}
+
+function _buildLegacyVFXConfig() {
+    const result = {};
+    for (const [key, w] of Object.entries(WEAPON_CONFIG)) {
+        const entry = {
+            muzzleColor: w.muzzleColor, trailColor: w.trailColor,
+            hitColor: w.hitColor, ringColor: w.ringColor,
+            recoilStrength: w.recoilStrength, screenShake: w.screenShakeOnHit,
+        };
+        if (w.chargeTime > 0) entry.chargeTime = w.chargeTime;
+        result[key] = entry;
+    }
+    return result;
+}
+
+const WeaponSystem = {
+    getConfig(weaponKey) {
+        return WEAPON_CONFIG[weaponKey] || WEAPON_CONFIG['1x'];
+    },
+    getCooldown(weaponKey) {
+        const w = this.getConfig(weaponKey);
+        return 1 / w.shotsPerSecond;
+    },
+    getSoundVolume(weaponKey) {
+        return this.getConfig(weaponKey).soundVolume;
+    },
+    getFireScreenShake(weaponKey) {
+        return this.getConfig(weaponKey).fireScreenShake;
+    },
+    isHitscan(weaponKey) {
+        return this.getConfig(weaponKey).type === 'laser';
+    },
+    getAllKeys() {
+        return Object.keys(WEAPON_CONFIG);
+    },
+};
+
 // ==================== GAME CONFIGURATION ====================
 const CONFIG = {
     // Aquarium tank dimensions (rectangular glass tank) - Issue #10: 1.5X SIZE (of original)
@@ -844,42 +1052,8 @@ const CONFIG = {
         // These can be re-added when corresponding GLB models are uploaded to R2
     },
     
-    // Weapons (multiplier-based with unique mechanics)
-    // Weapons (multiplier-based with unique mechanics)
-    // Issue #16 CORRECTION: All weapons have 100% accuracy - point-and-click shooting
-    weapons: {
-        '1x': { 
-            multiplier: 1, cost: 1, speed: 2000,
-            damage: 100, shotsPerSecond: 2.5,
-            type: 'projectile', color: 0xcccccc, size: 0.8,
-            cannonColor: 0xcccccc, cannonEmissive: 0x666666,
-            convergenceDistance: 1400
-        },
-        '3x': {
-            multiplier: 3, cost: 3, speed: 2000,
-            damage: 100, shotsPerSecond: 2.5,
-            type: 'spread', spreadAngle: 15,
-            color: 0xffaaaa, size: 0.8,
-            cannonColor: 0xff8888, cannonEmissive: 0xff6666,
-            convergenceDistance: 1400
-        },
-        '5x': {
-            multiplier: 5, cost: 5, speed: 2000,
-            damage: 200, shotsPerSecond: 2.5,
-            type: 'rocket', aoeRadius: 120, damageEdge: 80,
-            color: 0xffdd00, size: 0.8,
-            cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-            convergenceDistance: 1400
-        },
-        '8x': {
-            multiplier: 8, cost: 8,
-            damage: 350, shotsPerSecond: 1.0,
-            type: 'laser', piercing: true, laserWidth: 8,
-            color: 0xff4444, size: 16,
-            cannonColor: 0xff2222, cannonEmissive: 0xcc0000,
-            convergenceDistance: 1400
-        }
-    },
+    // Weapons - auto-generated from WEAPON_CONFIG (single source of truth)
+    weapons: _buildLegacyWeaponsConfig(),
     
     // RTP settings - Updated weapon configuration
     // 1x: 91%, 3x: 93%, 5x: 94%, 8x: 95%
@@ -2099,83 +2273,10 @@ async function preloadFishGLBModels() {
 }
 
 // ==================== WEAPON GLB MODEL LOADER ====================
+// Auto-generated from WEAPON_CONFIG (single source of truth)
 const WEAPON_GLB_CONFIG = {
     baseUrl: 'https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/',
-    weapons: {
-        '1x': {
-            cannon: '1x 武器模組',
-            cannonNonPlayer: '1x 武器模組(非玩家).glb',
-            bullet: '1x 子彈模組',
-            hitEffect: '1x 擊中特效',
-            scale: 1.0,
-            bulletScale: 0.5,
-            hitEffectScale: 0.6,
-            muzzleOffset: new THREE.Vector3(0, 30, 55),
-            cannonYOffset: 35,
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            hitEffectRotationFix: false,
-            hitEffectPlanar: true,
-            fpsCameraBackDist: 115,
-            fpsCameraUpOffset: 80,
-            emissiveBoost: 0.4
-        },
-        '3x': {
-            cannon: '3x 武器模組',
-            cannonNonPlayer: '3x 武器模組(非玩家).glb',
-            bullet: '1x 子彈模組',
-            bulletTint: 0xffaaaa,
-            hitEffect: '3x 擊中特效',
-            scale: 1.1,
-            bulletScale: 0.6,
-            hitEffectScale: 0.7,
-            muzzleOffset: new THREE.Vector3(0, 30, 60),
-            cannonYOffset: 20,
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            hitEffectRotationFix: false,
-            hitEffectPlanar: true,
-            fpsCameraBackDist: 125,
-            fpsCameraUpOffset: 75,
-            emissiveBoost: 0.4
-        },
-        '5x': {
-            cannon: '5x 武器模組',
-            cannonNonPlayer: '5x 武器模組(非玩家).glb',
-            bullet: '5x 子彈模組',
-            hitEffect: '5x 擊中特效',
-            scale: 1.3,
-            bulletScale: 0.7,
-            hitEffectScale: 0.9,
-            muzzleOffset: new THREE.Vector3(0, 30, 65),
-            cannonYOffset: 20,
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            hitEffectRotationFix: false,
-            hitEffectPlanar: false,
-            fpsCameraBackDist: 150,
-            fpsCameraUpOffset: 85,
-            emissiveBoost: 0.4
-        },
-        '8x': {
-            cannon: '8x 武器模組',
-            cannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
-            bullet: '8x 子彈模組',
-            hitEffect: '8x 擊中特效',
-            scale: 1.0,
-            bulletScale: 0.9,
-            hitEffectScale: 1.2,
-            muzzleOffset: new THREE.Vector3(0, 30, 50),
-            cannonYOffset: 20,
-            cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
-            hitEffectRotationFix: false,
-            hitEffectPlanar: false,
-            fpsCameraBackDist: 150,
-            fpsCameraUpOffset: 75,
-            emissiveBoost: 0.3
-        }
-    }
+    weapons: _buildLegacyGLBWeapons()
 };
 
 const weaponGLBState = {
@@ -4655,43 +4756,8 @@ const ABILITY_FISH_EXCLUDED = ['bombCrab', 'electricEel', 'goldFish', 'shieldTur
 
 // ==================== WEAPON VFX SYSTEM (Issue #14) ====================
 // Visual effects configuration and state for each weapon type
-const WEAPON_VFX_CONFIG = {
-    '1x': {
-        muzzleColor: 0x88ddff,      // Light blue
-        trailColor: 0xffffff,       // White
-        hitColor: 0x88ddff,         // Light blue
-        ringColor: 0xffffff,        // White for weapon switch
-        recoilStrength: 5,
-        screenShake: 0.5
-    },
-    '3x': {
-        muzzleColor: 0xffaaaa,      // Light red
-        trailColor: 0xffbbbb,       // Light red
-        hitColor: 0xffaaaa,         // Light red
-        ringColor: 0xffaaaa,        // Light red for weapon switch
-        recoilStrength: 8,
-        screenShake: 1.0
-    },
-    '5x': {
-        muzzleColor: 0xffdd00,      // Golden yellow
-        trailColor: 0xffcc00,       // Gold
-        hitColor: 0xffdd00,         // Gold
-        ringColor: 0xffdd00,        // Gold for weapon switch
-        recoilStrength: 12,
-        screenShake: 1.5,           // Slight shake
-        chargeTime: 0.2             // 0.2s charge effect
-    },
-    '8x': {
-        muzzleColor: 0xff4400,      // Red-orange
-        trailColor: 0xff6600,       // Orange
-        hitColor: 0xff2200,         // Red
-        ringColor: 0xff2200,        // Red for weapon switch
-        recoilStrength: 15,
-        screenShake: 3,             // Strong shake
-        chargeTime: 0.3             // 0.3s charge effect
-    }
-    // Note: 20x weapon removed per latest specification
-};
+// Auto-generated from WEAPON_CONFIG (single source of truth)
+const WEAPON_VFX_CONFIG = _buildLegacyVFXConfig();
 
 // ==================== 3X WEAPON FIRE PARTICLE SYSTEM ====================
 // Uses Unity-extracted textures for fire trail and hit effects
@@ -5640,11 +5706,11 @@ function playWeaponShot(weaponKey) {
     
     const soundKey = soundKeyMap[weaponKey];
     if (soundKey && audioBufferCache.has(soundKey)) {
-        const volumeMap = { '1x': 1.0, '3x': 1.0, '5x': 1.0, '8x': 0.5 };
-        playMP3Sound(soundKey, volumeMap[weaponKey] || 1.0);
+        playMP3Sound(soundKey, WeaponSystem.getSoundVolume(weaponKey));
         
-        if (weaponKey === '8x') {
-            triggerScreenShakeWithStrength(6, 200);
+        const shake = WeaponSystem.getFireScreenShake(weaponKey);
+        if (shake.strength > 0) {
+            triggerScreenShakeWithStrength(shake.strength, shake.duration);
         }
     } else {
         // Fallback to synthesized sounds if MP3 not loaded
@@ -11004,158 +11070,160 @@ function aimCannon(targetX, targetY) {
     }
 }
 
-const AUTOFIRE_YAW_LIMIT = 46.75 * (Math.PI / 180);
-const AUTOFIRE_PITCH_MAX = 42.5 * (Math.PI / 180);
-const AUTOFIRE_PITCH_MIN = -29.75 * (Math.PI / 180);
-const AUTOFIRE_TRACK_SPEED = 8.0;
+// ==================== TARGETING SERVICE ====================
+// Centralized auto-fire targeting: config, state machine, and target selection.
+// All targeting parameters live here — adjust values without touching logic.
+const TargetingService = {
+    config: {
+        yawLimit:   46.75 * (Math.PI / 180),
+        pitchMax:   42.5  * (Math.PI / 180),
+        pitchMin:  -29.75 * (Math.PI / 180),
+        trackSpeed: 8.0,
+        initialLockMs: 250,
+        transitionMs:  200,
+    },
 
-const autoFireState = {
-    lockedTarget: null,
-    phase: 'idle',
-    phaseStart: 0,
-    INITIAL_LOCK_MS: 250,
-    TRANSITION_MS: 200,
-    currentYaw: 0,
-    currentPitch: 0,
-    startYaw: 0,
-    startPitch: 0,
-    initialized: false
-};
+    state: {
+        lockedTarget: null,
+        phase: 'idle',
+        phaseStart: 0,
+        currentYaw: 0,
+        currentPitch: 0,
+        startYaw: 0,
+        startPitch: 0,
+        initialized: false,
+    },
 
-function resetAutoFireState() {
-    autoFireState.lockedTarget = null;
-    autoFireState.phase = 'idle';
-    autoFireState.phaseStart = 0;
-    autoFireState.initialized = false;
-}
+    reset() {
+        const s = this.state;
+        s.lockedTarget = null;
+        s.phase = 'idle';
+        s.phaseStart = 0;
+        s.initialized = false;
+    },
 
-function findNearestFish(muzzlePos) {
-    let best = null;
-    let bestDist = Infinity;
-    for (const fish of activeFish) {
-        if (!fish.isActive) continue;
-        const pos = fish.group.position;
-        const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
-        const dir = new THREE.Vector3(dx, dy, dz).normalize();
-        const yaw = Math.atan2(dir.x, dir.z);
-        const pitch = Math.asin(dir.y);
-        if (Math.abs(yaw) > AUTOFIRE_YAW_LIMIT) continue;
-        if (pitch > AUTOFIRE_PITCH_MAX || pitch < AUTOFIRE_PITCH_MIN) continue;
-        const dist = dx*dx + dy*dy + dz*dz;
-        if (dist < bestDist) {
-            bestDist = dist;
-            best = fish;
+    _initFromCannon() {
+        const s = this.state;
+        if (!s.initialized) {
+            s.currentYaw   = cannonGroup      ? cannonGroup.rotation.y        : 0;
+            s.currentPitch = cannonPitchGroup  ? -cannonPitchGroup.rotation.x : 0;
+            s.initialized  = true;
         }
-    }
-    return best;
-}
+    },
 
-function autoFireTick() {
-    const now = performance.now();
-    const muzzlePos = new THREE.Vector3();
-    cannonMuzzle.getWorldPosition(muzzlePos);
-
-    if (!autoFireState.initialized) {
-        autoFireState.currentYaw = cannonGroup ? cannonGroup.rotation.y : 0;
-        autoFireState.currentPitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
-        autoFireState.initialized = true;
-    }
-
-    if (autoFireState.phase === 'idle') {
-        const nearest = findNearestFish(muzzlePos);
-        if (nearest) {
-            autoFireState.lockedTarget = nearest;
-            autoFireState.phase = 'locking';
-            autoFireState.phaseStart = now;
-            autoFireState.startYaw = autoFireState.currentYaw;
-            autoFireState.startPitch = autoFireState.currentPitch;
+    findNearest(muzzlePos) {
+        const c = this.config;
+        let best = null, bestDist = Infinity;
+        for (const fish of activeFish) {
+            if (!fish.isActive) continue;
+            const pos = fish.group.position;
+            const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
+            const dir = new THREE.Vector3(dx, dy, dz).normalize();
+            const yaw   = Math.atan2(dir.x, dir.z);
+            const pitch = Math.asin(dir.y);
+            if (Math.abs(yaw) > c.yawLimit) continue;
+            if (pitch > c.pitchMax || pitch < c.pitchMin) continue;
+            const dist = dx * dx + dy * dy + dz * dz;
+            if (dist < bestDist) { bestDist = dist; best = fish; }
         }
-        return { target: null, canFire: false };
-    }
+        return best;
+    },
 
-    if (autoFireState.lockedTarget && !autoFireState.lockedTarget.isActive) {
-        const nearest = findNearestFish(muzzlePos);
-        if (nearest) {
-            autoFireState.lockedTarget = nearest;
-            autoFireState.phase = 'transition';
-            autoFireState.phaseStart = now;
-            autoFireState.startYaw = autoFireState.currentYaw;
-            autoFireState.startPitch = autoFireState.currentPitch;
-        } else {
-            resetAutoFireState();
-            autoFireState.initialized = true;
-            autoFireState.currentYaw = cannonGroup ? cannonGroup.rotation.y : 0;
-            autoFireState.currentPitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+    _smoothstep(t) { return t * t * (3 - 2 * t); },
+
+    _wrapDelta(delta) {
+        if (delta >  Math.PI) delta -= 2 * Math.PI;
+        if (delta < -Math.PI) delta += 2 * Math.PI;
+        return delta;
+    },
+
+    tick() {
+        const now = performance.now();
+        const muzzlePos = new THREE.Vector3();
+        cannonMuzzle.getWorldPosition(muzzlePos);
+        const c = this.config, s = this.state;
+
+        this._initFromCannon();
+
+        if (s.phase === 'idle') {
+            const nearest = this.findNearest(muzzlePos);
+            if (nearest) {
+                s.lockedTarget = nearest;
+                s.phase = 'locking';
+                s.phaseStart = now;
+                s.startYaw = s.currentYaw;
+                s.startPitch = s.currentPitch;
+            }
             return { target: null, canFire: false };
         }
-    }
 
-    const fish = autoFireState.lockedTarget;
-    if (!fish) {
-        resetAutoFireState();
-        return { target: null, canFire: false };
-    }
-
-    let aimPos = fish.group.position.clone();
-    const weapon = CONFIG.weapons[gameState.currentWeapon];
-    if (weapon.speed && fish.velocity) {
-        const dist = muzzlePos.distanceTo(aimPos);
-        const flightTime = dist / weapon.speed;
-        aimPos.add(fish.velocity.clone().multiplyScalar(flightTime));
-    }
-    const dir = aimPos.clone().sub(muzzlePos).normalize();
-    const targetYaw = Math.atan2(dir.x, dir.z);
-    const targetPitch = Math.asin(dir.y);
-    const clampedYaw = Math.max(-AUTOFIRE_YAW_LIMIT, Math.min(AUTOFIRE_YAW_LIMIT, targetYaw));
-    const clampedPitch = Math.max(AUTOFIRE_PITCH_MIN, Math.min(AUTOFIRE_PITCH_MAX, targetPitch));
-
-    const elapsed = now - autoFireState.phaseStart;
-    let canFire = false;
-
-    if (autoFireState.phase === 'locking') {
-        const t = Math.min(1, elapsed / autoFireState.INITIAL_LOCK_MS);
-        const ease = t * t * (3 - 2 * t);
-        let yawDelta = clampedYaw - autoFireState.startYaw;
-        if (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
-        if (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
-        autoFireState.currentYaw = autoFireState.startYaw + yawDelta * ease;
-        autoFireState.currentPitch = autoFireState.startPitch + (clampedPitch - autoFireState.startPitch) * ease;
-        if (t >= 1) {
-            autoFireState.phase = 'firing';
-            autoFireState.currentYaw = clampedYaw;
-            autoFireState.currentPitch = clampedPitch;
-            canFire = true;
+        if (s.lockedTarget && !s.lockedTarget.isActive) {
+            const nearest = this.findNearest(muzzlePos);
+            if (nearest) {
+                s.lockedTarget = nearest;
+                s.phase = 'transition';
+                s.phaseStart = now;
+                s.startYaw = s.currentYaw;
+                s.startPitch = s.currentPitch;
+            } else {
+                this.reset();
+                this._initFromCannon();
+                return { target: null, canFire: false };
+            }
         }
-    } else if (autoFireState.phase === 'firing') {
-        const dt = 1 / 60;
-        const factor = 1 - Math.exp(-AUTOFIRE_TRACK_SPEED * dt);
-        let yawDiff = clampedYaw - autoFireState.currentYaw;
-        if (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
-        if (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
-        autoFireState.currentYaw += yawDiff * factor;
-        autoFireState.currentPitch += (clampedPitch - autoFireState.currentPitch) * factor;
-        canFire = true;
-    } else if (autoFireState.phase === 'transition') {
-        const t = Math.min(1, elapsed / autoFireState.TRANSITION_MS);
-        const ease = t * t * (3 - 2 * t);
-        let yawDelta = clampedYaw - autoFireState.startYaw;
-        if (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
-        if (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
-        autoFireState.currentYaw = autoFireState.startYaw + yawDelta * ease;
-        autoFireState.currentPitch = autoFireState.startPitch + (clampedPitch - autoFireState.startPitch) * ease;
-        if (t >= 1) {
-            autoFireState.phase = 'firing';
-            autoFireState.currentYaw = clampedYaw;
-            autoFireState.currentPitch = clampedPitch;
-            canFire = true;
+
+        const fish = s.lockedTarget;
+        if (!fish) { this.reset(); return { target: null, canFire: false }; }
+
+        let aimPos = fish.group.position.clone();
+        const weapon = CONFIG.weapons[gameState.currentWeapon];
+        if (weapon.speed && fish.velocity) {
+            const dist = muzzlePos.distanceTo(aimPos);
+            aimPos.add(fish.velocity.clone().multiplyScalar(dist / weapon.speed));
         }
-    }
+        const dir = aimPos.clone().sub(muzzlePos).normalize();
+        const clampedYaw   = Math.max(-c.yawLimit, Math.min(c.yawLimit, Math.atan2(dir.x, dir.z)));
+        const clampedPitch = Math.max(c.pitchMin, Math.min(c.pitchMax, Math.asin(dir.y)));
 
-    if (cannonGroup) cannonGroup.rotation.y = autoFireState.currentYaw;
-    if (cannonPitchGroup) cannonPitchGroup.rotation.x = -autoFireState.currentPitch;
+        const elapsed = now - s.phaseStart;
+        let canFire = false;
 
-    return { target: fish, canFire };
-}
+        if (s.phase === 'locking') {
+            const t = Math.min(1, elapsed / c.initialLockMs);
+            const ease = this._smoothstep(t);
+            s.currentYaw   = s.startYaw   + this._wrapDelta(clampedYaw   - s.startYaw)   * ease;
+            s.currentPitch = s.startPitch  + (clampedPitch - s.startPitch) * ease;
+            if (t >= 1) { s.phase = 'firing'; s.currentYaw = clampedYaw; s.currentPitch = clampedPitch; canFire = true; }
+        } else if (s.phase === 'firing') {
+            const factor = 1 - Math.exp(-c.trackSpeed / 60);
+            s.currentYaw   += this._wrapDelta(clampedYaw - s.currentYaw)   * factor;
+            s.currentPitch += (clampedPitch - s.currentPitch) * factor;
+            canFire = true;
+        } else if (s.phase === 'transition') {
+            const t = Math.min(1, elapsed / c.transitionMs);
+            const ease = this._smoothstep(t);
+            s.currentYaw   = s.startYaw   + this._wrapDelta(clampedYaw   - s.startYaw)   * ease;
+            s.currentPitch = s.startPitch  + (clampedPitch - s.startPitch) * ease;
+            if (t >= 1) { s.phase = 'firing'; s.currentYaw = clampedYaw; s.currentPitch = clampedPitch; canFire = true; }
+        }
+
+        if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
+        if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
+
+        return { target: fish, canFire };
+    },
+};
+
+// Backward-compatible aliases so callers keep working
+const AUTOFIRE_YAW_LIMIT  = TargetingService.config.yawLimit;
+const AUTOFIRE_PITCH_MAX  = TargetingService.config.pitchMax;
+const AUTOFIRE_PITCH_MIN  = TargetingService.config.pitchMin;
+const AUTOFIRE_TRACK_SPEED = TargetingService.config.trackSpeed;
+const autoFireState = TargetingService.state;
+
+function resetAutoFireState() { TargetingService.reset(); }
+function findNearestFish(muzzlePos) { return TargetingService.findNearest(muzzlePos); }
+function autoFireTick() { return TargetingService.tick(); }
 
 function aimCannonAtFish(fish) {
     if (!fish) return;
@@ -11248,14 +11316,13 @@ function autoFireAtFish(targetFish) {
         spawnMuzzleFlash(weaponKey, muzzlePos, direction);
     }
     
-    if (weaponKey === '5x' || weaponKey === '8x') {
+    const wCfg = WeaponSystem.getConfig(weaponKey);
+    if (wCfg.chargeTime > 0) {
         startCannonChargeEffect(weaponKey);
     }
     
-    // Light recoil for auto fire(reduced strength for smoother animation)
     if (cannonBarrel) {
-        const weaponConfig = WEAPON_VFX_CONFIG[weaponKey];
-        const recoilStrength = weaponConfig ? weaponConfig.recoilStrength : 5;
+        const recoilStrength = wCfg.recoilStrength;
         const autoRecoilScale = 0.3;
         
         if (gameState.viewMode === 'fps') {
@@ -11266,8 +11333,7 @@ function autoFireAtFish(targetFish) {
             fpsCameraRecoilState.kickDuration = 20;
             fpsCameraRecoilState.returnDuration = 60;
         } else {
-            const glbCfg = WEAPON_GLB_CONFIG.weapons[weaponKey];
-            const correctY = glbCfg && glbCfg.cannonYOffset !== undefined ? glbCfg.cannonYOffset : 20;
+            const correctY = wCfg.cannonYOffset !== undefined ? wCfg.cannonYOffset : 20;
             barrelRecoilState.originalPosition.set(0, correctY, 0);
             barrelRecoilState.recoilVector.set(0, -1, 0);
             barrelRecoilState.recoilDistance = recoilStrength * autoRecoilScale;
