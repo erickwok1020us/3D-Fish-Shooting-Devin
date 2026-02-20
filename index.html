@@ -1615,7 +1615,7 @@
     <!-- Game Container -->
     <div id="game-container">
         <!-- Plan B: Weapon Selection Overlay (shown before cannon creation) -->
-        <div id="weapon-picker-overlay" style="display:none;position:absolute;inset:0;z-index:9999;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;flex-direction:column;transition:opacity 0.4s;">
+        <div id="weapon-picker-overlay" style="display:none;position:absolute;inset:0;z-index:9999;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;flex-direction:column;transition:opacity 0.4s;cursor:default;">
             <div style="text-align:center;margin-bottom:24px;">
                 <div style="font-family:monospace;font-size:13px;color:#44ddff;letter-spacing:6px;text-transform:uppercase;margin-bottom:8px;">Select Your Weapon</div>
                 <div style="width:180px;height:1px;background:linear-gradient(90deg,transparent,#44ddff,transparent);margin:0 auto;"></div>
@@ -1624,20 +1624,25 @@
                 <button class="wp-pick-btn" data-weapon="1x" onclick="onInitialWeaponSelected('1x')" style="width:100px;height:110px;background:rgba(0,20,40,0.85);border:1px solid #44ddff55;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;color:#fff;font-family:monospace;">
                     <span style="font-size:28px;font-weight:bold;color:#44ddff;">1x</span>
                     <span style="font-size:10px;color:#88bbdd;letter-spacing:1px;">STANDARD</span>
+                    <span style="font-size:11px;color:#44ddff99;margin-top:2px;">[ 1 ]</span>
                 </button>
                 <button class="wp-pick-btn" data-weapon="3x" onclick="onInitialWeaponSelected('3x')" style="width:100px;height:110px;background:rgba(0,20,40,0.85);border:1px solid #44ddff55;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;color:#fff;font-family:monospace;">
                     <span style="font-size:28px;font-weight:bold;color:#ffaa00;">3x</span>
                     <span style="font-size:10px;color:#88bbdd;letter-spacing:1px;">SPREAD</span>
+                    <span style="font-size:11px;color:#44ddff99;margin-top:2px;">[ 2 ]</span>
                 </button>
                 <button class="wp-pick-btn" data-weapon="5x" onclick="onInitialWeaponSelected('5x')" style="width:100px;height:110px;background:rgba(0,20,40,0.85);border:1px solid #44ddff55;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;color:#fff;font-family:monospace;">
                     <span style="font-size:28px;font-weight:bold;color:#ff4444;">5x</span>
                     <span style="font-size:10px;color:#88bbdd;letter-spacing:1px;">BARRAGE</span>
+                    <span style="font-size:11px;color:#44ddff99;margin-top:2px;">[ 3 ]</span>
                 </button>
                 <button class="wp-pick-btn" data-weapon="8x" onclick="onInitialWeaponSelected('8x')" style="width:100px;height:110px;background:rgba(0,20,40,0.85);border:1px solid #44ddff55;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;color:#fff;font-family:monospace;">
                     <span style="font-size:28px;font-weight:bold;color:#ff00ff;">8x</span>
                     <span style="font-size:10px;color:#88bbdd;letter-spacing:1px;">LASER</span>
+                    <span style="font-size:11px;color:#44ddff99;margin-top:2px;">[ 4 ]</span>
                 </button>
             </div>
+            <div style="margin-top:20px;font-family:monospace;font-size:11px;color:#44ddff88;letter-spacing:2px;">PRESS 1-4 OR CLICK TO SELECT &bull; ESC TO SHOW CURSOR</div>
         </div>
         <!-- UI Overlay -->
         <div id="ui-overlay">

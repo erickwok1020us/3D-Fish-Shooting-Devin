@@ -9360,19 +9360,29 @@ function initGameScene() {
 }
 
 function showWeaponPicker() {
+    if (document.pointerLockElement) {
+        document.exitPointerLock();
+    }
+    var container = document.getElementById('game-container');
+    if (container) container.classList.remove('fps-hide-cursor');
+    document.body.style.cursor = 'default';
+    
     var overlay = document.getElementById('weapon-picker-overlay');
     if (overlay) {
         overlay.style.display = 'flex';
+        overlay.style.opacity = '1';
     }
     var uiOverlay = document.getElementById('ui-overlay');
     if (uiOverlay) {
         uiOverlay.style.pointerEvents = 'none';
         uiOverlay.style.opacity = '0';
     }
-    console.log('[PLAN-B] Weapon picker shown. Cannon hidden. Waiting for player selection.');
+    console.log('[PLAN-B] Weapon picker shown. Pointer unlocked. Waiting for player selection.');
 }
 
 function onInitialWeaponSelected(weaponKey) {
+    if (gameState.weaponSelected) return;
+    
     applyWeaponToCannon(weaponKey);
     
     cannonGroup.visible = true;
@@ -9391,6 +9401,13 @@ function onInitialWeaponSelected(weaponKey) {
     
     if (gameState.viewMode === 'fps') {
         updateFPSCamera();
+        var container = document.getElementById('game-container');
+        if (container) {
+            container.classList.add('fps-hide-cursor');
+            if (container.requestPointerLock) {
+                container.requestPointerLock();
+            }
+        }
     }
     
     console.log('[PLAN-B] Initial weapon selected: ' + weaponKey + '. Cannon visible. Game ready.');
@@ -17315,20 +17332,24 @@ function setupEventListeners() {
             return;
         }
         
-        // Weapon switching: 1-4 keys
+        // Weapon switching: 1-4 keys (also works on weapon picker screen)
         if (e.key === '1') {
+            if (!gameState.weaponSelected) { onInitialWeaponSelected('1x'); return; }
             selectWeapon('1x');
             highlightButton('.weapon-btn[data-weapon="1x"]');
             return;
         } else if (e.key === '2') {
+            if (!gameState.weaponSelected) { onInitialWeaponSelected('3x'); return; }
             selectWeapon('3x');
             highlightButton('.weapon-btn[data-weapon="3x"]');
             return;
         } else if (e.key === '3') {
+            if (!gameState.weaponSelected) { onInitialWeaponSelected('5x'); return; }
             selectWeapon('5x');
             highlightButton('.weapon-btn[data-weapon="5x"]');
             return;
         } else if (e.key === '4') {
+            if (!gameState.weaponSelected) { onInitialWeaponSelected('8x'); return; }
             selectWeapon('8x');
             highlightButton('.weapon-btn[data-weapon="8x"]');
             return;
@@ -17349,6 +17370,13 @@ function setupEventListeners() {
             highlightButton('#hand-side-btn');
             return;
         } else if (e.key === 'Escape') {
+            if (!gameState.weaponSelected) {
+                if (document.pointerLockElement) document.exitPointerLock();
+                var container = document.getElementById('game-container');
+                if (container) container.classList.remove('fps-hide-cursor');
+                document.body.style.cursor = 'default';
+                return;
+            }
             toggleSettingsPanel();
             highlightButton('#settings-container');
             return;
