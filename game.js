@@ -16924,6 +16924,7 @@ function addKillFeedEntry(fishForm, rewardAmount) {
     if (!list) return;
 
     const imageUrl = FISH_KILLLOG_IMAGES[fishForm] || null;
+    if (!imageUrl) return; // skip entry if no dedicated killlog image (e.g., barracuda)
     const name = formatFishName(fishForm);
 
     killFeedRecords.push({ imageUrl, name, reward: rewardAmount });
