@@ -10274,6 +10274,7 @@ function createStaticCannon(position, rotationY, color = 0x888888, weaponKey = '
     staticCannonGroup.position.copy(position);
     staticCannonGroup.rotation.y = rotationY;
     staticCannonGroup.scale.set(1.0, 1.0, 1.0);
+    staticCannonGroup.visible = false;
     
     scene.add(staticCannonGroup);
     staticCannons.push(staticCannonGroup);
@@ -10415,6 +10416,7 @@ function createCannonBase() {
     var cannonSpotLight = new THREE.SpotLight(0xffffff, 2.5, 1000, Math.PI / 4, 0.5, 1);
     cannonSpotLight.position.set(0, CANNON_BASE_Y + 200, -200);
     cannonSpotLight.target = cannonGroup;
+    cannonSpotLight.visible = false;
     scene.add(cannonSpotLight);
     
     console.log('[PLAN-B] createCannonBase() complete. Cannon hidden until weapon selection.');
