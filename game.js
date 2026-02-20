@@ -17407,8 +17407,27 @@ function toggleCannonSide() {
 // Toggle settings panel
 function toggleSettingsPanel() {
     const settingsPanel = document.getElementById('settings-panel');
-    if (settingsPanel) {
-        settingsPanel.classList.toggle('visible');
+    if (!settingsPanel) return;
+    const nowVisible = settingsPanel.classList.toggle('visible');
+
+    const container = document.getElementById('game-container');
+
+    if (nowVisible) {
+        // Enter pause/menu: show cursor and unlock pointer
+        gameState.isPaused = true;
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+        if (container) container.classList.remove('fps-hide-cursor');
+        document.body.style.cursor = 'default';
+    } else {
+        // Resume game: hide cursor and re-lock pointer (FPS mode only)
+        gameState.isPaused = false;
+        if (container) container.classList.add('fps-hide-cursor');
+        if (gameState.viewMode === 'fps' && gameState.weaponSelected && gameState.isInGameScene && container && container.requestPointerLock) {
+            container.requestPointerLock();
+        }
+        document.body.style.cursor = 'none';
     }
 }
 
