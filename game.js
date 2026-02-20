@@ -1149,7 +1149,7 @@ const gameState = {
 // INVARIANT: In single-player mode, gameState.balance may ONLY be modified by:
 //   1. fireBullet (cost deduction): gameState.balance -= weapon.cost
 //   2. autoFireAtFish (cost deduction): gameState.balance -= weapon.cost
-//   3. Fish.die() (payout): gameState.balance += win
+//   3. Fish.die() (payout): gameState.balance += fishReward (deterministic, every kill pays)
 // FORBIDDEN: coin-fly animations must NEVER modify balance (LEAK-1 fix)
 // FORBIDDEN: spawnCoinFlyToScore must NEVER add reward to balance
 //
@@ -14404,25 +14404,11 @@ class Fish {
             }
             addKillFeedEntry(this.form, this.config.reward);
         } else {
-            // SINGLE PLAYER MODE: Use local RTP calculation
-            // COMBO SYSTEM: Update combo and get bonus
-            const comboBonus = updateComboOnKill();
+            // SINGLE PLAYER MODE: every kill awards the fish's full reward
+            updateComboOnKill();
             
-            // FIXED RTP SYSTEM: Casino-standard kill rate calculation
-            // Kill Rate = Target RTP / Effective Multiplier (reward / cost-to-kill)
-            // This ensures long-term RTP converges to target (91-95% based on fish size)
             const fishReward = this.config.reward;
-            const fishHP = this.config.hp;
-            
-            // Calculate kill rate using FIXED RTP system (now accounts for cost-to-kill)
-            const killRate = calculateKillRate(fishReward, weaponKey, fishHP);
-            
-            // Determine if this kill awards a payout based on kill rate
-            const isKill = Math.random() < killRate;
-            // Apply combo bonus to winnings
-            // NOTE: fishReward is already in coins (40-500), no need to multiply by weapon.multiplier
-            const baseWin = isKill ? fishReward : 0;
-            const win = baseWin > 0 ? Math.floor(baseWin * (1 + comboBonus)) : 0;
+            const win = fishReward;
             
             // Determine fish size from tier (used for visual effects)
             let fishSize = 'small';
