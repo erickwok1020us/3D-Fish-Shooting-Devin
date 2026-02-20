@@ -9920,39 +9920,49 @@ let terrainObstacles = [];
 
 function extractTerrainObstacles(mapScene) {
     terrainObstacles = [];
-    const minR = CONFIG.terrainAvoidance.minObstacleRadius;
-    const tempBox = new THREE.Box3();
-    const tempCenter = new THREE.Vector3();
-    const tempSize = new THREE.Vector3();
-    const visited = new Set();
+    const aq = CONFIG.aquarium;
+    const fishMinY = aq.floorY + aq.marginY;
+    const gridSize = 60;
+    const v = new THREE.Vector3();
+    const grid = {};
 
     mapScene.traverse((obj) => {
         if (!obj.isMesh) return;
-        if (visited.has(obj.uuid)) return;
-        visited.add(obj.uuid);
-
-        tempBox.setFromObject(obj);
-        if (tempBox.isEmpty()) return;
-        tempBox.getCenter(tempCenter);
-        tempBox.getSize(tempSize);
-
-        const radius = Math.max(tempSize.x, tempSize.y, tempSize.z) * 0.45;
-        if (radius < minR) return;
-
-        terrainObstacles.push({
-            x: tempCenter.x,
-            y: tempCenter.y,
-            z: tempCenter.z,
-            radius: radius
-        });
+        obj.updateMatrixWorld(true);
+        const pos = obj.geometry.attributes.position;
+        if (!pos) return;
+        for (let i = 0; i < pos.count; i++) {
+            v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+            v.applyMatrix4(obj.matrixWorld);
+            const gx = Math.floor(v.x / gridSize);
+            const gz = Math.floor(v.z / gridSize);
+            const key = gx + ',' + gz;
+            if (!grid[key]) grid[key] = { maxY: -Infinity, sumX: 0, sumY: 0, sumZ: 0, count: 0 };
+            const cell = grid[key];
+            if (v.y > cell.maxY) cell.maxY = v.y;
+            cell.sumX += v.x;
+            cell.sumZ += v.z;
+            if (v.y > fishMinY) { cell.sumY += v.y; }
+            cell.count++;
+        }
     });
+
+    for (const cell of Object.values(grid)) {
+        if (cell.maxY <= fishMinY) continue;
+        const cx = cell.sumX / cell.count;
+        const cz = cell.sumZ / cell.count;
+        const height = cell.maxY - fishMinY;
+        const cy = (fishMinY + cell.maxY) * 0.5;
+        const radius = Math.max(gridSize * 0.5, height * 0.5) + 10;
+        terrainObstacles.push({ x: cx, y: cy, z: cz, radius: radius });
+    }
 
     if (terrainObstacles.length > 200) {
         terrainObstacles.sort((a, b) => b.radius - a.radius);
         terrainObstacles.length = 200;
     }
 
-    console.log(`[TERRAIN] Extracted ${terrainObstacles.length} obstacles for fish avoidance (minR=${minR})`);
+    console.log(`[TERRAIN] Extracted ${terrainObstacles.length} heightmap obstacles for fish avoidance (gridSize=${gridSize}, fishMinY=${fishMinY})`);
 }
 
 // ==================== CLEAN AQUARIUM SCENE ====================
