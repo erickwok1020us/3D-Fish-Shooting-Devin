@@ -12987,6 +12987,13 @@ class Fish {
         // are treated as normal fish when they respawn after Boss Mode ends.
         this.isBoss = false;
         
+        if (this.config.ability === 'shield' && this.config.shieldHP) {
+            this.shieldHP = this.config.shieldHP;
+        }
+        
+        this._originalCorrectionQuat = null;
+        this._hitCount = 0;
+        
         // FIX: Reset lastPosition on spawn to prevent stuck fish detection from using stale data
         // This is critical for pooled fish reuse - without this, the first frame's displacement
         // calculation would use the old fish's last position, potentially triggering false stuck detection
@@ -13063,27 +13070,20 @@ class Fish {
             this.glbLoaded = false;
             this.tryLoadGLBModel(this.form, this.config.size);
         } else if (this.glbLoaded && this.glbModelRoot) {
-            // ANIMATION FIX: Reinitialize AnimationMixer for recycled fish
-            // The previous mixer's actions were uncached in die() via uncacheRoot(),
-            // so we MUST create a new mixer and action - the old glbAction is invalid.
-            // This is the root cause of "sliding statue" fish that move but don't animate.
             const glbUrl = this.glbModelRoot.userData?.glbUrl;
             const animations = glbUrl ? getGLBAnimations(glbUrl) : null;
             if (animations && animations.length > 0) {
-                // Create fresh AnimationMixer (old one was invalidated by uncacheRoot)
                 this.glbMixer = new THREE.AnimationMixer(this.glbModelRoot);
-                
-                // Find swimming animation or use first available
                 let clip = animations.find(c => c.name.toLowerCase().includes('swim')) || animations[0];
-                
-                // Create and play the animation action
                 this.glbAction = this.glbMixer.clipAction(clip);
                 this.glbAction.setLoop(THREE.LoopRepeat);
                 this.glbAction.play();
-                
-                // Reset animation speed state for fresh start
                 this._animTimeScale = 1.0;
                 this._animMode = 'swim';
+            } else {
+                console.warn(`[FISH-BUG] No animations found for recycled fish ${this.form} (glbUrl=${glbUrl}), forcing GLB reload`);
+                this.glbLoaded = false;
+                this.tryLoadGLBModel(this.form, this.config.size);
             }
         }
         
@@ -14480,7 +14480,11 @@ class Fish {
             const weapon = CONFIG.weapons[weaponKey];
             if (!weapon) {
                 console.warn(`[RTP] takeDamage: no weapon found for key='${weaponKey}'`);
-            } else if (weapon.type === 'projectile' || weapon.type === 'spread') {
+            } else {
+                this._hitCount = (this._hitCount || 0) + 1;
+                if (this._hitCount > 50 && this._hitCount % 25 === 0) {
+                    console.warn(`[FISH-BUG] fish=${this.rtpFishId} form=${this.form} tier=${this.rtpTier} received ${this._hitCount} hits without dying`);
+                }
                 const perShotCostFp = Math.floor(weapon.cost / weapon.multiplier) * RTP_MONEY_SCALE;
                 const result = clientRTPEngine.handleSingleTargetHit(
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, perShotCostFp, this.rtpTier
@@ -14489,11 +14493,12 @@ class Fish {
                     this.die(weaponKey, result.reward);
                     return true;
                 }
-            } else {
-                console.log(`[RTP] takeDamage: weapon type='${weapon.type}' handled at caller level`);
+                if (result.reason === 'already_killed' && this.isActive) {
+                    console.warn(`[FISH-BUG] fish=${this.rtpFishId} RTP says already_killed but fish still active, forcing die()`);
+                    this.die(weaponKey, 0);
+                    return true;
+                }
             }
-        } else {
-            console.log(`[RTP] takeDamage: skipped - multiplayerMode=${multiplayerMode}`);
         }
         
         return false;
@@ -15000,6 +15005,19 @@ class ClientRTPPhase1 {
             if (key.endsWith(suffix)) {
                 this.states.delete(key);
             }
+        }
+    }
+
+    pruneKilledStates() {
+        let pruned = 0;
+        for (const [key, state] of this.states.entries()) {
+            if (state.killed) {
+                this.states.delete(key);
+                pruned++;
+            }
+        }
+        if (pruned > 0) {
+            console.log(`[RTP] pruned ${pruned} killed states, remaining=${this.states.size}`);
         }
     }
 
@@ -18353,6 +18371,10 @@ function animate() {
         
         // Dynamic fish respawn system - maintain target fish count (single-player only)
         updateDynamicFishSpawn(deltaTime);
+        
+        if (typeof clientRTPEngine !== 'undefined' && clientRTPEngine.states.size > 500) {
+            clientRTPEngine.pruneKilledStates();
+        }
         
         // FIX: Rebuild spatial hash AFTER fish move so bullet collision uses current positions
         // Without this, bullets query stale fish positions causing pass-through at cell boundaries
