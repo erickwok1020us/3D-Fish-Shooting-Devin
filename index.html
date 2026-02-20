@@ -1506,6 +1506,12 @@
             0%, 100% { opacity: 0.7; }
             50% { opacity: 1; }
         }
+        .wp-pick-btn:hover {
+            border-color: #44ddff !important;
+            background: rgba(0,40,80,0.95) !important;
+            transform: translateY(-4px);
+            box-shadow: 0 0 20px rgba(68,221,255,0.3);
+        }
     </style>
 </head>
 <body>
@@ -1608,6 +1614,31 @@
     
     <!-- Game Container -->
     <div id="game-container">
+        <!-- Plan B: Weapon Selection Overlay (shown before cannon creation) -->
+        <div id="weapon-picker-overlay" style="display:none;position:absolute;inset:0;z-index:9999;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;flex-direction:column;transition:opacity 0.4s;">
+            <div style="text-align:center;margin-bottom:24px;">
+                <div style="font-family:monospace;font-size:13px;color:#44ddff;letter-spacing:6px;text-transform:uppercase;margin-bottom:8px;">Select Your Weapon</div>
+                <div style="width:180px;height:1px;background:linear-gradient(90deg,transparent,#44ddff,transparent);margin:0 auto;"></div>
+            </div>
+            <div style="display:flex;gap:18px;">
+                <button class="wp-pick-btn" data-weapon="1x" onclick="onInitialWeaponSelected('1x')" style="width:100px;height:110px;background:rgba(0,20,40,0.85);border:1px solid #44ddff55;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;color:#fff;font-family:monospace;">
+                    <span style="font-size:28px;font-weight:bold;color:#44ddff;">1x</span>
+                    <span style="font-size:10px;color:#88bbdd;letter-spacing:1px;">STANDARD</span>
+                </button>
+                <button class="wp-pick-btn" data-weapon="3x" onclick="onInitialWeaponSelected('3x')" style="width:100px;height:110px;background:rgba(0,20,40,0.85);border:1px solid #44ddff55;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;color:#fff;font-family:monospace;">
+                    <span style="font-size:28px;font-weight:bold;color:#ffaa00;">3x</span>
+                    <span style="font-size:10px;color:#88bbdd;letter-spacing:1px;">SPREAD</span>
+                </button>
+                <button class="wp-pick-btn" data-weapon="5x" onclick="onInitialWeaponSelected('5x')" style="width:100px;height:110px;background:rgba(0,20,40,0.85);border:1px solid #44ddff55;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;color:#fff;font-family:monospace;">
+                    <span style="font-size:28px;font-weight:bold;color:#ff4444;">5x</span>
+                    <span style="font-size:10px;color:#88bbdd;letter-spacing:1px;">BARRAGE</span>
+                </button>
+                <button class="wp-pick-btn" data-weapon="8x" onclick="onInitialWeaponSelected('8x')" style="width:100px;height:110px;background:rgba(0,20,40,0.85);border:1px solid #44ddff55;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;color:#fff;font-family:monospace;">
+                    <span style="font-size:28px;font-weight:bold;color:#ff00ff;">8x</span>
+                    <span style="font-size:10px;color:#88bbdd;letter-spacing:1px;">LASER</span>
+                </button>
+            </div>
+        </div>
         <!-- UI Overlay -->
         <div id="ui-overlay">
             <!-- Balance Display - Top Left -->
