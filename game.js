@@ -1098,6 +1098,15 @@ const CONFIG = {
         avoidStrength: 120,
         lookAheadTime: 1.2,
         predictiveStrength: 60
+    },
+    hardSeparation: {
+        radiusFactor: 1.1,
+        largeFishRadiusFactor: 1.4,
+        largeFishSizeThreshold: 50,
+        pushStrength: 80,
+        largeFishPushStrength: 140,
+        maxPushAccel: 200,
+        predictTime: 0.5
     }
 };
 
@@ -13218,6 +13227,7 @@ class Fish {
         
         if (shouldUpdateBoids) {
             this.applyDodgeManeuver(deltaTime);
+            this.applyHardSeparation();
             const boidsStrength = this.config.boidsStrength !== undefined ? this.config.boidsStrength : 1.0;
             if (boidsStrength > 0) {
                 this.applyBoids(allFish, boidsStrength);
@@ -13944,6 +13954,67 @@ class Fish {
         }
     }
     
+    applyHardSeparation() {
+        const myPos = this.group.position;
+        const mySize = this.config.size || 20;
+        const hs = CONFIG.hardSeparation;
+        const isLarge = mySize >= hs.largeFishSizeThreshold;
+        const myRadiusFactor = isLarge ? hs.largeFishRadiusFactor : hs.radiusFactor;
+        const myPushStr = isLarge ? hs.largeFishPushStrength : hs.pushStrength;
+
+        const nearbyFish = getNearbyFish(this);
+        let pushX = 0, pushY = 0, pushZ = 0;
+
+        for (let i = 0; i < nearbyFish.length; i++) {
+            const other = nearbyFish[i];
+            if (other === this || !other.isActive) continue;
+
+            const otherSize = other.config.size || 20;
+            const otherLarge = otherSize >= hs.largeFishSizeThreshold;
+            const otherRadiusFactor = otherLarge ? hs.largeFishRadiusFactor : hs.radiusFactor;
+            const safeRadius = (mySize * myRadiusFactor + otherSize * otherRadiusFactor) * 0.5;
+
+            const otherPos = other.group.position;
+            let dx = myPos.x - otherPos.x;
+            let dy = myPos.y - otherPos.y;
+            let dz = myPos.z - otherPos.z;
+
+            if (hs.predictTime > 0) {
+                const relVx = this.velocity.x - other.velocity.x;
+                const relVy = this.velocity.y - other.velocity.y;
+                const relVz = this.velocity.z - other.velocity.z;
+                dx += relVx * hs.predictTime;
+                dy += relVy * hs.predictTime;
+                dz += relVz * hs.predictTime;
+            }
+
+            const distSq = dx * dx + dy * dy + dz * dz;
+            const safeRadiusSq = safeRadius * safeRadius;
+
+            if (distSq < safeRadiusSq && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                const overlap = 1.0 - dist / safeRadius;
+                const force = overlap * overlap * myPushStr;
+                const invDist = 1.0 / dist;
+                pushX += dx * invDist * force;
+                pushY += dy * invDist * force;
+                pushZ += dz * invDist * force;
+            }
+        }
+
+        const pushLen = Math.sqrt(pushX * pushX + pushY * pushY + pushZ * pushZ);
+        if (pushLen > hs.maxPushAccel) {
+            const scale = hs.maxPushAccel / pushLen;
+            pushX *= scale;
+            pushY *= scale;
+            pushZ *= scale;
+        }
+
+        this.acceleration.x += pushX;
+        this.acceleration.y += pushY * 0.3;
+        this.acceleration.z += pushZ;
+    }
+
     applyDodgeManeuver(deltaTime) {
         const myPos = this.group.position;
         const mySize = this.config.size || 20;
