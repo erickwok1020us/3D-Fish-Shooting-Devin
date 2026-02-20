@@ -1147,23 +1147,6 @@
             margin-top: 10px;
         }
         
-        /* Instructions - Secondary info, subtle sci-fi style */
-        #instructions {
-            position: absolute;
-            top: 72px;
-            right: 16px;
-            color: rgba(0, 200, 255, 0.45);
-            font-size: 9px;
-            font-weight: 500;
-            font-family: 'Orbitron', monospace;
-            letter-spacing: 0.5px;
-            text-align: right;
-            background: linear-gradient(135deg, rgba(0, 18, 40, 0.8), rgba(0, 8, 22, 0.82));
-            border: 1px solid rgba(0, 200, 255, 0.15);
-            border-radius: 5px;
-            padding: 6px 12px;
-            line-height: 1.6;
-        }
         
         /* Issue #5: Rare Fish Effects */
         /* Screen shake animation */
@@ -1698,6 +1681,7 @@
                     </svg>
                 </div>
             </div>
+            <div id="esc-hint" style="position:absolute;top:72px;right:16px;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:rgba(0,200,255,0.4);text-align:center;pointer-events:none;">Press ESC for menu</div>
             
             <!-- Settings Panel -->
             <div id="settings-panel">
@@ -1768,12 +1752,6 @@
             <!-- FPS Counter -->
             <div id="fps-counter">FPS: 60</div>
             
-            <!-- Instructions -->
-            <div id="instructions">
-                Click to shoot<br>
-                Right-drag to rotate view<br>
-                Select weapon below
-            </div>
             
             <!-- Auto-shoot Toggle, View Mode, and Center View - Bottom Right (hidden, replaced by weapon panel pill) -->
             <div id="auto-shoot-container" style="display:none;">
