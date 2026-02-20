@@ -1111,6 +1111,13 @@ const CONFIG = {
         lateralStrength: 40,
         decayRate: 2.5,
         rampUpRate: 6.0
+    },
+    terrainAvoidance: {
+        minObstacleRadius: 15,
+        avoidMargin: 40,
+        avoidStrength: 120,
+        lookAheadTime: 1.2,
+        predictiveStrength: 60
     }
 };
 
@@ -9908,6 +9915,46 @@ function optimizeStaticObjects(object) {
     console.log(`[PERF] Optimized ${optimizedCount} static objects (matrixAutoUpdate=false)`);
 }
 
+// ==================== TERRAIN OBSTACLE SYSTEM ====================
+let terrainObstacles = [];
+
+function extractTerrainObstacles(mapScene) {
+    terrainObstacles = [];
+    const minR = CONFIG.terrainAvoidance.minObstacleRadius;
+    const tempBox = new THREE.Box3();
+    const tempCenter = new THREE.Vector3();
+    const tempSize = new THREE.Vector3();
+    const visited = new Set();
+
+    mapScene.traverse((obj) => {
+        if (!obj.isMesh) return;
+        if (visited.has(obj.uuid)) return;
+        visited.add(obj.uuid);
+
+        tempBox.setFromObject(obj);
+        if (tempBox.isEmpty()) return;
+        tempBox.getCenter(tempCenter);
+        tempBox.getSize(tempSize);
+
+        const radius = Math.max(tempSize.x, tempSize.y, tempSize.z) * 0.45;
+        if (radius < minR) return;
+
+        terrainObstacles.push({
+            x: tempCenter.x,
+            y: tempCenter.y,
+            z: tempCenter.z,
+            radius: radius
+        });
+    });
+
+    if (terrainObstacles.length > 200) {
+        terrainObstacles.sort((a, b) => b.radius - a.radius);
+        terrainObstacles.length = 200;
+    }
+
+    console.log(`[TERRAIN] Extracted ${terrainObstacles.length} obstacles for fish avoidance (minR=${minR})`);
+}
+
 // ==================== CLEAN AQUARIUM SCENE ====================
 function createTunnelScene() {
     // Renamed but kept for compatibility - now creates aquarium
@@ -9923,6 +9970,8 @@ function createAquariumScene() {
         // Scale and position the map to fit aquarium bounds
         scaleAndPositionMap(mapScene);
         tunnelGroup.add(mapScene);
+        
+        extractTerrainObstacles(mapScene);
         
         // Enhanced debug logging for map verification
         const mapBox = new THREE.Box3().setFromObject(mapScene);
@@ -13268,6 +13317,7 @@ class Fish {
         
         // Apply boundary forces
         this.applyBoundaryForces();
+        this.applyTerrainAvoidance();
         
         // Update velocity (using addScaledVector to avoid clone() allocation)
         this.velocity.addScaledVector(this.acceleration, deltaTime);
@@ -14145,6 +14195,61 @@ class Fish {
         }
         
         this.acceleration.addScaledVector(force, 60);
+    }
+    
+    applyTerrainAvoidance() {
+        if (terrainObstacles.length === 0) return;
+        const cfg = CONFIG.terrainAvoidance;
+        const pos = this.group.position;
+        const vel = this.velocity;
+        const margin = cfg.avoidMargin;
+        const laTime = cfg.lookAheadTime;
+        const predX = pos.x + vel.x * laTime;
+        const predY = pos.y + vel.y * laTime;
+        const predZ = pos.z + vel.z * laTime;
+        let fx = 0, fy = 0, fz = 0;
+
+        for (let i = 0; i < terrainObstacles.length; i++) {
+            const ob = terrainObstacles[i];
+            const shell = ob.radius + margin;
+            const shellSq = shell * shell;
+
+            let dx = pos.x - ob.x;
+            let dy = pos.y - ob.y;
+            let dz = pos.z - ob.z;
+            let distSq = dx * dx + dy * dy + dz * dz;
+
+            if (distSq < shellSq && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                const penetration = shell - dist;
+                const t = penetration / margin;
+                const strength = t * t * cfg.avoidStrength;
+                const invDist = 1 / dist;
+                fx += dx * invDist * strength;
+                fy += dy * invDist * strength;
+                fz += dz * invDist * strength;
+            }
+
+            dx = predX - ob.x;
+            dy = predY - ob.y;
+            dz = predZ - ob.z;
+            distSq = dx * dx + dy * dy + dz * dz;
+
+            if (distSq < shellSq && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                const penetration = shell - dist;
+                const t = penetration / margin;
+                const strength = t * t * cfg.predictiveStrength;
+                const invDist = 1 / dist;
+                fx += dx * invDist * strength;
+                fy += dy * invDist * strength;
+                fz += dz * invDist * strength;
+            }
+        }
+
+        this.acceleration.x += fx;
+        this.acceleration.y += fy;
+        this.acceleration.z += fz;
     }
     
     updateRotation(deltaTime) {
