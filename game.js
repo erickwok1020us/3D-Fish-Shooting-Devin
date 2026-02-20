@@ -12895,6 +12895,15 @@ class Fish {
             this.respawnTimerId = null;
         }
         
+        // RTP FIX: Clear old RTP state and assign fresh fishId on EVERY spawn
+        // This fixes the bug where fish recycled via updateDynamicFishSpawn()
+        // kept their old rtpFishId with killed=true, making them immortal.
+        const oldRtpFishId = this.rtpFishId;
+        this.rtpFishId = nextRTPFishId();
+        if (oldRtpFishId && typeof clientRTPEngine !== 'undefined') {
+            clientRTPEngine.clearFishStates(oldRtpFishId);
+        }
+        
         this.group.position.copy(position);
         this.hp = this.config.hp;
         this.isActive = true;
@@ -14707,8 +14716,6 @@ class Fish {
             console.log(`[FISH] Boss-only species ${fishSpecies} not respawning outside Boss Mode`);
             return;
         }
-        
-        this.rtpFishId = nextRTPFishId();
         
         const position = getRandomFishPositionIn3DSpace();
         this.spawn(position);
