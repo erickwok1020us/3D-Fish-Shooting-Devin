@@ -6694,7 +6694,8 @@ function showCrosshairRingFlash(spreadIndex) {
         }
     }
     const ring = document.createElement('div');
-    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:32px;height:32px;border:2px solid rgba(255,20,60,0.95);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 12px rgba(255,20,60,0.9),0 0 20px rgba(255,60,80,0.6),inset 0 0 6px rgba(255,120,120,0.4);`;
+    const ringSz = CROSSHAIR_SIZE;
+    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:${ringSz}px;height:${ringSz}px;border:2px solid rgba(255,20,60,0.95);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 12px rgba(255,20,60,0.9),0 0 20px rgba(255,60,80,0.6),inset 0 0 6px rgba(255,120,120,0.4);`;
     document.body.appendChild(ring);
     if (targetEl) {
         targetEl.classList.add('hit-flash');
@@ -16734,6 +16735,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
             const result = results[i];
             hit.fish.hp -= damage;
             hit.fish.flashHit();
+            showCrosshairRingFlash();
             createHitParticles(hit.hitPoint, weapon.color, 8);
             playWeaponHitSound(weaponKey);
             if (result && result.kill && hit.fish.isActive) {
@@ -17045,6 +17047,7 @@ function triggerExplosion(center, weaponKey) {
             const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
             fish.hp -= damage;
             fish.flashHit();
+            showCrosshairRingFlash();
             
             const fishPos = fish.group ? fish.group.position : null;
             createHitParticles(fish.group.position, weapon.color, 3);
