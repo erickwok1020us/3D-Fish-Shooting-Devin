@@ -9379,6 +9379,7 @@ function initGameScene() {
         animate();
         
         createCannon();
+        showRmbZoomHint();
     }, 500);
 }
 
@@ -9434,6 +9435,7 @@ function onInitialWeaponSelected(weaponKey) {
     }
     
     console.log('[PLAN-B] Initial weapon selected: ' + weaponKey + '. Cannon visible. Game ready.');
+    showRmbZoomHint();
 }
 
 // Start single player game - called from lobby
@@ -17329,27 +17331,15 @@ function createScopeOverlay() {
     el.id = 'scope-overlay';
     el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
     const inset = 52;
-    const cornerLen = 27;
-    const tickLen = 36;
-    const color = 'rgba(0,255,200,0.5)';
-    const thin = 'rgba(0,255,200,0.15)';
-    const glow = '0 0 6px rgba(0,255,200,0.4)';
-    const shared = `position:absolute;box-shadow:${glow};`;
-    const border = `2px solid ${color}`;
-    const borderThin = `1px solid ${thin}`;
+    const cornerLen = 32;
+    const color = 'rgba(0,255,200,0.7)';
+    const shared = `position:absolute;`;
+    const border = `3px solid ${color}`;
     el.innerHTML = `
         <div style="${shared}top:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-left:${border};"></div>
         <div style="${shared}top:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-right:${border};"></div>
         <div style="${shared}bottom:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-left:${border};"></div>
         <div style="${shared}bottom:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-right:${border};"></div>
-        <div style="${shared}top:${inset}px;left:${inset + cornerLen}px;right:${inset + cornerLen}px;height:0;border-top:${borderThin};"></div>
-        <div style="${shared}bottom:${inset}px;left:${inset + cornerLen}px;right:${inset + cornerLen}px;height:0;border-bottom:${borderThin};"></div>
-        <div style="${shared}left:${inset}px;top:${inset + cornerLen}px;bottom:${inset + cornerLen}px;width:0;border-left:${borderThin};"></div>
-        <div style="${shared}right:${inset}px;top:${inset + cornerLen}px;bottom:${inset + cornerLen}px;width:0;border-right:${borderThin};"></div>
-        <div style="position:absolute;top:${inset - 1}px;left:50%;transform:translateX(-50%);width:${tickLen}px;height:0;border-top:${border};"></div>
-        <div style="position:absolute;bottom:${inset - 1}px;left:50%;transform:translateX(-50%);width:${tickLen}px;height:0;border-bottom:${border};"></div>
-        <div style="position:absolute;left:${inset - 1}px;top:50%;transform:translateY(-50%);height:${tickLen}px;width:0;border-left:${border};"></div>
-        <div style="position:absolute;right:${inset - 1}px;top:50%;transform:translateY(-50%);height:${tickLen}px;width:0;border-right:${border};"></div>
     `;
     document.body.appendChild(el);
     scopeOverlayEl = el;
@@ -17364,6 +17354,39 @@ function showScopeOverlay() {
 function hideScopeOverlay() {
     if (scopeOverlayEl) {
         scopeOverlayEl.style.opacity = '0';
+    }
+    hideRmbZoomHint();
+}
+
+let rmbHintEl = null;
+let rmbHintUsed = false;
+
+function createRmbZoomHint() {
+    if (rmbHintEl) return rmbHintEl;
+    const el = document.createElement('div');
+    el.id = 'rmb-zoom-hint';
+    el.style.cssText = 'position:fixed;right:28px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:1000;pointer-events:none;';
+    const mouseSvg = `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" stroke="rgba(0,255,200,0.6)" stroke-width="1.5" fill="none"/>
+        <line x1="14" y1="1.5" x2="14" y2="18" stroke="rgba(0,255,200,0.6)" stroke-width="1"/>
+        <rect x="14.5" y="3" width="10.5" height="14" rx="4" fill="rgba(0,255,200,0.35)" stroke="rgba(0,255,200,0.7)" stroke-width="1"/>
+    </svg>`;
+    el.innerHTML = `${mouseSvg}<span style="font:600 12px 'Rajdhani',sans-serif;color:rgba(0,255,200,0.6);letter-spacing:1px;text-transform:uppercase;white-space:nowrap;">RMB: Zoom</span>`;
+    document.body.appendChild(el);
+    rmbHintEl = el;
+    return el;
+}
+
+function showRmbZoomHint() {
+    if (rmbHintUsed) return;
+    const el = createRmbZoomHint();
+    el.style.opacity = '1';
+}
+
+function hideRmbZoomHint() {
+    if (rmbHintEl) {
+        rmbHintEl.style.opacity = '0';
+        rmbHintUsed = true;
     }
 }
 
