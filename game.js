@@ -17299,38 +17299,126 @@ function applyRtpLabels() {
 }
 
 // ==================== SCOPE OVERLAY ====================
+const SCOPE_STYLE = 'A';
 let scopeOverlayEl = null;
+let _scopeCurrentStyle = null;
+
+function _buildScopeStyleA() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const fw = Math.round(vw * 0.42);
+    const fh = Math.round(vh * 0.42);
+    const left = Math.round((vw - fw) / 2);
+    const top = Math.round((vh - fh) / 2);
+    const cLen = 40;
+    const color = 'rgba(0,255,200,0.6)';
+    const glow = '0 0 8px rgba(0,255,200,0.35)';
+    const s = `position:absolute;box-shadow:${glow};`;
+    const b = `2px solid ${color}`;
+    return `
+        <div style="${s}top:${top}px;left:${left}px;width:${cLen}px;height:${cLen}px;border-top:${b};border-left:${b};"></div>
+        <div style="${s}top:${top}px;right:${vw - left - fw}px;width:${cLen}px;height:${cLen}px;border-top:${b};border-right:${b};"></div>
+        <div style="${s}bottom:${vh - top - fh}px;left:${left}px;width:${cLen}px;height:${cLen}px;border-bottom:${b};border-left:${b};"></div>
+        <div style="${s}bottom:${vh - top - fh}px;right:${vw - left - fw}px;width:${cLen}px;height:${cLen}px;border-bottom:${b};border-right:${b};"></div>
+        <div style="position:absolute;top:${top}px;left:50%;transform:translateX(-50%);width:24px;height:0;border-top:${b};box-shadow:${glow};"></div>
+        <div style="position:absolute;bottom:${vh - top - fh}px;left:50%;transform:translateX(-50%);width:24px;height:0;border-bottom:${b};box-shadow:${glow};"></div>
+        <div style="position:absolute;left:${left}px;top:50%;transform:translateY(-50%);height:24px;width:0;border-left:${b};box-shadow:${glow};"></div>
+        <div style="position:absolute;right:${vw - left - fw}px;top:50%;transform:translateY(-50%);height:24px;width:0;border-right:${b};box-shadow:${glow};"></div>
+    `;
+}
+
+function _buildScopeStyleB() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const fw = Math.round(vw * 0.42);
+    const fh = Math.round(vh * 0.42);
+    const l = Math.round((vw - fw) / 2);
+    const t = Math.round((vh - fh) / 2);
+    const r = vw - l - fw;
+    const bo = vh - t - fh;
+    const cLen = 28;
+    const brkLen = 10;
+    const tickW = 16;
+    const color = 'rgba(0,230,255,0.7)';
+    const dim = 'rgba(0,230,255,0.2)';
+    const glow = '0 0 10px rgba(0,230,255,0.5)';
+    const s = `position:absolute;box-shadow:${glow};`;
+    const brd = `3px solid ${color}`;
+    const brdDim = `1px solid ${dim}`;
+    const midX = l + fw / 2;
+    const midY = t + fh / 2;
+    const tickOff = 60;
+    let html = '';
+    html += `<div style="${s}top:${t}px;left:${l}px;width:${cLen}px;height:${cLen}px;border-top:${brd};border-left:${brd};"></div>`;
+    html += `<div style="${s}top:${t}px;right:${r}px;width:${cLen}px;height:${cLen}px;border-top:${brd};border-right:${brd};"></div>`;
+    html += `<div style="${s}bottom:${bo}px;left:${l}px;width:${cLen}px;height:${cLen}px;border-bottom:${brd};border-left:${brd};"></div>`;
+    html += `<div style="${s}bottom:${bo}px;right:${r}px;width:${cLen}px;height:${cLen}px;border-bottom:${brd};border-right:${brd};"></div>`;
+    html += `<div style="${s}top:${t}px;left:${l}px;width:${brkLen}px;height:0;border-top:${brd};margin-left:${cLen + 6}px;"></div>`;
+    html += `<div style="${s}top:${t}px;right:${r}px;width:${brkLen}px;height:0;border-top:${brd};margin-right:${cLen + 6}px;"></div>`;
+    html += `<div style="${s}bottom:${bo}px;left:${l}px;width:${brkLen}px;height:0;border-bottom:${brd};margin-left:${cLen + 6}px;"></div>`;
+    html += `<div style="${s}bottom:${bo}px;right:${r}px;width:${brkLen}px;height:0;border-bottom:${brd};margin-right:${cLen + 6}px;"></div>`;
+    html += `<div style="${s}left:${l}px;top:${t}px;width:0;height:${brkLen}px;border-left:${brd};margin-top:${cLen + 6}px;"></div>`;
+    html += `<div style="${s}right:${r}px;top:${t}px;width:0;height:${brkLen}px;border-right:${brd};margin-top:${cLen + 6}px;"></div>`;
+    html += `<div style="${s}left:${l}px;bottom:${bo}px;width:0;height:${brkLen}px;border-left:${brd};margin-bottom:${cLen + 6}px;"></div>`;
+    html += `<div style="${s}right:${r}px;bottom:${bo}px;width:0;height:${brkLen}px;border-right:${brd};margin-bottom:${cLen + 6}px;"></div>`;
+    const ticks = [0.25, 0.5, 0.75];
+    for (const frac of ticks) {
+        const xPos = l + fw * frac;
+        html += `<div style="position:absolute;top:${t}px;left:${Math.round(xPos)}px;transform:translateX(-50%);width:${frac === 0.5 ? tickW + 4 : tickW}px;height:0;border-top:${frac === 0.5 ? brd : brdDim};box-shadow:${glow};"></div>`;
+        html += `<div style="position:absolute;bottom:${bo}px;left:${Math.round(xPos)}px;transform:translateX(-50%);width:${frac === 0.5 ? tickW + 4 : tickW}px;height:0;border-bottom:${frac === 0.5 ? brd : brdDim};box-shadow:${glow};"></div>`;
+    }
+    const ticsY = [0.25, 0.5, 0.75];
+    for (const frac of ticsY) {
+        const yPos = t + fh * frac;
+        html += `<div style="position:absolute;left:${l}px;top:${Math.round(yPos)}px;transform:translateY(-50%);height:${frac === 0.5 ? tickW + 4 : tickW}px;width:0;border-left:${frac === 0.5 ? brd : brdDim};box-shadow:${glow};"></div>`;
+        html += `<div style="position:absolute;right:${r}px;top:${Math.round(yPos)}px;transform:translateY(-50%);height:${frac === 0.5 ? tickW + 4 : tickW}px;width:0;border-right:${frac === 0.5 ? brd : brdDim};box-shadow:${glow};"></div>`;
+    }
+    html += `<div style="position:absolute;top:${t - 18}px;right:${r}px;font:bold 10px monospace;color:${color};text-shadow:${glow};letter-spacing:1px;">2.0x</div>`;
+    return html;
+}
+
+function _buildScopeStyleC() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const fw = Math.round(vw * 0.42);
+    const fh = Math.round(vh * 0.42);
+    const l = Math.round((vw - fw) / 2);
+    const t = Math.round((vh - fh) / 2);
+    const r = vw - l - fw;
+    const bo = vh - t - fh;
+    const cLen = 32;
+    const color = 'rgba(0,255,200,0.55)';
+    const outline = 'rgba(0,255,200,0.12)';
+    const accent = 'rgba(0,255,200,0.7)';
+    const glow = '0 0 6px rgba(0,255,200,0.3)';
+    const glowStrong = '0 0 10px rgba(0,255,200,0.5)';
+    const s = `position:absolute;`;
+    let html = '';
+    html += `<div style="${s}top:${t}px;left:${l}px;width:${fw}px;height:${fh}px;border:1px solid ${outline};box-sizing:border-box;"></div>`;
+    html += `<div style="${s}top:${t}px;left:${l}px;width:${cLen}px;height:${cLen}px;border-top:2px solid ${accent};border-left:2px solid ${accent};box-shadow:${glowStrong};"></div>`;
+    html += `<div style="${s}top:${t}px;right:${r}px;width:${cLen}px;height:${cLen}px;border-top:2px solid ${accent};border-right:2px solid ${accent};box-shadow:${glowStrong};"></div>`;
+    html += `<div style="${s}bottom:${bo}px;left:${l}px;width:${cLen}px;height:${cLen}px;border-bottom:2px solid ${accent};border-left:2px solid ${accent};box-shadow:${glowStrong};"></div>`;
+    html += `<div style="${s}bottom:${bo}px;right:${r}px;width:${cLen}px;height:${cLen}px;border-bottom:2px solid ${accent};border-right:2px solid ${accent};box-shadow:${glowStrong};"></div>`;
+    html += `<div style="position:absolute;top:${t}px;left:50%;transform:translateX(-50%);width:20px;height:0;border-top:1px solid ${color};box-shadow:${glow};"></div>`;
+    html += `<div style="position:absolute;bottom:${bo}px;left:50%;transform:translateX(-50%);width:20px;height:0;border-bottom:1px solid ${color};box-shadow:${glow};"></div>`;
+    html += `<div style="position:absolute;left:${l}px;top:50%;transform:translateY(-50%);height:20px;width:0;border-left:1px solid ${color};box-shadow:${glow};"></div>`;
+    html += `<div style="position:absolute;right:${r}px;top:50%;transform:translateY(-50%);height:20px;width:0;border-right:1px solid ${color};box-shadow:${glow};"></div>`;
+    return html;
+}
 
 function createScopeOverlay() {
-    if (scopeOverlayEl) return scopeOverlayEl;
+    const style = SCOPE_STYLE;
+    if (scopeOverlayEl && _scopeCurrentStyle === style) return scopeOverlayEl;
+    if (scopeOverlayEl) { scopeOverlayEl.remove(); scopeOverlayEl = null; }
     const el = document.createElement('div');
     el.id = 'scope-overlay';
     el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
-    const inset = 52;
-    const cornerLen = 27;
-    const tickLen = 36;
-    const color = 'rgba(0,255,200,0.5)';
-    const thin = 'rgba(0,255,200,0.15)';
-    const glow = '0 0 6px rgba(0,255,200,0.4)';
-    const shared = `position:absolute;box-shadow:${glow};`;
-    const border = `2px solid ${color}`;
-    const borderThin = `1px solid ${thin}`;
-    el.innerHTML = `
-        <div style="${shared}top:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-left:${border};"></div>
-        <div style="${shared}top:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-right:${border};"></div>
-        <div style="${shared}bottom:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-left:${border};"></div>
-        <div style="${shared}bottom:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-right:${border};"></div>
-        <div style="${shared}top:${inset}px;left:${inset + cornerLen}px;right:${inset + cornerLen}px;height:0;border-top:${borderThin};"></div>
-        <div style="${shared}bottom:${inset}px;left:${inset + cornerLen}px;right:${inset + cornerLen}px;height:0;border-bottom:${borderThin};"></div>
-        <div style="${shared}left:${inset}px;top:${inset + cornerLen}px;bottom:${inset + cornerLen}px;width:0;border-left:${borderThin};"></div>
-        <div style="${shared}right:${inset}px;top:${inset + cornerLen}px;bottom:${inset + cornerLen}px;width:0;border-right:${borderThin};"></div>
-        <div style="position:absolute;top:${inset - 1}px;left:50%;transform:translateX(-50%);width:${tickLen}px;height:0;border-top:${border};"></div>
-        <div style="position:absolute;bottom:${inset - 1}px;left:50%;transform:translateX(-50%);width:${tickLen}px;height:0;border-bottom:${border};"></div>
-        <div style="position:absolute;left:${inset - 1}px;top:50%;transform:translateY(-50%);height:${tickLen}px;width:0;border-left:${border};"></div>
-        <div style="position:absolute;right:${inset - 1}px;top:50%;transform:translateY(-50%);height:${tickLen}px;width:0;border-right:${border};"></div>
-    `;
+    if (style === 'A') el.innerHTML = _buildScopeStyleA();
+    else if (style === 'B') el.innerHTML = _buildScopeStyleB();
+    else el.innerHTML = _buildScopeStyleC();
     document.body.appendChild(el);
     scopeOverlayEl = el;
+    _scopeCurrentStyle = style;
     return el;
 }
 
