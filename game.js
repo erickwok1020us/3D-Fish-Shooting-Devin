@@ -448,30 +448,61 @@ function updateUnderwaterParticles(deltaTime) {
 // ==================== UNDERWATER GOD RAYS (Light Shafts from Surface) ====================
 let godRayGroup = null;
 const GOD_RAY_CONFIG = {
-    count: 4,
+    count: 5,
     topY: 800,
     bottomY: -600,
     spread: 1800,
-    minWidth: 50,
-    maxWidth: 140,
+    minWidth: 8,
+    maxWidth: 30,
     color: 0x80d8f0,
-    opacity: 0.035,
-    driftSpeed: 0.06,
-    pulseSpeed: 0.2
+    opacity: 0.018,
+    driftSpeed: 0.04,
+    pulseSpeed: 0.15,
+    fpsFadeStartDist: 200,
+    fpsFadeEndDist: 80
+};
+
+const godRayShader = {
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        varying vec2 vUv;
+        void main() {
+            float vFade = vUv.y * (1.0 - vUv.y) * 4.0;
+            vFade = pow(vFade, 1.5);
+            float hFade = 1.0 - pow(abs(vUv.x - 0.5) * 2.0, 2.0);
+            float alpha = uOpacity * vFade * hFade;
+            gl_FragColor = vec4(uColor, alpha);
+        }
+    `
 };
 
 function createGodRays() {
     godRayGroup = new THREE.Group();
     godRayGroup.name = 'godRays';
 
+    const c = new THREE.Color(GOD_RAY_CONFIG.color);
+
     for (let i = 0; i < GOD_RAY_CONFIG.count; i++) {
         const w = GOD_RAY_CONFIG.minWidth + Math.random() * (GOD_RAY_CONFIG.maxWidth - GOD_RAY_CONFIG.minWidth);
         const h = GOD_RAY_CONFIG.topY - GOD_RAY_CONFIG.bottomY;
         const geo = new THREE.PlaneGeometry(w, h);
-        const mat = new THREE.MeshBasicMaterial({
-            color: GOD_RAY_CONFIG.color,
+        const baseOpacity = GOD_RAY_CONFIG.opacity * (0.6 + Math.random() * 0.4);
+        const mat = new THREE.ShaderMaterial({
+            uniforms: {
+                uColor: { value: c },
+                uOpacity: { value: baseOpacity }
+            },
+            vertexShader: godRayShader.vertexShader,
+            fragmentShader: godRayShader.fragmentShader,
             transparent: true,
-            opacity: GOD_RAY_CONFIG.opacity * (0.6 + Math.random() * 0.4),
             blending: THREE.AdditiveBlending,
             depthWrite: false,
             side: THREE.DoubleSide,
@@ -480,25 +511,48 @@ function createGodRays() {
         const mesh = new THREE.Mesh(geo, mat);
         const xPos = (Math.random() - 0.5) * GOD_RAY_CONFIG.spread;
         mesh.position.set(xPos, (GOD_RAY_CONFIG.topY + GOD_RAY_CONFIG.bottomY) / 2, (Math.random() - 0.5) * 400);
-        mesh.rotation.z = (Math.random() - 0.5) * 0.15;
+        mesh.rotation.z = (Math.random() - 0.5) * 0.08;
         mesh.userData.baseX = xPos;
-        mesh.userData.baseOpacity = mat.opacity;
+        mesh.userData.baseOpacity = baseOpacity;
         mesh.userData.phase = Math.random() * Math.PI * 2;
         mesh.userData.driftPhase = Math.random() * Math.PI * 2;
         mesh.renderOrder = -500;
         godRayGroup.add(mesh);
     }
     scene.add(godRayGroup);
-    console.log(`[ATMOSPHERE] Created ${GOD_RAY_CONFIG.count} god ray light shafts`);
+    console.log(`[ATMOSPHERE] Created ${GOD_RAY_CONFIG.count} subtle god ray light shafts`);
 }
+
+const _godRayTempDir = new THREE.Vector3();
+const _godRayTempPos = new THREE.Vector3();
 
 function updateGodRays(time) {
     if (!godRayGroup) return;
+    const isFps = gameState.viewMode === 'fps';
+    const camPos = camera ? camera.position : null;
+
     for (let i = 0; i < godRayGroup.children.length; i++) {
         const ray = godRayGroup.children[i];
-        ray.position.x = ray.userData.baseX + Math.sin(time * GOD_RAY_CONFIG.driftSpeed + ray.userData.driftPhase) * 60;
-        const pulse = 0.7 + 0.3 * Math.sin(time * GOD_RAY_CONFIG.pulseSpeed + ray.userData.phase);
-        ray.material.opacity = ray.userData.baseOpacity * pulse;
+        ray.position.x = ray.userData.baseX + Math.sin(time * GOD_RAY_CONFIG.driftSpeed + ray.userData.driftPhase) * 40;
+        const pulse = 0.75 + 0.25 * Math.sin(time * GOD_RAY_CONFIG.pulseSpeed + ray.userData.phase);
+        let opacity = ray.userData.baseOpacity * pulse;
+
+        if (isFps && camPos) {
+            _godRayTempPos.set(ray.position.x, camPos.y, ray.position.z);
+            const dist = camPos.distanceTo(_godRayTempPos);
+            if (dist < GOD_RAY_CONFIG.fpsFadeStartDist) {
+                const t = Math.max(0, (dist - GOD_RAY_CONFIG.fpsFadeEndDist) /
+                    (GOD_RAY_CONFIG.fpsFadeStartDist - GOD_RAY_CONFIG.fpsFadeEndDist));
+                opacity *= t;
+            }
+            _godRayTempDir.subVectors(ray.position, camPos).normalize();
+            const camForward = camera.getWorldDirection(_godRayTempPos);
+            const dot = Math.abs(_godRayTempDir.dot(camForward));
+            const angleFade = Math.min(1, dot * 3);
+            opacity *= angleFade;
+        }
+
+        ray.material.uniforms.uOpacity.value = opacity;
     }
 }
 
