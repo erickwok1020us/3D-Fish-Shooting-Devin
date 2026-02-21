@@ -17351,8 +17351,8 @@ function applyRtpLabels() {
 
 // ==================== SCOPE OVERLAY ====================
 let scopeOverlayEl = null;
-const ZOOM_FRAME_SIZES = { S: 140, M: 104, L: 72 };
-let zoomFrameInset = ZOOM_FRAME_SIZES.M;
+const ZOOM_FRAME_SIZES = { S: 300, M: 220, L: 140 };
+let zoomFrameInset = ZOOM_FRAME_SIZES.S;
 
 function createScopeOverlay() {
     if (scopeOverlayEl) { scopeOverlayEl.remove(); scopeOverlayEl = null; }
@@ -17361,9 +17361,10 @@ function createScopeOverlay() {
     el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
     const inset = zoomFrameInset;
     const cornerLen = 32;
-    const color = 'rgba(0,255,200,0.7)';
-    const shared = `position:absolute;`;
-    const border = `3px solid ${color}`;
+    const color = 'rgba(57,255,20,0.85)';
+    const glow = '0 0 6px rgba(57,255,20,0.5)';
+    const shared = `position:absolute;box-shadow:${glow};`;
+    const border = `4px solid ${color}`;
     el.innerHTML = `
         <div style="${shared}top:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-left:${border};"></div>
         <div style="${shared}top:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-right:${border};"></div>
