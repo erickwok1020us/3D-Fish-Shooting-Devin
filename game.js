@@ -14951,15 +14951,19 @@ const RTP_P_SCALE = 1000000;
 const RTP_K = 1.2;
 const RTP_AOE_MAX_TARGETS = 8;
 const RTP_LASER_MAX_TARGETS = 6;
-const RTP_RAMP_START = 800000;
+const RTP_RAMP_START = 200000;
+const RTP_RAMP_AMP = 5;
+const RTP_BASE_P_BOOST = 1500000;
+const RTP_MULTI_TARGET_P_BOOST = 2500000;
+const RTP_LUCKY_CRIT_P = 2000;
 
 const RTP_TIER_CONFIG = {
-    1: { rtpTierFp: 9000, n1Fp: 6000, rewardFp: 4500, pityCompFp: 367403 },
-    2: { rtpTierFp: 9200, n1Fp: 10000, rewardFp: 7666, pityCompFp: 343881 },
-    3: { rtpTierFp: 9300, n1Fp: 16000, rewardFp: 12400, pityCompFp: 331913 },
-    4: { rtpTierFp: 9400, n1Fp: 30000, rewardFp: 23500, pityCompFp: 323159 },
-    5: { rtpTierFp: 9450, n1Fp: 45000, rewardFp: 35437, pityCompFp: 319944 },
-    6: { rtpTierFp: 9500, n1Fp: 120000, rewardFp: 95000, pityCompFp: 316012 }
+    1: { rtpTierFp: 9000, n1Fp: 10000, rewardFp: 6940, pityCompFp: 162492 },
+    2: { rtpTierFp: 9200, n1Fp: 15000, rewardFp: 10411, pityCompFp: 155148 },
+    3: { rtpTierFp: 9300, n1Fp: 22000, rewardFp: 15364, pityCompFp: 148338 },
+    4: { rtpTierFp: 9400, n1Fp: 40000, rewardFp: 27904, pityCompFp: 141657 },
+    5: { rtpTierFp: 9450, n1Fp: 60000, rewardFp: 41909, pityCompFp: 131718 },
+    6: { rtpTierFp: 9500, n1Fp: 120000, rewardFp: 82773, pityCompFp: 109818 }
 };
 
 const FISH_SPECIES_TO_RTP_TIER = {
@@ -15043,12 +15047,19 @@ class ClientRTPPhase1 {
             return this._executeKill(state, config, fishId, 'hard_pity');
         }
 
+        const luckyRand = Math.floor(Math.random() * RTP_P_SCALE);
+        if (luckyRand < RTP_LUCKY_CRIT_P) {
+            console.log(`[RTP] KILL(lucky_crit) fish=${fishId} tier=${tier} shot=${shotNum}/${n1Shots}`);
+            return this._executeKill(state, config, fishId, 'lucky_crit');
+        }
+
         const pBaseRawFp = Math.min(RTP_P_SCALE, Math.floor(budgetTotalFp * RTP_P_SCALE / config.rewardFp));
-        const pBaseFp = Math.floor(pBaseRawFp * config.pityCompFp / RTP_P_SCALE);
+        const pBaseBoostedFp = Math.min(RTP_P_SCALE, Math.floor(pBaseRawFp * RTP_BASE_P_BOOST / RTP_P_SCALE));
+        const pBaseFp = Math.floor(pBaseBoostedFp * config.pityCompFp / RTP_P_SCALE);
         const progressFp = Math.floor(state.sumCostFp * RTP_PROGRESS_SCALE / config.n1Fp);
         const rFp = progressFp <= RTP_RAMP_START ? 0
             : Math.min(RTP_PROGRESS_SCALE, Math.floor((progressFp - RTP_RAMP_START) * RTP_PROGRESS_SCALE / (RTP_PROGRESS_SCALE - RTP_RAMP_START)));
-        const aFp = Math.floor(pBaseFp / 2);
+        const aFp = Math.floor(pBaseFp * RTP_RAMP_AMP);
         const pFp = Math.min(RTP_P_SCALE, pBaseFp + Math.floor(aFp * rFp / RTP_PROGRESS_SCALE));
 
         const rand = Math.floor(Math.random() * RTP_P_SCALE);
@@ -15127,13 +15138,21 @@ class ClientRTPPhase1 {
                 continue;
             }
 
+            const luckyRandI = Math.floor(Math.random() * RTP_P_SCALE);
+            if (luckyRandI < RTP_LUCKY_CRIT_P) {
+                results.push(this._executeKill(state, config, entry.fishId, 'lucky_crit'));
+                continue;
+            }
+
             const pBaseRawIFp = Math.min(RTP_P_SCALE, Math.floor(budgetAllocFp[i] * RTP_P_SCALE / config.rewardFp));
-            const pBaseIFp = Math.floor(pBaseRawIFp * config.pityCompFp / RTP_P_SCALE);
+            const pBaseBoostedIFp = Math.min(RTP_P_SCALE, Math.floor(pBaseRawIFp * RTP_BASE_P_BOOST / RTP_P_SCALE));
+            const pBaseIFp = Math.floor(pBaseBoostedIFp * config.pityCompFp / RTP_P_SCALE);
             const progressIFp = Math.floor(state.sumCostFp * RTP_PROGRESS_SCALE / config.n1Fp);
             const rIFp = progressIFp <= RTP_RAMP_START ? 0
                 : Math.min(RTP_PROGRESS_SCALE, Math.floor((progressIFp - RTP_RAMP_START) * RTP_PROGRESS_SCALE / (RTP_PROGRESS_SCALE - RTP_RAMP_START)));
-            const aIFp = Math.floor(pBaseIFp / 2);
-            const pIFp = Math.min(RTP_P_SCALE, pBaseIFp + Math.floor(aIFp * rIFp / RTP_PROGRESS_SCALE));
+            const aIFp = Math.floor(pBaseIFp * RTP_RAMP_AMP);
+            const pIFpRaw = Math.min(RTP_P_SCALE, pBaseIFp + Math.floor(aIFp * rIFp / RTP_PROGRESS_SCALE));
+            const pIFp = Math.min(RTP_P_SCALE, Math.floor(pIFpRaw * RTP_MULTI_TARGET_P_BOOST / RTP_P_SCALE));
 
             const randI = Math.floor(Math.random() * RTP_P_SCALE);
             if (randI < pIFp) {
