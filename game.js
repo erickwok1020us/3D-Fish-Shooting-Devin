@@ -18873,13 +18873,16 @@ function updateBossWaitingTimerUI(secondsLeft) {
     const s = Math.ceil(secondsLeft);
     const timerText = document.getElementById('boss-waiting-text');
     
-    // Show timer when waiting (60s down to 16s), hide when boss mode is about to start
-    if (s > 15 && !gameState.bossActive) {
+    if (s > 0 && !gameState.bossActive) {
         if (timerText) timerText.textContent = `${s}s`;
         bossWaitingUI.style.display = 'block';
         
-        // Change color as time gets closer to boss spawn
-        if (s <= 20) {
+        if (s <= 10) {
+            bossWaitingUI.style.borderColor = 'rgba(255, 50, 0, 0.7)';
+            bossWaitingUI.style.boxShadow = '0 0 30px rgba(255, 50, 0, 0.3)';
+            if (timerText) timerText.style.color = '#ff4400';
+            if (timerText) timerText.style.textShadow = '0 0 12px rgba(255, 50, 0, 0.6)';
+        } else if (s <= 20) {
             bossWaitingUI.style.borderColor = 'rgba(255, 100, 0, 0.6)';
             bossWaitingUI.style.boxShadow = '0 0 25px rgba(255, 100, 0, 0.2)';
             if (timerText) timerText.style.color = '#ff8800';
@@ -19186,8 +19189,7 @@ function spawnBossFish() {
         bossType: bossType
     };
     
-    // Show boss alert UI
-    showBossAlert(bossType);
+    let spawnedBoss = null;
     
     if (bossType.isSwarm) {
         const swarmFish = [];
@@ -19200,7 +19202,6 @@ function spawnBossFish() {
                 fish.config = bossConfig;
                 fish.createMesh();
                 
-                // Position around center
                 const offset = new THREE.Vector3(
                     (Math.random() - 0.5) * 200,
                     (Math.random() - 0.5) * 100,
@@ -19208,7 +19209,6 @@ function spawnBossFish() {
                 );
                 fish.spawn(centerPos.clone().add(offset));
                 fish.isBoss = true;
-                // BUG FIX: Only push if not already in activeFish to prevent duplicates
                 if (!activeFish.includes(fish)) {
                     activeFish.push(fish);
                 }
@@ -19216,9 +19216,8 @@ function spawnBossFish() {
             }
         }
         
-        // Mark first fish as the main boss target
         if (swarmFish.length > 0) {
-            gameState.activeBoss = swarmFish[0];
+            spawnedBoss = swarmFish[0];
             createBossCrosshair(swarmFish[0]);
             addBossGlowEffect(swarmFish[0], bossType.glowColor);
         }
@@ -19229,23 +19228,25 @@ function spawnBossFish() {
             fish.createMesh();
             fish.spawn(getRandomFishPositionIn3DSpace());
             fish.isBoss = true;
-            // BUG FIX: Only push if not already in activeFish to prevent duplicates
             if (!activeFish.includes(fish)) {
                 activeFish.push(fish);
             }
             
-            gameState.activeBoss = fish;
+            spawnedBoss = fish;
             createBossCrosshair(fish);
             addBossGlowEffect(fish, bossType.glowColor);
         }
     }
     
-    // Start countdown - Extended from 15s to 17s to give 1x weapon users more time
-    // (1x weapon needs 14s continuous fire to kill ALPHA ORCA with 2800 HP)
+    if (!spawnedBoss) {
+        console.warn('[BOSS] Spawn failed — freeFish pool empty. Skipping Boss Mode this cycle.');
+        return;
+    }
+    
+    gameState.activeBoss = spawnedBoss;
+    showBossAlert(bossType);
     gameState.bossCountdown = 17;
     gameState.bossActive = true;
-    
-    // Start boss time music
     startBossMusicMP3();
 }
 
