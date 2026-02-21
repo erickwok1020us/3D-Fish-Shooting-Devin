@@ -11596,8 +11596,13 @@ function autoFireAtFish(targetFish) {
     
     let direction;
     if (weapon.type === 'laser') {
-        direction = getCrosshairRay();
-        if (!direction) return false;
+        if (gameState.viewMode === 'fps' && targetFish && targetFish.isActive) {
+            direction = autoFireTempVectors.direction;
+            direction.copy(targetFish.group.position).sub(camera.position).normalize();
+        } else {
+            direction = getCrosshairRay();
+            if (!direction) return false;
+        }
     } else {
         direction = autoFireTempVectors.direction;
         const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
