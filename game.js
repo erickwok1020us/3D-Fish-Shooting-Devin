@@ -19191,6 +19191,25 @@ function spawnBossFish() {
     
     let spawnedBoss = null;
     
+    if (freeFish.length === 0) {
+        let victim = null, worstVal = Infinity;
+        for (let i = activeFish.length - 1; i >= 0; i--) {
+            const f = activeFish[i];
+            if (!f.isActive || f.isBoss) continue;
+            const val = (f.config && f.config.reward) || 0;
+            if (val < worstVal) { worstVal = val; victim = f; }
+        }
+        if (victim) {
+            victim.isActive = false;
+            victim.group.visible = false;
+            if (victim.group.parent) victim.group.parent.remove(victim.group);
+            const idx = activeFish.indexOf(victim);
+            if (idx !== -1) activeFish.splice(idx, 1);
+            victim.isBoss = false;
+            freeFish.push(victim);
+        }
+    }
+    
     if (bossType.isSwarm) {
         const swarmFish = [];
         const centerPos = getRandomFishPositionIn3DSpace();
@@ -19239,7 +19258,7 @@ function spawnBossFish() {
     }
     
     if (!spawnedBoss) {
-        console.warn('[BOSS] Spawn failed — freeFish pool empty. Skipping Boss Mode this cycle.');
+        console.warn('[BOSS] Spawn failed — no fish available even after recycle attempt.');
         return;
     }
     
