@@ -9379,7 +9379,6 @@ function initGameScene() {
         animate();
         
         createCannon();
-        showRmbZoomHint();
     }, 500);
 }
 
@@ -9435,7 +9434,6 @@ function onInitialWeaponSelected(weaponKey) {
     }
     
     console.log('[PLAN-B] Initial weapon selected: ' + weaponKey + '. Cannon visible. Game ready.');
-    showRmbZoomHint();
 }
 
 // Start single player game - called from lobby
@@ -17330,7 +17328,7 @@ function createScopeOverlay() {
     const el = document.createElement('div');
     el.id = 'scope-overlay';
     el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
-    const inset = 52;
+    const inset = 104;
     const cornerLen = 32;
     const color = 'rgba(0,255,200,0.7)';
     const shared = `position:absolute;`;
@@ -17349,6 +17347,7 @@ function createScopeOverlay() {
 function showScopeOverlay() {
     const el = createScopeOverlay();
     requestAnimationFrame(() => { el.style.opacity = '1'; });
+    showRmbZoomHint();
 }
 
 function hideScopeOverlay() {
@@ -17359,7 +17358,6 @@ function hideScopeOverlay() {
 }
 
 let rmbHintEl = null;
-let rmbHintUsed = false;
 
 function createRmbZoomHint() {
     if (rmbHintEl) return rmbHintEl;
@@ -17378,7 +17376,6 @@ function createRmbZoomHint() {
 }
 
 function showRmbZoomHint() {
-    if (rmbHintUsed) return;
     const el = createRmbZoomHint();
     el.style.opacity = '1';
 }
@@ -17386,7 +17383,6 @@ function showRmbZoomHint() {
 function hideRmbZoomHint() {
     if (rmbHintEl) {
         rmbHintEl.style.opacity = '0';
-        rmbHintUsed = true;
     }
 }
 
