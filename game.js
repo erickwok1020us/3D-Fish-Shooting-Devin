@@ -11276,6 +11276,8 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 55,
         hitscanFireGate: 8,
+        lockBreakAngle: 70,
+        hitscan8xTrackSpeed: 5.0,
         trackSpeed: 8.0,
         maxRotSpeed: 2.0,
         initialLockMs: 250,
@@ -11385,6 +11387,17 @@ const TargetingService = {
         return out;
     },
 
+    _isTargetInCone(fish, muzzlePos, angleDeg) {
+        if (!fish || !fish.isActive) return false;
+        const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
+        const pos = fish.group.position;
+        const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001) return false;
+        const dot = (dx * fwd.x + dy * fwd.y + dz * fwd.z) / len;
+        return dot >= Math.cos(angleDeg * Math.PI / 180);
+    },
+
     _pickTarget(muzzlePos) {
         const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
         return this.findNearestInCrosshairCone(muzzlePos, fwd, this.config.searchConeAngle);
@@ -11415,9 +11428,10 @@ const TargetingService = {
         this._initFromCannon();
 
         if (gameState.bossActive && s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
-            const bossCheck = this.findNearest(muzzlePos);
-            if (bossCheck.primary && bossCheck.primary.isBoss) {
-                s.lockedTarget = bossCheck.primary;
+            const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
+            const boss = this.findNearestInCrosshairCone(muzzlePos, fwd, this.config.searchConeAngle);
+            if (boss && boss.isBoss) {
+                s.lockedTarget = boss;
                 s.phase = 'transition';
                 s.phaseStart = now;
                 s.startYaw = s.currentYaw;
@@ -11452,6 +11466,23 @@ const TargetingService = {
             }
         }
 
+        if (s.lockedTarget && s.lockedTarget.isActive && gameState.currentWeapon === '8x') {
+            if (!this._isTargetInCone(s.lockedTarget, muzzlePos, this.config.lockBreakAngle)) {
+                const next = this._pickFallback(muzzlePos);
+                if (next) {
+                    s.lockedTarget = next;
+                    s.phase = 'transition';
+                    s.phaseStart = now;
+                    s.startYaw = s.currentYaw;
+                    s.startPitch = s.currentPitch;
+                } else {
+                    this.reset();
+                    this._initFromCannon();
+                    return { target: null, canFire: false };
+                }
+            }
+        }
+
         const fish = s.lockedTarget;
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
@@ -11479,7 +11510,8 @@ const TargetingService = {
             s.currentPitch = s.startPitch  + dPitch;
             if (t >= 1) { s.phase = 'firing'; canFire = true; }
         } else if (s.phase === 'firing') {
-            const factor = 1 - Math.exp(-c.trackSpeed / 60);
+            const speed = (gameState.currentWeapon === '8x') ? c.hitscan8xTrackSpeed : c.trackSpeed;
+            const factor = 1 - Math.exp(-speed / 60);
             let dYaw   = this._wrapDelta(clampedYaw - s.currentYaw)   * factor;
             let dPitch = (clampedPitch - s.currentPitch) * factor;
             dYaw   = this._clampRotDelta(dYaw,   maxStep);
