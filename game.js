@@ -17494,15 +17494,19 @@ function createScopeOverlay() {
     const vInset = zoomFrameInset;
     const hInset = Math.round(zoomFrameInset * 1.35);
     const cornerLen = 32;
-    const color = 'rgba(207,255,4,0.85)';
-    const glow = '0 0 6px rgba(207,255,4,0.5)';
-    const shared = `position:absolute;box-shadow:${glow};`;
-    const border = `4px solid ${color}`;
+    const thick = 3;
+    const color = 'rgba(255,179,71,0.85)';
+    const glow = '0 0 6px rgba(255,179,71,0.5)';
+    const line = `position:absolute;background:${color};box-shadow:${glow};border-radius:1.5px;`;
     el.innerHTML = `
-        <div style="${shared}top:${vInset}px;left:${hInset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-left:${border};"></div>
-        <div style="${shared}top:${vInset}px;right:${hInset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-right:${border};"></div>
-        <div style="${shared}bottom:${vInset}px;left:${hInset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-left:${border};"></div>
-        <div style="${shared}bottom:${vInset}px;right:${hInset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-right:${border};"></div>
+        <div style="${line}top:${vInset}px;left:${hInset}px;width:${cornerLen}px;height:${thick}px;"></div>
+        <div style="${line}top:${vInset}px;left:${hInset}px;width:${thick}px;height:${cornerLen}px;"></div>
+        <div style="${line}top:${vInset}px;right:${hInset}px;width:${cornerLen}px;height:${thick}px;"></div>
+        <div style="${line}top:${vInset}px;right:${hInset}px;width:${thick}px;height:${cornerLen}px;"></div>
+        <div style="${line}bottom:${vInset}px;left:${hInset}px;width:${cornerLen}px;height:${thick}px;"></div>
+        <div style="${line}bottom:${vInset}px;left:${hInset}px;width:${thick}px;height:${cornerLen}px;"></div>
+        <div style="${line}bottom:${vInset}px;right:${hInset}px;width:${cornerLen}px;height:${thick}px;"></div>
+        <div style="${line}bottom:${vInset}px;right:${hInset}px;width:${thick}px;height:${cornerLen}px;"></div>
     `;
     document.body.appendChild(el);
     scopeOverlayEl = el;
