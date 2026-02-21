@@ -11280,8 +11280,9 @@ const TargetingService = {
         maxRotSpeed: 2.0,
         initialLockMs: 250,
         transitionMs:  200,
-        maxLockTimeMs: 3000,
+        maxLockTimeMs: 5000,
         maxShotsPerTarget: 10,
+        minShotsBeforeDrop: 5,
         bossCooldownMs: 2000,
     },
 
@@ -11510,7 +11511,7 @@ const TargetingService = {
 
         if (is8x && s.lockedTarget && s.lockedTarget.isActive && (s.phase === 'firing' || s.phase === 'locking')) {
             const lockTime = now - s.lockStartMs;
-            if (lockTime > c.maxLockTimeMs || s.shotsAtCurrent >= c.maxShotsPerTarget) {
+            if (s.shotsAtCurrent >= c.maxShotsPerTarget || (lockTime > c.maxLockTimeMs && s.shotsAtCurrent >= c.minShotsBeforeDrop)) {
                 if (s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
                 const next = this._pick8xNewTarget(refPos, now);
                 if (next && next !== s.lockedTarget) {
@@ -11541,7 +11542,8 @@ const TargetingService = {
             const dist = muzzlePos.distanceTo(aimPos);
             aimPos.add(fish.velocity.clone().multiplyScalar(dist / weapon.speed));
         }
-        const dir = aimPos.clone().sub(muzzlePos).normalize();
+        const trackOrigin = (is8x && gameState.autoShoot) ? refPos : muzzlePos;
+        const dir = aimPos.clone().sub(trackOrigin).normalize();
         const clampedYaw   = Math.max(-c.yawLimit, Math.min(c.yawLimit, Math.atan2(dir.x, dir.z)));
         const clampedPitch = Math.max(c.pitchMin, Math.min(c.pitchMax, Math.asin(dir.y)));
 
