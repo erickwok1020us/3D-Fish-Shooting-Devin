@@ -9379,6 +9379,7 @@ function initGameScene() {
         animate();
         
         createCannon();
+        showRmbZoomHint();
     }, 500);
 }
 
@@ -9434,6 +9435,7 @@ function onInitialWeaponSelected(weaponKey) {
     }
     
     console.log('[PLAN-B] Initial weapon selected: ' + weaponKey + '. Cannon visible. Game ready.');
+    showRmbZoomHint();
 }
 
 // Start single player game - called from lobby
@@ -11253,6 +11255,7 @@ const TargetingService = {
     },
 
     findNearest(muzzlePos) {
+        const c = this.config;
         const locked = this.state.lockedTarget;
         const hysteresis = 0.85;
         let bestBoss = null, bestBossDist = Infinity;
@@ -11262,6 +11265,11 @@ const TargetingService = {
             if (!fish.isActive) continue;
             const pos = fish.group.position;
             const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
+            const dir = new THREE.Vector3(dx, dy, dz).normalize();
+            const yaw   = Math.atan2(dir.x, dir.z);
+            const pitch = Math.asin(dir.y);
+            if (Math.abs(yaw) > c.yawLimit) continue;
+            if (pitch > c.pitchMax || pitch < c.pitchMin) continue;
             let dist = dx * dx + dy * dy + dz * dz;
             if (fish.isBoss) {
                 if (dist < bestBossDist) { bestBossDist = dist; bestBoss = fish; }
@@ -11279,6 +11287,29 @@ const TargetingService = {
         return { primary: best, fallback: second };
     },
 
+    findNearestInCrosshairCone(muzzlePos, crosshairDir, coneAngleDeg) {
+        const cosThreshold = Math.cos((coneAngleDeg || 9) * Math.PI / 180);
+        let best = null, bestDist = Infinity;
+        let bestBoss = null, bestBossDist = Infinity;
+        for (const fish of activeFish) {
+            if (!fish.isActive) continue;
+            const pos = fish.group.position;
+            const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
+            const dist = dx * dx + dy * dy + dz * dz;
+            const len = Math.sqrt(dist);
+            if (len < 0.001) continue;
+            const dot = (dx * crosshairDir.x + dy * crosshairDir.y + dz * crosshairDir.z) / len;
+            if (dot < cosThreshold) continue;
+            if (fish.isBoss) {
+                if (dist < bestBossDist) { bestBossDist = dist; bestBoss = fish; }
+                continue;
+            }
+            if (dist < bestDist) { best = fish; bestDist = dist; }
+        }
+        if (bestBoss) return bestBoss;
+        return best;
+    },
+
     _smoothstep(t) { return t * t * (3 - 2 * t); },
 
     _wrapDelta(delta) {
@@ -11288,11 +11319,21 @@ const TargetingService = {
     },
 
     _pickTarget(muzzlePos) {
+        if (gameState.currentWeapon === '8x') {
+            const crosshairDir = getCrosshairRay();
+            if (crosshairDir) return this.findNearestInCrosshairCone(muzzlePos, crosshairDir, 9);
+            return null;
+        }
         const result = this.findNearest(muzzlePos);
         return result.primary;
     },
 
     _pickFallback(muzzlePos) {
+        if (gameState.currentWeapon === '8x') {
+            const crosshairDir = getCrosshairRay();
+            if (crosshairDir) return this.findNearestInCrosshairCone(muzzlePos, crosshairDir, 9);
+            return null;
+        }
         const result = this.findNearest(muzzlePos);
         return result.primary || result.fallback;
     },
@@ -11404,16 +11445,16 @@ const TargetingService = {
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
 
-        if (canFire && fish) {
-            const cannonDir = new THREE.Vector3(
-                Math.sin(s.currentYaw) * Math.cos(s.currentPitch),
-                Math.sin(s.currentPitch),
-                Math.cos(s.currentYaw) * Math.cos(s.currentPitch)
-            ).normalize();
-            const fishDir = new THREE.Vector3().copy(fish.group.position).sub(muzzlePos).normalize();
-            const dotVal = Math.min(1, Math.max(-1, cannonDir.dot(fishDir)));
-            const angleDeg = Math.acos(dotVal) * (180 / Math.PI);
-            if (angleDeg > 4) canFire = false;
+        if (canFire && gameState.currentWeapon === '8x') {
+            const crosshairDir = getCrosshairRay();
+            if (crosshairDir && fish) {
+                const fishDir = new THREE.Vector3().copy(fish.group.position).sub(muzzlePos).normalize();
+                const dotVal = Math.min(1, Math.max(-1, crosshairDir.dot(fishDir)));
+                const angleDeg = Math.acos(dotVal) * (180 / Math.PI);
+                if (angleDeg > 4) canFire = false;
+            } else {
+                canFire = false;
+            }
         }
 
         return { target: fish, canFire };
@@ -11431,6 +11472,11 @@ function resetAutoFireState() { TargetingService.reset(); }
 function findNearestFish(muzzlePos) { return TargetingService.findNearest(muzzlePos).primary; }
 function autoFireTick() { if (!gameState.weaponSelected) return; return TargetingService.tick(); }
 
+function getCrosshairRay() {
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    return getAimDirectionFromMouse(cx, cy, autoFireTempVectors.crosshairDir);
+}
 
 function aimCannonAtFish(fish) {
     if (!fish) return;
@@ -11491,14 +11537,20 @@ function autoFireAtFish(targetFish) {
     const muzzlePos = autoFireTempVectors.muzzlePos;
     cannonMuzzle.getWorldPosition(muzzlePos);
     
-    const direction = autoFireTempVectors.direction;
-    const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
-    const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
-    direction.set(
-        Math.sin(yaw) * Math.cos(pitch),
-        Math.sin(pitch),
-        Math.cos(yaw) * Math.cos(pitch)
-    ).normalize();
+    let direction;
+    if (weapon.type === 'laser') {
+        direction = getCrosshairRay();
+        if (!direction) return false;
+    } else {
+        direction = autoFireTempVectors.direction;
+        const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
+        const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+        direction.set(
+            Math.sin(yaw) * Math.cos(pitch),
+            Math.sin(pitch),
+            Math.cos(yaw) * Math.cos(pitch)
+        ).normalize();
+    }
     
     if (weapon.type === 'spread') {
         const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
@@ -16655,7 +16707,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
     
     const laserDirection = direction.clone().normalize();
     
-    const hitOrigin = origin;
+    const hitOrigin = (gameState.viewMode === 'fps') ? camera.position.clone() : origin;
     
     laserTempVectors.rayEnd.copy(laserDirection).multiplyScalar(maxRange).add(hitOrigin);
     
@@ -17299,13 +17351,15 @@ function applyRtpLabels() {
 
 // ==================== SCOPE OVERLAY ====================
 let scopeOverlayEl = null;
+const ZOOM_FRAME_SIZES = { S: 140, M: 104, L: 72 };
+let zoomFrameInset = ZOOM_FRAME_SIZES.M;
 
 function createScopeOverlay() {
-    if (scopeOverlayEl) return scopeOverlayEl;
+    if (scopeOverlayEl) { scopeOverlayEl.remove(); scopeOverlayEl = null; }
     const el = document.createElement('div');
     el.id = 'scope-overlay';
     el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
-    const inset = 104;
+    const inset = zoomFrameInset;
     const cornerLen = 32;
     const color = 'rgba(0,255,200,0.7)';
     const shared = `position:absolute;`;
@@ -17321,17 +17375,23 @@ function createScopeOverlay() {
     return el;
 }
 
+function setZoomFrameSize(size) {
+    if (ZOOM_FRAME_SIZES[size]) zoomFrameInset = ZOOM_FRAME_SIZES[size];
+    else if (typeof size === 'number') zoomFrameInset = size;
+    if (scopeOverlayEl) { scopeOverlayEl.remove(); scopeOverlayEl = null; }
+}
+
 function showScopeOverlay() {
     const el = createScopeOverlay();
     requestAnimationFrame(() => { el.style.opacity = '1'; });
-    showRmbZoomHint();
+    hideRmbZoomHint();
 }
 
 function hideScopeOverlay() {
     if (scopeOverlayEl) {
         scopeOverlayEl.style.opacity = '0';
     }
-    hideRmbZoomHint();
+    showRmbZoomHint();
 }
 
 let rmbHintEl = null;
