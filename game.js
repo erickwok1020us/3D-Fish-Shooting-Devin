@@ -1100,13 +1100,13 @@ const CONFIG = {
         predictiveStrength: 60
     },
     hardSeparation: {
-        radiusFactor: 1.1,
-        largeFishRadiusFactor: 1.4,
+        radiusFactor: 1.4,
+        largeFishRadiusFactor: 1.8,
         largeFishSizeThreshold: 50,
-        pushStrength: 80,
-        largeFishPushStrength: 140,
-        maxPushAccel: 200,
-        predictTime: 0.5
+        pushStrength: 160,
+        largeFishPushStrength: 280,
+        maxPushAccel: 400,
+        predictTime: 0.8
     }
 };
 
@@ -11252,6 +11252,8 @@ const TargetingService = {
 
     findNearest(muzzlePos) {
         const c = this.config;
+        const locked = this.state.lockedTarget;
+        const hysteresis = 0.85;
         let bestBoss = null, bestBossDist = Infinity;
         let best = null, bestDist = Infinity;
         let second = null, secondDist = Infinity;
@@ -11264,11 +11266,12 @@ const TargetingService = {
             const pitch = Math.asin(dir.y);
             if (Math.abs(yaw) > c.yawLimit) continue;
             if (pitch > c.pitchMax || pitch < c.pitchMin) continue;
-            const dist = dx * dx + dy * dy + dz * dz;
+            let dist = dx * dx + dy * dy + dz * dz;
             if (fish.isBoss) {
                 if (dist < bestBossDist) { bestBossDist = dist; bestBoss = fish; }
                 continue;
             }
+            if (locked && fish === locked) dist *= hysteresis;
             if (dist < bestDist) {
                 second = best; secondDist = bestDist;
                 best = fish; bestDist = dist;
@@ -13945,7 +13948,8 @@ class Fish {
         
         for (let i = 0; i < nearbyFish.length; i++) {
             const other = nearbyFish[i];
-            if (other === this || !other.isActive || other.tier !== this.tier) continue;
+            if (other === this || !other.isActive) continue;
+            const sameTier = other.tier === this.tier;
             
             const otherPos = other.group.position;
             const dx = myPos.x - otherPos.x;
@@ -13955,13 +13959,14 @@ class Fish {
             
             if (distSq < sepDistSq && distSq > 0) {
                 const invDist = 1 / Math.sqrt(distSq);
-                sepX += dx * invDist;
-                sepY += dy * invDist;
-                sepZ += dz * invDist;
+                const w = sameTier ? 1.0 : 0.6;
+                sepX += dx * invDist * w;
+                sepY += dy * invDist * w;
+                sepZ += dz * invDist * w;
                 sepCount++;
             }
             
-            if (distSq < cohDistSq) {
+            if (sameTier && distSq < cohDistSq) {
                 cohX += otherPos.x;
                 cohY += otherPos.y;
                 cohZ += otherPos.z;
@@ -14086,7 +14091,7 @@ class Fish {
         }
 
         this.acceleration.x += pushX;
-        this.acceleration.y += pushY * 0.3;
+        this.acceleration.y += pushY * 0.6;
         this.acceleration.z += pushZ;
     }
 
@@ -14832,30 +14837,48 @@ function getRandomFishPositionIn3DSpace() {
     const { width, height, depth, floorY } = CONFIG.aquarium;
     const { marginX, marginY, marginZ } = CONFIG.fishArena;
     
-    // Calculate bounds inside the tank with margins
     const minX = -width / 2 + marginX;
     const maxX = width / 2 - marginX;
-    // Fish spawn ABOVE the cannon (which is at bottom floor)
-    // Cannon is at floorY + 30, so fish spawn from floorY + 300 upward
     const cannonY = floorY + 30;
-    const minY = cannonY + 250;  // Fish spawn at least 250 units above cannon
+    const minY = cannonY + 250;
     const maxY = floorY + height - marginY;
     const minZ = -depth / 2 + marginZ;
     const maxZ = depth / 2 - marginZ;
     
-    // Minimum horizontal distance from cannon center (X=0, Z=0)
     const minHorizontalDistFromCannon = 150;
+    const minFishSpawnDist = 60;
+    const maxSpawnAttempts = 8;
     
-    let x, y, z, horizontalDist;
-    do {
-        // Random position inside the tank (above cannon)
-        x = minX + Math.random() * (maxX - minX);
-        y = minY + Math.random() * (maxY - minY);
-        z = minZ + Math.random() * (maxZ - minZ);
-        horizontalDist = Math.sqrt(x*x + z*z);
-    } while (horizontalDist < minHorizontalDistFromCannon);  // Ensure fish don't spawn directly above cannon
+    let bestX = 0, bestY = 0, bestZ = 0, bestMinDist = 0;
     
-    return new THREE.Vector3(x, y, z);
+    for (let attempt = 0; attempt < maxSpawnAttempts; attempt++) {
+        let x, y, z, horizontalDist;
+        do {
+            x = minX + Math.random() * (maxX - minX);
+            y = minY + Math.random() * (maxY - minY);
+            z = minZ + Math.random() * (maxZ - minZ);
+            horizontalDist = Math.sqrt(x*x + z*z);
+        } while (horizontalDist < minHorizontalDistFromCannon);
+        
+        let closestDistSq = Infinity;
+        for (let i = 0; i < activeFish.length; i++) {
+            const f = activeFish[i];
+            if (!f.isActive) continue;
+            const fp = f.group.position;
+            const dx = x - fp.x, dy = y - fp.y, dz = z - fp.z;
+            const dSq = dx * dx + dy * dy + dz * dz;
+            if (dSq < closestDistSq) closestDistSq = dSq;
+        }
+        
+        if (closestDistSq > bestMinDist) {
+            bestMinDist = closestDistSq;
+            bestX = x; bestY = y; bestZ = z;
+        }
+        
+        if (closestDistSq >= minFishSpawnDist * minFishSpawnDist) break;
+    }
+    
+    return new THREE.Vector3(bestX, bestY, bestZ);
 }
 
 function spawnInitialFish() {
