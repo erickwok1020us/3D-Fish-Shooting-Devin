@@ -11386,11 +11386,19 @@ const TargetingService = {
     },
 
     _pickTarget(muzzlePos) {
+        if (gameState.currentWeapon === '8x' && gameState.viewMode === 'fps') {
+            const camRay = getCrosshairRay();
+            if (camRay) return this.findNearestInCrosshairCone(camera.position, camRay, this.config.searchConeAngle);
+        }
         const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
         return this.findNearestInCrosshairCone(muzzlePos, fwd, this.config.searchConeAngle);
     },
 
     _pickFallback(muzzlePos) {
+        if (gameState.currentWeapon === '8x' && gameState.viewMode === 'fps') {
+            const camRay = getCrosshairRay();
+            if (camRay) return this.findNearestInCrosshairCone(camera.position, camRay, this.config.searchConeAngle);
+        }
         const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
         return this.findNearestInCrosshairCone(muzzlePos, fwd, this.config.searchConeAngle);
     },
@@ -11414,8 +11422,11 @@ const TargetingService = {
 
         this._initFromCannon();
 
+        const is8xFps = gameState.currentWeapon === '8x' && gameState.viewMode === 'fps';
+        const refPos = is8xFps ? camera.position : muzzlePos;
+
         if (gameState.bossActive && s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
-            const bossCheck = this.findNearest(muzzlePos);
+            const bossCheck = this.findNearest(refPos);
             if (bossCheck.primary && bossCheck.primary.isBoss) {
                 s.lockedTarget = bossCheck.primary;
                 s.phase = 'transition';
@@ -11505,7 +11516,8 @@ const TargetingService = {
         if (canFire && gameState.currentWeapon === '8x') {
             const crosshairDir = getCrosshairRay();
             if (crosshairDir && fish) {
-                const fishDir = new THREE.Vector3().copy(fish.group.position).sub(muzzlePos).normalize();
+                const gateRef = is8xFps ? camera.position : muzzlePos;
+                const fishDir = new THREE.Vector3().copy(fish.group.position).sub(gateRef).normalize();
                 const dotVal = Math.min(1, Math.max(-1, crosshairDir.dot(fishDir)));
                 const angleDeg = Math.acos(dotVal) * (180 / Math.PI);
                 if (angleDeg > this.config.hitscanFireGate) canFire = false;
