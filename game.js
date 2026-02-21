@@ -11409,6 +11409,13 @@ const TargetingService = {
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
 
+        if (canFire && gameState.currentWeapon === '8x') {
+            const aimYawErr = Math.abs(this._wrapDelta(clampedYaw - s.currentYaw));
+            const aimPitchErr = Math.abs(clampedPitch - s.currentPitch);
+            const aimAngleOff = Math.sqrt(aimYawErr * aimYawErr + aimPitchErr * aimPitchErr);
+            if (aimAngleOff > 0.07) canFire = false;
+        }
+
         return { target: fish, canFire };
     },
 };
@@ -11511,9 +11518,7 @@ function autoFireAtFish(targetFish) {
     }
     
     playWeaponShot(weaponKey);
-    if (weapon.type !== 'laser') {
-        spawnMuzzleFlash(weaponKey, muzzlePos, direction);
-    }
+    spawnMuzzleFlash(weaponKey, muzzlePos, direction);
     
     const wCfg = WeaponSystem.getConfig(weaponKey);
     if (wCfg.chargeTime > 0) {
@@ -15877,10 +15882,7 @@ function fireBullet(targetX, targetY) {
         }
     }
     
-    // Issue #14: Enhanced muzzle flash VFX (laser has its own muzzle flash in beam effect)
-    if (weapon.type !== 'laser') {
-        spawnMuzzleFlash(weaponKey, muzzlePos, direction);
-    }
+    spawnMuzzleFlash(weaponKey, muzzlePos, direction);
     
     // Issue #14: Start charge effect for 5x and 8x weapons (visual only, doesn't delay shot)
     if (weaponKey === '5x' || weaponKey === '8x') {
@@ -16637,41 +16639,27 @@ function spawnVisualBulletConvergent(origin, targetPoint, convergentDirection, w
 
 
 // ==================== 8X LASER WEAPON ====================
-// Instant hitscan laser - damages all fish along the beam path
-// Temp vectors for laser calculations
+// Pure crosshair-based hitscan laser - instant ray along crosshair direction
+// No travelling beam; hits resolved instantly with muzzle flash + hit VFX
 const laserTempVectors = {
     rayEnd: new THREE.Vector3(),
     fishToRay: new THREE.Vector3(),
     closestPoint: new THREE.Vector3()
 };
 
-// Active laser beams for animation
 const activeLaserBeams = [];
 
 function fireLaserBeam(origin, direction, weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
     const damage = weapon.damage || 350;
-    const laserWidth = weapon.laserWidth || 8;
-    const maxRange = 3000; // Maximum laser range
+    const maxRange = 3000;
     
     const laserDirection = direction.clone().normalize();
     
-    // Sound is handled by the caller (fireBullet/autoFireAtFish call playWeaponShot)
-    
-    // FPS MODE FIX: Use camera position as ray origin for hit detection.
-    // The muzzle is offset from the camera (below and in front). If we raycast
-    // from the muzzle in the camera's forward direction, the ray is parallel to
-    // but offset from the crosshair line. This offset varies with pitch angle
-    // (camera Y is fixed, muzzle Y changes with pitch rotation), causing the
-    // laser to appear to shift up/down relative to the crosshair at different angles.
-    // Fix: hit detection uses camera ray (matches crosshair), visual beam renders
-    // from muzzle to the hit/end point on the camera ray (natural convergent visual).
     const hitOrigin = (gameState.viewMode === 'fps') ? camera.position.clone() : origin;
     
-    // Calculate laser end point along the hit detection ray
     laserTempVectors.rayEnd.copy(laserDirection).multiplyScalar(maxRange).add(hitOrigin);
     
-    // Find all fish hit by the laser beam
     const hitFish = [];
     
     for (const fish of activeFish) {
@@ -16682,7 +16670,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
         const fishYaw = fish._currentYaw || 0;
         
         if (halfExt) {
-            const result = rayHitsEllipsoid(hitOrigin, laserDirection, fishPos, halfExt, fishYaw, laserWidth);
+            const result = rayHitsEllipsoid(hitOrigin, laserDirection, fishPos, halfExt, fishYaw, 0);
             if (result.hit && result.t >= 50) {
                 laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(result.t).add(hitOrigin);
                 hitFish.push({
@@ -16698,7 +16686,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
             if (t < 50) continue;
             laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(t).add(hitOrigin);
             const distanceToRay = fishPos.distanceTo(laserTempVectors.closestPoint);
-            if (distanceToRay <= fishRadius + laserWidth) {
+            if (distanceToRay <= fishRadius) {
                 hitFish.push({
                     fish: fish,
                     distance: t,
@@ -16708,17 +16696,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
         }
     }
     
-    // Sort by distance (closest first)
     hitFish.sort((a, b) => a.distance - b.distance);
-    
-    // Determine laser end point (last fish hit or max range on camera ray)
-    let laserEndPoint;
-    if (hitFish.length > 0) {
-        // Laser ends at the last fish hit (piercing through all)
-        laserEndPoint = hitFish[hitFish.length - 1].hitPoint.clone();
-    } else {
-        laserEndPoint = laserTempVectors.rayEnd.clone();
-    }
     
     if (hitFish.length > 0 && !multiplayerMode) {
         const weaponCostFp = weapon.cost * RTP_MONEY_SCALE;
@@ -16736,7 +16714,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
             hit.fish.hp -= damage;
             hit.fish.flashHit();
             showCrosshairRingFlash();
-            createHitParticles(hit.hitPoint, weapon.color, 8);
+            createHitParticles(hit.hitPoint, weapon.color, 12);
             playWeaponHitSound(weaponKey);
             if (result && result.kill && hit.fish.isActive) {
                 hit.fish.die(weaponKey, result.reward);
@@ -16745,231 +16723,107 @@ function fireLaserBeam(origin, direction, weaponKey) {
     } else {
         for (const hit of hitFish) {
             hit.fish.takeDamage(damage, weaponKey);
-            createHitParticles(hit.hitPoint, weapon.color, 8);
+            createHitParticles(hit.hitPoint, weapon.color, 12);
             playWeaponHitSound(weaponKey);
         }
     }
     
-    spawnLaserBeamEffect(origin, laserEndPoint, weapon.color, laserWidth);
+    const hitPoints = hitFish.map(h => h.hitPoint);
+    spawnLaserHitscanVFX(origin, hitPoints, weapon.color);
     triggerScreenShakeWithStrength(8, 100);
 }
 
-// Spawn laser beam visual effect - STAR WARS STYLE with particles
-function spawnLaserBeamEffect(start, end, color, width) {
-    const distance = start.distanceTo(end);
-    const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-    const direction = new THREE.Vector3().subVectors(end, start).normalize();
+// Hitscan laser VFX: muzzle flash + per-hit sparks (no travelling beam)
+function spawnLaserHitscanVFX(muzzlePos, hitPoints, color) {
+    const flashRadius = 30;
     
-    // ==================== MAIN BEAM ====================
-    // Create glow core (inner bright beam) - thinner for Star Wars look
-    const coreGeometry = new THREE.CylinderGeometry(width * 0.2, width * 0.2, distance, 8, 1);
-    const coreMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 1.0
-    });
-    const coreBeam = new THREE.Mesh(coreGeometry, coreMaterial);
-    
-    // Create outer glow - slightly larger
-    const glowGeometry = new THREE.CylinderGeometry(width * 0.8, width * 0.8, distance, 8, 1);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.5
-    });
-    const glowBeam = new THREE.Mesh(glowGeometry, glowMaterial);
-    
-    // Create outer halo for extra glow
-    const haloGeometry = new THREE.CylinderGeometry(width * 1.5, width * 1.5, distance, 8, 1);
-    const haloMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.2
-    });
-    const haloBeam = new THREE.Mesh(haloGeometry, haloMaterial);
-    
-    // Create beam group
-    const beamGroup = new THREE.Group();
-    beamGroup.add(coreBeam);
-    beamGroup.add(glowBeam);
-    beamGroup.add(haloBeam);
-    
-    // Position and orient the beam
-    beamGroup.position.copy(midPoint);
-    const quaternion = new THREE.Quaternion();
-    quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
-    beamGroup.quaternion.copy(quaternion);
-    scene.add(beamGroup);
-    
-    // ==================== MUZZLE FLASH / ENERGY BURST ====================
-    // Create muzzle flash sphere
-    const muzzleFlashGeometry = new THREE.SphereGeometry(width * 4, 16, 16);
+    const muzzleFlashGeometry = new THREE.SphereGeometry(flashRadius, 16, 16);
     const muzzleFlashMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.9
+        color: 0xffffff, transparent: true, opacity: 0.95
     });
     const muzzleFlash = new THREE.Mesh(muzzleFlashGeometry, muzzleFlashMaterial);
-    muzzleFlash.position.copy(start);
+    muzzleFlash.position.copy(muzzlePos);
     scene.add(muzzleFlash);
     
-    // Create expanding energy ring at muzzle
-    const ringGeometry = new THREE.RingGeometry(width * 2, width * 4, 32);
+    const glowGeometry = new THREE.SphereGeometry(flashRadius * 2, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: color, transparent: true, opacity: 0.5
+    });
+    const glowSphere = new THREE.Mesh(glowGeometry, glowMaterial);
+    glowSphere.position.copy(muzzlePos);
+    scene.add(glowSphere);
+    
+    const ringGeometry = new THREE.RingGeometry(flashRadius, flashRadius * 2, 32);
     const ringMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide
+        color: color, transparent: true, opacity: 0.8, side: THREE.DoubleSide
     });
     const energyRing = new THREE.Mesh(ringGeometry, ringMaterial);
-    energyRing.position.copy(start);
-    energyRing.lookAt(end);
+    energyRing.position.copy(muzzlePos);
+    if (camera) energyRing.lookAt(camera.position);
     scene.add(energyRing);
     
-    // ==================== IMPACT EFFECTS ====================
-    // REMOVED: Impact flash and impact glow spheres (user feedback: remove red halo)
-    // Keep only sparks for impact visual
-    
-    // ==================== PARTICLE TRAIL ====================
-    // Create particles along the beam path
-    const particleCount = Math.min(30, Math.floor(distance / 50));
-    const particles = [];
-    const particleGeometry = new THREE.SphereGeometry(width * 0.4, 8, 8);
-    
-    for (let i = 0; i < particleCount; i++) {
-        const particleMaterial = new THREE.MeshBasicMaterial({
-            color: i % 2 === 0 ? 0xffffff : color,
-            transparent: true,
-            opacity: 0.8
-        });
-        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-        
-        // Position along beam with slight random offset
-        const t = i / particleCount;
-        particle.position.lerpVectors(start, end, t);
-        particle.position.x += (Math.random() - 0.5) * width * 2;
-        particle.position.y += (Math.random() - 0.5) * width * 2;
-        particle.position.z += (Math.random() - 0.5) * width * 2;
-        
-        // Store initial position and random velocity for animation
-        particle.userData = {
-            initialPos: particle.position.clone(),
-            velocity: new THREE.Vector3(
-                (Math.random() - 0.5) * 100,
-                (Math.random() - 0.5) * 100,
-                (Math.random() - 0.5) * 100
-            ),
-            material: particleMaterial
-        };
-        
-        scene.add(particle);
-        particles.push(particle);
-    }
-    
-    // ==================== IMPACT SPARKS ====================
-    // Create spark particles at impact point
-    const sparkCount = 20;
-    const sparks = [];
-    const sparkGeometry = new THREE.SphereGeometry(width * 0.3, 6, 6);
-    
-    // Use bright red color for sparks (user feedback: 鮮紅光)
+    const allSparks = [];
+    const sparkGeometry = new THREE.SphereGeometry(3, 6, 6);
     const brightRed = 0xff0000;
     
-    for (let i = 0; i < sparkCount; i++) {
-        const sparkMaterial = new THREE.MeshBasicMaterial({
-            color: i % 3 === 0 ? 0xffffff : brightRed,
-            transparent: true,
-            opacity: 1.0
-        });
-        const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
-        spark.position.copy(end);
-        
-        // Random outward velocity
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.random() * Math.PI;
-        const speed = 200 + Math.random() * 300;
-        spark.userData = {
-            velocity: new THREE.Vector3(
-                Math.sin(phi) * Math.cos(theta) * speed,
-                Math.sin(phi) * Math.sin(theta) * speed,
-                Math.cos(phi) * speed
-            ),
-            material: sparkMaterial
-        };
-        
-        scene.add(spark);
-        sparks.push(spark);
+    for (const hitPt of hitPoints) {
+        const sparkCount = 12;
+        for (let i = 0; i < sparkCount; i++) {
+            const sparkMaterial = new THREE.MeshBasicMaterial({
+                color: i % 3 === 0 ? 0xffffff : brightRed,
+                transparent: true, opacity: 1.0
+            });
+            const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
+            spark.position.copy(hitPt);
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI;
+            const speed = 150 + Math.random() * 250;
+            spark.userData = {
+                velocity: new THREE.Vector3(
+                    Math.sin(phi) * Math.cos(theta) * speed,
+                    Math.sin(phi) * Math.sin(theta) * speed,
+                    Math.cos(phi) * speed
+                ),
+                material: sparkMaterial
+            };
+            scene.add(spark);
+            allSparks.push(spark);
+        }
     }
     
-    // ==================== ANIMATION ====================
     addVfxEffect({
-        type: 'laserBeamStarWars',
-        beamGroup: beamGroup,
-        muzzleFlash: muzzleFlash,
-        energyRing: energyRing,
-        particles: particles,
-        sparks: sparks,
-        coreGeometry: coreGeometry,
-        coreMaterial: coreMaterial,
-        glowGeometry: glowGeometry,
-        glowMaterial: glowMaterial,
-        haloGeometry: haloGeometry,
-        haloMaterial: haloMaterial,
-        muzzleFlashGeometry: muzzleFlashGeometry,
-        muzzleFlashMaterial: muzzleFlashMaterial,
-        ringGeometry: ringGeometry,
-        ringMaterial: ringMaterial,
-        particleGeometry: particleGeometry,
-        sparkGeometry: sparkGeometry,
-        duration: 800, // 0.8s beam display duration
-        pulsePhase: 0,
+        type: 'laserHitscan',
+        muzzleFlash, glowSphere, energyRing, allSparks,
+        muzzleFlashGeometry, muzzleFlashMaterial,
+        glowGeometry, glowMaterial,
+        ringGeometry, ringMaterial,
+        sparkGeometry,
+        duration: 400,
         
         update(dt, elapsed) {
             const progress = elapsed / this.duration;
-            this.pulsePhase += dt * 30; // Fast pulse
             
-            // Beam pulsing effect (Star Wars style flickering)
-            const pulse = 0.8 + Math.sin(this.pulsePhase) * 0.2;
-            
-            // Fade out beam with pulse
-            const beamFade = Math.max(0, 1.0 - progress * 1.5);
-            this.coreMaterial.opacity = beamFade * pulse;
-            this.glowMaterial.opacity = 0.5 * beamFade * pulse;
-            this.haloMaterial.opacity = 0.2 * beamFade;
-            
-            // Muzzle flash - quick fade
-            const muzzleFade = Math.max(0, 1.0 - progress * 4);
-            this.muzzleFlashMaterial.opacity = 0.9 * muzzleFade;
-            const muzzleScale = 1.0 + progress * 3;
+            const muzzleFade = Math.max(0, 1.0 - progress * 5);
+            this.muzzleFlashMaterial.opacity = 0.95 * muzzleFade;
+            const muzzleScale = 1.0 + progress * 2;
             this.muzzleFlash.scale.set(muzzleScale, muzzleScale, muzzleScale);
             
-            // Energy ring expansion
-            const ringScale = 1.0 + progress * 5;
+            this.glowMaterial.opacity = 0.5 * Math.max(0, 1.0 - progress * 3);
+            const glowScale = 1.0 + progress * 3;
+            this.glowSphere.scale.set(glowScale, glowScale, glowScale);
+            
+            const ringScale = 1.0 + progress * 6;
             this.energyRing.scale.set(ringScale, ringScale, 1);
-            this.ringMaterial.opacity = 0.8 * Math.max(0, 1.0 - progress * 2);
+            this.ringMaterial.opacity = 0.8 * Math.max(0, 1.0 - progress * 3);
             
-            // REMOVED: Impact flash and impact glow animation (user feedback: remove red halo)
-            
-            // Animate particles - disperse outward
-            for (const particle of this.particles) {
-                const vel = particle.userData.velocity;
-                particle.position.x += vel.x * dt;
-                particle.position.y += vel.y * dt;
-                particle.position.z += vel.z * dt;
-                particle.userData.material.opacity = 0.8 * (1.0 - progress);
-                const pScale = 1.0 - progress * 0.5;
-                particle.scale.set(pScale, pScale, pScale);
-            }
-            
-            // Animate sparks - fly outward with gravity
-            for (const spark of this.sparks) {
+            for (const spark of this.allSparks) {
                 const vel = spark.userData.velocity;
                 spark.position.x += vel.x * dt;
-                spark.position.y += vel.y * dt - 200 * dt; // Gravity
+                spark.position.y += vel.y * dt - 150 * dt;
                 spark.position.z += vel.z * dt;
-                vel.multiplyScalar(0.98); // Air resistance
+                vel.multiplyScalar(0.96);
                 spark.userData.material.opacity = 1.0 * (1.0 - progress);
-                const sScale = 1.0 - progress * 0.7;
+                const sScale = 1.0 - progress * 0.8;
                 spark.scale.set(sScale, sScale, sScale);
             }
             
@@ -16977,30 +16831,19 @@ function spawnLaserBeamEffect(start, end, color, width) {
         },
         
         cleanup() {
-            scene.remove(this.beamGroup);
             scene.remove(this.muzzleFlash);
+            scene.remove(this.glowSphere);
             scene.remove(this.energyRing);
-            
-            for (const particle of this.particles) {
-                scene.remove(particle);
-                particle.userData.material.dispose();
-            }
-            for (const spark of this.sparks) {
+            for (const spark of this.allSparks) {
                 scene.remove(spark);
                 spark.userData.material.dispose();
             }
-            
-            this.coreGeometry.dispose();
-            this.coreMaterial.dispose();
-            this.glowGeometry.dispose();
-            this.glowMaterial.dispose();
-            this.haloGeometry.dispose();
-            this.haloMaterial.dispose();
             this.muzzleFlashGeometry.dispose();
             this.muzzleFlashMaterial.dispose();
+            this.glowGeometry.dispose();
+            this.glowMaterial.dispose();
             this.ringGeometry.dispose();
             this.ringMaterial.dispose();
-            this.particleGeometry.dispose();
             this.sparkGeometry.dispose();
         }
     });
