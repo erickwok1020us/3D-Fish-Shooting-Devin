@@ -16780,12 +16780,15 @@ function fireLaserBeam(origin, direction, weaponKey) {
     }
     
     const hitPoints = hitFish.map(h => h.hitPoint);
-    spawnLaserHitscanVFX(origin, hitPoints, weapon.color);
+    const beamEnd = hitFish.length > 0
+        ? hitFish[hitFish.length - 1].hitPoint
+        : laserTempVectors.rayEnd.clone();
+    spawnLaserHitscanVFX(origin, beamEnd, hitPoints, weapon.color);
     triggerScreenShakeWithStrength(8, 100);
 }
 
-// Hitscan laser VFX: muzzle flash + per-hit sparks (no travelling beam)
-function spawnLaserHitscanVFX(muzzlePos, hitPoints, color) {
+// Hitscan laser VFX: visual beam from muzzle to hit point + muzzle flash + per-hit sparks
+function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
     const flashRadius = 30;
     
     const muzzleFlashGeometry = new THREE.SphereGeometry(flashRadius, 16, 16);
@@ -16804,14 +16807,52 @@ function spawnLaserHitscanVFX(muzzlePos, hitPoints, color) {
     glowSphere.position.copy(muzzlePos);
     scene.add(glowSphere);
     
-    const ringGeometry = new THREE.RingGeometry(flashRadius, flashRadius * 2, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-        color: color, transparent: true, opacity: 0.8, side: THREE.DoubleSide
+    const beamDir = new THREE.Vector3().subVectors(beamEnd, muzzlePos);
+    const beamLength = beamDir.length();
+    const beamMid = new THREE.Vector3().addVectors(muzzlePos, beamEnd).multiplyScalar(0.5);
+    
+    const coreRadius = 2;
+    const beamCoreGeo = new THREE.CylinderGeometry(coreRadius, coreRadius, beamLength, 8, 1);
+    const beamCoreMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.95
     });
-    const energyRing = new THREE.Mesh(ringGeometry, ringMaterial);
-    energyRing.position.copy(muzzlePos);
-    if (camera) energyRing.lookAt(camera.position);
-    scene.add(energyRing);
+    const beamCore = new THREE.Mesh(beamCoreGeo, beamCoreMat);
+    beamCore.position.copy(beamMid);
+    beamCore.lookAt(beamEnd);
+    beamCore.rotateX(Math.PI / 2);
+    scene.add(beamCore);
+    
+    const glowRadius = 8;
+    const beamGlowGeo = new THREE.CylinderGeometry(glowRadius, glowRadius, beamLength, 8, 1);
+    const beamGlowMat = new THREE.MeshBasicMaterial({
+        color: color, transparent: true, opacity: 0.4,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const beamGlow = new THREE.Mesh(beamGlowGeo, beamGlowMat);
+    beamGlow.position.copy(beamMid);
+    beamGlow.lookAt(beamEnd);
+    beamGlow.rotateX(Math.PI / 2);
+    scene.add(beamGlow);
+    
+    const outerRadius = 18;
+    const beamOuterGeo = new THREE.CylinderGeometry(outerRadius, outerRadius, beamLength, 8, 1);
+    const beamOuterMat = new THREE.MeshBasicMaterial({
+        color: color, transparent: true, opacity: 0.12,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const beamOuter = new THREE.Mesh(beamOuterGeo, beamOuterMat);
+    beamOuter.position.copy(beamMid);
+    beamOuter.lookAt(beamEnd);
+    beamOuter.rotateX(Math.PI / 2);
+    scene.add(beamOuter);
+    
+    const impactFlashGeo = new THREE.SphereGeometry(20, 12, 12);
+    const impactFlashMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.9
+    });
+    const impactFlash = new THREE.Mesh(impactFlashGeo, impactFlashMat);
+    impactFlash.position.copy(beamEnd);
+    scene.add(impactFlash);
     
     const allSparks = [];
     const sparkGeometry = new THREE.SphereGeometry(3, 6, 6);
@@ -16844,12 +16885,16 @@ function spawnLaserHitscanVFX(muzzlePos, hitPoints, color) {
     
     addVfxEffect({
         type: 'laserHitscan',
-        muzzleFlash, glowSphere, energyRing, allSparks,
+        muzzleFlash, glowSphere, allSparks,
+        beamCore, beamGlow, beamOuter, impactFlash,
         muzzleFlashGeometry, muzzleFlashMaterial,
         glowGeometry, glowMaterial,
-        ringGeometry, ringMaterial,
+        beamCoreGeo, beamCoreMat,
+        beamGlowGeo, beamGlowMat,
+        beamOuterGeo, beamOuterMat,
+        impactFlashGeo, impactFlashMat,
         sparkGeometry,
-        duration: 400,
+        duration: 350,
         
         update(dt, elapsed) {
             const progress = elapsed / this.duration;
@@ -16863,9 +16908,18 @@ function spawnLaserHitscanVFX(muzzlePos, hitPoints, color) {
             const glowScale = 1.0 + progress * 3;
             this.glowSphere.scale.set(glowScale, glowScale, glowScale);
             
-            const ringScale = 1.0 + progress * 6;
-            this.energyRing.scale.set(ringScale, ringScale, 1);
-            this.ringMaterial.opacity = 0.8 * Math.max(0, 1.0 - progress * 3);
+            const beamFade = Math.max(0, 1.0 - progress * 4);
+            this.beamCoreMat.opacity = 0.95 * beamFade;
+            this.beamGlowMat.opacity = 0.4 * beamFade;
+            this.beamOuterMat.opacity = 0.12 * beamFade;
+            const beamShrink = 1.0 - progress * 0.3;
+            this.beamCore.scale.set(beamShrink, 1, beamShrink);
+            this.beamGlow.scale.set(1.0 + progress * 0.5, 1, 1.0 + progress * 0.5);
+            
+            const impactFade = Math.max(0, 1.0 - progress * 3);
+            this.impactFlashMat.opacity = 0.9 * impactFade;
+            const impactScale = 1.0 + progress * 4;
+            this.impactFlash.scale.set(impactScale, impactScale, impactScale);
             
             for (const spark of this.allSparks) {
                 const vel = spark.userData.velocity;
@@ -16884,7 +16938,10 @@ function spawnLaserHitscanVFX(muzzlePos, hitPoints, color) {
         cleanup() {
             scene.remove(this.muzzleFlash);
             scene.remove(this.glowSphere);
-            scene.remove(this.energyRing);
+            scene.remove(this.beamCore);
+            scene.remove(this.beamGlow);
+            scene.remove(this.beamOuter);
+            scene.remove(this.impactFlash);
             for (const spark of this.allSparks) {
                 scene.remove(spark);
                 spark.userData.material.dispose();
@@ -16893,8 +16950,14 @@ function spawnLaserHitscanVFX(muzzlePos, hitPoints, color) {
             this.muzzleFlashMaterial.dispose();
             this.glowGeometry.dispose();
             this.glowMaterial.dispose();
-            this.ringGeometry.dispose();
-            this.ringMaterial.dispose();
+            this.beamCoreGeo.dispose();
+            this.beamCoreMat.dispose();
+            this.beamGlowGeo.dispose();
+            this.beamGlowMat.dispose();
+            this.beamOuterGeo.dispose();
+            this.beamOuterMat.dispose();
+            this.impactFlashGeo.dispose();
+            this.impactFlashMat.dispose();
             this.sparkGeometry.dispose();
         }
     });
