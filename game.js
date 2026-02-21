@@ -11280,6 +11280,9 @@ const TargetingService = {
         maxRotSpeed: 2.0,
         initialLockMs: 250,
         transitionMs:  200,
+        maxLockTimeMs: 3000,
+        maxShotsPerTarget: 10,
+        bossCooldownMs: 2000,
     },
 
     state: {
@@ -11291,14 +11294,19 @@ const TargetingService = {
         startYaw: 0,
         startPitch: 0,
         initialized: false,
+        shotsAtCurrent: 0,
+        lockStartMs: 0,
+        lastBossReleaseMs: 0,
     },
 
-    reset() {
+    reset(){
         const s = this.state;
         s.lockedTarget = null;
         s.phase = 'idle';
         s.phaseStart = 0;
         s.initialized = false;
+        s.shotsAtCurrent = 0;
+        s.lockStartMs = 0;
     },
 
     _initFromCannon() {
@@ -11385,6 +11393,36 @@ const TargetingService = {
         return out;
     },
 
+    _priorityScore(fish, refPos) {
+        const tierWeights = { tier1: 1, tier2: 1.2, tier3: 1.5, tier4: 2, tier5: 2.5, tier6: 3 };
+        const tw = tierWeights[fish.tier] || 1;
+        const reward = (fish.config && fish.config.reward) || 1;
+        const dx = fish.group.position.x - refPos.x;
+        const dy = fish.group.position.y - refPos.y;
+        const dz = fish.group.position.z - refPos.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        return tw * reward / (dist + 1);
+    },
+
+    _pick8xNewTarget(refPos, now) {
+        const c = this.config, s = this.state;
+        for (const fish of activeFish) {
+            if (!fish.isActive || !fish.isBoss) continue;
+            if (now - s.lastBossReleaseMs > c.bossCooldownMs) return fish;
+        }
+        let best = null, bestScore = -1;
+        for (const fish of activeFish) {
+            if (!fish.isActive || fish.isBoss) continue;
+            const dx = fish.group.position.x - refPos.x;
+            const dy = fish.group.position.y - refPos.y;
+            const dz = fish.group.position.z - refPos.z;
+            if (dx * dx + dy * dy + dz * dz > 4000000) continue;
+            const score = this._priorityScore(fish, refPos);
+            if (score > bestScore) { bestScore = score; best = fish; }
+        }
+        return best;
+    },
+
     _pickTarget(muzzlePos) {
         if (gameState.currentWeapon === '8x' && gameState.viewMode === 'fps') {
             const camRay = getCrosshairRay();
@@ -11422,7 +11460,8 @@ const TargetingService = {
 
         this._initFromCannon();
 
-        const is8xFps = gameState.currentWeapon === '8x' && gameState.viewMode === 'fps';
+        const is8x = gameState.currentWeapon === '8x';
+        const is8xFps = is8x && gameState.viewMode === 'fps';
         const refPos = is8xFps ? camera.position : muzzlePos;
 
         if (gameState.bossActive && s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
@@ -11433,33 +11472,63 @@ const TargetingService = {
                 s.phaseStart = now;
                 s.startYaw = s.currentYaw;
                 s.startPitch = s.currentPitch;
+                s.lockStartMs = now;
+                s.shotsAtCurrent = 0;
             }
         }
 
         if (s.phase === 'idle') {
-            const target = this._pickTarget(muzzlePos);
+            const target = is8x ? this._pick8xNewTarget(refPos, now) : this._pickTarget(muzzlePos);
             if (target) {
                 s.lockedTarget = target;
                 s.phase = 'locking';
                 s.phaseStart = now;
                 s.startYaw = s.currentYaw;
                 s.startPitch = s.currentPitch;
+                s.lockStartMs = now;
+                s.shotsAtCurrent = 0;
             }
             return { target: null, canFire: false };
         }
 
         if (s.lockedTarget && !s.lockedTarget.isActive) {
-            const next = this._pickFallback(muzzlePos);
+            const next = is8x ? this._pick8xNewTarget(refPos, now) : this._pickFallback(muzzlePos);
             if (next) {
                 s.lockedTarget = next;
                 s.phase = 'transition';
                 s.phaseStart = now;
                 s.startYaw = s.currentYaw;
                 s.startPitch = s.currentPitch;
+                s.lockStartMs = now;
+                s.shotsAtCurrent = 0;
             } else {
                 this.reset();
                 this._initFromCannon();
                 return { target: null, canFire: false };
+            }
+        }
+
+        if (is8x && s.lockedTarget && s.lockedTarget.isActive && (s.phase === 'firing' || s.phase === 'locking')) {
+            const lockTime = now - s.lockStartMs;
+            if (lockTime > c.maxLockTimeMs || s.shotsAtCurrent >= c.maxShotsPerTarget) {
+                if (s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
+                const next = this._pick8xNewTarget(refPos, now);
+                if (next && next !== s.lockedTarget) {
+                    s.lockedTarget = next;
+                    s.phase = 'transition';
+                    s.phaseStart = now;
+                    s.startYaw = s.currentYaw;
+                    s.startPitch = s.currentPitch;
+                    s.lockStartMs = now;
+                    s.shotsAtCurrent = 0;
+                } else if (!next) {
+                    this.reset();
+                    this._initFromCannon();
+                    return { target: null, canFire: false };
+                } else {
+                    s.lockStartMs = now;
+                    s.shotsAtCurrent = 0;
+                }
             }
         }
 
@@ -11513,7 +11582,7 @@ const TargetingService = {
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
 
-        if (canFire && gameState.currentWeapon === '8x') {
+        if (canFire && is8x && !gameState.autoShoot) {
             const crosshairDir = getCrosshairRay();
             if (crosshairDir && fish) {
                 const gateRef = is8xFps ? camera.position : muzzlePos;
@@ -11608,8 +11677,14 @@ function autoFireAtFish(targetFish) {
     
     let direction;
     if (weapon.type === 'laser') {
-        direction = getCrosshairRay();
-        if (!direction) return false;
+        if (gameState.autoShoot && targetFish) {
+            direction = autoFireTempVectors.direction;
+            const aimOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
+            direction.copy(targetFish.group.position).sub(aimOrigin).normalize();
+        } else {
+            direction = getCrosshairRay();
+            if (!direction) return false;
+        }
     } else {
         direction = autoFireTempVectors.direction;
         const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
@@ -18423,7 +18498,9 @@ function animate() {
         autoShootTimer -= deltaTime;
         if (autoShootTimer <= 0 && gameState.cooldown <= 0) {
             if (result.target && result.canFire) {
-                autoFireAtFish(result.target);
+                if (autoFireAtFish(result.target)) {
+                    TargetingService.state.shotsAtCurrent++;
+                }
             }
             const weapon = CONFIG.weapons[gameState.currentWeapon];
             autoShootTimer = 1 / weapon.shotsPerSecond;
