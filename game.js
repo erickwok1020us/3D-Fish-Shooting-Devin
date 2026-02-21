@@ -17172,39 +17172,43 @@ function createTechCircleSVG(size) {
     return d;
 }
 
-function createLaserTechCircleSVG() {
-    var s = 44, c = 22, r = 13;
+function createLaserTechCircleSVG(size) {
+    var s = size || 44, c = s / 2, r = s * 13 / 44;
+    var sc = s / 44;
     var col = 'rgba(0,255,200,';
     var d = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + ' ' + s + '" class="tech-circle-svg" style="overflow:visible;filter:drop-shadow(0 0 4px ' + col + '0.5));">';
-    d += '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + col + '0.5)" stroke-width="0.8" stroke-dasharray="3 2"/>';
-    d += '<circle cx="' + c + '" cy="' + c + '" r="' + (r - 4) + '" fill="none" stroke="' + col + '0.25)" stroke-width="0.6"/>';
-    var arms = [[c, c - r + 2, c, c - r - 6], [c + r - 2, c, c + r + 6, c], [c, c + r - 2, c, c + r + 6], [c - r + 2, c, c - r - 6, c]];
+    d += '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + col + '0.5)" stroke-width="' + (0.8 * sc).toFixed(2) + '" stroke-dasharray="' + (3 * sc).toFixed(1) + ' ' + (2 * sc).toFixed(1) + '"/>';
+    d += '<circle cx="' + c + '" cy="' + c + '" r="' + (r - 4 * sc) + '" fill="none" stroke="' + col + '0.25)" stroke-width="' + (0.6 * sc).toFixed(2) + '"/>';
+    var arms = [[c, c - r + 2 * sc, c, c - r - 6 * sc], [c + r - 2 * sc, c, c + r + 6 * sc, c], [c, c + r - 2 * sc, c, c + r + 6 * sc], [c - r + 2 * sc, c, c - r - 6 * sc, c]];
     for (var i = 0; i < arms.length; i++) {
         var p = arms[i];
-        d += '<line x1="' + p[0] + '" y1="' + p[1] + '" x2="' + p[2] + '" y2="' + p[3] + '" stroke="' + col + '0.9)" stroke-width="1.2"/>';
+        d += '<line x1="' + p[0] + '" y1="' + p[1] + '" x2="' + p[2] + '" y2="' + p[3] + '" stroke="' + col + '0.9)" stroke-width="' + (1.2 * sc).toFixed(2) + '"/>';
     }
     var corners = [45, 135, 225, 315];
     for (var j = 0; j < corners.length; j++) {
         var rad = (corners[j] - 90) * Math.PI / 180;
-        var ix = c + Math.cos(rad) * (r - 2);
-        var iy = c + Math.sin(rad) * (r - 2);
-        var ox = c + Math.cos(rad) * (r + 4);
-        var oy = c + Math.sin(rad) * (r + 4);
-        d += '<line x1="' + ix.toFixed(1) + '" y1="' + iy.toFixed(1) + '" x2="' + ox.toFixed(1) + '" y2="' + oy.toFixed(1) + '" stroke="' + col + '0.45)" stroke-width="0.7"/>';
+        var ix = c + Math.cos(rad) * (r - 2 * sc);
+        var iy = c + Math.sin(rad) * (r - 2 * sc);
+        var ox = c + Math.cos(rad) * (r + 4 * sc);
+        var oy = c + Math.sin(rad) * (r + 4 * sc);
+        d += '<line x1="' + ix.toFixed(1) + '" y1="' + iy.toFixed(1) + '" x2="' + ox.toFixed(1) + '" y2="' + oy.toFixed(1) + '" stroke="' + col + '0.45)" stroke-width="' + (0.7 * sc).toFixed(2) + '"/>';
     }
-    var chevW = 3.5, chevH = 2;
+    var chevW = 3.5 * sc, chevH = 2 * sc;
     d += '<polyline points="' + (c - chevW) + ',' + (c - r - 3 + chevH) + ' ' + c + ',' + (c - r - 3) + ' ' + (c + chevW) + ',' + (c - r - 3 + chevH) + '" fill="none" stroke="' + col + '0.6)" stroke-width="0.8"/>';
     d += '<polyline points="' + (c - chevW) + ',' + (c + r + 3 - chevH) + ' ' + c + ',' + (c + r + 3) + ' ' + (c + chevW) + ',' + (c + r + 3 - chevH) + '" fill="none" stroke="' + col + '0.6)" stroke-width="0.8"/>';
-    d += '<line x1="' + (c - 2) + '" y1="' + c + '" x2="' + (c + 2) + '" y2="' + c + '" stroke="' + col + '0.7)" stroke-width="0.8"/>';
-    d += '<line x1="' + c + '" y1="' + (c - 2) + '" x2="' + c + '" y2="' + (c + 2) + '" stroke="' + col + '0.7)" stroke-width="0.8"/>';
-    d += '<circle cx="' + c + '" cy="' + c + '" r="1" fill="rgba(255,255,255,0.9)"/>';
+    d += '<line x1="' + (c - 2 * sc) + '" y1="' + c + '" x2="' + (c + 2 * sc) + '" y2="' + c + '" stroke="' + col + '0.7)" stroke-width="' + (0.8 * sc).toFixed(2) + '"/>';
+    d += '<line x1="' + c + '" y1="' + (c - 2 * sc) + '" x2="' + c + '" y2="' + (c + 2 * sc) + '" stroke="' + col + '0.7)" stroke-width="' + (0.8 * sc).toFixed(2) + '"/>';
+    d += '<circle cx="' + c + '" cy="' + c + '" r="' + (1 * sc).toFixed(2) + '" fill="rgba(255,255,255,0.9)"/>';
     d += '</svg>';
     return d;
 }
 
+const CROSSHAIR_SIZE = 64;
+
 function updateCrosshairForWeapon(weaponKey) {
     const crosshair = document.getElementById('crosshair');
     if (!crosshair) return;
+    const sz = CROSSHAIR_SIZE;
     
     const hasFpsMode = crosshair.classList.contains('fps-mode');
     crosshair.className = 'weapon-' + weaponKey;
@@ -17212,21 +17216,13 @@ function updateCrosshairForWeapon(weaponKey) {
         crosshair.classList.add('fps-mode');
     }
     
-    if (weaponKey === '1x' || weaponKey === '5x') {
-        crosshair.style.width = '48px';
-        crosshair.style.height = '48px';
-        crosshair.innerHTML = createTechCircleSVG(48);
-    } else if (weaponKey === '3x') {
-        crosshair.style.width = '40px';
-        crosshair.style.height = '40px';
-        crosshair.innerHTML = createTechCircleSVG(40);
-    } else if (weaponKey === '8x') {
-        crosshair.style.width = '44px';
-        crosshair.style.height = '44px';
-        crosshair.innerHTML = createLaserTechCircleSVG();
+    crosshair.style.width = sz + 'px';
+    crosshair.style.height = sz + 'px';
+    if (weaponKey === '8x') {
+        crosshair.innerHTML = createLaserTechCircleSVG(sz);
+    } else if (weaponKey === '1x' || weaponKey === '3x' || weaponKey === '5x') {
+        crosshair.innerHTML = createTechCircleSVG(sz);
     } else {
-        crosshair.style.width = '40px';
-        crosshair.style.height = '40px';
         crosshair.innerHTML = '<div class="crosshair-dot"></div><div class="crosshair-line top"></div><div class="crosshair-line bottom"></div><div class="crosshair-line left"></div><div class="crosshair-line right"></div>';
     }
     
@@ -17243,11 +17239,15 @@ function updateCrosshairForWeapon(weaponKey) {
     if (weaponKey === '3x') {
         if (sideL) {
             sideL.style.display = 'block';
-            sideL.innerHTML = createTechCircleSVG(36);
+            sideL.style.width = sz + 'px';
+            sideL.style.height = sz + 'px';
+            sideL.innerHTML = createTechCircleSVG(sz);
         }
         if (sideR) {
             sideR.style.display = 'block';
-            sideR.innerHTML = createTechCircleSVG(36);
+            sideR.style.width = sz + 'px';
+            sideR.style.height = sz + 'px';
+            sideR.innerHTML = createTechCircleSVG(sz);
         }
         update3xSideCrosshairPositions();
     } else {
