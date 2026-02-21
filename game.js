@@ -11276,7 +11276,7 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 55,
         hitscanFireGate: 8,
-        trackSpeed: 8.0,
+        trackSpeed: 22.0,
         maxRotSpeed: 2.0,
         initialLockMs: 250,
         transitionMs:  200,
@@ -16778,8 +16778,8 @@ function fireLaserBeam(origin, direction, weaponKey) {
         const fishYaw = fish._currentYaw || 0;
         
         if (halfExt) {
-            const result = rayHitsEllipsoid(hitOrigin, laserDirection, fishPos, halfExt, fishYaw, 0);
-            if (result.hit && result.t >= 50) {
+            const result = rayHitsEllipsoid(hitOrigin, laserDirection, fishPos, halfExt, fishYaw, 8);
+            if (result.hit && result.t >= 5) {
                 laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(result.t).add(hitOrigin);
                 hitFish.push({
                     fish: fish,
@@ -16791,7 +16791,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
             const fishRadius = fish.boundingRadius;
             laserTempVectors.fishToRay.copy(fishPos).sub(hitOrigin);
             const t = laserTempVectors.fishToRay.dot(laserDirection);
-            if (t < 50) continue;
+            if (t < 5) continue;
             laserTempVectors.closestPoint.copy(laserDirection).multiplyScalar(t).add(hitOrigin);
             const distanceToRay = fishPos.distanceTo(laserTempVectors.closestPoint);
             if (distanceToRay <= fishRadius) {
