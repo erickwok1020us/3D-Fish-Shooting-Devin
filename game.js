@@ -11405,11 +11405,24 @@ const TargetingService = {
         return tw * reward / (dist + 1);
     },
 
+    _isInAutoFireCone(fishPos, refPos) {
+        const c = this.config;
+        const margin = 3 * (Math.PI / 180);
+        const dx = fishPos.x - refPos.x;
+        const dy = fishPos.y - refPos.y;
+        const dz = fishPos.z - refPos.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < 1) return true;
+        const yaw = Math.atan2(dx / dist, dz / dist);
+        const pitch = Math.asin(dy / dist);
+        return Math.abs(yaw) <= (c.yawLimit - margin) && pitch >= (c.pitchMin + margin) && pitch <= (c.pitchMax - margin);
+    },
+
     _pick8xNewTarget(refPos, now) {
         const c = this.config, s = this.state;
         for (const fish of activeFish) {
             if (!fish.isActive || !fish.isBoss) continue;
-            if (now - s.lastBossReleaseMs > c.bossCooldownMs) return fish;
+            if (now - s.lastBossReleaseMs > c.bossCooldownMs && this._isInAutoFireCone(fish.group.position, refPos)) return fish;
         }
         let best = null, bestScore = -1;
         for (const fish of activeFish) {
@@ -11418,6 +11431,7 @@ const TargetingService = {
             const dy = fish.group.position.y - refPos.y;
             const dz = fish.group.position.z - refPos.z;
             if (dx * dx + dy * dy + dz * dz > 4000000) continue;
+            if (!this._isInAutoFireCone(fish.group.position, refPos)) continue;
             const score = this._priorityScore(fish, refPos);
             if (score > bestScore) { bestScore = score; best = fish; }
         }
@@ -11511,7 +11525,8 @@ const TargetingService = {
 
         if (is8x && s.lockedTarget && s.lockedTarget.isActive && (s.phase === 'firing' || s.phase === 'locking')) {
             const lockTime = now - s.lockStartMs;
-            if (s.shotsAtCurrent >= c.maxShotsPerTarget || (lockTime > c.maxLockTimeMs && s.shotsAtCurrent >= c.minShotsBeforeDrop)) {
+            const outOfCone = !this._isInAutoFireCone(s.lockedTarget.group.position, refPos);
+            if (outOfCone || s.shotsAtCurrent >= c.maxShotsPerTarget || (lockTime > c.maxLockTimeMs && s.shotsAtCurrent >= c.minShotsBeforeDrop)) {
                 if (s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
                 const next = this._pick8xNewTarget(refPos, now);
                 if (next && next !== s.lockedTarget) {
