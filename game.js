@@ -5189,7 +5189,8 @@ const vfxTempVectors = {
 // PERFORMANCE: Temp vectors for autoFireAtFish (avoid per-call allocations)
 const autoFireTempVectors = {
     muzzlePos: new THREE.Vector3(),
-    direction: new THREE.Vector3()
+    direction: new THREE.Vector3(),
+    crosshairDir: new THREE.Vector3()
 };
 
 // Initialize shared materials (called once when scene is ready)
@@ -11410,10 +11411,19 @@ const TargetingService = {
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
 
         if (canFire && gameState.currentWeapon === '8x') {
-            const aimYawErr = Math.abs(this._wrapDelta(clampedYaw - s.currentYaw));
-            const aimPitchErr = Math.abs(clampedPitch - s.currentPitch);
-            const aimAngleOff = Math.sqrt(aimYawErr * aimYawErr + aimPitchErr * aimPitchErr);
-            if (aimAngleOff > 0.07) canFire = false;
+            const crosshairDir = getCrosshairRay();
+            if (crosshairDir && fish) {
+                const fishDir = new THREE.Vector3().copy(fish.group.position).sub(muzzlePos).normalize();
+                const dotVal = Math.min(1, Math.max(-1, crosshairDir.dot(fishDir)));
+                const angleDeg = Math.acos(dotVal) * (180 / Math.PI);
+                if (angleDeg > 4) canFire = false;
+                _laser8xDebug.crosshairDir = crosshairDir.clone();
+                _laser8xDebug.targetFishId = fish.rtpFishId || fish.tier;
+                _laser8xDebug.angleDeg = angleDeg;
+                _laser8xDebug.canFire = canFire;
+            } else {
+                canFire = false;
+            }
         }
 
         return { target: fish, canFire };
@@ -11430,6 +11440,14 @@ const autoFireState = TargetingService.state;
 function resetAutoFireState() { TargetingService.reset(); }
 function findNearestFish(muzzlePos) { return TargetingService.findNearest(muzzlePos).primary; }
 function autoFireTick() { if (!gameState.weaponSelected) return; return TargetingService.tick(); }
+
+function getCrosshairRay() {
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    return getAimDirectionFromMouse(cx, cy, autoFireTempVectors.crosshairDir);
+}
+
+const _laser8xDebug = { crosshairDir: null, targetFishId: null, angleDeg: null, canFire: false };
 
 function aimCannonAtFish(fish) {
     if (!fish) return;
@@ -11490,18 +11508,22 @@ function autoFireAtFish(targetFish) {
     const muzzlePos = autoFireTempVectors.muzzlePos;
     cannonMuzzle.getWorldPosition(muzzlePos);
     
-    const direction = autoFireTempVectors.direction;
-    const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
-    const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
-    
-    direction.set(
-        Math.sin(yaw) * Math.cos(pitch),
-        Math.sin(pitch),
-        Math.cos(yaw) * Math.cos(pitch)
-    ).normalize();
+    let direction;
+    if (weapon.type === 'laser') {
+        direction = getCrosshairRay();
+        if (!direction) return false;
+    } else {
+        direction = autoFireTempVectors.direction;
+        const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
+        const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+        direction.set(
+            Math.sin(yaw) * Math.cos(pitch),
+            Math.sin(pitch),
+            Math.cos(yaw) * Math.cos(pitch)
+        ).normalize();
+    }
     
     if (weapon.type === 'spread') {
-        // 3x weapon: Fire 3 bullets in fan spread pattern
         const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
         
         spawnBulletFromDirection(muzzlePos, direction, weaponKey, 0);
@@ -18120,6 +18142,28 @@ function hideFPSDebugOverlay() {
     if (overlay) overlay.remove();
 }
 
+function update8xLaserDebugOverlay() {
+    if (gameState.currentWeapon !== '8x' || !gameState.autoShoot) {
+        const el = document.getElementById('laser8x-debug');
+        if (el) el.style.display = 'none';
+        return;
+    }
+    let el = document.getElementById('laser8x-debug');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'laser8x-debug';
+        el.style.cssText = 'position:fixed;bottom:120px;right:10px;background:rgba(0,0,0,0.8);color:#0ff;font:11px monospace;padding:8px 10px;border-radius:4px;z-index:10000;pointer-events:none;border:1px solid rgba(0,255,255,0.3);';
+        document.body.appendChild(el);
+    }
+    el.style.display = 'block';
+    const d = _laser8xDebug;
+    const dir = d.crosshairDir;
+    const dirStr = dir ? `(${dir.x.toFixed(3)}, ${dir.y.toFixed(3)}, ${dir.z.toFixed(3)})` : 'N/A';
+    const angleStr = d.angleDeg !== null ? d.angleDeg.toFixed(1) + '°' : 'N/A';
+    const fireStr = d.canFire ? '<span style="color:#0f0">YES</span>' : '<span style="color:#f44">NO</span>';
+    el.innerHTML = `<b>8x LASER DEBUG</b><br>Ray: ${dirStr}<br>Target: ${d.targetFishId || 'none'}<br>Angle: ${angleStr}<br>CanFire: ${fireStr}`;
+}
+
 // ==================== GAME LOOP ====================
 // PERFORMANCE FIX: Guard flag to prevent multiple main animate loops
 let gameLoopStarted = false;
@@ -18212,6 +18256,8 @@ function animate() {
             autoShootTimer = 1 / weapon.shotsPerSecond;
         }
     }
+    
+    update8xLaserDebugOverlay();
     
     // Update fish with error handling to prevent freeze bugs
     // MULTIPLAYER: Skip local fish updates in multiplayer mode - fish come from server
