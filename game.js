@@ -17491,17 +17491,18 @@ function createScopeOverlay() {
     const el = document.createElement('div');
     el.id = 'scope-overlay';
     el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
-    const inset = zoomFrameInset;
+    const vInset = zoomFrameInset;
+    const hInset = Math.round(zoomFrameInset * 1.35);
     const cornerLen = 32;
-    const color = 'rgba(57,255,20,0.85)';
-    const glow = '0 0 6px rgba(57,255,20,0.5)';
+    const color = 'rgba(207,255,4,0.85)';
+    const glow = '0 0 6px rgba(207,255,4,0.5)';
     const shared = `position:absolute;box-shadow:${glow};`;
     const border = `4px solid ${color}`;
     el.innerHTML = `
-        <div style="${shared}top:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-left:${border};"></div>
-        <div style="${shared}top:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-right:${border};"></div>
-        <div style="${shared}bottom:${inset}px;left:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-left:${border};"></div>
-        <div style="${shared}bottom:${inset}px;right:${inset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-right:${border};"></div>
+        <div style="${shared}top:${vInset}px;left:${hInset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-left:${border};"></div>
+        <div style="${shared}top:${vInset}px;right:${hInset}px;width:${cornerLen}px;height:${cornerLen}px;border-top:${border};border-right:${border};"></div>
+        <div style="${shared}bottom:${vInset}px;left:${hInset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-left:${border};"></div>
+        <div style="${shared}bottom:${vInset}px;right:${hInset}px;width:${cornerLen}px;height:${cornerLen}px;border-bottom:${border};border-right:${border};"></div>
     `;
     document.body.appendChild(el);
     scopeOverlayEl = el;
