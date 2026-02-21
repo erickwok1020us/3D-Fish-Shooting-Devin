@@ -14413,38 +14413,7 @@ class Fish {
         this.tail.rotation.y = Math.sin(time + this.group.position.x) * 0.3;
     }
     
-    takeDamage(damage, weaponKey, spreadIndex) {
-        if (!this.isActive) return false;
-        
-        // Phase 2: Shield Turtle - check if fish has shield
-        if (this.config.ability === 'shield' && this.shieldHP > 0) {
-            this.shieldHP -= damage;
-            if (this.shieldBubble) {
-                this.shieldBubble.material.emissiveIntensity = 1.0;
-                setTimeout(() => {
-                    if (this.shieldBubble) {
-                        this.shieldBubble.material.emissiveIntensity = 0.3;
-                    }
-                }, 100);
-                const shieldPercent = Math.max(0, this.shieldHP / this.config.shieldHP);
-                this.shieldBubble.material.opacity = 0.3 * shieldPercent;
-                if (this.shieldHP <= 0) {
-                    this.shieldBubble.visible = false;
-                    playImpactSound('shieldBreak');
-                    triggerScreenFlash(0x00ffff, 0.2);
-                }
-            }
-            return false;
-        }
-        
-        // HP is visual only - track for visual feedback but does NOT determine death
-        this.hp -= damage;
-        
-        const fishPos = this.group ? this.group.position : null;
-        showHitMarker(spreadIndex, fishPos, this);
-        showCrosshairRingFlash(spreadIndex);
-        
-        // Visual hit flash
+    flashHit() {
         if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
                 if (mesh.material && 'emissive' in mesh.material) {
@@ -14480,6 +14449,40 @@ class Fish {
                 }
             }, 80);
         }
+    }
+    
+    takeDamage(damage, weaponKey, spreadIndex) {
+        if (!this.isActive) return false;
+        
+        // Phase 2: Shield Turtle - check if fish has shield
+        if (this.config.ability === 'shield' && this.shieldHP > 0) {
+            this.shieldHP -= damage;
+            if (this.shieldBubble) {
+                this.shieldBubble.material.emissiveIntensity = 1.0;
+                setTimeout(() => {
+                    if (this.shieldBubble) {
+                        this.shieldBubble.material.emissiveIntensity = 0.3;
+                    }
+                }, 100);
+                const shieldPercent = Math.max(0, this.shieldHP / this.config.shieldHP);
+                this.shieldBubble.material.opacity = 0.3 * shieldPercent;
+                if (this.shieldHP <= 0) {
+                    this.shieldBubble.visible = false;
+                    playImpactSound('shieldBreak');
+                    triggerScreenFlash(0x00ffff, 0.2);
+                }
+            }
+            return false;
+        }
+        
+        // HP is visual only - track for visual feedback but does NOT determine death
+        this.hp -= damage;
+        
+        const fishPos = this.group ? this.group.position : null;
+        showHitMarker(spreadIndex, fishPos, this);
+        showCrosshairRingFlash(spreadIndex);
+        
+        this.flashHit();
         
         if (!multiplayerMode) {
             const weapon = CONFIG.weapons[weaponKey];
@@ -16730,6 +16733,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
             const hit = hitFish[i];
             const result = results[i];
             hit.fish.hp -= damage;
+            hit.fish.flashHit();
             createHitParticles(hit.hitPoint, weapon.color, 8);
             playWeaponHitSound(weaponKey);
             if (result && result.kill && hit.fish.isActive) {
@@ -17040,6 +17044,7 @@ function triggerExplosion(center, weaponKey) {
             const t = hitFishList[i].distance / aoeRadius;
             const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
             fish.hp -= damage;
+            fish.flashHit();
             
             const fishPos = fish.group ? fish.group.position : null;
             createHitParticles(fish.group.position, weapon.color, 3);
