@@ -11274,6 +11274,8 @@ const TargetingService = {
         yawLimit:   46.75 * (Math.PI / 180),
         pitchMax:   42.5  * (Math.PI / 180),
         pitchMin:  -29.75 * (Math.PI / 180),
+        searchConeAngle: 55,
+        hitscanFireGate: 8,
         trackSpeed: 8.0,
         maxRotSpeed: 2.0,
         initialLockMs: 250,
@@ -11372,24 +11374,25 @@ const TargetingService = {
         return delta;
     },
 
+    _getCannonForward(out) {
+        const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
+        const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+        out.set(
+            Math.sin(yaw) * Math.cos(pitch),
+            Math.sin(pitch),
+            Math.cos(yaw) * Math.cos(pitch)
+        ).normalize();
+        return out;
+    },
+
     _pickTarget(muzzlePos) {
-        if (gameState.currentWeapon === '8x') {
-            const crosshairDir = getCrosshairRay();
-            if (crosshairDir) return this.findNearestInCrosshairCone(muzzlePos, crosshairDir, 9);
-            return null;
-        }
-        const result = this.findNearest(muzzlePos);
-        return result.primary;
+        const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
+        return this.findNearestInCrosshairCone(muzzlePos, fwd, this.config.searchConeAngle);
     },
 
     _pickFallback(muzzlePos) {
-        if (gameState.currentWeapon === '8x') {
-            const crosshairDir = getCrosshairRay();
-            if (crosshairDir) return this.findNearestInCrosshairCone(muzzlePos, crosshairDir, 9);
-            return null;
-        }
-        const result = this.findNearest(muzzlePos);
-        return result.primary || result.fallback;
+        const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
+        return this.findNearestInCrosshairCone(muzzlePos, fwd, this.config.searchConeAngle);
     },
 
     _clampRotDelta(delta, maxStep) {
@@ -11505,7 +11508,7 @@ const TargetingService = {
                 const fishDir = new THREE.Vector3().copy(fish.group.position).sub(muzzlePos).normalize();
                 const dotVal = Math.min(1, Math.max(-1, crosshairDir.dot(fishDir)));
                 const angleDeg = Math.acos(dotVal) * (180 / Math.PI);
-                if (angleDeg > 4) canFire = false;
+                if (angleDeg > this.config.hitscanFireGate) canFire = false;
             } else {
                 canFire = false;
             }
