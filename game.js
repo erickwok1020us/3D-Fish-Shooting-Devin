@@ -11276,6 +11276,7 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 55,
         hitscanFireGate: 8,
+        autoFireAlignGate: 5,
         trackSpeed: 22.0,
         maxRotSpeed: 2.0,
         initialLockMs: 250,
@@ -11610,6 +11611,15 @@ const TargetingService = {
             } else {
                 canFire = false;
             }
+        }
+
+        if (canFire && is8x && gameState.autoShoot) {
+            const fwd = new THREE.Vector3();
+            this._getCannonForward(fwd);
+            const toFish = new THREE.Vector3().copy(fish.group.position).sub(trackOrigin).normalize();
+            const dotVal = Math.min(1, Math.max(-1, fwd.dot(toFish)));
+            const angleDeg = Math.acos(dotVal) * (180 / Math.PI);
+            if (angleDeg > this.config.autoFireAlignGate) canFire = false;
         }
 
         return { target: fish, canFire };
