@@ -1160,7 +1160,15 @@ const CONFIG = {
         pushStrength: 160,
         largeFishPushStrength: 280,
         maxPushAccel: 400,
-        predictTime: 0.8
+        predictTime: 0.8,
+        ellipsoidMargin: 1.3,
+        yawSteerStrength: 2.0
+    },
+    terrainHardStop: {
+        enabled: true,
+        penetrationThreshold: 0.85,
+        emergencyYawRange: Math.PI * 0.6,
+        rollbackDamping: 0.3
     }
 };
 
@@ -11477,18 +11485,28 @@ const TargetingService = {
             if (!fish.isActive || !fish.isBoss) continue;
             if (now - s.lastBossReleaseMs > c.bossCooldownMs && this._isInAutoFireCone(fish.group.position, refPos)) return fish;
         }
-        let best = null, bestScore = -1;
+        const candidates = [];
         for (const fish of activeFish) {
             if (!fish.isActive || fish.isBoss) continue;
             const dx = fish.group.position.x - refPos.x;
             const dy = fish.group.position.y - refPos.y;
             const dz = fish.group.position.z - refPos.z;
-            if (dx * dx + dy * dy + dz * dz > 2000000) continue;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq > 2000000) continue;
             if (!this._isInAutoFireCone(fish.group.position, refPos)) continue;
             const score = this._priorityScore(fish, refPos);
-            if (score > bestScore) { bestScore = score; best = fish; }
+            candidates.push({ fish, score, distSq });
         }
-        return best;
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => b.score - a.score);
+        if (candidates.length >= 2) {
+            const top = candidates[0];
+            const runner = candidates[1];
+            if (top.score > 0 && runner.score / top.score > 0.85) {
+                if (runner.distSq < top.distSq) return runner.fish;
+            }
+        }
+        return candidates[0].fish;
     },
 
     _pickTarget(muzzlePos) {
@@ -11605,6 +11623,14 @@ const TargetingService = {
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
         let aimPos = fish.group.position.clone();
+        if (fish.isBoss && fish.ellipsoidHalfExtents) {
+            const he = fish.ellipsoidHalfExtents;
+            if (!fish._aimOffsetSeed) fish._aimOffsetSeed = Math.random() * 1000;
+            const t = performance.now() * 0.0003 + fish._aimOffsetSeed;
+            aimPos.x += Math.sin(t * 2.1) * he.x * 0.3;
+            aimPos.y += Math.sin(t * 1.7) * he.y * 0.2;
+            aimPos.z += Math.cos(t * 1.3) * he.z * 0.3;
+        }
         const weapon = CONFIG.weapons[gameState.currentWeapon];
         if (weapon.speed && fish.velocity) {
             const dist = muzzlePos.distanceTo(aimPos);
@@ -13760,6 +13786,9 @@ class Fish {
         // Update position (using addScaledVector to avoid clone() allocation)
         this.group.position.addScaledVector(this.velocity, deltaTime);
         
+        // Terrain hard stop: rollback + emergency yaw if fish penetrates terrain
+        this.checkTerrainHardStop();
+        
         // Update rotation to face movement direction
         this.updateRotation(deltaTime);
         
@@ -14314,49 +14343,60 @@ class Fish {
     
     applyHardSeparation() {
         const myPos = this.group.position;
-        const mySize = this.config.size || 20;
         const hs = CONFIG.hardSeparation;
-        const isLarge = mySize >= hs.largeFishSizeThreshold;
-        const myRadiusFactor = isLarge ? hs.largeFishRadiusFactor : hs.radiusFactor;
-        const myPushStr = isLarge ? hs.largeFishPushStrength : hs.pushStrength;
+        const myHE = this.ellipsoidHalfExtents;
+        const margin = hs.ellipsoidMargin;
+        const myYaw = this._currentYaw || 0;
+        const myCosYaw = Math.cos(myYaw);
+        const mySinYaw = Math.sin(myYaw);
 
         const nearbyFish = getNearbyFish(this);
         let pushX = 0, pushY = 0, pushZ = 0;
+        let steerYaw = 0;
 
         for (let i = 0; i < nearbyFish.length; i++) {
             const other = nearbyFish[i];
             if (other === this || !other.isActive) continue;
 
-            const otherSize = other.config.size || 20;
-            const otherLarge = otherSize >= hs.largeFishSizeThreshold;
-            const otherRadiusFactor = otherLarge ? hs.largeFishRadiusFactor : hs.radiusFactor;
-            const safeRadius = (mySize * myRadiusFactor + otherSize * otherRadiusFactor) * 0.5;
-
+            const otherHE = other.ellipsoidHalfExtents;
             const otherPos = other.group.position;
+
             let dx = myPos.x - otherPos.x;
             let dy = myPos.y - otherPos.y;
             let dz = myPos.z - otherPos.z;
 
             if (hs.predictTime > 0) {
-                const relVx = this.velocity.x - other.velocity.x;
-                const relVy = this.velocity.y - other.velocity.y;
-                const relVz = this.velocity.z - other.velocity.z;
-                dx += relVx * hs.predictTime;
-                dy += relVy * hs.predictTime;
-                dz += relVz * hs.predictTime;
+                dx += (this.velocity.x - other.velocity.x) * hs.predictTime;
+                dy += (this.velocity.y - other.velocity.y) * hs.predictTime;
+                dz += (this.velocity.z - other.velocity.z) * hs.predictTime;
             }
 
-            const distSq = dx * dx + dy * dy + dz * dz;
-            const safeRadiusSq = safeRadius * safeRadius;
+            const safeX = (myHE.x + otherHE.x) * margin;
+            const safeY = (myHE.y + otherHE.y) * margin;
+            const safeZ = (myHE.z + otherHE.z) * margin;
 
-            if (distSq < safeRadiusSq && distSq > 0.01) {
-                const dist = Math.sqrt(distSq);
-                const overlap = 1.0 - dist / safeRadius;
-                const force = overlap * overlap * myPushStr;
-                const invDist = 1.0 / dist;
-                pushX += dx * invDist * force;
-                pushY += dy * invDist * force;
-                pushZ += dz * invDist * force;
+            const nx = safeX > 0.01 ? dx / safeX : 0;
+            const ny = safeY > 0.01 ? dy / safeY : 0;
+            const nz = safeZ > 0.01 ? dz / safeZ : 0;
+            const ellipDistSq = nx * nx + ny * ny + nz * nz;
+
+            if (ellipDistSq < 1.0 && ellipDistSq > 0.0001) {
+                const ellipDist = Math.sqrt(ellipDistSq);
+                const overlap = 1.0 - ellipDist;
+                const isLarge = (this.config.size || 20) >= hs.largeFishSizeThreshold ||
+                                (other.config.size || 20) >= hs.largeFishSizeThreshold;
+                const pushStr = isLarge ? hs.largeFishPushStrength : hs.pushStrength;
+                const force = overlap * overlap * pushStr;
+
+                const invED = 1.0 / ellipDist;
+                pushX += nx * invED * force * safeX;
+                pushY += ny * invED * force * safeY;
+                pushZ += nz * invED * force * safeZ;
+
+                const localDx = dx * myCosYaw - dz * mySinYaw;
+                const localDz = dx * mySinYaw + dz * myCosYaw;
+                const cross = localDz;
+                steerYaw += (cross > 0 ? 1 : -1) * overlap * hs.yawSteerStrength;
             }
         }
 
@@ -14371,6 +14411,14 @@ class Fish {
         this.acceleration.x += pushX;
         this.acceleration.y += pushY * 0.6;
         this.acceleration.z += pushZ;
+
+        if (Math.abs(steerYaw) > 0.01) {
+            const clampedSteer = Math.max(-2.0, Math.min(2.0, steerYaw));
+            const steerForceX = -Math.sin(myYaw + clampedSteer * 0.3) * 40;
+            const steerForceZ = Math.cos(myYaw + clampedSteer * 0.3) * 40;
+            this.acceleration.x += steerForceX;
+            this.acceleration.z += steerForceZ;
+        }
     }
 
     applyDodgeManeuver(deltaTime) {
@@ -14540,7 +14588,8 @@ class Fish {
         const cfg = CONFIG.terrainAvoidance;
         const pos = this.group.position;
         const vel = this.velocity;
-        const margin = cfg.avoidMargin;
+        const fishRadius = this.boundingRadius || 20;
+        const margin = cfg.avoidMargin + fishRadius;
         const laTime = cfg.lookAheadTime;
         const predX = pos.x + vel.x * laTime;
         const predY = pos.y + vel.y * laTime;
@@ -14588,6 +14637,55 @@ class Fish {
         this.acceleration.x += fx;
         this.acceleration.y += fy;
         this.acceleration.z += fz;
+    }
+
+    checkTerrainHardStop() {
+        if (!CONFIG.terrainHardStop.enabled || terrainObstacles.length === 0) return;
+        const pos = this.group.position;
+        const fishRadius = this.boundingRadius || 20;
+        const threshold = CONFIG.terrainHardStop.penetrationThreshold;
+
+        for (let i = 0; i < terrainObstacles.length; i++) {
+            const ob = terrainObstacles[i];
+            const safeRadius = ob.radius + fishRadius * threshold;
+            const dx = pos.x - ob.x;
+            const dy = pos.y - ob.y;
+            const dz = pos.z - ob.z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+
+            if (distSq < safeRadius * safeRadius && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                if (dist < safeRadius) {
+                    if (this._lastValidPosition) {
+                        const damping = CONFIG.terrainHardStop.rollbackDamping;
+                        pos.lerp(this._lastValidPosition, damping);
+                    }
+
+                    const invDist = 1 / dist;
+                    const pushOut = (safeRadius - dist) * 0.5;
+                    pos.x += dx * invDist * pushOut;
+                    pos.y += dy * invDist * pushOut;
+                    pos.z += dz * invDist * pushOut;
+
+                    const yawRange = CONFIG.terrainHardStop.emergencyYawRange;
+                    const emergencyYaw = (Math.random() - 0.5) * yawRange;
+                    const speed = this.velocity.length();
+                    if (speed > 1) {
+                        const currentYaw = Math.atan2(this.velocity.x, this.velocity.z);
+                        const newYaw = currentYaw + emergencyYaw;
+                        this.velocity.x = Math.sin(newYaw) * speed;
+                        this.velocity.z = Math.cos(newYaw) * speed;
+                        this.velocity.y *= 0.3;
+                    }
+                    return;
+                }
+            }
+        }
+
+        if (!this._lastValidPosition) {
+            this._lastValidPosition = new THREE.Vector3();
+        }
+        this._lastValidPosition.copy(pos);
     }
     
     updateRotation(deltaTime) {
