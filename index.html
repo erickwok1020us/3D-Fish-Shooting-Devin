@@ -456,7 +456,7 @@
         .weapon-btn {
             flex: 1;
             position: relative;
-            height: 40px;
+            height: 44px;
             background: rgba(0, 20, 50, 0.5);
             border: 1px solid rgba(0, 180, 255, 0.18);
             border-radius: 7px;
@@ -468,9 +468,24 @@
         }
         .weapon-btn .multiplier {
             font-family: 'Orbitron', monospace;
-            font-size: 17px;
+            font-size: 20px;
             font-weight: 900;
             color: rgba(0, 180, 255, 0.35);
+        }
+        .weapon-btn .keycap {
+            position: absolute;
+            bottom: 3px;
+            right: 4px;
+            font-family: 'Orbitron', monospace;
+            font-size: 8px;
+            font-weight: 700;
+            color: rgba(0, 180, 255, 0.25);
+            background: rgba(0, 15, 35, 0.6);
+            border: 1px solid rgba(0, 180, 255, 0.15);
+            border-radius: 3px;
+            padding: 1px 3px;
+            line-height: 1;
+            letter-spacing: 0.5px;
         }
         .weapon-btn:hover {
             border-color: rgba(0, 200, 255, 0.4);
@@ -486,6 +501,10 @@
             text-shadow: 0 0 14px rgba(0, 255, 255, 0.6), 0 0 28px rgba(0, 255, 255, 0.15);
             -webkit-text-stroke: 0.3px rgba(0, 255, 255, 0.2);
         }
+        .weapon-btn.active .keycap {
+            color: rgba(0, 255, 255, 0.45);
+            border-color: rgba(0, 255, 255, 0.25);
+        }
         .weapon-btn.active::after {
             content: '';
             position: absolute;
@@ -495,75 +514,58 @@
             box-shadow: 0 0 8px #00d4ff;
             border-radius: 1px;
         }
-        /* Digital LED 4-digit ammo display */
+        /* AMMO display: prominent multiplier + 5-slot index bar */
         #digi-ammo {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
             margin-bottom: 10px;
             padding: 6px 0;
         }
-        #digi-ammo .digi-ammo-wrap {
-            position: relative;
-            padding-top: 14px;
-        }
-        #digi-ammo .digi-ammo-label {
-            font-size: 8px;
-            letter-spacing: 2px;
-            color: rgba(0, 200, 255, 0.45);
-            position: absolute;
-            top: 0; left: 50%;
-            transform: translateX(-50%);
-            white-space: nowrap;
-        }
-        #digi-ammo .digi-ammo-digits {
-            display: flex;
-            gap: 3px;
-            align-items: center;
-        }
-        .digi-digit {
-            width: 33px; height: 46px;
-            background: rgba(0, 12, 30, 0.9);
-            border: 2px solid rgba(0, 180, 255, 0.25);
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        #digi-ammo .ammo-multiplier {
             font-family: 'Orbitron', monospace;
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 900;
             color: #00ffff;
             text-shadow: 0 0 14px rgba(0, 255, 255, 0.6), 0 0 28px rgba(0, 255, 255, 0.15);
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+        }
+        #digi-ammo .ammo-label {
+            font-size: 8px;
+            letter-spacing: 2px;
+            color: rgba(0, 200, 255, 0.45);
+            margin-bottom: 5px;
+        }
+        #digi-ammo .ammo-slots {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .ammo-slot {
+            width: 36px;
+            height: 6px;
+            background: rgba(0, 30, 60, 0.7);
+            border: 1px solid rgba(0, 180, 255, 0.15);
+            border-radius: 2px;
+            transition: all 0.25s ease;
             position: relative;
-            overflow: hidden;
         }
-        .digi-digit::before {
-            content: '';
-            position: absolute;
-            top: 49%; left: 0; right: 0;
-            height: 1px;
-            background: rgba(0, 0, 0, 0.4);
+        .ammo-slot.active {
+            background: #00d4ff;
+            border-color: #00d4ff;
+            box-shadow: 0 0 8px rgba(0, 212, 255, 0.5), 0 0 16px rgba(0, 212, 255, 0.15);
         }
-        .digi-digit::after {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 45%;
-            background: linear-gradient(180deg, rgba(0, 200, 255, 0.05), transparent);
+        .ammo-slot.filled {
+            background: rgba(0, 120, 180, 0.4);
+            border-color: rgba(0, 180, 255, 0.3);
         }
-        #digi-ammo .digi-ammo-bar {
-            width: 100%; height: 3px;
-            background: rgba(0, 25, 50, 0.4);
-            border-radius: 2px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
-        #digi-ammo .digi-ammo-bar-fill {
-            height: 100%; width: 75%;
-            background: linear-gradient(90deg, #0088bb, #00d4ff);
-            border-radius: 2px;
-            box-shadow: 0 0 4px rgba(0, 200, 255, 0.3);
-            transition: width 0.3s ease, background 0.3s ease;
+        #digi-ammo .ammo-count {
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            color: rgba(0, 200, 255, 0.6);
+            margin-top: 6px;
+            letter-spacing: 1px;
         }
         #weapon-panel .wp-auto {
             display: flex;
@@ -1535,7 +1537,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #428</div>
+    <div id="pr-version-tag">PR #433</div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
@@ -1753,22 +1755,22 @@
                 <div class="wp-outer">
                     <div class="wp-header"><div class="wp-dot"></div><div class="wp-title">BET MULTIPLIER</div><div class="wp-line"></div></div>
                     <div class="wp-weapons">
-                        <button class="weapon-btn active" data-weapon="1x"><span class="multiplier">1x</span></button>
-                        <button class="weapon-btn" data-weapon="3x"><span class="multiplier">3x</span></button>
-                        <button class="weapon-btn" data-weapon="5x"><span class="multiplier">5x</span></button>
-                        <button class="weapon-btn" data-weapon="8x"><span class="multiplier">8x</span></button>
+                        <button class="weapon-btn active" data-weapon="1x"><span class="multiplier">1x</span><span class="keycap">1</span></button>
+                        <button class="weapon-btn" data-weapon="3x"><span class="multiplier">3x</span><span class="keycap">2</span></button>
+                        <button class="weapon-btn" data-weapon="5x"><span class="multiplier">5x</span><span class="keycap">3</span></button>
+                        <button class="weapon-btn" data-weapon="8x"><span class="multiplier">8x</span><span class="keycap">4</span></button>
                     </div>
                     <div id="digi-ammo">
-                        <div class="digi-ammo-wrap">
-                            <div class="digi-ammo-label">AMMO</div>
-                            <div class="digi-ammo-digits">
-                                <div class="digi-digit" id="digi-d0">1</div>
-                                <div class="digi-digit" id="digi-d1">0</div>
-                                <div class="digi-digit" id="digi-d2">0</div>
-                                <div class="digi-digit" id="digi-d3">0</div>
-                            </div>
-                            <div class="digi-ammo-bar"><div class="digi-ammo-bar-fill" id="digi-ammo-bar-fill"></div></div>
+                        <div class="ammo-label">AMMO</div>
+                        <div class="ammo-multiplier" id="ammo-multiplier-text">1x</div>
+                        <div class="ammo-slots">
+                            <div class="ammo-slot active" id="ammo-slot-0"></div>
+                            <div class="ammo-slot" id="ammo-slot-1"></div>
+                            <div class="ammo-slot" id="ammo-slot-2"></div>
+                            <div class="ammo-slot" id="ammo-slot-3"></div>
+                            <div class="ammo-slot" id="ammo-slot-4"></div>
                         </div>
+                        <div class="ammo-count" id="ammo-count-text"></div>
                     </div>
                     <div class="wp-auto">
                         <div class="auto-left"><div class="auto-label">AUTO FIRE</div><span class="auto-sep">:</span><span class="auto-kbd">A</span></div>
