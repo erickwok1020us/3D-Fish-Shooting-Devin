@@ -67,7 +67,7 @@
 | `yawLimit` | 46.75 deg | Max horizontal aim angle from center |
 | `pitchMax` | 42.5 deg | Max upward aim angle |
 | `pitchMin` | -29.75 deg | Max downward aim angle |
-| `trackSpeed` | 8.0 | Exponential smoothing speed |
+| `trackSpeed` | 22.0 | Exponential smoothing speed |
 | `maxRotSpeed` | 2.0 rad/s | Maximum rotation speed per frame |
 | `initialLockMs` | 250 ms | Time to lock onto first target |
 | `transitionMs` | 200 ms | Time to transition between targets |
