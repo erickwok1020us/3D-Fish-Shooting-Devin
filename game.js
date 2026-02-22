@@ -1319,9 +1319,6 @@ function createGlbDebugDisplay() {
         debugDiv = document.createElement('div');
         debugDiv.id = 'glb-debug-display';
         debugDiv.style.cssText = `
-            position: fixed;
-            top: 80px;
-            left: 10px;
             background: rgba(0, 0, 0, 0.8);
             color: #00ff00;
             font-family: monospace;
@@ -1329,13 +1326,13 @@ function createGlbDebugDisplay() {
             line-height: 1.15;
             padding: 6px;
             border-radius: 4px;
-            z-index: 10000;
             max-width: 200px;
             max-height: 30vh;
             overflow-y: auto;
             pointer-events: none;
         `;
-        document.body.appendChild(debugDiv);
+        var wrapper = document.getElementById('debug-middle-right');
+        (wrapper || document.body).appendChild(debugDiv);
     }
     return debugDiv;
 }
@@ -1410,9 +1407,6 @@ function createPerfDisplay() {
         perfDiv = document.createElement('div');
         perfDiv.id = 'perf-display';
         perfDiv.style.cssText = `
-            position: fixed;
-            top: calc(80px + 30vh + 10px);
-            left: 10px;
             background: rgba(0, 0, 0, 0.85);
             color: #00ff00;
             font-family: monospace;
@@ -1420,14 +1414,14 @@ function createPerfDisplay() {
             line-height: 1.15;
             padding: 6px;
             border-radius: 4px;
-            z-index: 10001;
             min-width: 170px;
             max-height: 28vh;
             overflow-y: auto;
             pointer-events: none;
             border: 1px solid #00ff00;
         `;
-        document.body.appendChild(perfDiv);
+        var wrapper = document.getElementById('debug-middle-right');
+        (wrapper || document.body).appendChild(perfDiv);
     }
     return perfDiv;
 }
@@ -17289,6 +17283,22 @@ function spawnExplosionEffect(center, radius, color) {
     createHitParticles(center, 0xffaa00, 15);
 }
 
+// ==================== BALANCE AIRFLOW (CSS-only) ====================
+let _airflowGainTimer = null;
+
+function _triggerAirflowGain() {
+    const bd = document.getElementById('balance-display');
+    if (!bd) return;
+    bd.classList.remove('balance-gain');
+    void bd.offsetWidth;
+    bd.classList.add('balance-gain');
+    if (_airflowGainTimer) clearTimeout(_airflowGainTimer);
+    _airflowGainTimer = setTimeout(() => {
+        bd.classList.remove('balance-gain');
+        _airflowGainTimer = null;
+    }, 1500);
+}
+
 // ==================== UI FUNCTIONS ====================
 let _lastBalanceForFlash = null;
 function updateUI() {
@@ -17302,6 +17312,9 @@ function updateUI() {
             bd.classList.add('balance-flash');
             setTimeout(() => bd.classList.remove('balance-flash'), 400);
         }
+        const newVal = parseFloat(newBalance);
+        const oldVal = parseFloat(_lastBalanceForFlash);
+        if (newVal > oldVal) _triggerAirflowGain();
     }
     _lastBalanceForFlash = newBalance;
     
