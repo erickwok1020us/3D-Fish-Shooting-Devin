@@ -11729,14 +11729,13 @@ function aimCannonAtFish(fish) {
 }
 
 // Auto-fire at fish (for AUTO mode - bypasses mouse-based fireBullet)
-// PERFORMANCE: Uses pre-allocated temp vectors to avoid per-call allocations
-// FIX: Bullets now fire in the direction the cannon is VISUALLY pointing,
-// not directly at the target fish. This ensures visual consistency.
+// GUARANTEED HIT: All weapons resolve damage instantly (hitscan) when a target is locked.
+// Visual-only bullets are spawned for animation; no projectile-based miss is possible.
+// Fire suppression: this function is only called when TargetingService has a valid locked target.
 function autoFireAtFish(targetFish) {
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
     
-    // Check cooldown
     if (gameState.cooldown > 0) return false;
     
     if (gameState.balance < weapon.cost) return false;
@@ -11750,45 +11749,44 @@ function autoFireAtFish(targetFish) {
     
     gameState.lastWeaponKey = weaponKey;
     
-    // PERFORMANCE: Reuse pre-allocated temp vector instead of new Vector3()
     const muzzlePos = autoFireTempVectors.muzzlePos;
     cannonMuzzle.getWorldPosition(muzzlePos);
     
-    let direction;
-    if (weapon.type === 'laser') {
-        if (gameState.autoShoot && targetFish) {
-            direction = autoFireTempVectors.direction;
-            const aimOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
-            direction.copy(targetFish.group.position).sub(aimOrigin).normalize();
-        } else {
-            direction = getCrosshairRay();
-            if (!direction) return false;
-        }
-    } else {
-        direction = autoFireTempVectors.direction;
-        const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
-        const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
-        direction.set(
-            Math.sin(yaw) * Math.cos(pitch),
-            Math.sin(pitch),
-            Math.cos(yaw) * Math.cos(pitch)
-        ).normalize();
-    }
+    const direction = autoFireTempVectors.direction;
+    const fishPos = targetFish.group.position;
     
-    if (weapon.type === 'spread') {
-        const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
-        
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey, 0);
-        
-        fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
-        
-        fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
-    } else if (weapon.type === 'laser') {
+    if (weapon.type === 'laser') {
+        const aimOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
+        direction.copy(fishPos).sub(aimOrigin).normalize();
         fireLaserBeam(muzzlePos, direction, weaponKey);
     } else {
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        direction.copy(fishPos).sub(muzzlePos).normalize();
+        
+        if (weapon.type === 'rocket') {
+            triggerExplosion(fishPos, weaponKey);
+            spawnVisualBullet(muzzlePos, fishPos, weaponKey);
+        } else if (weapon.type === 'spread') {
+            targetFish.takeDamage(weapon.damage, weaponKey, 0);
+            if (targetFish.isActive) targetFish.takeDamage(weapon.damage, weaponKey, -1);
+            if (targetFish.isActive) targetFish.takeDamage(weapon.damage, weaponKey, 1);
+            createHitParticles(fishPos, weapon.color, 5);
+            spawnWeaponHitEffect(weaponKey, fishPos, targetFish, direction);
+            playWeaponHitSound(weaponKey);
+            spawnVisualBullet(muzzlePos, fishPos, weaponKey);
+            const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
+            fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
+            const lb = spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
+            if (lb) lb.isVisualOnly = true;
+            fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
+            const rb = spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
+            if (rb) rb.isVisualOnly = true;
+        } else {
+            targetFish.takeDamage(weapon.damage, weaponKey);
+            createHitParticles(fishPos, weapon.color, 5);
+            spawnWeaponHitEffect(weaponKey, fishPos, targetFish, direction);
+            playWeaponHitSound(weaponKey);
+            spawnVisualBullet(muzzlePos, fishPos, weaponKey);
+        }
     }
     
     playWeaponShot(weaponKey);
