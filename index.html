@@ -138,13 +138,26 @@
             text-transform: uppercase;
         }
         
-        /* Settings Container - Top Right, below debug/perf panels */
+        /* Middle-Right Debug Group: GLB Debug + Performance Monitor */
+        #debug-middle-right {
+            position: fixed;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10000;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Settings Container - Top Right (fixed anchor) */
         #settings-container {
             transform: scale(1.1);
             transform-origin: top right;
             position: fixed;
-            top: calc(10px + 30vh + 10px + 28vh + 16px);
-            right: 10px;
+            top: 16px;
+            right: 16px;
             background: linear-gradient(135deg, rgba(0, 18, 40, 0.94), rgba(0, 8, 22, 0.97));
             border: 2px solid rgba(0, 200, 255, 0.4);
             border-radius: 8px;
@@ -156,6 +169,7 @@
             transition: all 0.3s ease;
             box-shadow: 0 0 18px rgba(0, 200, 255, 0.1), inset 0 0 15px rgba(0, 100, 200, 0.05);
             overflow: hidden;
+            z-index: 10002;
         }
         #settings-container::before {
             content: '';
@@ -204,8 +218,8 @@
         #kill-feed-panel {
             transform: scale(1.1);
             transform-origin: bottom right;
-            position: absolute;
-            bottom: 16px;
+            position: fixed;
+            bottom: 30px;
             right: 16px;
             width: 336px;
             background: linear-gradient(180deg, rgba(0, 15, 35, 0.9), rgba(0, 8, 20, 0.88));
@@ -213,7 +227,7 @@
             border-radius: 8px;
             padding: 12px;
             pointer-events: none;
-            z-index: 11;
+            z-index: 10002;
             box-shadow: 0 0 28px rgba(0, 100, 200, 0.2), inset 0 0 20px rgba(0, 60, 120, 0.12);
             font-family: 'Orbitron', monospace;
         }
@@ -669,7 +683,7 @@
         
         /* Settings Panel - Sci-fi style matching other panels */
         #settings-panel {
-            position: absolute;
+            position: fixed;
             top: 72px;
             right: 16px;
             width: 320px;
@@ -679,7 +693,7 @@
             padding: 20px;
             pointer-events: auto;
             display: none;
-            z-index: 1100;
+            z-index: 10003;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 100, 200, 0.1);
             font-family: 'Orbitron', monospace;
         }
@@ -1226,14 +1240,14 @@
         
         #pr-version-tag {
             position: fixed;
-            bottom: 8px;
-            right: 16px;
-            font-size: 14px;
+            bottom: 6px;
+            right: 370px;
+            font-size: 12px;
             font-weight: 800;
             color: #00ff66;
             font-family: 'Orbitron', monospace;
             letter-spacing: 1.5px;
-            z-index: 1001;
+            z-index: 10003;
             pointer-events: none;
             text-shadow: 0 0 10px rgba(0, 255, 102, 0.5), 0 0 20px rgba(0, 255, 102, 0.2);
         }
@@ -1541,6 +1555,9 @@
     </div>
     
     <div id="pr-version-tag">PR #435</div>
+    
+    <!-- Middle-Right Debug Group: GLB Debug + Performance Monitor (panels appended by game.js) -->
+    <div id="debug-middle-right"></div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
@@ -1642,7 +1659,7 @@
         </div>
         <!-- UI Overlay -->
         <div id="ui-overlay">
-            <!-- Bottom-Left HUD Cluster -->
+            <!-- Bottom-Left HUD Cluster (Balance + Weapon Panel only) -->
             <div id="hud-bottom-left">
             <div id="balance-display">
                 <div class="balance-icon">$</div>
@@ -1650,7 +1667,39 @@
                 <span class="balance-label">USDT</span>
             </div>
             
-            <!-- Kill Feed Panel - Bottom Right (Style B: Tier Accent Bar) -->
+            <div id="weapon-panel">
+                <div class="wp-outer">
+                    <div class="wp-header"><div class="wp-dot"></div><div class="wp-title">BET MULTIPLIER</div><div class="wp-line"></div></div>
+                    <div class="wp-weapons">
+                        <button class="weapon-btn active" data-weapon="1x"><span class="multiplier">1x</span><span class="keycap">1</span></button>
+                        <button class="weapon-btn" data-weapon="3x"><span class="multiplier">3x</span><span class="keycap">2</span></button>
+                        <button class="weapon-btn" data-weapon="5x"><span class="multiplier">5x</span><span class="keycap">3</span></button>
+                        <button class="weapon-btn" data-weapon="8x"><span class="multiplier">8x</span><span class="keycap">4</span></button>
+                    </div>
+                    <div id="digi-ammo">
+                        <div class="ammo-label">AMMO</div>
+                        <div class="ammo-multiplier" id="ammo-multiplier-text">1x</div>
+                        <div class="ammo-slots">
+                            <div class="ammo-slot active" id="ammo-slot-0"></div>
+                            <div class="ammo-slot" id="ammo-slot-1"></div>
+                            <div class="ammo-slot" id="ammo-slot-2"></div>
+                            <div class="ammo-slot" id="ammo-slot-3"></div>
+                            <div class="ammo-slot" id="ammo-slot-4"></div>
+                        </div>
+                        <div class="ammo-count" id="ammo-count-text"></div>
+                    </div>
+                    <div class="wp-auto">
+                        <div class="auto-left"><div class="auto-label">AUTO FIRE</div><span class="auto-sep">:</span><span class="auto-kbd">A</span></div>
+                        <div class="auto-pill" id="auto-pill">
+                            <button class="opt on" id="auto-off-btn">OFF</button>
+                            <button class="opt" id="auto-on-btn">ON</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div><!-- end #hud-bottom-left -->
+            
+            <!-- Kill Feed Panel - Bottom Right (fixed anchor) -->
             <div id="kill-feed-panel">
                 <div class="kf-corner kf-corner-tl"></div>
                 <div class="kf-corner kf-corner-tr"></div>
@@ -1663,7 +1712,7 @@
                 <div class="kf-list" id="kill-feed-list"></div>
             </div>
             
-            <!-- Settings Container - Top Right (Style A: Detailed Gear SVG) -->
+            <!-- Settings Container - Top Right (fixed anchor) -->
             <div id="settings-container" onclick="toggleSettingsPanel()">
                 <span class="settings-label">SETTINGS</span>
                 <div class="settings-icon-svg">
@@ -1741,46 +1790,11 @@
                 <button id="settings-close-btn">Close</button>
             </div>
             
-            <!-- FPS Counter -->
-            
-            
-            <!-- Auto-shoot Toggle, View Mode, and Center View - Bottom Right (hidden, replaced by weapon panel pill) -->
+            <!-- Auto-shoot Toggle (hidden, replaced by weapon panel pill) -->
             <div id="auto-shoot-container" style="display:none;">
                 <button id="auto-shoot-btn">AUTO OFF (A)</button>
                 <button id="center-view-btn">CENTER VIEW (C)</button>
             </div>
-            
-            <div id="weapon-panel">
-                <div class="wp-outer">
-                    <div class="wp-header"><div class="wp-dot"></div><div class="wp-title">BET MULTIPLIER</div><div class="wp-line"></div></div>
-                    <div class="wp-weapons">
-                        <button class="weapon-btn active" data-weapon="1x"><span class="multiplier">1x</span><span class="keycap">1</span></button>
-                        <button class="weapon-btn" data-weapon="3x"><span class="multiplier">3x</span><span class="keycap">2</span></button>
-                        <button class="weapon-btn" data-weapon="5x"><span class="multiplier">5x</span><span class="keycap">3</span></button>
-                        <button class="weapon-btn" data-weapon="8x"><span class="multiplier">8x</span><span class="keycap">4</span></button>
-                    </div>
-                    <div id="digi-ammo">
-                        <div class="ammo-label">AMMO</div>
-                        <div class="ammo-multiplier" id="ammo-multiplier-text">1x</div>
-                        <div class="ammo-slots">
-                            <div class="ammo-slot active" id="ammo-slot-0"></div>
-                            <div class="ammo-slot" id="ammo-slot-1"></div>
-                            <div class="ammo-slot" id="ammo-slot-2"></div>
-                            <div class="ammo-slot" id="ammo-slot-3"></div>
-                            <div class="ammo-slot" id="ammo-slot-4"></div>
-                        </div>
-                        <div class="ammo-count" id="ammo-count-text"></div>
-                    </div>
-                    <div class="wp-auto">
-                        <div class="auto-left"><div class="auto-label">AUTO FIRE</div><span class="auto-sep">:</span><span class="auto-kbd">A</span></div>
-                        <div class="auto-pill" id="auto-pill">
-                            <button class="opt on" id="auto-off-btn">OFF</button>
-                            <button class="opt" id="auto-on-btn">ON</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            </div><!-- end #hud-bottom-left -->
         </div>
         
         <!-- Issue #16: Dynamic crosshair showing weapon accuracy -->

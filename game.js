@@ -1319,9 +1319,6 @@ function createGlbDebugDisplay() {
         debugDiv = document.createElement('div');
         debugDiv.id = 'glb-debug-display';
         debugDiv.style.cssText = `
-            position: fixed;
-            top: 10px;
-            right: 10px;
             background: rgba(0, 0, 0, 0.8);
             color: #00ff00;
             font-family: monospace;
@@ -1329,13 +1326,13 @@ function createGlbDebugDisplay() {
             line-height: 1.15;
             padding: 6px;
             border-radius: 4px;
-            z-index: 10000;
             max-width: 200px;
             max-height: 30vh;
             overflow-y: auto;
             pointer-events: none;
         `;
-        document.body.appendChild(debugDiv);
+        var wrapper = document.getElementById('debug-middle-right');
+        (wrapper || document.body).appendChild(debugDiv);
     }
     return debugDiv;
 }
@@ -1410,9 +1407,6 @@ function createPerfDisplay() {
         perfDiv = document.createElement('div');
         perfDiv.id = 'perf-display';
         perfDiv.style.cssText = `
-            position: fixed;
-            top: calc(10px + 30vh + 10px);
-            right: 10px;
             background: rgba(0, 0, 0, 0.85);
             color: #00ff00;
             font-family: monospace;
@@ -1420,14 +1414,14 @@ function createPerfDisplay() {
             line-height: 1.15;
             padding: 6px;
             border-radius: 4px;
-            z-index: 10001;
             min-width: 170px;
             max-height: 28vh;
             overflow-y: auto;
             pointer-events: none;
             border: 1px solid #00ff00;
         `;
-        document.body.appendChild(perfDiv);
+        var wrapper = document.getElementById('debug-middle-right');
+        (wrapper || document.body).appendChild(perfDiv);
     }
     return perfDiv;
 }
