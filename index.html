@@ -48,29 +48,29 @@
             z-index: 10;
         }
         
-        /* Bottom-Left HUD Cluster: Balance + Weapon Panel stacked */
+        /* Bottom-Left HUD Cluster: Balance + Weapon Panel stacked (Arcade Power-Up) */
         #hud-bottom-left {
             position: absolute;
             bottom: 16px;
             left: 16px;
             display: flex;
             flex-direction: column;
-            width: 280px;
+            width: 308px;
             pointer-events: auto;
         }
 
-        /* Balance Display - top of cluster */
+        /* Balance Display - top of cluster (Arcade Power-Up hero) */
         #balance-display {
             position: relative;
-            background: linear-gradient(170deg, rgba(0, 18, 40, 0.94), rgba(0, 8, 22, 0.97));
-            border: 2px solid rgba(0, 200, 255, 0.4);
+            background: linear-gradient(170deg, rgba(0, 14, 35, 0.96), rgba(0, 6, 18, 0.98));
+            border: 3px solid rgba(0, 180, 255, 0.5);
             border-bottom: none;
-            border-radius: 8px 8px 0 0;
-            padding: 12px 16px;
+            border-radius: 12px 12px 0 0;
+            padding: 16px 18px;
             display: flex;
             align-items: center;
-            gap: 10px;
-            box-shadow: 0 0 28px rgba(0, 150, 255, 0.1), inset 0 0 20px rgba(0, 100, 200, 0.05);
+            gap: 12px;
+            box-shadow: 0 0 30px rgba(0, 150, 255, 0.15), inset 0 0 20px rgba(0, 100, 200, 0.05);
             font-family: 'Orbitron', monospace;
             overflow: hidden;
             transition: box-shadow 0.3s ease;
@@ -82,8 +82,8 @@
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3) 20%, rgba(0, 212, 255, 0.6) 50%, rgba(0, 212, 255, 0.3) 80%, transparent);
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #00ffcc 30%, #00d4ff 50%, #00ffcc 70%, transparent);
             background-size: 200% 100%;
             animation: airflowIdle 4s linear infinite;
         }
@@ -104,40 +104,47 @@
             100% { opacity: 1; background-position: -100% 0; }
         }
         #balance-display .balance-icon {
-            width: 30px;
-            height: 30px;
+            width: 36px;
+            height: 36px;
             background: rgba(0, 212, 255, 0.08);
-            border: 2px solid rgba(0, 220, 255, 0.7);
+            border: 2.5px solid #00e0ff;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 900;
-            color: #00e0ff;
-            font-size: 16px;
+            color: #00ffcc;
+            font-size: 18px;
             font-family: 'Orbitron', monospace;
-            text-shadow: 0 0 12px rgba(0, 220, 255, 0.8);
-            box-shadow: 0 0 12px rgba(0, 220, 255, 0.3), inset 0 0 8px rgba(0, 220, 255, 0.15);
+            text-shadow: 0 0 14px rgba(0, 255, 204, 0.9);
+            box-shadow: 0 0 16px rgba(0, 255, 204, 0.4), inset 0 0 10px rgba(0, 255, 204, 0.15);
             flex-shrink: 0;
+            animation: iconPulse 3s ease-in-out infinite;
+        }
+        @keyframes iconPulse {
+            0%,100% { box-shadow: 0 0 16px rgba(0,255,204,0.4), inset 0 0 10px rgba(0,255,204,0.15); }
+            50% { box-shadow: 0 0 24px rgba(0,255,204,0.6), inset 0 0 14px rgba(0,255,204,0.25); }
         }
         #balance-display .balance-value {
-            font-size: 30px;
+            font-size: 32px;
             font-weight: 900;
             color: #00ffee;
-            text-shadow: 0 0 18px rgba(0, 255, 238, 0.7), 0 0 36px rgba(0, 255, 238, 0.3), 0 0 60px rgba(0, 255, 238, 0.1);
+            text-shadow: 0 0 20px rgba(0, 255, 238, 0.8), 0 0 40px rgba(0, 255, 238, 0.35), 0 0 70px rgba(0, 255, 238, 0.12);
             font-family: 'Orbitron', monospace;
             -webkit-text-stroke: 0.5px rgba(0, 255, 238, 0.4);
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
+            transform: scaleY(1.06);
+            transform-origin: center;
         }
         #balance-display .balance-label {
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 700;
             letter-spacing: 2px;
-            color: rgba(0, 220, 255, 0.7);
+            color: rgba(0, 220, 255, 0.8);
             margin-left: -2px;
             font-family: 'Orbitron', monospace;
             text-transform: uppercase;
-            text-shadow: 0 0 8px rgba(0, 220, 255, 0.3);
+            text-shadow: 0 0 10px rgba(0, 220, 255, 0.4);
         }
         
         /* Top-Left Debug Group: GLB Debug + Performance Monitor */
@@ -476,13 +483,15 @@
         .weapon-btn {
             flex: 1;
             position: relative;
-            height: 44px;
+            height: 56px;
             background: rgba(0, 20, 50, 0.5);
-            border: 1px solid rgba(0, 180, 255, 0.18);
-            border-radius: 7px;
+            border: 2px solid rgba(0, 150, 255, 0.2);
+            border-radius: 8px;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
+            gap: 2px;
             cursor: pointer;
             transition: all 0.2s ease;
         }
@@ -493,17 +502,14 @@
             color: rgba(0, 180, 255, 0.35);
         }
         .weapon-btn .keycap {
-            position: absolute;
-            bottom: 3px;
-            right: 4px;
             font-family: 'Orbitron', monospace;
             font-size: 9px;
             font-weight: 700;
-            color: rgba(0, 220, 255, 0.5);
-            background: rgba(0, 20, 50, 0.8);
-            border: 1px solid rgba(0, 220, 255, 0.35);
+            color: rgba(0, 200, 255, 0.5);
+            background: rgba(0, 20, 50, 0.85);
+            border: 1px solid rgba(0, 200, 255, 0.35);
             border-radius: 3px;
-            padding: 2px 4px;
+            padding: 2px 6px;
             line-height: 1;
             letter-spacing: 0.5px;
         }
@@ -512,20 +518,20 @@
             background: rgba(0, 30, 70, 0.4);
         }
         .weapon-btn.active {
-            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.25), rgba(0, 60, 120, 0.15));
-            border: 2px solid #00e0ff;
-            box-shadow: 0 0 18px rgba(0, 220, 255, 0.2), inset 0 0 10px rgba(0, 200, 255, 0.08);
+            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.3), rgba(0, 60, 140, 0.18));
+            border: 2.5px solid #00e0ff;
+            box-shadow: 0 0 20px rgba(0, 220, 255, 0.25), inset 0 0 12px rgba(0, 200, 255, 0.1);
         }
         .weapon-btn.active .multiplier {
             color: #00ffff;
-            text-shadow: 0 0 14px rgba(0, 255, 255, 0.6), 0 0 28px rgba(0, 255, 255, 0.15);
+            text-shadow: 0 0 14px rgba(0, 255, 255, 0.7), 0 0 28px rgba(0, 255, 255, 0.15);
             -webkit-text-stroke: 0.3px rgba(0, 255, 255, 0.2);
         }
         .weapon-btn.active .keycap {
-            color: rgba(0, 255, 255, 0.7);
-            border-color: rgba(0, 255, 255, 0.45);
+            color: #00ffee;
+            border-color: rgba(0, 255, 238, 0.5);
             background: rgba(0, 40, 80, 0.9);
-            text-shadow: 0 0 4px rgba(0, 255, 255, 0.3);
+            text-shadow: 0 0 6px rgba(0, 255, 238, 0.4);
         }
         .weapon-btn.active::after {
             content: '';
@@ -536,9 +542,92 @@
             box-shadow: 0 0 8px #00d4ff;
             border-radius: 1px;
         }
-        /* AMMO display removed - digital money aesthetic */
+        /* AMMO display removed - replaced by shot counter */
         #digi-ammo {
             display: none;
+        }
+        /* Shot Counter Strip (Arcade Power-Up) */
+        #shot-counter-strip {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(0, 200, 255, 0.12);
+        }
+        #shot-counter-strip .weapon-badge {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, rgba(0, 100, 200, 0.3), rgba(0, 60, 140, 0.15));
+            border: 2px solid #00aaff;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 1px;
+            flex-shrink: 0;
+            box-shadow: 0 0 12px rgba(0, 170, 255, 0.3);
+        }
+        #shot-counter-strip .weapon-badge .badge-mult {
+            font-family: 'Orbitron', monospace;
+            font-size: 16px;
+            font-weight: 900;
+            color: #00ccff;
+            text-shadow: 0 0 8px rgba(0, 204, 255, 0.6);
+        }
+        #shot-counter-strip .weapon-badge .badge-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 7px;
+            font-weight: 600;
+            color: rgba(0, 200, 255, 0.5);
+            letter-spacing: 1px;
+        }
+        #shot-counter-strip .glass-panel {
+            flex: 1;
+            background: rgba(0, 20, 50, 0.6);
+            border: 1px solid rgba(0, 200, 255, 0.2);
+            border-radius: 8px;
+            padding: 6px 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            box-shadow: inset 0 0 15px rgba(0, 100, 200, 0.08);
+        }
+        #shot-counter-strip .glass-panel .shots-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 7px;
+            font-weight: 600;
+            color: rgba(0, 200, 255, 0.45);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+        #shot-counter-strip .glass-panel .shot-digits {
+            display: flex;
+            gap: 3px;
+        }
+        #shot-counter-strip .glass-panel .shot-digit {
+            width: 34px;
+            height: 38px;
+            background: rgba(0, 10, 25, 0.9);
+            border: 1px solid rgba(0, 200, 255, 0.12);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', monospace;
+            font-size: 22px;
+            font-weight: 900;
+            color: rgba(0, 180, 255, 0.12);
+            transition: color 0.2s, text-shadow 0.2s, border-color 0.2s;
+            transform: scaleY(1.06);
+            transform-origin: center;
+        }
+        #shot-counter-strip .glass-panel .shot-digit.filled {
+            color: #00ffcc;
+            text-shadow: 0 0 12px rgba(0, 255, 204, 0.7), 0 0 24px rgba(0, 255, 204, 0.2);
+            border-color: rgba(0, 255, 204, 0.2);
         }
         #weapon-panel .wp-auto {
             display: flex;
@@ -1510,7 +1599,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #440</div>
+    <div id="pr-version-tag">PR #441</div>
     
     <!-- Middle-Right Debug Group: GLB Debug + Performance Monitor (panels appended by game.js) -->
     <div id="debug-middle-right"></div>
@@ -1626,12 +1715,32 @@
             <div id="weapon-panel">
                 <div class="wp-outer">
                     <div class="wp-header"><div class="wp-dot"></div><div class="wp-title">BET MULTIPLIER</div><div class="wp-line"></div></div>
+
+                    <!-- Shot Counter Strip (Arcade Power-Up) -->
+                    <div id="shot-counter-strip">
+                        <div class="weapon-badge">
+                            <span class="badge-mult" id="weapon-badge-mult">1x</span>
+                            <span class="badge-label">BET</span>
+                        </div>
+                        <div class="glass-panel">
+                            <div class="shots-title">EFFECTIVE SHOTS</div>
+                            <div class="shot-digits" id="shot-digits">
+                                <div class="shot-digit filled" id="shot-digit-0">0</div>
+                                <div class="shot-digit filled" id="shot-digit-1">1</div>
+                                <div class="shot-digit filled" id="shot-digit-2">0</div>
+                                <div class="shot-digit filled" id="shot-digit-3">0</div>
+                                <div class="shot-digit filled" id="shot-digit-4">0</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="wp-weapons">
                         <button class="weapon-btn active" data-weapon="1x"><span class="multiplier">1x</span><span class="keycap">1</span></button>
                         <button class="weapon-btn" data-weapon="3x"><span class="multiplier">3x</span><span class="keycap">2</span></button>
                         <button class="weapon-btn" data-weapon="5x"><span class="multiplier">5x</span><span class="keycap">3</span></button>
                         <button class="weapon-btn" data-weapon="8x"><span class="multiplier">8x</span><span class="keycap">4</span></button>
                     </div>
+
                     <div id="digi-ammo">
                         <div class="ammo-label">AMMO</div>
                         <div class="ammo-multiplier" id="ammo-multiplier-text">1x</div>
@@ -1644,6 +1753,7 @@
                         </div>
                         <div class="ammo-count" id="ammo-count-text"></div>
                     </div>
+
                     <div class="wp-auto">
                         <div class="auto-left"><div class="auto-label">AUTO FIRE</div><span class="auto-sep">:</span><span class="auto-kbd">A</span></div>
                         <div class="auto-pill" id="auto-pill">
