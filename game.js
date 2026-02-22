@@ -9181,6 +9181,51 @@ let fpsCounter = 0;
 let fpsTime = 0;
 let autoShootTimer = 0;
 
+// ==================== AUTO-FIRE DEBUG HUD ====================
+window.DEBUG_COMET_MODE = false;
+const _afDebug = {
+    shotCount: 0,
+    balanceAtStart: 0,
+    startTime: 0,
+    lastFps: 0,
+    _fpsFrames: 0,
+    _fpsTime: 0,
+    el: null,
+    active: false,
+    init() {
+        if (this.el) return;
+        const div = document.createElement('div');
+        div.id = 'autofire-debug';
+        div.style.cssText = 'position:fixed;bottom:8px;right:8px;background:rgba(0,0,0,0.75);color:#0ff;font-family:monospace;font-size:12px;padding:8px 12px;border-radius:6px;z-index:99999;pointer-events:none;display:none;line-height:1.6;white-space:pre;';
+        document.body.appendChild(div);
+        this.el = div;
+    },
+    reset() {
+        this.shotCount = 0;
+        this.balanceAtStart = gameState.balance;
+        this.startTime = performance.now();
+    },
+    recordShot() { this.shotCount++; },
+    update(dt) {
+        if (!this.el) this.init();
+        const show = gameState.autoShoot && gameState.currentWeapon === '8x';
+        if (show && !this.active) { this.reset(); this.active = true; }
+        if (!show) { this.active = false; this.el.style.display = 'none'; return; }
+        this.el.style.display = 'block';
+        this._fpsFrames++;
+        this._fpsTime += dt;
+        if (this._fpsTime >= 0.5) { this.lastFps = Math.round(this._fpsFrames / this._fpsTime); this._fpsFrames = 0; this._fpsTime = 0; }
+        const elapsed = Math.max(0.001, (performance.now() - this.startTime) / 1000);
+        const weapon = CONFIG.weapons['8x'];
+        const shotsPerSec = (this.shotCount / elapsed).toFixed(2);
+        const ammoPerSec = (this.shotCount * weapon.cost / elapsed).toFixed(2);
+        const balanceDelta = gameState.balance - this.balanceAtStart;
+        const balPerSec = (balanceDelta / elapsed).toFixed(2);
+        const phase = TargetingService.state.phase || 'idle';
+        this.el.textContent = `[8x AutoFire Debug]\nShots/sec : ${shotsPerSec}\nAmmo/sec  : ${ammoPerSec}\nBal Δ/sec : ${balPerSec}\nPhase     : ${phase}\nFPS       : ${this.lastFps}\nFish      : ${activeFish.length}`;
+    }
+};
+
 // ==================== INITIALIZATION ====================
 // Flag to track if game scene has been initialized
 let gameSceneInitialized = false;
@@ -11435,7 +11480,7 @@ const TargetingService = {
             const dx = fish.group.position.x - refPos.x;
             const dy = fish.group.position.y - refPos.y;
             const dz = fish.group.position.z - refPos.z;
-            if (dx * dx + dy * dy + dz * dz > 4000000) continue;
+            if (dx * dx + dy * dy + dz * dz > 640000) continue;
             if (!this._isInAutoFireCone(fish.group.position, refPos)) continue;
             const score = this._priorityScore(fish, refPos);
             if (score > bestScore) { bestScore = score; best = fish; }
@@ -15156,6 +15201,21 @@ let dynamicSpawnTimer = 0;
 function updateDynamicFishSpawn(deltaTime) {
     // MULTIPLAYER: Skip local fish spawning in multiplayer mode - fish come from server
     if (multiplayerMode) return;
+
+    // DEBUG_COMET_MODE: force-spawn up to 100 active fish immediately
+    if (window.DEBUG_COMET_MODE && activeFish.length < 100) {
+        const toSpawn = 100 - activeFish.length;
+        for (let i = 0; i < toSpawn; i++) {
+            const inactiveFish = freeFish.pop();
+            if (!inactiveFish) break;
+            const position = getRandomFishPositionIn3DSpace();
+            inactiveFish.spawn(position);
+            if (!activeFish.includes(inactiveFish)) {
+                activeFish.push(inactiveFish);
+            }
+        }
+        return;
+    }
     
     dynamicSpawnTimer -= deltaTime;
     
@@ -18595,6 +18655,7 @@ function animate() {
         camera.updateProjectionMatrix();
     }
     
+    _afDebug.update(deltaTime);
     if (gameState.autoShoot) {
         const result = autoFireTick();
         if (result.target) {
@@ -18604,13 +18665,17 @@ function animate() {
         }
         autoShootTimer -= deltaTime;
         if (autoShootTimer <= 0 && gameState.cooldown <= 0) {
+            const weapon = CONFIG.weapons[gameState.currentWeapon];
+            const interval = 1 / weapon.shotsPerSecond;
             if (result.target && result.canFire) {
                 if (autoFireAtFish(result.target)) {
                     TargetingService.state.shotsAtCurrent++;
+                    _afDebug.recordShot();
                 }
+                autoShootTimer = interval;
+            } else {
+                autoShootTimer = Math.max(autoShootTimer, -interval);
             }
-            const weapon = CONFIG.weapons[gameState.currentWeapon];
-            autoShootTimer = 1 / weapon.shotsPerSecond;
         }
     }
     
