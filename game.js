@@ -16972,14 +16972,16 @@ function fireLaserBeam(origin, direction, weaponKey) {
         );
         for (let i = 0; i < hitFish.length; i++) {
             const hit = hitFish[i];
-            const result = results[i];
             hit.fish.hp -= damage;
             hit.fish.flashHit();
             showCrosshairRingFlash();
             createHitParticles(hit.hitPoint, weapon.color, 12);
             playWeaponHitSound(weaponKey);
-            if (result && result.kill && hit.fish.isActive) {
-                hit.fish.die(weaponKey, result.reward);
+            if (i < results.length) {
+                const result = results[i];
+                if (result && result.kill && hit.fish.isActive) {
+                    hit.fish.die(weaponKey, result.reward);
+                }
             }
         }
     } else {
@@ -16991,10 +16993,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
     }
     
     const hitPoints = hitFish.map(h => h.hitPoint);
-    const beamEnd = hitFish.length > 0
-        ? hitFish[hitFish.length - 1].hitPoint
-        : laserTempVectors.rayEnd.clone();
-    spawnLaserHitscanVFX(origin, beamEnd, hitPoints, weapon.color);
+    spawnLaserHitscanVFX(origin, laserTempVectors.rayEnd.clone(), hitPoints, weapon.color);
     triggerScreenShakeWithStrength(8, 100);
 }
 
@@ -17208,20 +17207,20 @@ function triggerExplosion(center, weaponKey) {
         );
         for (let i = 0; i < hitFishList.length; i++) {
             const fish = hitFishList[i].fish;
-            const result = results[i];
             
             const t = hitFishList[i].distance / aoeRadius;
             const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
             fish.hp -= damage;
             fish.flashHit();
             showCrosshairRingFlash();
-            
-            const fishPos = fish.group ? fish.group.position : null;
             createHitParticles(fish.group.position, weapon.color, 3);
             hitAny = true;
             
-            if (result && result.kill && fish.isActive) {
-                fish.die(weaponKey, result.reward);
+            if (i < results.length) {
+                const result = results[i];
+                if (result && result.kill && fish.isActive) {
+                    fish.die(weaponKey, result.reward);
+                }
             }
         }
     } else {
