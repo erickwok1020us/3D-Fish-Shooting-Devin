@@ -17589,7 +17589,9 @@ const AMMO_WEAPON_SLOTS = ['1x', '3x', '5x', '8x'];
 function updateDigiAmmoDisplay() {
     const weapon = CONFIG.weapons[gameState.currentWeapon];
     if (!weapon) return;
-    const ammo = Math.min(9999, Math.max(0, Math.floor(gameState.balance / weapon.cost)));
+    const ammo = Math.min(99999, Math.max(0, Math.floor(gameState.balance / weapon.cost)));
+
+    // Legacy digi-ammo (kept hidden via CSS but still updated to avoid null refs)
     const currentIdx = AMMO_WEAPON_SLOTS.indexOf(gameState.currentWeapon);
     const mulEl = document.getElementById('ammo-multiplier-text');
     if (mulEl) mulEl.textContent = gameState.currentWeapon.toUpperCase();
@@ -17605,7 +17607,19 @@ function updateDigiAmmoDisplay() {
     }
     const countEl = document.getElementById('ammo-count-text');
     if (countEl) countEl.textContent = ammo + ' ROUNDS';
+
+    // New Arcade Power-Up shot counter strip
+    const badgeMult = document.getElementById('weapon-badge-mult');
+    if (badgeMult) badgeMult.textContent = gameState.currentWeapon.toLowerCase();
+    const digitsStr = String(ammo).padStart(5, '0');
+    for (let i = 0; i < 5; i++) {
+        const d = document.getElementById('shot-digit-' + i);
+        if (!d) continue;
+        d.textContent = digitsStr[i];
+        d.classList.add('filled');
+    }
 }
+
 
 function syncAutoPillUI() {
     const onBtn = document.getElementById('auto-on-btn');
