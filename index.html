@@ -140,13 +140,14 @@
             text-shadow: 0 0 8px rgba(0, 220, 255, 0.3);
         }
         
-        /* Middle-Right Debug Group: GLB Debug + Performance Monitor */
+        /* Top-Left Debug Group: GLB Debug + Performance Monitor */
         #debug-middle-right {
             position: fixed;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 10000;
+            top: 10px;
+            left: 10px;
+            max-height: 50vh;
+            overflow-y: auto;
+            z-index: 9999;
             pointer-events: none;
             display: flex;
             flex-direction: column;
@@ -1509,7 +1510,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #439</div>
+    <div id="pr-version-tag">PR #440</div>
     
     <!-- Middle-Right Debug Group: GLB Debug + Performance Monitor (panels appended by game.js) -->
     <div id="debug-middle-right"></div>
