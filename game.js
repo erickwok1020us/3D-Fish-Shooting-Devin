@@ -11775,20 +11775,18 @@ function autoFireAtFish(targetFish) {
         ).normalize();
     }
     
+    // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
     if (weapon.type === 'spread') {
         const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
-        
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey, 0);
-        
+        fireHitscanRay(muzzlePos, direction, weaponKey, 0);
         fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
-        
+        fireHitscanRay(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-        spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
+        fireHitscanRay(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
     } else if (weapon.type === 'laser') {
         fireLaserBeam(muzzlePos, direction, weaponKey);
     } else {
-        spawnBulletFromDirection(muzzlePos, direction, weaponKey);
+        fireHitscanRay(muzzlePos, direction, weaponKey);
     }
     
     playWeaponShot(weaponKey);
@@ -16166,55 +16164,20 @@ function fireBullet(targetX, targetY) {
         }
     }
     
-    const useFpsConvergent = gameState.viewMode === 'fps';
-    
-    // Fire based on weapon type
+    // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
     if (weapon.type === 'spread') {
-        // 3x weapon: Fire 3 bullets in fan spread pattern
-        const spreadAngle = weapon.spreadAngle * (Math.PI / 180); // Convert to radians
-        
-        if (useFpsConvergent) {
-            fireWithConvergentDirection(muzzlePos, direction, weaponKey, 0);
-            
-            fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-            fireWithConvergentDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
-            
-            fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-            fireWithConvergentDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
-        } else {
-            // THIRD-PERSON MODE: Normal bullet spawning
-            // Center bullet
-            spawnBulletFromDirection(muzzlePos, direction, weaponKey, 0);
-            
-            // PERFORMANCE: Use temp vectors instead of clone() + new Vector3()
-            // Left bullet (rotate around Y axis)
-            fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-            spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
-            
-            // Right bullet (rotate around Y axis)
-            fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-            spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
-        }
-        
+        const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
+        fireHitscanRay(muzzlePos, direction, weaponKey, 0);
+        fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
+        fireHitscanRay(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
+        fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
+        fireHitscanRay(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
     } else if (weapon.type === 'laser') {
-        // 8x LASER: Hitscan with piercing - instant raycast damages all fish along beam
         fireLaserBeam(muzzlePos, direction, weaponKey);
-        
     } else if (weapon.type === 'rocket') {
-        // 5x ROCKET: Straight line projectile with explosion on impact
-        if (useFpsConvergent) {
-            fireWithConvergentDirection(muzzlePos, direction, weaponKey);
-        } else {
-            spawnBulletFromDirection(muzzlePos, direction, weaponKey);
-        }
-        
+        fireHitscanRay(muzzlePos, direction, weaponKey);
     } else {
-        if (useFpsConvergent) {
-            fireWithConvergentDirection(muzzlePos, direction, weaponKey);
-        } else {
-            // THIRD-PERSON MODE: Normal bullet
-            spawnBulletFromDirection(muzzlePos, direction, weaponKey);
-        }
+        fireHitscanRay(muzzlePos, direction, weaponKey);
     }
     
     spawnMuzzleFlash(weaponKey, muzzlePos, direction);
@@ -16973,9 +16936,135 @@ function spawnVisualBulletConvergent(origin, targetPoint, convergentDirection, w
 }
 
 
+// ==================== HITSCAN SYSTEM ====================
+// All weapons (1x, 3x, 5x, 8x) use instant Raycaster-based hit detection.
+// No physical bullet travel - damage is resolved immediately on the frame the shot fires.
+// Visual tracer beams provide feedback from muzzle to hit/max-range point.
+
+const hitscanTempVectors = {
+    rayDir: new THREE.Vector3(),
+    rayEnd: new THREE.Vector3(),
+    hitPos: new THREE.Vector3(),
+    fishToRay: new THREE.Vector3(),
+    closestPoint: new THREE.Vector3(),
+};
+
+function fireHitscanRay(origin, direction, weaponKey, spreadIndex) {
+    const weapon = CONFIG.weapons[weaponKey];
+    const damage = weapon.damage || 100;
+    const maxRange = 3000;
+    const dir = hitscanTempVectors.rayDir.copy(direction).normalize();
+
+    const hitOrigin = (gameState.viewMode === 'fps') ? camera.position : origin;
+
+    let closestHit = null;
+    let closestT = Infinity;
+
+    for (const fish of activeFish) {
+        if (!fish.isActive) continue;
+        const fishPos = fish.group.position;
+        const halfExt = fish.ellipsoidHalfExtents;
+        const fishYaw = fish._currentYaw || 0;
+
+        let result;
+        if (halfExt) {
+            result = rayHitsEllipsoid(hitOrigin, dir, fishPos, halfExt, fishYaw, 8);
+        } else {
+            const fishRadius = fish.boundingRadius;
+            hitscanTempVectors.fishToRay.copy(fishPos).sub(hitOrigin);
+            const t = hitscanTempVectors.fishToRay.dot(dir);
+            if (t < 5) continue;
+            hitscanTempVectors.closestPoint.copy(dir).multiplyScalar(t).add(hitOrigin);
+            const distToRay = fishPos.distanceTo(hitscanTempVectors.closestPoint);
+            result = distToRay <= fishRadius ? { hit: true, t: t } : { hit: false, t: -1 };
+        }
+
+        if (result.hit && result.t >= 5 && result.t < closestT) {
+            closestT = result.t;
+            closestHit = fish;
+        }
+    }
+
+    const beamEnd = hitscanTempVectors.rayEnd.copy(dir).multiplyScalar(closestHit ? closestT : maxRange).add(hitOrigin);
+    const hitPoint = closestHit ? beamEnd.clone() : null;
+
+    if (closestHit && !multiplayerMode) {
+        if (weapon.type === 'rocket') {
+            triggerExplosion(beamEnd.clone(), weaponKey);
+            triggerScreenShakeWithStrength(6, 80);
+        } else if (weapon.type === 'spread') {
+            closestHit.takeDamage(damage, weaponKey, spreadIndex);
+            createHitParticles(beamEnd, weapon.color, 5);
+            spawnWeaponHitEffect(weaponKey, beamEnd.clone(), closestHit, dir);
+            playWeaponHitSound(weaponKey);
+        } else {
+            closestHit.takeDamage(damage, weaponKey, spreadIndex);
+            createHitParticles(beamEnd, weapon.color, 5);
+            spawnWeaponHitEffect(weaponKey, beamEnd.clone(), closestHit, dir);
+            playWeaponHitSound(weaponKey);
+        }
+    } else if (closestHit && multiplayerMode) {
+        closestHit.takeDamage(damage, weaponKey, spreadIndex);
+        createHitParticles(beamEnd, weapon.color, 5);
+        playWeaponHitSound(weaponKey);
+    }
+
+    spawnTracerBeamVFX(origin, closestHit ? beamEnd.clone() : beamEnd.clone(), weapon.color, weaponKey);
+
+    return { hit: !!closestHit, fish: closestHit, hitPoint: hitPoint, beamEnd: beamEnd.clone() };
+}
+
+function spawnTracerBeamVFX(muzzlePos, beamEnd, color, weaponKey) {
+    const beamDir = new THREE.Vector3().subVectors(beamEnd, muzzlePos);
+    const beamLength = beamDir.length();
+    if (beamLength < 1) return;
+    const beamMid = new THREE.Vector3().addVectors(muzzlePos, beamEnd).multiplyScalar(0.5);
+
+    const coreGeo = new THREE.CylinderGeometry(1.5, 1.5, beamLength, 6, 1);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.position.copy(beamMid);
+    core.lookAt(beamEnd);
+    core.rotateX(Math.PI / 2);
+    scene.add(core);
+
+    const glowGeo = new THREE.CylinderGeometry(5, 5, beamLength, 6, 1);
+    const glowMat = new THREE.MeshBasicMaterial({
+        color: color, transparent: true, opacity: 0.35,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.position.copy(beamMid);
+    glow.lookAt(beamEnd);
+    glow.rotateX(Math.PI / 2);
+    scene.add(glow);
+
+    addVfxEffect({
+        type: 'hitscanTracer',
+        core, glow, coreGeo, coreMat, glowGeo, glowMat,
+        duration: 120,
+        update(dt, elapsed) {
+            const progress = elapsed / this.duration;
+            this.coreMat.opacity = 0.85 * Math.max(0, 1.0 - progress * 3);
+            this.glowMat.opacity = 0.35 * Math.max(0, 1.0 - progress * 2.5);
+            const shrink = 1.0 - progress * 0.5;
+            this.core.scale.set(shrink, 1, shrink);
+            return progress < 1;
+        },
+        cleanup() {
+            scene.remove(this.core);
+            scene.remove(this.glow);
+            this.coreGeo.dispose();
+            this.coreMat.dispose();
+            this.glowGeo.dispose();
+            this.glowMat.dispose();
+        }
+    });
+}
+
 // ==================== 8X LASER WEAPON ====================
 // Pure crosshair-based hitscan laser - instant ray along crosshair direction
-// No travelling beam; hits resolved instantly with muzzle flash + hit VFX
+// Now NON-PIERCING: hits only the first target (closest fish along the ray)
 const laserTempVectors = {
     rayEnd: new THREE.Vector3(),
     fishToRay: new THREE.Vector3(),
@@ -17033,39 +17122,32 @@ function fireLaserBeam(origin, direction, weaponKey) {
     
     hitFish.sort((a, b) => a.distance - b.distance);
     
-    if (hitFish.length > 0 && !multiplayerMode) {
-        const rtpHitList = hitFish.map((h, i) => ({
-            fishId: h.fish.rtpFishId,
-            tier: h.fish.rtpTier,
-            distance: i + 1
-        }));
-        const results = clientRTPEngine.handleMultiTargetHit(
-            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'laser', gameState.autoShoot
+    // NON-PIERCING: Only hit the closest (first) fish along the ray
+    const firstHit = hitFish.length > 0 ? [hitFish[0]] : [];
+    
+    if (firstHit.length > 0 && !multiplayerMode) {
+        const hit = firstHit[0];
+        const result = clientRTPEngine.handleSingleTargetHit(
+            CLIENT_RTP_PLAYER_ID, hit.fish.rtpFishId, weaponKey, hit.fish.rtpTier, gameState.autoShoot
         );
-        for (let i = 0; i < hitFish.length; i++) {
-            const hit = hitFish[i];
-            hit.fish.hp -= damage;
-            hit.fish.flashHit();
-            showCrosshairRingFlash();
-            createHitParticles(hit.hitPoint, weapon.color, 12);
-            playWeaponHitSound(weaponKey);
-            if (i < results.length) {
-                const result = results[i];
-                if (result && result.kill && hit.fish.isActive) {
-                    hit.fish.die(weaponKey, result.reward);
-                }
-            }
+        hit.fish.hp -= damage;
+        hit.fish.flashHit();
+        showCrosshairRingFlash();
+        createHitParticles(hit.hitPoint, weapon.color, 12);
+        playWeaponHitSound(weaponKey);
+        if (result && result.kill && hit.fish.isActive) {
+            hit.fish.die(weaponKey, result.reward);
         }
-    } else {
-        for (const hit of hitFish) {
-            hit.fish.takeDamage(damage, weaponKey);
-            createHitParticles(hit.hitPoint, weapon.color, 12);
-            playWeaponHitSound(weaponKey);
-        }
+    } else if (firstHit.length > 0) {
+        const hit = firstHit[0];
+        hit.fish.takeDamage(damage, weaponKey);
+        createHitParticles(hit.hitPoint, weapon.color, 12);
+        playWeaponHitSound(weaponKey);
     }
     
-    const hitPoints = hitFish.map(h => h.hitPoint);
-    spawnLaserHitscanVFX(origin, laserTempVectors.rayEnd.clone(), hitPoints, weapon.color);
+    const beamEndPoint = firstHit.length > 0 ? firstHit[0].hitPoint : laserTempVectors.rayEnd.clone();
+    const hitPoints = firstHit.map(h => h.hitPoint);
+    spawnLaserHitscanVFX(origin, beamEndPoint, hitPoints, weapon.color);
     triggerScreenShakeWithStrength(8, 100);
 }
 
