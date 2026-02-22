@@ -14721,7 +14721,7 @@ class Fish {
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, isAutoFired
                 );
                 if (result.kill) {
-                    this.die(weaponKey, result.reward);
+                    this.die(weaponKey, result.reward, isAutoFired);
                     return true;
                 }
             } else if (weapon.type === 'projectile') {
@@ -14729,7 +14729,7 @@ class Fish {
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, isAutoFired
                 );
                 if (result.kill) {
-                    this.die(weaponKey, result.reward);
+                    this.die(weaponKey, result.reward, isAutoFired);
                     return true;
                 }
             }
@@ -14738,7 +14738,7 @@ class Fish {
         return false;
     }
     
-    die(weaponKey, rtpReward) {
+    die(weaponKey, rtpReward, isAutoFired) {
         if (!this.isActive) {
             console.warn('[FISH] die() called on already-dead fish, skipping');
             return;
@@ -14797,7 +14797,7 @@ class Fish {
         
         // Phase 2: Trigger special abilities on death
         if (this.config.ability) {
-            this.triggerAbility(deathPosition, weaponKey);
+            this.triggerAbility(deathPosition, weaponKey, isAutoFired);
         }
         
         // MULTIPLAYER MODE: Skip local RTP calculation - server handles rewards
@@ -14871,15 +14871,15 @@ class Fish {
     }
     
     // Phase 2: Trigger special ability when fish dies
-    triggerAbility(position, weaponKey) {
+    triggerAbility(position, weaponKey, isAutoFired) {
         switch (this.config.ability) {
             case 'bomb':
                 // Bomb Crab: Explode and damage nearby fish
-                this.triggerBombExplosion(position, weaponKey);
+                this.triggerBombExplosion(position, weaponKey, isAutoFired);
                 break;
             case 'lightning':
                 // Electric Eel: Chain lightning to nearby fish
-                this.triggerChainLightningAbility(position, weaponKey);
+                this.triggerChainLightningAbility(position, weaponKey, isAutoFired);
                 break;
             case 'bonus':
                 // Gold Fish: Extra coin burst
@@ -14890,7 +14890,7 @@ class Fish {
     }
     
     // Bomb Crab explosion - damages nearby fish
-    triggerBombExplosion(position, weaponKey) {
+    triggerBombExplosion(position, weaponKey, isAutoFired) {
         const radius = this.config.abilityRadius || 200;
         const damage = this.config.abilityDamage || 300;
         
@@ -14910,7 +14910,7 @@ class Fish {
                     // Damage falls off with distance
                     const falloff = 1 - (dist / radius);
                     const actualDamage = damage * falloff;
-                    fish.takeDamage(actualDamage, weaponKey);
+                    fish.takeDamage(actualDamage, weaponKey, undefined, isAutoFired);
                 }
             }
         });
@@ -14920,7 +14920,7 @@ class Fish {
     }
     
     // Electric Eel chain lightning - jumps to nearby fish
-    triggerChainLightningAbility(position, weaponKey) {
+    triggerChainLightningAbility(position, weaponKey, isAutoFired) {
         const maxChains = this.config.abilityChains || 4;
         const baseDamage = this.config.abilityDamage || 150;
         const decay = this.config.abilityDecay || 0.6;
@@ -14956,7 +14956,7 @@ class Fish {
                 // Damage the fish
                 setTimeout(() => {
                     if (nearestFish.isActive) {
-                        nearestFish.takeDamage(currentDamage, weaponKey);
+                        nearestFish.takeDamage(currentDamage, weaponKey, undefined, isAutoFired);
                     }
                 }, i * 150 + 50);
                 
@@ -16982,7 +16982,7 @@ function fireLaserBeam(origin, direction, weaponKey, isAutoFired) {
             if (i < results.length) {
                 const result = results[i];
                 if (result && result.kill && hit.fish.isActive) {
-                    hit.fish.die(weaponKey, result.reward);
+                    hit.fish.die(weaponKey, result.reward, isAutoFired);
                 }
             }
         }
@@ -17221,7 +17221,7 @@ function triggerExplosion(center, weaponKey, isAutoFired) {
             if (i < results.length) {
                 const result = results[i];
                 if (result && result.kill && fish.isActive) {
-                    fish.die(weaponKey, result.reward);
+                    fish.die(weaponKey, result.reward, isAutoFired);
                 }
             }
         }
