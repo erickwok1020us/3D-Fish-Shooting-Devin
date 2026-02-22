@@ -1320,8 +1320,8 @@ function createGlbDebugDisplay() {
         debugDiv.id = 'glb-debug-display';
         debugDiv.style.cssText = `
             position: fixed;
-            top: 80px;
-            left: 10px;
+            top: 10px;
+            right: 10px;
             background: rgba(0, 0, 0, 0.8);
             color: #00ff00;
             font-family: monospace;
@@ -1411,8 +1411,8 @@ function createPerfDisplay() {
         perfDiv.id = 'perf-display';
         perfDiv.style.cssText = `
             position: fixed;
-            top: calc(80px + 30vh + 10px);
-            left: 10px;
+            top: calc(10px + 30vh + 10px);
+            right: 10px;
             background: rgba(0, 0, 0, 0.85);
             color: #00ff00;
             font-family: monospace;
@@ -17286,11 +17286,22 @@ function spawnExplosionEffect(center, radius, color) {
 
 // ==================== UI FUNCTIONS ====================
 let _lastBalanceForFlash = null;
+let _lastBalanceNum = null;
 function updateUI() {
     const balanceEl = document.getElementById('balance-value');
     const newBalance = gameState.balance.toFixed(2);
     balanceEl.textContent = newBalance;
     
+    const newNum = parseFloat(newBalance);
+    if (_lastBalanceNum !== null && newNum > _lastBalanceNum) {
+        const bd = document.getElementById('balance-display');
+        if (bd) {
+            bd.classList.remove('balance-gain');
+            void bd.offsetWidth;
+            bd.classList.add('balance-gain');
+            setTimeout(() => bd.classList.remove('balance-gain'), 500);
+        }
+    }
     if (_lastBalanceForFlash !== null && _lastBalanceForFlash !== newBalance) {
         const bd = document.getElementById('balance-display');
         if (bd) {
@@ -17299,6 +17310,7 @@ function updateUI() {
         }
     }
     _lastBalanceForFlash = newBalance;
+    _lastBalanceNum = newNum;
     
     const fpsEl = document.getElementById('fps-counter');
     if (fpsEl) fpsEl.textContent = `FPS: ${Math.round(1 / deltaTime) || 60}`;
@@ -17678,7 +17690,7 @@ function createRmbZoomHint() {
     if (rmbHintEl) return rmbHintEl;
     const el = document.createElement('div');
     el.id = 'rmb-zoom-hint';
-    el.style.cssText = 'position:fixed;right:28px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:1000;pointer-events:none;';
+    el.style.cssText = 'position:fixed;right:30%;bottom:24px;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:1000;pointer-events:none;';
     const mouseSvg = `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" stroke="rgba(0,255,200,0.6)" stroke-width="1.5" fill="none"/>
         <line x1="14" y1="1.5" x2="14" y2="18" stroke="rgba(0,255,200,0.6)" stroke-width="1"/>

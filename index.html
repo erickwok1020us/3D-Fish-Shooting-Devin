@@ -48,12 +48,12 @@
             z-index: 10;
         }
         
-        /* Balance Display - Top Left (Cyberpunk Orbitron) */
+        /* Balance Display - Bottom Left (above weapon panel) */
         #balance-display {
-            transform: scale(1.1);
-            transform-origin: top left;
+            transform: scale(1.0);
+            transform-origin: bottom left;
             position: absolute;
-            top: 16px;
+            bottom: 240px;
             left: 16px;
             background: linear-gradient(135deg, rgba(0, 18, 40, 0.94), rgba(0, 8, 22, 0.97));
             border: 2px solid rgba(0, 200, 255, 0.4);
@@ -81,6 +81,20 @@
         #balance-display.balance-flash {
             box-shadow: 0 0 20px rgba(0, 255, 204, 0.35), 0 0 40px rgba(0, 255, 204, 0.15);
             border-color: rgba(0, 255, 204, 0.6);
+        }
+        @keyframes balanceAirflow {
+            0% { background-position: -100% 0; }
+            100% { background-position: 200% 0; }
+        }
+        #balance-display.balance-gain .balance-value {
+            background: linear-gradient(90deg, #00ffcc 0%, #66ffee 30%, #ffffff 50%, #66ffee 70%, #00ffcc 100%);
+            background-size: 200% 100%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: balanceAirflow 0.45s ease-out;
+        }
+        #balance-display.balance-gain {
+            box-shadow: 0 0 18px rgba(0, 255, 204, 0.3), 0 0 35px rgba(0, 255, 204, 0.1);
         }
         #balance-display::before {
             content: '';
@@ -126,13 +140,13 @@
             text-transform: uppercase;
         }
         
-        /* Settings Container - Top Right (Style A: Detailed Gear SVG) */
+        /* Settings Container - Bottom Left (below balance, above weapon panel) */
         #settings-container {
-            transform: scale(1.1);
-            transform-origin: top right;
+            transform: scale(1.0);
+            transform-origin: bottom left;
             position: absolute;
-            top: 16px;
-            right: 16px;
+            bottom: 192px;
+            left: 16px;
             background: linear-gradient(135deg, rgba(0, 18, 40, 0.94), rgba(0, 8, 22, 0.97));
             border: 2px solid rgba(0, 200, 255, 0.4);
             border-radius: 8px;
@@ -396,14 +410,14 @@
             display: none;
         }
         
-        /* Weapon Panel - Bottom Left (Sci-Fi with Digital LED 4-digit ammo) */
+        /* Weapon Panel - Bottom Left (Combat HUD) */
         #weapon-panel {
-            transform: scale(1.1);
+            transform: scale(1.0);
             transform-origin: bottom left;
             position: absolute;
             bottom: 16px;
             left: 16px;
-            width: 280px;
+            width: 290px;
             font-family: 'Orbitron', monospace;
             pointer-events: auto;
         }
@@ -665,8 +679,8 @@
         /* Settings Panel - Sci-fi style matching other panels */
         #settings-panel {
             position: absolute;
-            top: 72px;
-            right: 16px;
+            bottom: 250px;
+            left: 16px;
             width: 320px;
             background: linear-gradient(180deg, rgba(0, 15, 35, 0.96), rgba(0, 8, 22, 0.98));
             border: 1.5px solid rgba(0, 200, 255, 0.35);
@@ -1535,7 +1549,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #428</div>
+    <div id="pr-version-tag">PR #434</div>
 
     <!-- Multiplayer Lobby -->
     <div id="multiplayer-lobby" style="display: none;">
