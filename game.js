@@ -14718,7 +14718,7 @@ class Fish {
                 console.warn(`[RTP] takeDamage: no weapon found for key='${weaponKey}'`);
             } else if (weapon.type === 'spread') {
                 const result = clientRTPEngine.handleShotgunHit(
-                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier
+                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
                 );
                 if (result.kill) {
                     this.die(weaponKey, result.reward);
@@ -14726,7 +14726,7 @@ class Fish {
                 }
             } else if (weapon.type === 'projectile') {
                 const result = clientRTPEngine.handleSingleTargetHit(
-                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier
+                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
                 );
                 if (result.kill) {
                     this.die(weaponKey, result.reward);
@@ -15192,23 +15192,27 @@ function updateDynamicFishSpawn(deltaTime) {
 // Casino-standard RTP calculation: RTP = (Total Wins / Total Bets) * 100%
 // ==================== RTP Phase 1 System v1.3 (SSOT: 2026-02-22) ====================
 // Strict implementation of 《RTP Phase 1 系統聖經 v1.3》
-// §0 Precision: MONEY_SCALE=1000, RTP_SCALE=10000, PROGRESS_SCALE=1000000
+// §0 Precision: MONEY_SCALE=1000, RTP_SCALE=10000, P_SCALE=1000000
 // All division → floor(); All state → integer FP; No floating-point in settlement path.
+// v1.6.2: Convenience Tax — manual (98%) vs auto (96%) reward split
 const RTP_MONEY_SCALE = 1000;
 const RTP_SCALE = 10000;
-const RTP_PROGRESS_SCALE = 1000000;
 const RTP_P_SCALE = 1000000;
-const RTP_LATE_RAMP_START = 800000;
 const RTP_ROCKET_MAX_TARGETS = 6;
 const RTP_LASER_MAX_TARGETS = 10;
-const RTP_PRIMARY_WEIGHT = 700000;
-const RTP_SECONDARY_WEIGHT = 300000;
 
-const RTP_WEAPON_RTP_FP = {
+const RTP_WEAPON_RTP_MANUAL_FP = {
     '1x': 9200,
     '3x': 9400,
     '5x': 9600,
     '8x': 9800
+};
+
+const RTP_WEAPON_RTP_AUTO_FP = {
+    '1x': 9000,
+    '3x': 9200,
+    '5x': 9400,
+    '8x': 9600
 };
 
 const RTP_WEAPON_COST_FP = {
@@ -15219,12 +15223,12 @@ const RTP_WEAPON_COST_FP = {
 };
 
 const RTP_TIER_CONFIG = {
-    1: { rewardFp: 6440, n1Fp: 7000, pityCompFp: 367000 },
-    2: { rewardFp: 9200, n1Fp: 10000, pityCompFp: 344000 },
-    3: { rewardFp: 14720, n1Fp: 16000, pityCompFp: 332000 },
-    4: { rewardFp: 27600, n1Fp: 30000, pityCompFp: 326400 },
-    5: { rewardFp: 41400, n1Fp: 45000, pityCompFp: 322600 },
-    6: { rewardFp: 110400, n1Fp: 120000, pityCompFp: 316000 }
+    1: { rewardManualFp: 7840, rewardAutoFp: 7680, n1Fp: 8000, pityCompFp: 367000 },
+    2: { rewardManualFp: 11200, rewardAutoFp: 10970, n1Fp: 12000, pityCompFp: 344000 },
+    3: { rewardManualFp: 17920, rewardAutoFp: 17550, n1Fp: 18000, pityCompFp: 332000 },
+    4: { rewardManualFp: 33600, rewardAutoFp: 32910, n1Fp: 34000, pityCompFp: 326400 },
+    5: { rewardManualFp: 50400, rewardAutoFp: 49370, n1Fp: 51000, pityCompFp: 322600 },
+    6: { rewardManualFp: 134400, rewardAutoFp: 131660, n1Fp: 135000, pityCompFp: 316000 }
 };
 
 const FISH_SPECIES_TO_RTP_TIER = {
@@ -15302,7 +15306,30 @@ class ClientRTPPhase1 {
         }
     }
 
-    handleSingleTargetHit(playerId, fishId, weaponKey, tier) {
+    _resolveMode(isAuto) {
+        return isAuto ? 'auto' : 'manual';
+    }
+
+    _getRtp(weaponKey, isAuto) {
+        const table = isAuto ? RTP_WEAPON_RTP_AUTO_FP : RTP_WEAPON_RTP_MANUAL_FP;
+        return table[weaponKey] || (isAuto ? 9000 : 9200);
+    }
+
+    _getReward(config, isAuto) {
+        return isAuto ? config.rewardAutoFp : config.rewardManualFp;
+    }
+
+    _calcProbability(pState, config, isAuto) {
+        const rewardFp = this._getReward(config, isAuto);
+        const budgetEffFp = Math.max(0, pState.budgetRemainingFp);
+        const pBaseRawFp = Math.floor(budgetEffFp * RTP_P_SCALE / rewardFp);
+        if (pBaseRawFp >= RTP_P_SCALE) {
+            return RTP_P_SCALE;
+        }
+        return Math.min(RTP_P_SCALE, Math.floor(pBaseRawFp * config.pityCompFp / RTP_P_SCALE));
+    }
+
+    handleSingleTargetHit(playerId, fishId, weaponKey, tier, isAuto) {
         const config = RTP_TIER_CONFIG[tier];
         if (!config) return { kill: false, error: 'invalid_tier' };
 
@@ -15311,70 +15338,42 @@ class ClientRTPPhase1 {
 
         const pState = this._getOrCreatePlayerState(playerId);
         const weaponCostFp = RTP_WEAPON_COST_FP[weaponKey] || 1000;
-        const rtpWeaponFp = RTP_WEAPON_RTP_FP[weaponKey] || 9200;
+        const rtpWeaponFp = this._getRtp(weaponKey, isAuto);
 
         const budgetTotalFp = Math.floor(weaponCostFp * rtpWeaponFp / RTP_SCALE);
         pState.budgetRemainingFp += budgetTotalFp;
         fState.sumCostFp += weaponCostFp;
 
         if (fState.sumCostFp >= config.n1Fp) {
-            return this._executeKill(fState, pState, config, fishId, 'hard_pity');
+            return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto);
         }
 
-        const budgetEffFp = Math.max(0, pState.budgetRemainingFp);
-        const pBaseRawFp = Math.floor(budgetEffFp * RTP_P_SCALE / config.rewardFp);
-        const pBaseFp = Math.min(RTP_P_SCALE, Math.floor(pBaseRawFp * config.pityCompFp / RTP_P_SCALE));
-
-        const progressFp = Math.floor(fState.sumCostFp * RTP_PROGRESS_SCALE / config.n1Fp);
-        let rampBoostFp = 0;
-        if (progressFp > RTP_LATE_RAMP_START) {
-            rampBoostFp = Math.min(RTP_PROGRESS_SCALE, Math.floor(
-                (progressFp - RTP_LATE_RAMP_START) * RTP_PROGRESS_SCALE / (RTP_PROGRESS_SCALE - RTP_LATE_RAMP_START)
-            ));
-        }
-        const pFp = Math.min(RTP_P_SCALE, pBaseFp + Math.floor(pBaseFp * rampBoostFp / RTP_PROGRESS_SCALE));
+        const pFp = this._calcProbability(pState, config, isAuto);
 
         const rand = Math.floor(Math.random() * RTP_P_SCALE);
         if (rand < pFp) {
-            return this._executeKill(fState, pState, config, fishId, 'probability');
+            return this._executeKill(fState, pState, config, fishId, 'probability', isAuto);
         }
         return { kill: false, reason: 'roll_failed', pFp };
     }
 
-    handleMultiTargetHit(playerId, hitList, weaponKey, weaponType) {
+    handleMultiTargetHit(playerId, hitList, weaponKey, weaponType, isAuto) {
         if (!hitList || hitList.length === 0) return [];
 
         const maxTargets = weaponType === 'laser' ? RTP_LASER_MAX_TARGETS : RTP_ROCKET_MAX_TARGETS;
-        const cap = maxTargets;
         const trimmedList = hitList.slice(0, maxTargets);
         const M = trimmedList.length;
 
         const weaponCostFp = RTP_WEAPON_COST_FP[weaponKey] || 1000;
-        const rtpWeaponFp = RTP_WEAPON_RTP_FP[weaponKey] || 9200;
+        const rtpWeaponFp = this._getRtp(weaponKey, isAuto);
         const budgetTotalFp = Math.floor(weaponCostFp * rtpWeaponFp / RTP_SCALE);
 
         const pState = this._getOrCreatePlayerState(playerId);
 
-        let budget0Fp, budgetSecondaryEachFp;
-        if (M === 1) {
-            budget0Fp = budgetTotalFp;
-            budgetSecondaryEachFp = 0;
-        } else {
-            budget0Fp = Math.floor(budgetTotalFp * RTP_PRIMARY_WEIGHT / RTP_PROGRESS_SCALE);
-            const secondaryTotalFp = budgetTotalFp - budget0Fp;
-            budgetSecondaryEachFp = Math.floor(secondaryTotalFp / (M - 1));
-        }
-
-        const usedBudgetFp = budget0Fp + budgetSecondaryEachFp * (M - 1);
-        const remainderFp = budgetTotalFp - usedBudgetFp;
-        if (remainderFp > 0) {
-            budget0Fp += remainderFp;
-        }
-
-        const cost0Fp = Math.floor(weaponCostFp * RTP_PRIMARY_WEIGHT / RTP_PROGRESS_SCALE);
-        const costSecondaryEachFp = M > 1 ? Math.floor((weaponCostFp - cost0Fp) / (M - 1)) : 0;
+        pState.budgetRemainingFp += budgetTotalFp;
 
         const results = [];
+        let energyCarry = false;
         for (let i = 0; i < M; i++) {
             const entry = trimmedList[i];
             const config = RTP_TIER_CONFIG[entry.tier];
@@ -15389,41 +15388,45 @@ class ClientRTPPhase1 {
                 continue;
             }
 
-            const budgetIFp = (i === 0) ? budget0Fp : budgetSecondaryEachFp;
-            const costIFp = (i === 0) ? cost0Fp : costSecondaryEachFp;
-
-            pState.budgetRemainingFp += budgetIFp;
-            fState.sumCostFp += costIFp;
+            if (i === 0) {
+                fState.sumCostFp += weaponCostFp;
+            }
 
             if (fState.sumCostFp >= config.n1Fp) {
-                results.push(this._executeKill(fState, pState, config, entry.fishId, 'hard_pity'));
+                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'hard_pity', isAuto);
+                results.push(killResult);
+                energyCarry = true;
                 continue;
             }
 
+            const rewardFp = this._getReward(config, isAuto);
             const budgetEffFp = Math.max(0, pState.budgetRemainingFp);
-            const pBaseRawFp = Math.floor(budgetEffFp * RTP_P_SCALE / config.rewardFp);
-            const pBaseFp = Math.min(RTP_P_SCALE, Math.floor(pBaseRawFp * config.pityCompFp / RTP_P_SCALE));
+            const pBaseRawFp = Math.floor(budgetEffFp * RTP_P_SCALE / rewardFp);
 
-            const progressFp = Math.floor(fState.sumCostFp * RTP_PROGRESS_SCALE / config.n1Fp);
-            let rampBoostFp = 0;
-            if (progressFp > RTP_LATE_RAMP_START) {
-                rampBoostFp = Math.min(RTP_PROGRESS_SCALE, Math.floor(
-                    (progressFp - RTP_LATE_RAMP_START) * RTP_PROGRESS_SCALE / (RTP_PROGRESS_SCALE - RTP_LATE_RAMP_START)
-                ));
+            if (pBaseRawFp >= RTP_P_SCALE) {
+                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'probability', isAuto);
+                results.push(killResult);
+                energyCarry = true;
+                continue;
             }
-            const pIFp = Math.min(RTP_P_SCALE, pBaseFp + Math.floor(pBaseFp * rampBoostFp / RTP_PROGRESS_SCALE));
+
+            const pIFp = Math.min(RTP_P_SCALE, Math.floor(pBaseRawFp * config.pityCompFp / RTP_P_SCALE));
 
             const randI = Math.floor(Math.random() * RTP_P_SCALE);
             if (randI < pIFp) {
-                results.push(this._executeKill(fState, pState, config, entry.fishId, 'probability'));
+                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'probability', isAuto);
+                results.push(killResult);
+                energyCarry = (pState.budgetRemainingFp > 0);
             } else {
                 results.push({ fishId: entry.fishId, kill: false, reason: 'roll_failed', pFp: pIFp });
+                if (i > 0 && !energyCarry) break;
+                energyCarry = false;
             }
         }
         return results;
     }
 
-    handleShotgunHit(playerId, fishId, weaponKey, tier) {
+    handleShotgunHit(playerId, fishId, weaponKey, tier, isAuto) {
         const config = RTP_TIER_CONFIG[tier];
         if (!config) return { kill: false, error: 'invalid_tier' };
 
@@ -15432,52 +15435,44 @@ class ClientRTPPhase1 {
 
         const pState = this._getOrCreatePlayerState(playerId);
         const pelletCostFp = 1000;
-        const rtpWeaponFp = RTP_WEAPON_RTP_FP['3x'] || 9400;
+        const rtpWeaponFp = this._getRtp('3x', isAuto);
 
         const budgetTotalFp = Math.floor(pelletCostFp * rtpWeaponFp / RTP_SCALE);
         pState.budgetRemainingFp += budgetTotalFp;
         fState.sumCostFp += pelletCostFp;
 
         if (fState.sumCostFp >= config.n1Fp) {
-            return this._executeKill(fState, pState, config, fishId, 'hard_pity');
+            return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto);
         }
 
-        const budgetEffFp = Math.max(0, pState.budgetRemainingFp);
-        const pBaseRawFp = Math.floor(budgetEffFp * RTP_P_SCALE / config.rewardFp);
-        const pBaseFp = Math.min(RTP_P_SCALE, Math.floor(pBaseRawFp * config.pityCompFp / RTP_P_SCALE));
-
-        const progressFp = Math.floor(fState.sumCostFp * RTP_PROGRESS_SCALE / config.n1Fp);
-        let rampBoostFp = 0;
-        if (progressFp > RTP_LATE_RAMP_START) {
-            rampBoostFp = Math.min(RTP_PROGRESS_SCALE, Math.floor(
-                (progressFp - RTP_LATE_RAMP_START) * RTP_PROGRESS_SCALE / (RTP_PROGRESS_SCALE - RTP_LATE_RAMP_START)
-            ));
-        }
-        const pFp = Math.min(RTP_P_SCALE, pBaseFp + Math.floor(pBaseFp * rampBoostFp / RTP_PROGRESS_SCALE));
+        const pFp = this._calcProbability(pState, config, isAuto);
 
         const rand = Math.floor(Math.random() * RTP_P_SCALE);
         if (rand < pFp) {
-            return this._executeKill(fState, pState, config, fishId, 'probability');
+            return this._executeKill(fState, pState, config, fishId, 'probability', isAuto);
         }
         return { kill: false, reason: 'roll_failed', pFp };
     }
 
-    _executeKill(fState, pState, config, fishId, reason) {
+    _executeKill(fState, pState, config, fishId, reason, isAuto) {
         const killEventId = nextKillEventId();
         if (this.processedKillEvents.has(killEventId)) {
             return { kill: false, reason: 'duplicate_kill_event' };
         }
         this.processedKillEvents.add(killEventId);
 
-        pState.budgetRemainingFp -= config.rewardFp;
+        const rewardFp = isAuto ? config.rewardAutoFp : config.rewardManualFp;
+        pState.budgetRemainingFp -= rewardFp;
+        pState.budgetRemainingFp = Math.max(-config.rewardManualFp, pState.budgetRemainingFp);
         fState.killed = true;
         return {
             fishId,
             kill: true,
             reason,
             killEventId,
-            rewardFp: config.rewardFp,
-            reward: config.rewardFp / RTP_MONEY_SCALE
+            rewardFp,
+            reward: rewardFp / RTP_MONEY_SCALE,
+            isAuto: !!isAuto
         };
     }
 }
@@ -16978,7 +16973,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
             distance: i + 1
         }));
         const results = clientRTPEngine.handleMultiTargetHit(
-            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'laser'
+            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'laser', gameState.autoShoot
         );
         for (let i = 0; i < hitFish.length; i++) {
             const hit = hitFish[i];
@@ -17213,7 +17208,7 @@ function triggerExplosion(center, weaponKey) {
             distance: h.distance
         }));
         const results = clientRTPEngine.handleMultiTargetHit(
-            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'aoe'
+            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'aoe', gameState.autoShoot
         );
         for (let i = 0; i < hitFishList.length; i++) {
             const fish = hitFishList[i].fish;
