@@ -9183,6 +9183,7 @@ let autoShootTimer = 0;
 
 // ==================== AUTO-FIRE DEBUG HUD ====================
 window.DEBUG_COMET_MODE = false;
+window.DEBUG_AUTOFIRE_HUD = false;
 const _afDebug = {
     shotCount: 0,
     balanceAtStart: 0,
@@ -9208,7 +9209,7 @@ const _afDebug = {
     recordShot() { this.shotCount++; },
     update(dt) {
         if (!this.el) this.init();
-        const show = gameState.autoShoot && gameState.currentWeapon === '8x';
+        const show = window.DEBUG_AUTOFIRE_HUD && gameState.autoShoot && gameState.currentWeapon === '8x';
         if (show && !this.active) { this.reset(); this.active = true; }
         if (!show) { this.active = false; this.el.style.display = 'none'; return; }
         this.el.style.display = 'block';
@@ -9885,6 +9886,7 @@ function loadMap3D(onComplete) {
             // FIX: Set isInGameScene AFTER loading is complete
             // This prevents shooting/camera movement during loading screen
             gameState.isInGameScene = true;
+            initKillFeedSlots();
             
             var vTag = document.getElementById('pr-version-tag');
             if (vTag) vTag.style.display = 'none';
@@ -9923,6 +9925,7 @@ function loadMap3D(onComplete) {
             
             // FIX: Set isInGameScene even on error so game can proceed
             gameState.isInGameScene = true;
+            initKillFeedSlots();
             
             var vTag = document.getElementById('pr-version-tag');
             if (vTag) vTag.style.display = 'none';
@@ -11480,7 +11483,7 @@ const TargetingService = {
             const dx = fish.group.position.x - refPos.x;
             const dy = fish.group.position.y - refPos.y;
             const dz = fish.group.position.z - refPos.z;
-            if (dx * dx + dy * dy + dz * dz > 640000) continue;
+            if (dx * dx + dy * dy + dz * dz > 2000000) continue;
             if (!this._isInAutoFireCone(fish.group.position, refPos)) continue;
             const score = this._priorityScore(fish, refPos);
             if (score > bestScore) { bestScore = score; best = fish; }
@@ -17607,41 +17610,52 @@ function renderKillFeed() {
 
     list.innerHTML = '';
 
-    killFeedRecords.forEach((record, i) => {
-        const tier = getKillFeedTier(record.reward);
-        const isLatest = i === killFeedRecords.length - 1;
+    for (let i = 0; i < KILL_FEED_MAX; i++) {
+        const record = killFeedRecords[i];
         const entry = document.createElement('div');
-        entry.className = 'kill-feed-entry ' + tier + (isLatest ? ' latest' : '');
+        if (record) {
+            const tier = getKillFeedTier(record.reward);
+            const isLatest = i === killFeedRecords.length - 1;
+            entry.className = 'kill-feed-entry ' + tier + (isLatest ? ' latest' : '');
 
-        const iconEl = document.createElement('div');
-        iconEl.className = 'kf-fish-icon';
-        if (record.imageUrl) {
-            const img = document.createElement('img');
-            img.src = record.imageUrl;
-            img.alt = record.name;
-            img.draggable = false;
-            iconEl.appendChild(img);
+            const iconEl = document.createElement('div');
+            iconEl.className = 'kf-fish-icon';
+            if (record.imageUrl) {
+                const img = document.createElement('img');
+                img.src = record.imageUrl;
+                img.alt = record.name;
+                img.draggable = false;
+                iconEl.appendChild(img);
+            } else {
+                iconEl.textContent = '\u{1F41F}';
+            }
+
+            const info = document.createElement('div');
+            info.className = 'kf-info';
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'kf-name';
+            nameEl.textContent = record.name;
+
+            const rewardEl = document.createElement('div');
+            rewardEl.className = 'kf-reward';
+            rewardEl.textContent = '+' + Math.round(record.reward);
+
+            info.appendChild(nameEl);
+            info.appendChild(rewardEl);
+            entry.appendChild(iconEl);
+            entry.appendChild(info);
         } else {
-            iconEl.textContent = '\u{1F41F}';
+            entry.className = 'kill-feed-entry';
+            entry.style.opacity = '0.2';
+            entry.innerHTML = '<div class="kf-fish-icon" style="opacity:0.3">\u2014</div><div class="kf-info"><div class="kf-name" style="opacity:0.3">\u2014</div></div>';
         }
-
-        const info = document.createElement('div');
-        info.className = 'kf-info';
-
-        const nameEl = document.createElement('div');
-        nameEl.className = 'kf-name';
-        nameEl.textContent = record.name;
-
-        const rewardEl = document.createElement('div');
-        rewardEl.className = 'kf-reward';
-        rewardEl.textContent = '+' + Math.round(record.reward);
-
-        info.appendChild(nameEl);
-        info.appendChild(rewardEl);
-        entry.appendChild(iconEl);
-        entry.appendChild(info);
         list.appendChild(entry);
-    });
+    }
+}
+
+function initKillFeedSlots() {
+    renderKillFeed();
 }
 
 const AMMO_WEAPON_SLOTS = ['1x', '3x', '5x', '8x'];
