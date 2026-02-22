@@ -658,6 +658,94 @@ console.log('--- TEST X: Multi-Target Budget — Total Injection = budgetTotalFp
 }
 console.log('  Multi-Target Budget: OK\n');
 
+console.log('--- TEST Y: 1M Monte Carlo Stress Test — Convenience Tax 2% Convergence ---');
+{
+    const SHOTS = 250000;
+    const weapons = ['1x', '8x'];
+    const tiers = [1, 4];
+    const targetManual = { '1x': 92, '3x': 94, '5x': 96, '8x': 98 };
+    const targetAuto = { '1x': 90, '3x': 92, '5x': 94, '8x': 96 };
+    const taxTolerance = 0.5;
+
+    let totalManualCost = 0, totalManualReward = 0;
+    let totalAutoCost = 0, totalAutoReward = 0;
+    let totalShots = 0;
+
+    for (const wk of weapons) {
+        for (const tier of tiers) {
+            const costFp = RTP_WEAPON_COST_FP[wk];
+
+            for (const isAuto of [false, true]) {
+                const engine = new ClientRTPPhase1();
+                let sumCost = 0, sumReward = 0;
+                let fIdx = 0;
+                let currentFishId = 'mc' + fIdx;
+
+                for (let i = 0; i < SHOTS; i++) {
+                    const r = engine.handleSingleTargetHit('p1', currentFishId, wk, tier, isAuto);
+                    sumCost += costFp;
+                    if (r.kill) {
+                        sumReward += r.rewardFp;
+                        fIdx++;
+                        currentFishId = 'mc' + fIdx;
+                    }
+                }
+                engine.fishStates.clear();
+                engine.processedKillEvents.clear();
+
+                const rtp = (sumReward / sumCost) * 100;
+                const target = isAuto ? targetAuto[wk] : targetManual[wk];
+                const mode = isAuto ? 'auto' : 'manual';
+
+                if (isAuto) { totalAutoCost += sumCost; totalAutoReward += sumReward; }
+                else { totalManualCost += sumCost; totalManualReward += sumReward; }
+                totalShots += SHOTS;
+
+                const manualTarget = targetManual[wk];
+                const autoTarget = targetAuto[wk];
+                const pairManualRtp = isAuto ? null : rtp;
+                console.log(`    ${wk} T${tier} ${mode}: RTP=${rtp.toFixed(2)}% (target=${target}%)`);
+                assert(rtp >= target - 2 && rtp <= 100, `MC ${wk} T${tier} ${mode}: RTP=${rtp.toFixed(2)}% >= ${target - 2}%`);
+            }
+
+            const manualEngine = new ClientRTPPhase1();
+            const autoEngine = new ClientRTPPhase1();
+            let mCost = 0, mReward = 0, aCost = 0, aReward = 0;
+            let mFish = 0, aFish = 0;
+            for (let i = 0; i < SHOTS; i++) {
+                const rm = manualEngine.handleSingleTargetHit('p1', 'mf' + mFish, wk, tier, false);
+                mCost += costFp;
+                if (rm.kill) { mReward += rm.rewardFp; mFish++; }
+                const ra = autoEngine.handleSingleTargetHit('p1', 'af' + aFish, wk, tier, true);
+                aCost += costFp;
+                if (ra.kill) { aReward += ra.rewardFp; aFish++; }
+            }
+            const mRtp = (mReward / mCost) * 100;
+            const aRtp = (aReward / aCost) * 100;
+            const gap = mRtp - aRtp;
+            assert(Math.abs(gap - 2.0) < 1.0, `MC ${wk} T${tier} tax gap: ${gap.toFixed(2)}pp ≈ 2.00pp`);
+        }
+    }
+
+    const manualRtp = (totalManualReward / totalManualCost) * 100;
+    const autoRtp = (totalAutoReward / totalAutoCost) * 100;
+    const taxGap = manualRtp - autoRtp;
+
+    console.log(`    Total shots: ${totalShots.toLocaleString()}`);
+    console.log(`    Manual aggregate RTP: ${manualRtp.toFixed(2)}%`);
+    console.log(`    Auto aggregate RTP:   ${autoRtp.toFixed(2)}%`);
+    console.log(`    Convenience tax gap:  ${taxGap.toFixed(2)}pp (target: 2.00pp)`);
+
+    assert(Math.abs(taxGap - 2.0) < taxTolerance, `Tax gap convergence: ${taxGap.toFixed(2)}pp ≈ 2.00pp`);
+
+    const manualHouseEdge = 100 - manualRtp;
+    const autoHouseEdge = 100 - autoRtp;
+    console.log(`    Manual house edge: ${manualHouseEdge.toFixed(2)}%`);
+    console.log(`    Auto house edge:   ${autoHouseEdge.toFixed(2)}%`);
+    assert(autoHouseEdge > manualHouseEdge, `Auto house edge (${autoHouseEdge.toFixed(2)}%) > Manual (${manualHouseEdge.toFixed(2)}%)`);
+}
+console.log('  1M Monte Carlo: OK\n');
+
 console.log('\n========================================');
 console.log(`RESULTS: ${passed} passed, ${failed} failed`);
 console.log('========================================');
