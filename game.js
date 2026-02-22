@@ -1319,6 +1319,8 @@ function createGlbDebugDisplay() {
         debugDiv = document.createElement('div');
         debugDiv.id = 'glb-debug-display';
         debugDiv.style.cssText = `
+            position: relative;
+            z-index: 1;
             background: rgba(0, 0, 0, 0.8);
             color: #00ff00;
             font-family: monospace;
@@ -1407,6 +1409,8 @@ function createPerfDisplay() {
         perfDiv = document.createElement('div');
         perfDiv.id = 'perf-display';
         perfDiv.style.cssText = `
+            position: relative;
+            z-index: 2;
             background: rgba(0, 0, 0, 0.85);
             color: #00ff00;
             font-family: monospace;
@@ -9837,6 +9841,9 @@ function loadMap3D(onComplete) {
             // This prevents shooting/camera movement during loading screen
             gameState.isInGameScene = true;
             
+            var vTag = document.getElementById('pr-version-tag');
+            if (vTag) vTag.style.display = 'none';
+            
             onComplete(mapScene);
         },
         // onProgress callback
@@ -9871,6 +9878,9 @@ function loadMap3D(onComplete) {
             
             // FIX: Set isInGameScene even on error so game can proceed
             gameState.isInGameScene = true;
+            
+            var vTag = document.getElementById('pr-version-tag');
+            if (vTag) vTag.style.display = 'none';
             
             // Fall back to procedural aquarium
             createProceduralAquarium();
@@ -17696,7 +17706,7 @@ function createRmbZoomHint() {
     if (rmbHintEl) return rmbHintEl;
     const el = document.createElement('div');
     el.id = 'rmb-zoom-hint';
-    el.style.cssText = 'position:fixed;right:28px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:1000;pointer-events:none;';
+    el.style.cssText = 'position:fixed;right:28px;bottom:180px;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:10001;pointer-events:none;';
     const mouseSvg = `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" stroke="rgba(0,255,200,0.6)" stroke-width="1.5" fill="none"/>
         <line x1="14" y1="1.5" x2="14" y2="18" stroke="rgba(0,255,200,0.6)" stroke-width="1"/>
