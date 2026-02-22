@@ -66,10 +66,10 @@
             border: 2px solid rgba(0, 200, 255, 0.4);
             border-bottom: none;
             border-radius: 8px 8px 0 0;
-            padding: 8px 14px;
+            padding: 12px 16px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             box-shadow: 0 0 28px rgba(0, 150, 255, 0.1), inset 0 0 20px rgba(0, 100, 200, 0.05);
             font-family: 'Orbitron', monospace;
             overflow: hidden;
@@ -104,38 +104,40 @@
             100% { opacity: 1; background-position: -100% 0; }
         }
         #balance-display .balance-icon {
-            width: 24px;
-            height: 24px;
-            background: rgba(0, 212, 255, 0.06);
-            border: 1.5px solid rgba(0, 200, 255, 0.6);
+            width: 30px;
+            height: 30px;
+            background: rgba(0, 212, 255, 0.08);
+            border: 2px solid rgba(0, 220, 255, 0.7);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 900;
-            color: #00d4ff;
-            font-size: 12px;
+            color: #00e0ff;
+            font-size: 16px;
             font-family: 'Orbitron', monospace;
-            text-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
-            box-shadow: 0 0 8px rgba(0, 212, 255, 0.2), inset 0 0 6px rgba(0, 212, 255, 0.1);
+            text-shadow: 0 0 12px rgba(0, 220, 255, 0.8);
+            box-shadow: 0 0 12px rgba(0, 220, 255, 0.3), inset 0 0 8px rgba(0, 220, 255, 0.15);
             flex-shrink: 0;
         }
         #balance-display .balance-value {
-            font-size: 20px;
+            font-size: 30px;
             font-weight: 900;
-            color: #00ffcc;
-            text-shadow: 0 0 14px rgba(0, 255, 204, 0.5), 0 0 30px rgba(0, 255, 204, 0.15);
+            color: #00ffee;
+            text-shadow: 0 0 18px rgba(0, 255, 238, 0.7), 0 0 36px rgba(0, 255, 238, 0.3), 0 0 60px rgba(0, 255, 238, 0.1);
             font-family: 'Orbitron', monospace;
-            -webkit-text-stroke: 0.5px rgba(0, 255, 204, 0.3);
+            -webkit-text-stroke: 0.5px rgba(0, 255, 238, 0.4);
+            letter-spacing: 1px;
         }
         #balance-display .balance-label {
-            font-size: 8px;
+            font-size: 10px;
             font-weight: 700;
             letter-spacing: 2px;
-            color: rgba(0, 200, 255, 0.6);
-            margin-left: -4px;
+            color: rgba(0, 220, 255, 0.7);
+            margin-left: -2px;
             font-family: 'Orbitron', monospace;
             text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(0, 220, 255, 0.3);
         }
         
         /* Middle-Right Debug Group: GLB Debug + Performance Monitor */
@@ -494,13 +496,13 @@
             bottom: 3px;
             right: 4px;
             font-family: 'Orbitron', monospace;
-            font-size: 8px;
+            font-size: 9px;
             font-weight: 700;
-            color: rgba(0, 180, 255, 0.25);
-            background: rgba(0, 15, 35, 0.6);
-            border: 1px solid rgba(0, 180, 255, 0.15);
+            color: rgba(0, 220, 255, 0.5);
+            background: rgba(0, 20, 50, 0.8);
+            border: 1px solid rgba(0, 220, 255, 0.35);
             border-radius: 3px;
-            padding: 1px 3px;
+            padding: 2px 4px;
             line-height: 1;
             letter-spacing: 0.5px;
         }
@@ -509,9 +511,9 @@
             background: rgba(0, 30, 70, 0.4);
         }
         .weapon-btn.active {
-            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.2), rgba(0, 60, 120, 0.1));
-            border-color: #00d4ff;
-            box-shadow: 0 0 15px rgba(0, 200, 255, 0.12);
+            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.25), rgba(0, 60, 120, 0.15));
+            border: 2px solid #00e0ff;
+            box-shadow: 0 0 18px rgba(0, 220, 255, 0.2), inset 0 0 10px rgba(0, 200, 255, 0.08);
         }
         .weapon-btn.active .multiplier {
             color: #00ffff;
@@ -519,8 +521,10 @@
             -webkit-text-stroke: 0.3px rgba(0, 255, 255, 0.2);
         }
         .weapon-btn.active .keycap {
-            color: rgba(0, 255, 255, 0.45);
-            border-color: rgba(0, 255, 255, 0.25);
+            color: rgba(0, 255, 255, 0.7);
+            border-color: rgba(0, 255, 255, 0.45);
+            background: rgba(0, 40, 80, 0.9);
+            text-shadow: 0 0 4px rgba(0, 255, 255, 0.3);
         }
         .weapon-btn.active::after {
             content: '';
@@ -531,58 +535,9 @@
             box-shadow: 0 0 8px #00d4ff;
             border-radius: 1px;
         }
-        /* AMMO display: prominent multiplier + 5-slot index bar */
+        /* AMMO display removed - digital money aesthetic */
         #digi-ammo {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-bottom: 10px;
-            padding: 6px 0;
-        }
-        #digi-ammo .ammo-multiplier {
-            font-family: 'Orbitron', monospace;
-            font-size: 32px;
-            font-weight: 900;
-            color: #00ffff;
-            text-shadow: 0 0 14px rgba(0, 255, 255, 0.6), 0 0 28px rgba(0, 255, 255, 0.15);
-            letter-spacing: 2px;
-            margin-bottom: 6px;
-        }
-        #digi-ammo .ammo-label {
-            font-size: 8px;
-            letter-spacing: 2px;
-            color: rgba(0, 200, 255, 0.45);
-            margin-bottom: 5px;
-        }
-        #digi-ammo .ammo-slots {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-        .ammo-slot {
-            width: 36px;
-            height: 6px;
-            background: rgba(0, 30, 60, 0.7);
-            border: 1px solid rgba(0, 180, 255, 0.15);
-            border-radius: 2px;
-            transition: all 0.25s ease;
-            position: relative;
-        }
-        .ammo-slot.active {
-            background: #00d4ff;
-            border-color: #00d4ff;
-            box-shadow: 0 0 8px rgba(0, 212, 255, 0.5), 0 0 16px rgba(0, 212, 255, 0.15);
-        }
-        .ammo-slot.filled {
-            background: rgba(0, 120, 180, 0.4);
-            border-color: rgba(0, 180, 255, 0.3);
-        }
-        #digi-ammo .ammo-count {
-            font-family: 'Orbitron', monospace;
-            font-size: 11px;
-            color: rgba(0, 200, 255, 0.6);
-            margin-top: 6px;
-            letter-spacing: 1px;
+            display: none;
         }
         #weapon-panel .wp-auto {
             display: flex;
@@ -1554,7 +1509,7 @@
         </div>
     </div>
     
-    <div id="pr-version-tag">PR #436</div>
+    <div id="pr-version-tag">PR #439</div>
     
     <!-- Middle-Right Debug Group: GLB Debug + Performance Monitor (panels appended by game.js) -->
     <div id="debug-middle-right"></div>
