@@ -17610,12 +17610,14 @@ function renderKillFeed() {
 
     list.innerHTML = '';
 
+    const emptySlots = KILL_FEED_MAX - killFeedRecords.length;
     for (let i = 0; i < KILL_FEED_MAX; i++) {
-        const record = killFeedRecords[i];
+        const recordIdx = i - emptySlots;
+        const record = recordIdx >= 0 ? killFeedRecords[recordIdx] : null;
         const entry = document.createElement('div');
         if (record) {
             const tier = getKillFeedTier(record.reward);
-            const isLatest = i === killFeedRecords.length - 1;
+            const isLatest = recordIdx === killFeedRecords.length - 1;
             entry.className = 'kill-feed-entry ' + tier + (isLatest ? ' latest' : '');
 
             const iconEl = document.createElement('div');
