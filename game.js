@@ -17610,12 +17610,13 @@ function renderKillFeed() {
 
     list.innerHTML = '';
 
+    const emptySlots = KILL_FEED_MAX - killFeedRecords.length;
     for (let i = 0; i < KILL_FEED_MAX; i++) {
-        const record = killFeedRecords[i];
+        const record = i < emptySlots ? null : killFeedRecords[i - emptySlots];
         const entry = document.createElement('div');
         if (record) {
             const tier = getKillFeedTier(record.reward);
-            const isLatest = i === killFeedRecords.length - 1;
+            const isLatest = (i - emptySlots) === killFeedRecords.length - 1;
             entry.className = 'kill-feed-entry ' + tier + (isLatest ? ' latest' : '');
 
             const iconEl = document.createElement('div');
@@ -17794,7 +17795,7 @@ function createRmbZoomHint() {
     if (rmbHintEl) return rmbHintEl;
     const el = document.createElement('div');
     el.id = 'rmb-zoom-hint';
-    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:10001;pointer-events:none;';
+    el.style.cssText = 'position:fixed;bottom:20px;left:calc(50% + 28px);transform:translateX(-50%);display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:10001;pointer-events:none;';
     const mouseSvg = `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" stroke="rgba(0,255,200,0.6)" stroke-width="1.5" fill="none"/>
         <line x1="14" y1="1.5" x2="14" y2="18" stroke="rgba(0,255,200,0.6)" stroke-width="1"/>
