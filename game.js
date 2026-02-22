@@ -874,7 +874,7 @@ const CONFIG = {
     
     // Debug/testing settings
     debug: {
-        showRtpOnButtons: true  // Issue 4: Show RTP% on weapon buttons (set false for production)
+        showRtpOnButtons: false
     },
     
     // GLB Model Scale Multiplier - applies to all fish GLB models
@@ -17566,27 +17566,27 @@ function renderKillFeed() {
     });
 }
 
+const AMMO_WEAPON_SLOTS = ['1x', '3x', '5x', '8x'];
+
 function updateDigiAmmoDisplay() {
     const weapon = CONFIG.weapons[gameState.currentWeapon];
     if (!weapon) return;
     const ammo = Math.min(9999, Math.max(0, Math.floor(gameState.balance / weapon.cost)));
-    const str = String(ammo).padStart(4, '0');
-    for (let i = 0; i < 4; i++) {
-        const el = document.getElementById('digi-d' + i);
-        if (el) el.textContent = str[i];
-    }
-    const barFill = document.getElementById('digi-ammo-bar-fill');
-    if (barFill) {
-        const pct = Math.min(100, (ammo / 100) * 100);
-        barFill.style.width = pct + '%';
-        if (pct >= 50) {
-            barFill.style.background = 'linear-gradient(90deg, #0088bb, #00d4ff)';
-        } else if (pct >= 25) {
-            barFill.style.background = 'linear-gradient(90deg, #bb8800, #ffcc00)';
-        } else {
-            barFill.style.background = 'linear-gradient(90deg, #bb2200, #ff4444)';
+    const currentIdx = AMMO_WEAPON_SLOTS.indexOf(gameState.currentWeapon);
+    const mulEl = document.getElementById('ammo-multiplier-text');
+    if (mulEl) mulEl.textContent = gameState.currentWeapon.toUpperCase();
+    for (let i = 0; i < 5; i++) {
+        const slot = document.getElementById('ammo-slot-' + i);
+        if (!slot) continue;
+        slot.classList.remove('active', 'filled');
+        if (i === currentIdx) {
+            slot.classList.add('active');
+        } else if (i < AMMO_WEAPON_SLOTS.length) {
+            slot.classList.add('filled');
         }
     }
+    const countEl = document.getElementById('ammo-count-text');
+    if (countEl) countEl.textContent = ammo + ' ROUNDS';
 }
 
 function syncAutoPillUI() {
