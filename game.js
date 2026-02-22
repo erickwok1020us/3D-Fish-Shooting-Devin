@@ -11734,7 +11734,7 @@ function autoFireAtFish(targetFish) {
         fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
         spawnBulletFromDirection(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
     } else if (weapon.type === 'laser') {
-        fireLaserBeam(muzzlePos, direction, weaponKey);
+        fireLaserBeam(muzzlePos, direction, weaponKey, !!gameState.autoShoot);
     } else {
         spawnBulletFromDirection(muzzlePos, direction, weaponKey);
     }
@@ -14679,7 +14679,7 @@ class Fish {
         }
     }
     
-    takeDamage(damage, weaponKey, spreadIndex) {
+    takeDamage(damage, weaponKey, spreadIndex, isAutoFired) {
         if (!this.isActive) return false;
         
         // Phase 2: Shield Turtle - check if fish has shield
@@ -14718,7 +14718,7 @@ class Fish {
                 console.warn(`[RTP] takeDamage: no weapon found for key='${weaponKey}'`);
             } else if (weapon.type === 'spread') {
                 const result = clientRTPEngine.handleShotgunHit(
-                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
+                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, isAutoFired
                 );
                 if (result.kill) {
                     this.die(weaponKey, result.reward);
@@ -14726,7 +14726,7 @@ class Fish {
                 }
             } else if (weapon.type === 'projectile') {
                 const result = clientRTPEngine.handleSingleTargetHit(
-                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
+                    CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, isAutoFired
                 );
                 if (result.kill) {
                     this.die(weaponKey, result.reward);
@@ -15306,10 +15306,6 @@ class ClientRTPPhase1 {
         }
     }
 
-    _resolveMode(isAuto) {
-        return isAuto ? 'auto' : 'manual';
-    }
-
     _getRtp(weaponKey, isAuto) {
         const table = isAuto ? RTP_WEAPON_RTP_AUTO_FP : RTP_WEAPON_RTP_MANUAL_FP;
         return table[weaponKey] || (isAuto ? 9000 : 9200);
@@ -15817,17 +15813,17 @@ class Bullet {
                 if (weapon.type === 'rocket') {
                     // 5X ROCKET: Straight line projectile with explosion on impact
                     // Trigger explosion at hit point (damages all fish in radius)
-                    triggerExplosion(bulletTempVectors.hitPos, this.weaponKey);
+                    triggerExplosion(bulletTempVectors.hitPos, this.weaponKey, this.isAutoFired);
                     
                     // Screen shake for rocket impact
                     triggerScreenShakeWithStrength(6, 80);
                     
                 } else if (weapon.type === 'chain') {
                     // Chain lightning: hit first fish, then chain to nearby fish
-                    const killed = fish.takeDamage(weapon.damage, this.weaponKey);
+                    const killed = fish.takeDamage(weapon.damage, this.weaponKey, undefined, this.isAutoFired);
                     
                     // Trigger chain lightning effect (always show for visual feedback)
-                    triggerChainLightning(fish, this.weaponKey, weapon.damage);
+                    triggerChainLightning(fish, this.weaponKey, weapon.damage, this.isAutoFired);
                     
                     createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
                     spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
@@ -15837,7 +15833,7 @@ class Bullet {
                     // AOE/SuperAOE explosion: damage all fish in radius
                     // Note: triggerExplosion handles multiple fish, some may die, some may survive
                     // We show the explosion effect regardless (it's the weapon's visual, not hit feedback)
-                    triggerExplosion(bulletTempVectors.hitPos, this.weaponKey);
+                    triggerExplosion(bulletTempVectors.hitPos, this.weaponKey, this.isAutoFired);
                     
                     // Issue #16: Extra screen shake for 20x super weapon
                     if (weapon.type === 'superAoe') {
@@ -15846,7 +15842,7 @@ class Bullet {
                     }
                     
                 } else if (weapon.type === 'laser') {
-                    const killed = fish.takeDamage(weapon.damage, this.weaponKey);
+                    const killed = fish.takeDamage(weapon.damage, this.weaponKey, undefined, this.isAutoFired);
                     
                     createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
                     spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
@@ -15854,7 +15850,7 @@ class Bullet {
                     continue;
                 } else {
                     // Standard projectile or spread: single target damage
-                    const killed = fish.takeDamage(weapon.damage, this.weaponKey, this.spreadIndex);
+                    const killed = fish.takeDamage(weapon.damage, this.weaponKey, this.spreadIndex, this.isAutoFired);
                     
                     createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
                     spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
@@ -15910,6 +15906,7 @@ function spawnBulletFromDirection(origin, direction, weaponKey, spreadIndex) {
     // No need to clone - Bullet.fire() uses copy() internally
     // SIMPLIFIED: All weapons fire straight
     bullet.fire(origin, direction, weaponKey);
+    bullet.isAutoFired = !!gameState.autoShoot;
     if (spreadIndex !== undefined) bullet.spreadIndex = spreadIndex;
     activeBullets.push(bullet);
     return bullet;
@@ -16131,7 +16128,7 @@ function fireBullet(targetX, targetY) {
         
     } else if (weapon.type === 'laser') {
         // 8x LASER: Hitscan with piercing - instant raycast damages all fish along beam
-        fireLaserBeam(muzzlePos, direction, weaponKey);
+        fireLaserBeam(muzzlePos, direction, weaponKey, !!gameState.autoShoot);
         
     } else if (weapon.type === 'rocket') {
         // 5x ROCKET: Straight line projectile with explosion on impact
@@ -16397,7 +16394,7 @@ function createHitParticles(position, color, count) {
 // Chain Lightning Effect (5x weapon)
 // PERFORMANCE: Refactored to use VFX manager instead of setTimeout chains
 // This prevents frame loop interleaving and reduces jitter
-function triggerChainLightning(initialFish, weaponKey, initialDamage) {
+function triggerChainLightning(initialFish, weaponKey, initialDamage, isAutoFired) {
     // Issue #6: Play lightning sound
     playSound('lightning');
     
@@ -16449,7 +16446,7 @@ function triggerChainLightning(initialFish, weaponKey, initialDamage) {
             if (nearestFish) {
                 // Apply decayed damage
                 chainState.currentDamage *= chainDecay;
-                const killed = nearestFish.takeDamage(Math.floor(chainState.currentDamage), weaponKey);
+                const killed = nearestFish.takeDamage(Math.floor(chainState.currentDamage), weaponKey, undefined, isAutoFired);
                 
                 // Spawn lightning arc visual
                 spawnLightningArc(chainState.currentFish.group.position, nearestFish.group.position, weapon.color);
@@ -16917,7 +16914,7 @@ const laserTempVectors = {
 
 const activeLaserBeams = [];
 
-function fireLaserBeam(origin, direction, weaponKey) {
+function fireLaserBeam(origin, direction, weaponKey, isAutoFired) {
     const weapon = CONFIG.weapons[weaponKey];
     const damage = weapon.damage || 350;
     const maxRange = 3000;
@@ -16973,7 +16970,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
             distance: i + 1
         }));
         const results = clientRTPEngine.handleMultiTargetHit(
-            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'laser', gameState.autoShoot
+            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'laser', isAutoFired
         );
         for (let i = 0; i < hitFish.length; i++) {
             const hit = hitFish[i];
@@ -17178,7 +17175,7 @@ function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
     });
 }
 
-function triggerExplosion(center, weaponKey) {
+function triggerExplosion(center, weaponKey, isAutoFired) {
     playSound('explosion');
     
     const weapon = CONFIG.weapons[weaponKey];
@@ -17208,7 +17205,7 @@ function triggerExplosion(center, weaponKey) {
             distance: h.distance
         }));
         const results = clientRTPEngine.handleMultiTargetHit(
-            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'aoe', gameState.autoShoot
+            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'aoe', isAutoFired
         );
         for (let i = 0; i < hitFishList.length; i++) {
             const fish = hitFishList[i].fish;
