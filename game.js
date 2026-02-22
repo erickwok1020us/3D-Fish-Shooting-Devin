@@ -17294,94 +17294,20 @@ function spawnExplosionEffect(center, radius, color) {
     createHitParticles(center, 0xffaa00, 15);
 }
 
-// ==================== BALANCE AIRFLOW ANIMATION ====================
-const _airflow = {
-    canvas: null,
-    ctx: null,
-    particles: [],
-    maxParticles: 18,
-    intensity: 0.3,
-    targetIntensity: 0.3,
-    lastBalance: null,
-    boostTimer: 0,
-    animFrame: null,
-    initialized: false
-};
+// ==================== BALANCE AIRFLOW (CSS-only) ====================
+let _airflowGainTimer = null;
 
-function _initAirflow() {
-    if (_airflow.initialized) return;
+function _triggerAirflowGain() {
     const bd = document.getElementById('balance-display');
     if (!bd) return;
-    let canvas = bd.querySelector('.airflow-canvas');
-    if (!canvas) {
-        canvas = document.createElement('canvas');
-        canvas.className = 'airflow-canvas';
-        bd.insertBefore(canvas, bd.firstChild);
-    }
-    canvas.width = bd.offsetWidth || 280;
-    canvas.height = bd.offsetHeight || 44;
-    _airflow.canvas = canvas;
-    _airflow.ctx = canvas.getContext('2d');
-    for (let i = 0; i < _airflow.maxParticles; i++) {
-        _airflow.particles.push(_spawnAirflowParticle(canvas.width, canvas.height, true));
-    }
-    _airflow.initialized = true;
-    _tickAirflow();
-}
-
-function _spawnAirflowParticle(w, h, randomX) {
-    return {
-        x: randomX ? Math.random() * w : -2,
-        y: Math.random() * h,
-        vx: 0.3 + Math.random() * 0.6,
-        vy: (Math.random() - 0.5) * 0.15,
-        size: 1 + Math.random() * 1.5,
-        opacity: 0.08 + Math.random() * 0.12,
-        life: 1.0
-    };
-}
-
-function _tickAirflow() {
-    _airflow.animFrame = requestAnimationFrame(_tickAirflow);
-    const ctx = _airflow.ctx;
-    const canvas = _airflow.canvas;
-    if (!ctx || !canvas) return;
-    const w = canvas.width;
-    const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    _airflow.intensity += (_airflow.targetIntensity - _airflow.intensity) * 0.05;
-    if (_airflow.boostTimer > 0) {
-        _airflow.boostTimer -= 16;
-        if (_airflow.boostTimer <= 0) _airflow.targetIntensity = 0.3;
-    }
-
-    const intensity = _airflow.intensity;
-    const particles = _airflow.particles;
-    for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        p.x += p.vx * (0.5 + intensity * 1.5);
-        p.y += p.vy;
-        if (p.x > w + 4) {
-            particles[i] = _spawnAirflowParticle(w, h, false);
-            continue;
-        }
-        const alpha = p.opacity * intensity * 2.5;
-        if (alpha < 0.01) continue;
-        ctx.save();
-        ctx.globalAlpha = Math.min(alpha, 0.35);
-        ctx.fillStyle = '#00ffcc';
-        ctx.shadowColor = 'rgba(0, 255, 204, 0.4)';
-        ctx.shadowBlur = 4;
-        const len = 3 + intensity * 8;
-        ctx.fillRect(p.x, p.y, len, p.size * 0.6);
-        ctx.restore();
-    }
-}
-
-function _boostAirflow() {
-    _airflow.targetIntensity = Math.min(1.0, _airflow.intensity + 0.4);
-    _airflow.boostTimer = 800;
+    bd.classList.remove('balance-gain');
+    void bd.offsetWidth;
+    bd.classList.add('balance-gain');
+    if (_airflowGainTimer) clearTimeout(_airflowGainTimer);
+    _airflowGainTimer = setTimeout(() => {
+        bd.classList.remove('balance-gain');
+        _airflowGainTimer = null;
+    }, 1500);
 }
 
 // ==================== UI FUNCTIONS ====================
@@ -17399,11 +17325,9 @@ function updateUI() {
         }
         const newVal = parseFloat(newBalance);
         const oldVal = parseFloat(_lastBalanceForFlash);
-        if (newVal > oldVal) _boostAirflow();
+        if (newVal > oldVal) _triggerAirflowGain();
     }
     _lastBalanceForFlash = newBalance;
-    
-    if (!_airflow.initialized) _initAirflow();
     
     const fpsEl = document.getElementById('fps-counter');
     if (fpsEl) fpsEl.textContent = `FPS: ${Math.round(1 / deltaTime) || 60}`;
@@ -17783,7 +17707,7 @@ function createRmbZoomHint() {
     if (rmbHintEl) return rmbHintEl;
     const el = document.createElement('div');
     el.id = 'rmb-zoom-hint';
-    el.style.cssText = 'position:fixed;right:30%;bottom:24px;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:1000;pointer-events:none;';
+    el.style.cssText = 'position:fixed;right:28px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:1000;pointer-events:none;';
     const mouseSvg = `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" stroke="rgba(0,255,200,0.6)" stroke-width="1.5" fill="none"/>
         <line x1="14" y1="1.5" x2="14" y2="18" stroke="rgba(0,255,200,0.6)" stroke-width="1"/>
