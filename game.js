@@ -11864,7 +11864,8 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 60,
         hitscanFireGate: 8,
-        autoFireAlignGate: 3,
+        autoFireAlignGate: 8,
+        forceFireMs: 500,
         trackSpeed: 25,
         lerpSmoothing: 0.15,
         maxRotSpeed: 4.0,
@@ -12203,22 +12204,21 @@ const TargetingService = {
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
 
-        if (s.phase === 'firing') {
+        if (s.lockedTarget) {
             const fwd = this._getCannonForward(new THREE.Vector3());
-            const toFish = fish.group.position.clone().sub(muzzlePos).normalize();
-            const dot = fwd.dot(toFish);
-            const angleDeg = Math.acos(Math.min(1, Math.max(-1, dot))) * (180 / Math.PI);
+            const toFishXZ = new THREE.Vector3(fish.group.position.x - muzzlePos.x, 0, fish.group.position.z - muzzlePos.z).normalize();
+            const fwdXZ = new THREE.Vector3(fwd.x, 0, fwd.z).normalize();
+            const dot2D = fwdXZ.dot(toFishXZ);
+            const angleDeg = Math.acos(Math.min(1, Math.max(-1, dot2D))) * (180 / Math.PI);
             const isReady = angleDeg <= c.autoFireAlignGate;
-            if (isReady) {
+            const lockDuration = now - s.lockStartMs;
+            const forceFireOverride = lockDuration >= c.forceFireMs;
+            if (isReady || forceFireOverride) {
+                if (s.phase !== 'firing') s.phase = 'firing';
                 canFire = true;
             }
             if (!canFire) {
-                let blockReason = '';
-                if (!isReady) blockReason = `Align: ${angleDeg.toFixed(1)}° > gate ${c.autoFireAlignGate}°`;
-                else if (gameState.balance < CONFIG.weapons[gameState.currentWeapon].cost * BALANCE_SCALE) blockReason = 'Block: Balance';
-                else if (gameState.cooldown > 0) blockReason = 'Block: Cooldown';
-                else blockReason = 'Block: Unknown';
-                console.log(`[AutoFire] phase=${s.phase} angle=${angleDeg.toFixed(1)}° isReady=${isReady} | ${blockReason}`);
+                console.log(`[AutoFire] phase=${s.phase} angle=${angleDeg.toFixed(1)}° locked=${(lockDuration/1000).toFixed(1)}s | Align: ${angleDeg.toFixed(1)}° > gate ${c.autoFireAlignGate}°`);
             }
         }
 
