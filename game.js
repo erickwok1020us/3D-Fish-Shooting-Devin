@@ -7168,7 +7168,7 @@ function showKillSkull() {
 
 let _rewardPopupYOffset = 0;
 let _rewardPopupResetTimer = null;
-let _rewardPopupStyle = 'gold_spring';
+let _rewardPopupStyle = 'arcade_jump';
 
 function onScoreConfirmed(fishForm, rewardAmount) {
     const rewardInt = Math.round(rewardAmount);
