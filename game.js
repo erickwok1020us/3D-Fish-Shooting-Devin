@@ -11359,6 +11359,7 @@ const TargetingService = {
         initialLockMs: 250,
         transitionMs:  200,
         bossCooldownMs: 2000,
+        hysteresisExitDeg: 30,
     },
 
     state: {
@@ -11501,6 +11502,29 @@ const TargetingService = {
         return Math.abs(yaw) <= (c.yawLimit - margin) && pitch >= (c.pitchMin + margin) && pitch <= (c.pitchMax - margin);
     },
 
+    _isInExitCone(fishPos, refPos) {
+        const c = this.config;
+        const exitRad = c.hysteresisExitDeg * (Math.PI / 180);
+        const dx = fishPos.x - refPos.x;
+        const dy = fishPos.y - refPos.y;
+        const dz = fishPos.z - refPos.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < 1) return true;
+        const yaw = Math.atan2(dx / dist, dz / dist);
+        const pitch = Math.asin(dy / dist);
+        return Math.abs(yaw) <= (c.yawLimit + exitRad) &&
+               pitch >= (c.pitchMin - exitRad) &&
+               pitch <= (c.pitchMax + exitRad);
+    },
+
+    _shouldReleaseLock(fish, refPos) {
+        if (!fish) return true;
+        if (!fish.isActive) return true;
+        if (fish.hp !== undefined && fish.hp <= 0) return true;
+        if (!this._isInExitCone(fish.group.position, refPos)) return true;
+        return false;
+    },
+
     _pick8xNewTarget(refPos, now) {
         const c = this.config, s = this.state;
         for (const fish of activeFish) {
@@ -11606,7 +11630,7 @@ const TargetingService = {
             return { target: null, canFire: false };
         }
 
-        if (!this._isTargetValid(s.lockedTarget, refPos)) {
+        if (this._shouldReleaseLock(s.lockedTarget, refPos)) {
             if (s.lockedTarget && s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
             const next = this._pick8xNewTarget(refPos, now);
             if (next) {
