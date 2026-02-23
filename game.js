@@ -10068,14 +10068,15 @@ window.startMultiplayerGame = function(manager) {
             if (!fish) return;
             if (fish.userData._hitFlashActive) return;
             fish.userData._hitFlashActive = true;
+            const _tint = new THREE.Color(1.0, 0.4, 0.4);
+            const _factor = 0.35;
             fish.traverse(function(child) {
-                if (child.isMesh && child.material && 'emissive' in child.material) {
-                    if (!child._origEmissive) {
-                        child._origEmissive = child.material.emissive.clone();
-                        child._origEmissiveIntensity = child.material.emissiveIntensity;
+                if (child.isMesh && child.material && child.material.color) {
+                    if (!child._origColor) {
+                        child._origColor = child.material.color.clone();
                     }
-                    child.material.emissive.set(0xff6464);
-                    child.material.emissiveIntensity = 0.4;
+                    const tinted = child._origColor.clone().lerp(_tint, _factor);
+                    child.material.color.copy(tinted);
                 }
             });
             const mpFlashStart = performance.now();
@@ -10083,11 +10084,11 @@ window.startMultiplayerGame = function(manager) {
                 const p = Math.min((t - mpFlashStart) / 300, 1);
                 if (!fish.parent) { fish.userData._hitFlashActive = false; return; }
                 fish.traverse(function(child) {
-                    if (child.isMesh && child.material && child._origEmissive) {
-                        child.material.emissiveIntensity = child._origEmissiveIntensity + 0.4 * (1 - p);
+                    if (child.isMesh && child.material && child._origColor) {
+                        const c = child._origColor.clone().lerp(_tint, _factor * (1 - p));
+                        child.material.color.copy(c);
                         if (p >= 1) {
-                            child.material.emissive.copy(child._origEmissive);
-                            child.material.emissiveIntensity = child._origEmissiveIntensity;
+                            child.material.color.copy(child._origColor);
                         }
                     }
                 });
@@ -15204,17 +15205,18 @@ class Fish {
         if (this._flashTimer) clearTimeout(this._flashTimer);
         const isBoss = !!this.isBoss;
         const flashIntensity = isBoss ? 1.2 : 0.4;
-        const flashDuration = isBoss ? 300 : 300;
+        const flashDuration = 300;
+        const _hitTintColor = new THREE.Color(1.0, 0.4, 0.4);
+        const _maxTintFactor = 0.35; // 35% tint cap (below 40%)
 
         if (isBoss) {
             this.group.traverse(child => {
-                if (child.isMesh && child.material && 'emissive' in child.material) {
-                    if (!child._origEmissive) {
-                        child._origEmissive = child.material.emissive.clone();
-                        child._origEmissiveIntensity = child.material.emissiveIntensity;
+                if (child.isMesh && child.material && child.material.color) {
+                    if (!child._origColor) {
+                        child._origColor = child.material.color.clone();
                     }
-                    child.material.emissive.set(0xff6464);
-                    child.material.emissiveIntensity = flashIntensity;
+                    const tinted = child._origColor.clone().lerp(_hitTintColor, _maxTintFactor);
+                    child.material.color.copy(tinted);
                 }
             });
             if (bossGlowEffect && bossGlowEffect.material) {
@@ -15223,17 +15225,17 @@ class Fish {
             }
             const bossFlashStart = performance.now();
             const bossFlashDur = flashDuration;
-            const bossFlashSelf = this;
+            const bossSelf = this;
             function _bossFlashFade(t) {
                 const p = Math.min((t - bossFlashStart) / bossFlashDur, 1);
-                if (!bossFlashSelf.isActive) { _bossFlashRestore(); return; }
-                const curI = flashIntensity * (1 - p);
-                bossFlashSelf.group.traverse(child => {
-                    if (child.isMesh && child.material && child._origEmissive) {
-                        child.material.emissiveIntensity = child._origEmissiveIntensity + curI;
+                if (!bossSelf.isActive) { _bossFlashRestore(); return; }
+                const factor = _maxTintFactor * (1 - p);
+                bossSelf.group.traverse(child => {
+                    if (child.isMesh && child.material && child._origColor) {
+                        const c = child._origColor.clone().lerp(_hitTintColor, factor);
+                        child.material.color.copy(c);
                         if (p >= 1) {
-                            child.material.emissive.copy(child._origEmissive);
-                            child.material.emissiveIntensity = child._origEmissiveIntensity;
+                            child.material.color.copy(child._origColor);
                         }
                     }
                 });
@@ -15247,13 +15249,12 @@ class Fish {
             requestAnimationFrame(_bossFlashFade);
         } else if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
-                if (mesh.material && 'emissive' in mesh.material) {
-                    if (!mesh._origEmissive) {
-                        mesh._origEmissive = mesh.material.emissive.clone();
-                        mesh._origEmissiveIntensity = mesh.material.emissiveIntensity;
+                if (mesh.material && mesh.material.color) {
+                    if (!mesh._origColor) {
+                        mesh._origColor = mesh.material.color.clone();
                     }
-                    mesh.material.emissive.set(0xff6464);
-                    mesh.material.emissiveIntensity = flashIntensity;
+                    const tinted = mesh._origColor.clone().lerp(_hitTintColor, _maxTintFactor);
+                    mesh.material.color.copy(tinted);
                 }
             });
             const glbFlashStart = performance.now();
@@ -15262,35 +15263,35 @@ class Fish {
             function _glbFlashFade(t) {
                 const p = Math.min((t - glbFlashStart) / glbFlashDur, 1);
                 if (!glbFlashSelf.isActive || !glbFlashSelf.glbMeshes) return;
+                const factor = _maxTintFactor * (1 - p);
                 glbFlashSelf.glbMeshes.forEach(mesh => {
-                    if (mesh.material && mesh._origEmissive) {
-                        mesh.material.emissiveIntensity = mesh._origEmissiveIntensity + flashIntensity * (1 - p);
+                    if (mesh.material && mesh._origColor) {
+                        const c = mesh._origColor.clone().lerp(_hitTintColor, factor);
+                        mesh.material.color.copy(c);
                         if (p >= 1) {
-                            mesh.material.emissive.copy(mesh._origEmissive);
-                            mesh.material.emissiveIntensity = mesh._origEmissiveIntensity;
+                            mesh.material.color.copy(mesh._origColor);
                         }
                     }
                 });
                 if (p < 1) requestAnimationFrame(_glbFlashFade);
             }
             requestAnimationFrame(_glbFlashFade);
-        } else if (this.body && this.body.material && 'emissive' in this.body.material) {
-            if (!this.body._origEmissive) {
-                this.body._origEmissive = this.body.material.emissive.clone();
-                this.body._origEmissiveIntensity = this.body.material.emissiveIntensity;
+        } else if (this.body && this.body.material && this.body.material.color) {
+            if (!this.body._origColor) {
+                this.body._origColor = this.body.material.color.clone();
             }
-            this.body.material.emissive.set(0xff6464);
-            this.body.material.emissiveIntensity = flashIntensity;
+            const tinted = this.body._origColor.clone().lerp(_hitTintColor, _maxTintFactor);
+            this.body.material.color.copy(tinted);
             const bodyFlashStart = performance.now();
             const bodyFlashDur = flashDuration;
-            const bodyFlashSelf = this;
+            const selfB = this;
             function _bodyFlashFade(t) {
                 const p = Math.min((t - bodyFlashStart) / bodyFlashDur, 1);
-                if (!bodyFlashSelf.isActive || !bodyFlashSelf.body || !bodyFlashSelf.body.material || !bodyFlashSelf.body._origEmissive) return;
-                bodyFlashSelf.body.material.emissiveIntensity = bodyFlashSelf.body._origEmissiveIntensity + flashIntensity * (1 - p);
+                if (!selfB.isActive || !selfB.body || !selfB.body.material || !selfB.body._origColor) return;
+                const c = selfB.body._origColor.clone().lerp(_hitTintColor, _maxTintFactor * (1 - p));
+                selfB.body.material.color.copy(c);
                 if (p >= 1) {
-                    bodyFlashSelf.body.material.emissive.copy(bodyFlashSelf.body._origEmissive);
-                    bodyFlashSelf.body.material.emissiveIntensity = bodyFlashSelf.body._origEmissiveIntensity;
+                    selfB.body.material.color.copy(selfB.body._origColor);
                 }
                 if (p < 1) requestAnimationFrame(_bodyFlashFade);
             }
