@@ -7253,7 +7253,7 @@ function spawnExpandingRing(position, color, startRadius, endRadius, duration) {
     const material = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.25,
         side: THREE.DoubleSide
     });
     
@@ -7276,8 +7276,8 @@ function spawnExpandingRing(position, color, startRadius, endRadius, duration) {
             const progress = Math.min(elapsed / this.duration, 1);
             const scale = 1 + (this.endRadius / this.startRadius - 1) * progress;
             this.mesh.scale.set(scale, scale, scale);
-            this.material.opacity = 0.8 * (1 - progress);
-            return progress < 1; // Continue if not done
+            this.material.opacity = 0.25 * (1 - progress);
+            return progress < 1;
         },
         
         cleanup() {
@@ -7309,7 +7309,7 @@ function spawnExpandingRingOptimized(position, color, startRadius, endRadius, du
     
     // Configure the pooled ring
     material.color.setHex(color);
-    material.opacity = 0.8;
+    material.opacity = 0.25;
     ring.position.copy(position);
     
     // IMPROVED: Orient ring to face bullet direction if provided
@@ -7347,13 +7347,12 @@ function spawnExpandingRingOptimized(position, color, startRadius, endRadius, du
             // Scale from startRadius to endRadius
             const currentRadius = this.startRadius + (this.endRadius - this.startRadius) * progress;
             this.mesh.scale.set(currentRadius, currentRadius, currentRadius);
-            this.material.opacity = 0.8 * (1 - progress);
+            this.material.opacity = 0.25 * (1 - progress);
             return progress < 1;
         },
         
         cleanup() {
             scene.remove(this.mesh);
-            // Return to pool instead of disposing
             returnRingToPool(this.poolItem);
         }
     });
@@ -7426,19 +7425,18 @@ function spawnLightningBoltBetween(startPos, endPos, color) {
         color: color,
         linewidth: 3,
         transparent: true,
-        opacity: 1.0
+        opacity: 0.3
     });
     
     const lightning = new THREE.Line(geometry, material);
     scene.add(lightning);
     
-    // Add glow effect
     const glowGeometry = geometry.clone();
     const glowMaterial = new THREE.LineBasicMaterial({
         color: 0xffffff,
         linewidth: 5,
         transparent: true,
-        opacity: 0.5
+        opacity: 0.15
     });
     const glow = new THREE.Line(glowGeometry, glowMaterial);
     scene.add(glow);
@@ -7532,17 +7530,16 @@ function initFireballMaterialPool() {
         const fireballMaterial = new THREE.MeshBasicMaterial({
             color: 0xff4400,
             transparent: true,
-            opacity: 0.9
+            opacity: 0.25
         });
         const fireballMesh = new THREE.Mesh(vfxGeometryCache.fireballSphere, fireballMaterial);
         fireballMesh.visible = false;
         fireballMaterialPool.fireballPool.push({ mesh: fireballMesh, material: fireballMaterial });
         
-        // Inner core
         const coreMaterial = new THREE.MeshBasicMaterial({
             color: 0xffff88,
             transparent: true,
-            opacity: 1
+            opacity: 0.3
         });
         const coreMesh = new THREE.Mesh(vfxGeometryCache.fireballCore, coreMaterial);
         coreMesh.visible = false;
@@ -7554,11 +7551,10 @@ function initFireballMaterialPool() {
 function getFireballFromPool() {
     let item = fireballMaterialPool.fireballPool.pop();
     if (!item) {
-        // Pool exhausted, create new (fallback)
         const material = new THREE.MeshBasicMaterial({
             color: 0xff4400,
             transparent: true,
-            opacity: 0.9
+            opacity: 0.25
         });
         const mesh = new THREE.Mesh(vfxGeometryCache.fireballSphere, material);
         item = { mesh, material };
@@ -7570,11 +7566,10 @@ function getFireballFromPool() {
 function getCoreFromPool() {
     let item = fireballMaterialPool.corePool.pop();
     if (!item) {
-        // Pool exhausted, create new (fallback)
         const material = new THREE.MeshBasicMaterial({
             color: 0xffff88,
             transparent: true,
-            opacity: 1
+            opacity: 0.3
         });
         const mesh = new THREE.Mesh(vfxGeometryCache.fireballCore, material);
         item = { mesh, material };
@@ -7587,7 +7582,7 @@ function returnFireballToPool(item) {
     item.mesh.visible = false;
     if (item.mesh.parent) item.mesh.parent.remove(item.mesh);
     // Reset material properties
-    item.material.opacity = 0.9;
+    item.material.opacity = 0.25;
     item.material.color.setHex(0xff4400);
     fireballMaterialPool.fireballPool.push(item);
 }
@@ -7597,7 +7592,7 @@ function returnCoreToPool(item) {
     item.mesh.visible = false;
     if (item.mesh.parent) item.mesh.parent.remove(item.mesh);
     // Reset material properties
-    item.material.opacity = 1;
+    item.material.opacity = 0.3;
     item.material.color.setHex(0xffff88);
     fireballMaterialPool.corePool.push(item);
 }
@@ -7616,17 +7611,16 @@ function spawnFireballMuzzleFlash(position, direction) {
     const material = fireballItem.material;
     
     fireball.position.copy(position);
-    fireball.scale.set(25, 25, 25); // Scale unit sphere to size 25
+    fireball.scale.set(12, 12, 12);
     fireball.visible = true;
     scene.add(fireball);
     
-    // Inner bright core - PERFORMANCE: Get from pool
     const coreItem = getCoreFromPool();
     const core = coreItem.mesh;
     const coreMaterial = coreItem.material;
     
     core.position.copy(position);
-    core.scale.set(15, 15, 15); // Scale unit sphere to size 15
+    core.scale.set(7, 7, 7);
     core.visible = true;
     scene.add(core);
     
@@ -7639,10 +7633,10 @@ function spawnFireballMuzzleFlash(position, direction) {
         coreItem: coreItem,          // Store pool reference
         material: material,
         coreMaterial: coreMaterial,
-        baseFireballScale: 25,
-        baseCoreScale: 15,
+        baseFireballScale: 12,
+        baseCoreScale: 7,
         currentScaleMultiplier: 1,
-        currentOpacity: 0.9,
+        currentOpacity: 0.25,
         scaleSpeed: 9, // was 0.15 per frame at 60fps = 9/s
         fadeSpeed: 4.8, // was 0.08 per frame at 60fps = 4.8/s
         
@@ -7695,36 +7689,28 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     // Fallback to procedural effects
     if (weaponKey === '1x') {
         // Small water splash (ring removed per user feedback)
-        spawnWaterSplash(hitPos, 20);
-        // FIX: Removed expanding ring (user feedback: remove all ring effects)
-        createHitParticles(hitPos, config.hitColor, 8);
+        spawnWaterSplash(hitPos, 10);
+        createHitParticles(hitPos, config.hitColor, 2);
         
     } else if (weaponKey === '3x') {
         // Medium fire explosion - fire particle burst DISABLED (using original 3x bullet GLB model)
         // FIX: Removed expanding ring (user feedback: remove all ring effects)
-        spawnWaterSplash(hitPos, 35);
-        // Fire particle burst DISABLED - using original 3x bullet GLB model
-        // if (fireParticlePool.initialized) {
-        //     spawnFireHitBurst(hitPos);
-        // }
-        // Electric arc effects around impact
-        for (let i = 0; i < 4; i++) {
-            const angle = (i / 4) * Math.PI * 2;
+        spawnWaterSplash(hitPos, 17);
+        for (let i = 0; i < 2; i++) {
+            const angle = (i / 2) * Math.PI * 2;
             const endPos = hitPos.clone();
-            endPos.x += Math.cos(angle) * 40;
-            endPos.z += Math.sin(angle) * 40;
+            endPos.x += Math.cos(angle) * 20;
+            endPos.z += Math.sin(angle) * 20;
             spawnLightningArc(hitPos, endPos, config.hitColor);
         }
-        createHitParticles(hitPos, config.hitColor, 12);
+        createHitParticles(hitPos, config.hitColor, 4);
         
     } else if (weaponKey === '5x') {
         // FIX: Remove ring effects for 5x hit (keep water splash, shockwave, particles)
-        spawnWaterSplash(hitPos, 50);
-        // Screen edge flash
-        triggerScreenFlash(config.hitColor, 100, 0.2);
-        // Golden shockwave
-        spawnShockwave(hitPos, config.hitColor, 100);
-        createHitParticles(hitPos, config.hitColor, 20);
+        spawnWaterSplash(hitPos, 25);
+        triggerScreenFlash(config.hitColor, 100, 0.1);
+        spawnShockwave(hitPos, config.hitColor, 50);
+        createHitParticles(hitPos, config.hitColor, 6);
         // Slight screen shake
         triggerScreenShakeWithStrength(1);
         
@@ -7734,9 +7720,8 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         // Strong screen shake
         triggerScreenShakeWithStrength(3);
         // Full-screen white flash
-        triggerScreenFlash(0xffffff, 100, 0.4);
-        // Massive water column
-        spawnWaterColumn(hitPos, 80);
+        triggerScreenFlash(0xffffff, 100, 0.15);
+        spawnWaterColumn(hitPos, 40);
         // Knockback nearby fish
         applyExplosionKnockback(hitPos, 200, 150);
     }
@@ -7776,10 +7761,10 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish) {
     scene.add(hitEffectModel);
     
     // Register with VFX manager instead of using own RAF loop
-    const duration = 400; // 400ms animation (shorter, snappier)
-    const initialScale = scale * 0.3;
-    const maxScale = scale * 1.0;
-    const maxOpacity = 0.5;
+    const duration = 200; // 200ms - ultra-short pop
+    const initialScale = scale * 0.15;
+    const maxScale = scale * 0.5;
+    const maxOpacity = 0.25;
     
     materials.forEach((mat) => {
         mat.transparent = true;
@@ -7838,8 +7823,7 @@ function spawnWaterSplash(position, size) {
     // FIX: Removed RingGeometry splash ring (user feedback: remove all ring effects)
     
     // Spawn upward splash particles (these use the existing particle pool system)
-    for (let i = 0; i < 8; i++) {
-        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+    for (let i = 0; i < 3; i++) {
         const particle = freeParticles.pop();
         if (!particle) continue;
         
@@ -7849,8 +7833,7 @@ function spawnWaterSplash(position, size) {
             (Math.random() - 0.5) * 50
         );
         
-        // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
-        particle.spawn(splashPos, velocity, 0xaaddff, 0.8, 0.5);
+        particle.spawn(splashPos, velocity, 0xaaddff, 0.8, 0.2);
         activeParticles.push(particle);
     }
 }
@@ -7860,7 +7843,7 @@ function spawnWaterSplash(position, size) {
 function spawnShockwave(position, color, radius) {
     if (!scene) return;
     
-    const particleCount = 48;
+    const particleCount = 15;
     const positions = new Float32Array(particleCount * 3);
     const velocities = [];
     
@@ -7871,9 +7854,9 @@ function spawnShockwave(position, color, radius) {
         positions[i * 3 + 2] = position.z;
         
         velocities.push({
-            x: Math.cos(angle) * radius * 2,
-            y: (Math.random() - 0.5) * 20,
-            z: Math.sin(angle) * radius * 2
+            x: Math.cos(angle) * radius * 0.8,
+            y: (Math.random() - 0.5) * 10,
+            z: Math.sin(angle) * radius * 0.8
         });
     }
     
@@ -7882,9 +7865,9 @@ function spawnShockwave(position, color, radius) {
     
     const material = new THREE.PointsMaterial({
         color: color,
-        size: 4,
+        size: 2,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.2,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         sizeAttenuation: true
@@ -7899,7 +7882,7 @@ function spawnShockwave(position, color, radius) {
         geometry: geometry,
         material: material,
         velocities: velocities,
-        duration: 400,
+        duration: 200,
         
         update(dt, elapsed) {
             const progress = Math.min(elapsed / this.duration, 1);
@@ -7912,8 +7895,8 @@ function spawnShockwave(position, color, radius) {
             }
             this.geometry.attributes.position.needsUpdate = true;
             
-            this.material.opacity = 0.45 * (1 - progress);
-            this.material.size = 4 + progress * 6;
+            this.material.opacity = 0.2 * (1 - progress);
+            this.material.size = 2 + progress * 3;
             
             return progress < 1;
         },
@@ -7938,20 +7921,20 @@ function spawnMegaExplosion(position) {
     const coreMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 1
+        opacity: 0.25
     });
     const core = new THREE.Mesh(vfxGeometryCache.megaCore, coreMaterial);
     core.position.copy(position);
-    core.scale.set(10, 10, 10);
+    core.scale.set(5, 5, 5);
     scene.add(core);
     
     addVfxEffect({
         type: 'megaExplosionCore',
         mesh: core,
         material: coreMaterial,
-        baseScale: 10,
+        baseScale: 5,
         currentScaleMultiplier: 1,
-        currentOpacity: 0.5,
+        currentOpacity: 0.25,
         scaleSpeed: 18,
         fadeSpeed: 9,
         
@@ -7986,10 +7969,10 @@ function spawnMegaExplosion(position) {
         posX: posX,
         posY: posY,
         posZ: posZ,
-        baseFireballScale: 15,
-        baseInnerScale: 10,
+        baseFireballScale: 7,
+        baseInnerScale: 5,
         currentScaleMultiplier: 1,
-        currentOpacity: 0.4,
+        currentOpacity: 0.2,
         scaleSpeed: 7.2, // was 0.12 per frame at 60fps = 7.2/s
         fadeSpeed: 1.8, // was 0.03 per frame at 60fps = 1.8/s
         
@@ -8002,7 +7985,7 @@ function spawnMegaExplosion(position) {
                 this.fireballMaterial = new THREE.MeshBasicMaterial({
                     color: 0xff4400,
                     transparent: true,
-                    opacity: 0.4
+                    opacity: 0.2
                 });
                 this.fireball = new THREE.Mesh(vfxGeometryCache.megaFireball, this.fireballMaterial);
                 this.fireball.position.set(this.posX, this.posY, this.posZ);
@@ -8012,7 +7995,7 @@ function spawnMegaExplosion(position) {
                 this.innerMaterial = new THREE.MeshBasicMaterial({
                     color: 0xffaa00,
                     transparent: true,
-                    opacity: 0.45
+                    opacity: 0.2
                 });
                 this.inner = new THREE.Mesh(vfxGeometryCache.megaInner, this.innerMaterial);
                 this.inner.position.set(this.posX, this.posY, this.posZ);
@@ -8049,74 +8032,10 @@ function spawnMegaExplosion(position) {
         }
     });
     
-    // Stage 3: Black smoke lingering (delayed by 200ms) - reduced count for performance
-    // PERFORMANCE: Use cached smokeCloud geometry with scaling
-    const smokeCount = Math.min(15, Math.max(5, Math.floor(15 * (performanceState.currentFPS / 60))));
-    for (let i = 0; i < smokeCount; i++) {
-        // PERFORMANCE: Store position values instead of cloning
-        const smokePosX = position.x + (Math.random() - 0.5) * 40;
-        const smokePosY = position.y + Math.random() * 30;
-        const smokePosZ = position.z + (Math.random() - 0.5) * 40;
-        const riseSpeed = 20 + Math.random() * 30;
-        const duration = (1.5 + Math.random() * 0.5) * 1000; // Convert to ms
-        const smokeSize = 15 + Math.random() * 10;
-        
-        addVfxEffect({
-            type: 'megaExplosionSmoke',
-            delayMs: 200,
-            started: false,
-            mesh: null,
-            material: null,
-            smokePosX: smokePosX,
-            smokePosY: smokePosY,
-            smokePosZ: smokePosZ,
-            smokeSize: smokeSize,
-            riseSpeed: riseSpeed,
-            duration: duration,
-            
-            update(dt, elapsed) {
-                // Wait for delay before starting
-                if (!this.started) {
-                    if (elapsed < this.delayMs) return true;
-                    
-                    // PERFORMANCE: Use cached geometry with scaling
-                    this.material = new THREE.MeshBasicMaterial({
-                        color: 0x333333,
-                        transparent: true,
-                        opacity: 0.2
-                    });
-                    this.mesh = new THREE.Mesh(vfxGeometryCache.smokeCloud, this.material);
-                    this.mesh.position.set(this.smokePosX, this.smokePosY, this.smokePosZ);
-                    this.mesh.scale.setScalar(this.smokeSize); // Scale unit sphere to smokeSize
-                    scene.add(this.mesh);
-                    this.started = true;
-                    this.smokeStartTime = elapsed;
-                }
-                
-                // Animate smoke
-                const smokeElapsed = elapsed - this.smokeStartTime;
-                const progress = Math.min(smokeElapsed / this.duration, 1);
-                
-                this.mesh.position.y += this.riseSpeed * dt;
-                this.mesh.scale.setScalar(this.smokeSize * (1 + progress * 0.5));
-                this.material.opacity = 0.2 * (1 - progress);
-                
-                return progress < 1;
-            },
-            
-            cleanup() {
-                if (this.mesh) {
-                    scene.remove(this.mesh);
-                    // PERFORMANCE: Only dispose material, geometry is cached
-                    this.material.dispose();
-                }
-            }
-        });
-    }
+    // Stage 3: Black smoke REMOVED (user feedback: muddies the screen)
     
-    // Spawn flame particles that remain at impact (uses existing particle pool)
-    // PERFORMANCE: Use temp vector for velocity instead of creating new Vector3 each time
-    for (let i = 0; i < 30; i++) {
+    // Spawn flame particles at impact (reduced 70%)
+    for (let i = 0; i < 9; i++) {
         // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
         const particle = freeParticles.pop();
         if (!particle) continue;
@@ -8132,7 +8051,7 @@ function spawnMegaExplosion(position) {
         const color = colors[Math.floor(Math.random() * colors.length)];
         
         // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
-        particle.spawn(position, particleTempVectors.velocity, color, 1 + Math.random(), 1.5 + Math.random() * 0.5);
+        particle.spawn(position, particleTempVectors.velocity, color, 1 + Math.random(), 0.15 + Math.random() * 0.05);
         activeParticles.push(particle);
     }
 }
@@ -8146,12 +8065,10 @@ function spawnWaterColumn(position, height) {
     const columnZ = position.z;
     
     // Create column of water particles rising up
-    for (let i = 0; i < 20; i++) {
-        // PERFORMANCE: O(1) pop from free-list instead of O(n) .find()
+    for (let i = 0; i < 6; i++) {
         const particle = freeParticles.pop();
         if (!particle) continue;
         
-        // PERFORMANCE: Reuse temp vector instead of clone()
         const startPos = vfxTempVectors.startPos;
         startPos.set(
             columnX + (Math.random() - 0.5) * 30,
@@ -8159,7 +8076,6 @@ function spawnWaterColumn(position, height) {
             columnZ + (Math.random() - 0.5) * 30
         );
         
-        // PERFORMANCE: Reuse temp vector instead of new Vector3()
         const velocity = vfxTempVectors.velocity;
         velocity.set(
             (Math.random() - 0.5) * 20,
@@ -8167,7 +8083,7 @@ function spawnWaterColumn(position, height) {
             (Math.random() - 0.5) * 20
         );
         
-        particle.spawn(startPos, velocity, 0x88ccff, 1.5, 1.0);
+        particle.spawn(startPos, velocity, 0x88ccff, 1.5, 0.2);
         activeParticles.push(particle);
     }
 }
@@ -8209,8 +8125,8 @@ const activeSmokeEffects = [];
 // Enhanced for better visibility in underwater environment
 class SmokeEffect {
     constructor(position, scale = 1.0) {
-        this.particleCount = Math.floor(150 * scale);  // More particles for denser smoke
-        this.duration = 1.5;  // Slightly shorter for snappier effect
+        this.particleCount = Math.floor(45 * scale);
+        this.duration = 0.2;
         this.particles = [];
         this.alive = true;
         this.elapsedTime = 0;
@@ -8246,12 +8162,12 @@ class SmokeEffect {
         this.geometry.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1));
         
         this.material = new THREE.PointsMaterial({
-            size: 20 * scale,  // 2.5x larger base size
+            size: 10 * scale,
             map: createSmokeTexture(),
             transparent: true,
             depthWrite: false,
-            blending: THREE.AdditiveBlending,  // Additive for brighter, more visible smoke
-            opacity: 0.7,  // Higher opacity
+            blending: THREE.AdditiveBlending,
+            opacity: 0.2,
             sizeAttenuation: true
         });
         
@@ -8299,7 +8215,7 @@ class SmokeEffect {
         
         // Fade out overall opacity
         const lifeRatio = Math.max(0, 1 - (this.elapsedTime / this.duration));
-        this.material.opacity = 0.5 * lifeRatio;
+        this.material.opacity = 0.2 * lifeRatio;
         
         // Auto-dispose when all particles are dead or duration exceeded
         if (allDead || this.elapsedTime >= this.duration) {
@@ -16991,7 +16907,7 @@ function createHitParticles(position, color, count) {
                 (Math.random() - 0.5) * 150
             );
             // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
-            particle.spawn(position, velocity, color, 2 + Math.random() * 3, 0.8);
+            particle.spawn(position, velocity, color, 2 + Math.random() * 3, 0.15);
             activeParticles.push(particle);
         }
     }
