@@ -1183,9 +1183,15 @@ const CONFIG = {
     }
 };
 
+// ==================== BALANCE SCALE (Fixed-Point Integer Math) ====================
+// All balance arithmetic uses integer millicredits to avoid IEEE 754 float drift.
+// BALANCE_SCALE matches RTP_MONEY_SCALE (1000) so RTP rewardFp can be added directly.
+// Only divide by BALANCE_SCALE when rendering to innerHTML.
+const BALANCE_SCALE = 1000;
+
 // ==================== GAME STATE ====================
 const gameState = {
-    balance: CONFIG.game.initialBalance,
+    balance: CONFIG.game.initialBalance * BALANCE_SCALE,
     score: 0,
     currentWeapon: '1x',
     fish: [],  // Array of fish meshes (used in multiplayer mode)
@@ -1242,11 +1248,11 @@ const gameState = {
 
 // ==================== BALANCE AUDIT GUARD (T1 Regression) ====================
 // INVARIANT: In multiplayer mode, gameState.balance may ONLY be set by:
-//   1. onBalanceUpdate (server SSOT): gameState.balance = data.balance
+//   1. onBalanceUpdate (server SSOT): gameState.balance = Math.round(data.balance * BALANCE_SCALE)
 // INVARIANT: In single-player mode, gameState.balance may ONLY be modified by:
-//   1. fireBullet (cost deduction): gameState.balance -= weapon.cost
-//   2. autoFireAtFish (cost deduction): gameState.balance -= weapon.cost
-//   3. Fish.die() (payout): gameState.balance += fishReward (deterministic, every kill pays)
+//   1. fireBullet (cost deduction): gameState.balance -= weapon.cost * BALANCE_SCALE
+//   2. autoFireAtFish (cost deduction): gameState.balance -= weapon.cost * BALANCE_SCALE
+//   3. Fish.die() (payout): gameState.balance += rewardFp (integer, from RTP engine)
 // FORBIDDEN: coin-fly animations must NEVER modify balance (LEAK-1 fix)
 // FORBIDDEN: spawnCoinFlyToScore must NEVER add reward to balance
 //
@@ -1266,7 +1272,7 @@ const _balanceAudit = {
     onServerUpdate(serverBalance) {
         if (!this.enabled) return;
         this.serverUpdateCount++;
-        const clientBal = gameState.balance;
+        const clientBal = gameState.balance / BALANCE_SCALE;
         const drift = clientBal - serverBalance;
         this.lastServerBalance = serverBalance;
         if (Math.abs(drift) > 0.01) {
@@ -9222,7 +9228,7 @@ const _afDebug = {
     },
     reset() {
         this.shotCount = 0;
-        this.balanceAtStart = gameState.balance;
+        this.balanceAtStart = gameState.balance / BALANCE_SCALE;
         this.startTime = performance.now();
     },
     recordShot() { this.shotCount++; },
@@ -9239,7 +9245,7 @@ const _afDebug = {
         const weapon = CONFIG.weapons['8x'];
         const shotsPerSec = (this.shotCount / elapsed).toFixed(2);
         const ammoPerSec = (this.shotCount * weapon.cost / elapsed).toFixed(2);
-        const balanceDelta = gameState.balance - this.balanceAtStart;
+        const balanceDelta = (gameState.balance / BALANCE_SCALE) - this.balanceAtStart;
         const balPerSec = (balanceDelta / elapsed).toFixed(2);
         const phase = TargetingService.state.phase || 'idle';
         this.el.textContent = `[8x AutoFire Debug]\nShots/sec : ${shotsPerSec}\nAmmo/sec  : ${ammoPerSec}\nBal Δ/sec : ${balPerSec}\nPhase     : ${phase}\nFPS       : ${this.lastFps}\nFish      : ${activeFish.length}`;
@@ -9721,7 +9727,7 @@ window.startMultiplayerGame = function(manager) {
         // Handle balance updates
         multiplayerManager.onBalanceUpdate = function(data) {
             _balanceAudit.onServerUpdate(data.balance);
-            gameState.balance = data.balance;
+            gameState.balance = Math.round(data.balance * BALANCE_SCALE);
             updateUI();
         };
         
@@ -11781,10 +11787,10 @@ function autoFireAtFish(targetFish) {
     // Check cooldown
     if (gameState.cooldown > 0) return false;
     
-    if (gameState.balance < weapon.cost) return false;
+    if (gameState.balance < weapon.cost * BALANCE_SCALE) return false;
     
     if (!multiplayerMode) {
-        gameState.balance -= weapon.cost;
+        gameState.balance -= weapon.cost * BALANCE_SCALE;
         recordBet(weaponKey);
     }
     
@@ -14921,7 +14927,7 @@ class Fish {
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
                 );
                 if (result.kill) {
-                    this.die(weaponKey, result.reward);
+                    this.die(weaponKey, result.reward, result.rewardFp);
                     return true;
                 }
             } else if (weapon.type === 'projectile') {
@@ -14929,7 +14935,7 @@ class Fish {
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
                 );
                 if (result.kill) {
-                    this.die(weaponKey, result.reward);
+                    this.die(weaponKey, result.reward, result.rewardFp);
                     return true;
                 }
             }
@@ -14938,7 +14944,7 @@ class Fish {
         return false;
     }
     
-    die(weaponKey, rtpReward) {
+    die(weaponKey, rtpReward, rewardFp) {
         if (!this.isActive) {
             console.warn('[FISH] die() called on already-dead fish, skipping');
             return;
@@ -15027,7 +15033,8 @@ class Fish {
         } else {
             updateComboOnKill();
             
-            const win = (typeof rtpReward === 'number' && rtpReward > 0) ? rtpReward : 0;
+            const winFp = (typeof rewardFp === 'number' && rewardFp > 0) ? rewardFp : 0;
+            const winDisplay = (typeof rtpReward === 'number' && rtpReward > 0) ? rtpReward : 0;
             
             // Determine fish size from tier (used for visual effects)
             let fishSize = 'small';
@@ -15051,13 +15058,13 @@ class Fish {
                 spawnWaitingCoin(deathPosition, 0);
             }
             
-            if (win > 0) {
-                recordWin(win);
-                gameState.balance += win;
-                gameState.score += Math.floor(win);
+            if (winFp > 0) {
+                recordWin(winDisplay);
+                gameState.balance += winFp;
+                gameState.score += Math.floor(winDisplay);
             }
             
-            addKillFeedEntry(this.form, this.config.reward);
+            addKillFeedEntry(this.form, winDisplay);
             // Note: No "miss" sound or gray particles - every kill now has coin feedback
         }
         
@@ -16246,10 +16253,10 @@ function fireBullet(targetX, targetY) {
     
     // SINGLE PLAYER MODE: Original logic
     // Check balance
-    if (gameState.balance < weapon.cost) return false;
+    if (gameState.balance < weapon.cost * BALANCE_SCALE) return false;
     
     // Deduct cost
-    gameState.balance -= weapon.cost;
+    gameState.balance -= weapon.cost * BALANCE_SCALE;
     
     // Record bet for RTP tracking
     recordBet(weaponKey);
@@ -17286,7 +17293,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
         createHitParticles(hit.hitPoint, weapon.color, 12);
         playWeaponHitSound(weaponKey);
         if (result && result.kill && hit.fish.isActive) {
-            hit.fish.die(weaponKey, result.reward);
+            hit.fish.die(weaponKey, result.reward, result.rewardFp);
         }
     } else if (firstHit.length > 0) {
         const hit = firstHit[0];
@@ -17512,18 +17519,18 @@ function triggerExplosion(center, weaponKey) {
         for (let i = 0; i < hitFishList.length; i++) {
             const fish = hitFishList[i].fish;
             
-            const t = hitFishList[i].distance / aoeRadius;
-            const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
-            fish.hp -= damage;
-            fish.flashHit();
-            showCrosshairRingFlash();
-            createHitParticles(fish.group.position, weapon.color, 3);
-            hitAny = true;
-            
             if (i < results.length) {
+                const t = hitFishList[i].distance / aoeRadius;
+                const damage = Math.floor(damageCenter - (damageCenter - damageEdge) * t);
+                fish.hp -= damage;
+                fish.flashHit();
+                showCrosshairRingFlash();
+                createHitParticles(fish.group.position, weapon.color, 3);
+                hitAny = true;
+                
                 const result = results[i];
                 if (result && result.kill && fish.isActive) {
-                    fish.die(weaponKey, result.reward);
+                    fish.die(weaponKey, result.reward, result.rewardFp);
                 }
             }
         }
@@ -17608,7 +17615,7 @@ function _triggerAirflowGain() {
 let _lastBalanceForFlash = null;
 function updateUI() {
     const balanceEl = document.getElementById('balance-value');
-    const newBalance = gameState.balance.toFixed(2);
+    const newBalance = (gameState.balance / BALANCE_SCALE).toFixed(2);
     balanceEl.textContent = newBalance;
     
     if (_lastBalanceForFlash !== null && _lastBalanceForFlash !== newBalance) {
@@ -17807,8 +17814,7 @@ function addKillFeedEntry(fishForm, rewardAmount) {
     const list = document.getElementById('kill-feed-list');
     if (!list) return;
 
-    const imageUrl = FISH_KILLLOG_IMAGES[fishForm] || null;
-    if (!imageUrl) return;
+    const imageUrl = FISH_KILLLOG_IMAGES[fishForm] || 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="24" font-size="24">🐟</text></svg>');
     const name = formatFishName(fishForm);
 
     killFeedRecords.push({ imageUrl, name, reward: rewardAmount });
@@ -17897,7 +17903,7 @@ const AMMO_WEAPON_SLOTS = ['1x', '3x', '5x', '8x'];
 function updateDigiAmmoDisplay() {
     const weapon = CONFIG.weapons[gameState.currentWeapon];
     if (!weapon) return;
-    const ammo = Math.min(99999, Math.max(0, Math.floor(gameState.balance / weapon.cost)));
+    const ammo = Math.min(99999, Math.max(0, Math.floor(gameState.balance / (weapon.cost * BALANCE_SCALE))));
 
     // Legacy digi-ammo (kept hidden via CSS but still updated to avoid null refs)
     const currentIdx = AMMO_WEAPON_SLOTS.indexOf(gameState.currentWeapon);
