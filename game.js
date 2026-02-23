@@ -10073,20 +10073,27 @@ window.startMultiplayerGame = function(manager) {
                         child._origEmissive = child.material.emissive.clone();
                         child._origEmissiveIntensity = child.material.emissiveIntensity;
                     }
-                    child.material.emissive.set(0xffffff);
-                    child.material.emissiveIntensity = 1.0;
+                    child.material.emissive.set(0xff6464);
+                    child.material.emissiveIntensity = 0.4;
                 }
             });
-            setTimeout(function() {
-                if (!fish.parent) return;
-                fish.userData._hitFlashActive = false;
+            const mpFlashStart = performance.now();
+            function _mpFlashFade(t) {
+                const p = Math.min((t - mpFlashStart) / 300, 1);
+                if (!fish.parent) { fish.userData._hitFlashActive = false; return; }
                 fish.traverse(function(child) {
                     if (child.isMesh && child.material && child._origEmissive) {
-                        child.material.emissive.copy(child._origEmissive);
-                        child.material.emissiveIntensity = child._origEmissiveIntensity;
+                        child.material.emissiveIntensity = child._origEmissiveIntensity + 0.4 * (1 - p);
+                        if (p >= 1) {
+                            child.material.emissive.copy(child._origEmissive);
+                            child.material.emissiveIntensity = child._origEmissiveIntensity;
+                        }
                     }
                 });
-            }, 80);
+                if (p < 1) requestAnimationFrame(_mpFlashFade);
+                else fish.userData._hitFlashActive = false;
+            }
+            requestAnimationFrame(_mpFlashFade);
         };
 
         multiplayerManager.onFishKilled = function(data) {
@@ -15195,8 +15202,8 @@ class Fish {
     flashHit() {
         if (this._flashTimer) clearTimeout(this._flashTimer);
         const isBoss = !!this.isBoss;
-        const flashIntensity = isBoss ? 3.0 : 1.0;
-        const flashDuration = isBoss ? 150 : 80;
+        const flashIntensity = isBoss ? 1.2 : 0.4;
+        const flashDuration = isBoss ? 300 : 300;
 
         if (isBoss) {
             this.group.traverse(child => {
@@ -15205,7 +15212,7 @@ class Fish {
                         child._origEmissive = child.material.emissive.clone();
                         child._origEmissiveIntensity = child.material.emissiveIntensity;
                     }
-                    child.material.emissive.set(0xffffff);
+                    child.material.emissive.set(0xff6464);
                     child.material.emissiveIntensity = flashIntensity;
                 }
             });
@@ -15213,20 +15220,30 @@ class Fish {
                 bossGlowEffect._savedOpacity = bossGlowEffect.material.opacity;
                 bossGlowEffect.material.opacity = 0.1;
             }
-            this._flashTimer = setTimeout(() => {
-                this._flashTimer = null;
-                if (this.isActive) {
-                    this.group.traverse(child => {
-                        if (child.isMesh && child.material && child._origEmissive) {
+            const bossFlashStart = performance.now();
+            const bossFlashDur = flashDuration;
+            const bossFlashSelf = this;
+            function _bossFlashFade(t) {
+                const p = Math.min((t - bossFlashStart) / bossFlashDur, 1);
+                if (!bossFlashSelf.isActive) { _bossFlashRestore(); return; }
+                const curI = flashIntensity * (1 - p);
+                bossFlashSelf.group.traverse(child => {
+                    if (child.isMesh && child.material && child._origEmissive) {
+                        child.material.emissiveIntensity = child._origEmissiveIntensity + curI;
+                        if (p >= 1) {
                             child.material.emissive.copy(child._origEmissive);
                             child.material.emissiveIntensity = child._origEmissiveIntensity;
                         }
-                    });
-                }
+                    }
+                });
+                if (p < 1) requestAnimationFrame(_bossFlashFade); else _bossFlashRestore();
+            }
+            function _bossFlashRestore() {
                 if (bossGlowEffect && bossGlowEffect.material && bossGlowEffect._savedOpacity !== undefined) {
                     bossGlowEffect.material.opacity = bossGlowEffect._savedOpacity;
                 }
-            }, flashDuration);
+            }
+            requestAnimationFrame(_bossFlashFade);
         } else if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
                 if (mesh.material && 'emissive' in mesh.material) {
@@ -15234,35 +15251,49 @@ class Fish {
                         mesh._origEmissive = mesh.material.emissive.clone();
                         mesh._origEmissiveIntensity = mesh.material.emissiveIntensity;
                     }
-                    mesh.material.emissive.set(0xffffff);
+                    mesh.material.emissive.set(0xff6464);
                     mesh.material.emissiveIntensity = flashIntensity;
                 }
             });
-            this._flashTimer = setTimeout(() => {
-                this._flashTimer = null;
-                if (this.isActive && this.glbMeshes) {
-                    this.glbMeshes.forEach(mesh => {
-                        if (mesh.material && mesh._origEmissive) {
+            const glbFlashStart = performance.now();
+            const glbFlashDur = flashDuration;
+            const glbFlashSelf = this;
+            function _glbFlashFade(t) {
+                const p = Math.min((t - glbFlashStart) / glbFlashDur, 1);
+                if (!glbFlashSelf.isActive || !glbFlashSelf.glbMeshes) return;
+                glbFlashSelf.glbMeshes.forEach(mesh => {
+                    if (mesh.material && mesh._origEmissive) {
+                        mesh.material.emissiveIntensity = mesh._origEmissiveIntensity + flashIntensity * (1 - p);
+                        if (p >= 1) {
                             mesh.material.emissive.copy(mesh._origEmissive);
                             mesh.material.emissiveIntensity = mesh._origEmissiveIntensity;
                         }
-                    });
-                }
-            }, flashDuration);
+                    }
+                });
+                if (p < 1) requestAnimationFrame(_glbFlashFade);
+            }
+            requestAnimationFrame(_glbFlashFade);
         } else if (this.body && this.body.material && 'emissive' in this.body.material) {
             if (!this.body._origEmissive) {
                 this.body._origEmissive = this.body.material.emissive.clone();
                 this.body._origEmissiveIntensity = this.body.material.emissiveIntensity;
             }
-            this.body.material.emissive.set(0xffffff);
+            this.body.material.emissive.set(0xff6464);
             this.body.material.emissiveIntensity = flashIntensity;
-            this._flashTimer = setTimeout(() => {
-                this._flashTimer = null;
-                if (this.isActive && this.body && this.body.material && this.body._origEmissive) {
-                    this.body.material.emissive.copy(this.body._origEmissive);
-                    this.body.material.emissiveIntensity = this.body._origEmissiveIntensity;
+            const bodyFlashStart = performance.now();
+            const bodyFlashDur = flashDuration;
+            const bodyFlashSelf = this;
+            function _bodyFlashFade(t) {
+                const p = Math.min((t - bodyFlashStart) / bodyFlashDur, 1);
+                if (!bodyFlashSelf.isActive || !bodyFlashSelf.body || !bodyFlashSelf.body.material || !bodyFlashSelf.body._origEmissive) return;
+                bodyFlashSelf.body.material.emissiveIntensity = bodyFlashSelf.body._origEmissiveIntensity + flashIntensity * (1 - p);
+                if (p >= 1) {
+                    bodyFlashSelf.body.material.emissive.copy(bodyFlashSelf.body._origEmissive);
+                    bodyFlashSelf.body.material.emissiveIntensity = bodyFlashSelf.body._origEmissiveIntensity;
                 }
-            }, flashDuration);
+                if (p < 1) requestAnimationFrame(_bodyFlashFade);
+            }
+            requestAnimationFrame(_bodyFlashFade);
         }
     }
     
