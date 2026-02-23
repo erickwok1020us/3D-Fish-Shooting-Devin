@@ -7169,7 +7169,7 @@ function showKillSkull() {
 
 let _rewardPopupYOffset = 0;
 let _rewardPopupResetTimer = null;
-let _rewardPopupStyle = 'gold_spring';
+let _rewardPopupStyle = 'arcade_jump';
 
 function onScoreConfirmed(fishForm, rewardAmount) {
     const rewardInt = Math.round(rewardAmount);
@@ -7244,20 +7244,25 @@ function _showArcadeJump(intAmount) {
     _rewardPopupYOffset++;
     if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
     _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 5 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:#ffe600;text-shadow:3px 3px 0 #000,0 0 8px rgba(255,230,0,0.5);pointer-events:none;z-index:99999;white-space:nowrap;`;
+    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 5 - yOff}px;font-family:'Orbitron',monospace;font-size:42px;font-weight:900;color:#ffd700;-webkit-text-stroke:3px #000;text-shadow:0 0 16px rgba(255,215,0,0.8),0 3px 6px rgba(0,0,0,0.7);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
     document.body.appendChild(popup);
     const startT = performance.now();
-    const duration = 1200;
-    const peakHeight = 80 + yOff * 0.5;
-    const driftX = (Math.random() - 0.5) * 60;
+    const duration = 1400;
+    const peakHeight = 140 + yOff * 0.6;
+    const driftX = (Math.random() - 0.5) * 40;
     function animJump(t) {
         const p = Math.min((t - startT) / duration, 1);
         const yParabola = -4 * peakHeight * p * (p - 1);
         const xDrift = driftX * p;
-        const rotation = p * 8;
-        const opacity = p < 0.7 ? 1 : Math.max(0, 1 - ((p - 0.7) / 0.3));
-        const scale = p < 0.15 ? 0.5 + p / 0.15 * 0.5 : 1;
-        popup.style.transform = `translate(${xDrift}px, ${-yParabola}px) rotate(${rotation}deg) scale(${scale})`;
+        const opacity = p < 0.8 ? 1 : Math.max(0, 1 - ((p - 0.8) / 0.2));
+        const scaleIn = p < 0.12 ? 0.5 + (p / 0.12) * 0.7 : 1.2; // 強烈彈出
+        const apexBouncePhase = Math.max(0, (0.5 - Math.abs(p - 0.5)) / 0.5); // 於頂點微彈
+        const apexBounce = 1 + 0.05 * Math.sin(apexBouncePhase * Math.PI);
+        const landPhase = Math.max(0, (p - 0.92) / 0.08);
+        const landBounce = landPhase > 0 ? 1 - Math.sin(landPhase * Math.PI) * 0.12 * (1 - landPhase) : 1; // 落地彈跳
+        const scale = scaleIn * apexBounce * landBounce;
+        const yBounce = landPhase > 0 ? Math.sin(landPhase * Math.PI) * 16 * (1 - landPhase) : 0;
+        popup.style.transform = `translate(${xDrift}px, ${-(yParabola - yBounce)}px) scale(${scale})`;
         popup.style.opacity = String(opacity);
         if (p < 1) requestAnimationFrame(animJump); else popup.remove();
     }
