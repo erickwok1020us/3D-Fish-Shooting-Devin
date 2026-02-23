@@ -7114,7 +7114,7 @@ function showCrosshairRingFlash(spreadIndex) {
     }
     const ring = document.createElement('div');
     const ringSz = 24;
-    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:${ringSz}px;height:${ringSz}px;border:2.5px solid rgba(255,20,60,1);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 10px rgba(255,20,60,1),0 0 18px rgba(255,60,80,0.7),inset 0 0 5px rgba(255,120,120,0.5);`;
+    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:${ringSz}px;height:${ringSz}px;border:1.5px solid rgba(255,20,60,0.95);border-radius:50%;background:transparent;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 6px rgba(255,20,60,0.7),0 0 12px rgba(255,60,80,0.35);`;
     document.body.appendChild(ring);
     if (targetEl) {
         targetEl.classList.add('hit-flash');
@@ -7141,8 +7141,8 @@ function showKillSkull() {
         cy = chEl ? (parseFloat(chEl.style.top) || window.innerHeight / 2) : window.innerHeight / 2;
     }
     const skull = document.createElement('div');
-    skull.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="rgba(255,40,60,0.95)"><path d="M12 2C6.48 2 2 6.48 2 12c0 3.07 1.39 5.81 3.57 7.63L5 22h3l.5-2h7l.5 2h3l-.57-2.37C20.61 17.81 22 15.07 22 12c0-5.52-4.48-10-10-10zM8.5 14c-.83 0-1.5-.67-1.5-1.5S7.67 11 8.5 11s1.5.67 1.5 1.5S9.33 14 8.5 14zm7 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
-    skull.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%) scale(0.2);pointer-events:none;z-index:10002;opacity:0;filter:drop-shadow(0 0 6px rgba(255,20,60,0.9)) drop-shadow(0 0 12px rgba(255,60,80,0.5));`;
+    skull.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="rgba(255,40,60,0.95)"><path d="M12 2C6.48 2 2 6.48 2 12c0 3.07 1.39 5.81 3.57 7.63L5 22h3l.5-2h7l.5 2h3l-.57-2.37C20.61 17.81 22 15.07 22 12c0-5.52-4.48-10-10-10zM8.5 14c-.83 0-1.5-.67-1.5-1.5S7.67 11 8.5 11s1.5.67 1.5 1.5S9.33 14 8.5 14zm7 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
+    skull.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%) scale(0.2);pointer-events:none;z-index:10002;opacity:0;background:transparent;filter:drop-shadow(0 0 6px rgba(255,20,60,0.9)) drop-shadow(0 0 12px rgba(255,60,80,0.5));`;
     document.body.appendChild(skull);
     const startT = performance.now();
     function animSkull(t) {
@@ -7165,6 +7165,32 @@ function showKillSkull() {
         requestAnimationFrame(animSkull);
     }
     requestAnimationFrame(animSkull);
+}
+
+let _rewardPopupYOffset = 0;
+let _rewardPopupResetTimer = null;
+function showRewardFloat(amount) {
+    if (!amount || amount <= 0) return;
+    const bd = document.getElementById('balance-display');
+    if (!bd) return;
+    const rect = bd.getBoundingClientRect();
+    const popup = document.createElement('div');
+    popup.textContent = '+' + Math.floor(amount);
+    const yOff = _rewardPopupYOffset * 25;
+    _rewardPopupYOffset++;
+    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
+    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
+    popup.style.cssText = `position:fixed;left:${rect.left + 70}px;top:${rect.top - 8 - yOff}px;font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:#ffcc00;text-shadow:0 0 12px rgba(255,200,0,0.8),0 0 24px rgba(255,180,0,0.4);pointer-events:none;z-index:10003;white-space:nowrap;`;
+    document.body.appendChild(popup);
+    const startT = performance.now();
+    function animFloat(t) {
+        const p = Math.min((t - startT) / 1200, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        popup.style.transform = `translateY(${-ease * 50}px) scale(${p < 0.1 ? 0.8 + p * 2 : 1 - p * 0.1})`;
+        popup.style.opacity = String(p < 0.3 ? 1 : 1 - ((p - 0.3) / 0.7));
+        if (p < 1) requestAnimationFrame(animFloat); else popup.remove();
+    }
+    requestAnimationFrame(animFloat);
 }
 
 // Temp vectors for muzzle flash barrel direction calculation(avoid per-shot allocations)
@@ -15397,6 +15423,7 @@ class Fish {
                 spawnWaitingCoin(deathPosition, 0);
             }
             addKillFeedEntry(this.form, this.config.reward);
+            showRewardFloat(this.config.reward);
         } else {
             updateComboOnKill();
             
@@ -15432,6 +15459,7 @@ class Fish {
             }
             
             addKillFeedEntry(this.form, winDisplay);
+            showRewardFloat(winDisplay);
             // Note: No "miss" sound or gray particles - every kill now has coin feedback
         }
         
