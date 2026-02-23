@@ -11857,7 +11857,7 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 60,
         hitscanFireGate: 8,
-        autoFireAlignGate: 2,
+        autoFireAlignGate: 8,
         trackSpeed: 22.0,
         maxRotSpeed: 2.0,
         initialLockMs: 250,
@@ -12066,8 +12066,17 @@ const TargetingService = {
         return delta;
     },
 
+    _getFishCenter(fish) {
+        const center = new THREE.Vector3();
+        fish.group.getWorldPosition(center);
+        if (fish.ellipsoidHalfExtents) {
+            center.y += fish.ellipsoidHalfExtents.y * 0.15;
+        }
+        return center;
+    },
+
     _rayHitsTargetFish(origin, dir, fish) {
-        const fishPos = fish.group.position;
+        const fishPos = this._getFishCenter(fish);
         const halfExt = fish.ellipsoidHalfExtents;
         const fishYaw = fish._currentYaw || 0;
         if (halfExt) {
@@ -12138,7 +12147,7 @@ const TargetingService = {
         const fish = s.lockedTarget;
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
-        let aimPos = fish.group.position.clone();
+        let aimPos = this._getFishCenter(fish);
         if (fish.ellipsoidHalfExtents) {
             const he = fish.ellipsoidHalfExtents;
             if (!fish._aimOffsetSeed) fish._aimOffsetSeed = Math.random() * 1000;
@@ -12196,7 +12205,7 @@ const TargetingService = {
 
         if (s.phase === 'firing' || s.phase === 'locking' || s.phase === 'transition') {
             const fwd = this._getCannonForward(new THREE.Vector3());
-            const toFish = fish.group.position.clone().sub(muzzlePos).normalize();
+            const toFish = this._getFishCenter(fish).sub(muzzlePos).normalize();
             const dot = fwd.dot(toFish);
             const angleDeg = Math.acos(Math.min(1, Math.max(-1, dot))) * (180 / Math.PI);
             if (angleDeg <= c.autoFireAlignGate) canFire = true;
@@ -12286,7 +12295,12 @@ function autoFireAtFish(targetFish) {
     if (gameState.autoShoot && targetFish) {
         direction = autoFireTempVectors.direction;
         const aimOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
-        direction.copy(targetFish.group.position).sub(aimOrigin).normalize();
+        const fishCenter = new THREE.Vector3();
+        targetFish.group.getWorldPosition(fishCenter);
+        if (targetFish.ellipsoidHalfExtents) {
+            fishCenter.y += targetFish.ellipsoidHalfExtents.y * 0.15;
+        }
+        direction.copy(fishCenter).sub(aimOrigin).normalize();
     } else if (weapon.type === 'laser') {
         direction = getCrosshairRay();
         if (!direction) return false;
