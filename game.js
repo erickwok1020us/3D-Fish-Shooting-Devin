@@ -11859,9 +11859,9 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 60,
         hitscanFireGate: 8,
-        autoFireAlignGate: 15,
-        trackSpeed: 22.0,
-        maxRotSpeed: 2.0,
+        autoFireAlignGate: 6,
+        trackSpeed: 48.0,
+        maxRotSpeed: 4.0,
         initialLockMs: 250,
         transitionMs:  200,
         bossCooldownMs: 2000,
@@ -11982,6 +11982,13 @@ const TargetingService = {
             Math.cos(yaw) * Math.cos(pitch)
         ).normalize();
         return out;
+    },
+
+    _getFishCenter(fish) {
+        const pos = fish.group.position.clone();
+        if (fish.ellipsoidHalfExtents) pos.y += fish.ellipsoidHalfExtents.y * 0.5;
+        pos.y += 0.5;
+        return pos;
     },
 
     _priorityScore(fish, refPos) {
@@ -12140,22 +12147,15 @@ const TargetingService = {
         const fish = s.lockedTarget;
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
-        let aimPos = fish.group.position.clone();
-        if (fish.ellipsoidHalfExtents) {
-            const he = fish.ellipsoidHalfExtents;
-            aimPos.y += he.y * 0.5;
-            if (!fish._aimOffsetSeed) fish._aimOffsetSeed = Math.random() * 1000;
-            const t = performance.now() * 0.0003 + fish._aimOffsetSeed;
-            const wobbleScale = fish.isBoss ? 0.3 : 0.15;
-            aimPos.x += Math.sin(t * 2.1) * he.x * wobbleScale;
-            aimPos.y += Math.sin(t * 1.7) * he.y * (wobbleScale * 0.67);
-            aimPos.z += Math.cos(t * 1.3) * he.z * wobbleScale;
+        if (!this._isInAutoFireCone(fish.group.position, refPos)) {
+            if (fish.isBoss) s.lastBossReleaseMs = now;
+            console.log(`[AutoFire] phase=${s.phase} | Drop lock: Clamp limit exceeded`);
+            this.reset();
+            this._initFromCannon();
+            return { target: null, canFire: false };
         }
-        const weapon = CONFIG.weapons[gameState.currentWeapon];
-        if (weapon.speed && fish.velocity) {
-            const dist = muzzlePos.distanceTo(aimPos);
-            aimPos.add(fish.velocity.clone().multiplyScalar(dist / weapon.speed));
-        }
+
+        const aimPos = this._getFishCenter(fish);
         const trackOrigin = (gameState.autoShoot && isFps) ? refPos : muzzlePos;
         const dir = aimPos.clone().sub(trackOrigin).normalize();
         const clampedYaw   = Math.max(-c.yawLimit, Math.min(c.yawLimit, Math.atan2(dir.x, dir.z)));
@@ -12297,10 +12297,15 @@ function autoFireAtFish(targetFish) {
     cannonMuzzle.getWorldPosition(muzzlePos);
     
     let direction;
-    if (gameState.autoShoot && targetFish) {
+    if (gameState.autoShoot) {
         direction = autoFireTempVectors.direction;
-        const aimOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
-        direction.copy(targetFish.group.position).sub(aimOrigin).normalize();
+        const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
+        const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+        direction.set(
+            Math.sin(yaw) * Math.cos(pitch),
+            Math.sin(pitch),
+            Math.cos(yaw) * Math.cos(pitch)
+        ).normalize();
     } else if (weapon.type === 'laser') {
         direction = getCrosshairRay();
         if (!direction) return false;
