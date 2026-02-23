@@ -1002,7 +1002,7 @@ const WEAPON_CONFIG = {
         glbCannonNonPlayer: '1x 武器模組(非玩家).glb',
         glbBullet: '1x 子彈模組',
         glbHitEffect: '1x 擊中特效',
-        scale: 1.0, bulletScale: 0.5, hitEffectScale: 0.6,
+        scale: 1.0, bulletScale: 0.5, hitEffectScale: 0.3,
                 muzzleOffset: new THREE.Vector3(0, 30, 55),
                 cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -1032,7 +1032,7 @@ const WEAPON_CONFIG = {
         glbCannonNonPlayer: '3x 武器模組(非玩家).glb',
         glbBullet: '1x 子彈模組',
         glbHitEffect: '3x 擊中特效',
-        scale: 1.1, bulletScale: 0.6, hitEffectScale: 0.7,
+        scale: 1.1, bulletScale: 0.6, hitEffectScale: 0.35,
         muzzleOffset: new THREE.Vector3(0, 30, 60),
         cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -1062,7 +1062,7 @@ const WEAPON_CONFIG = {
         glbCannonNonPlayer: '5x 武器模組(非玩家).glb',
         glbBullet: '5x 子彈模組',
         glbHitEffect: '5x 擊中特效',
-        scale: 1.3, bulletScale: 0.7, hitEffectScale: 0.9,
+        scale: 1.3, bulletScale: 0.7, hitEffectScale: 0.45,
         muzzleOffset: new THREE.Vector3(0, 30, 65),
         cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -1092,7 +1092,7 @@ const WEAPON_CONFIG = {
         glbCannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
         glbBullet: '8x 子彈模組',
         glbHitEffect: '8x 擊中特效',
-        scale: 1.0, bulletScale: 0.9, hitEffectScale: 1.2,
+        scale: 1.0, bulletScale: 0.9, hitEffectScale: 0.6,
         muzzleOffset: new THREE.Vector3(0, 30, 50),
         cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -3807,10 +3807,9 @@ function returnHitEffectToPool(weaponKey, item) {
     item.inUse = false;
     item.model.visible = false;
     
-    // Reset material opacity (was modified during fade animation)
     item.materials.forEach((mat) => {
-        mat.opacity = 1;
-        mat.transparent = false;
+        mat.opacity = 0.5;
+        mat.transparent = true;
     });
     
     // Reset scale to initial
@@ -7780,33 +7779,35 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish) {
     const duration = 400; // 400ms animation (shorter, snappier)
     const initialScale = scale * 0.3;
     const maxScale = scale * 1.0;
+    const maxOpacity = 0.5;
+    
+    materials.forEach((mat) => {
+        mat.transparent = true;
+        mat.opacity = maxOpacity;
+    });
     
     addVfxEffect({
         type: 'glbHitEffect',
         model: hitEffectModel,
         materials: materials,
-        poolItem: poolItem,  // Store pool item for return
+        poolItem: poolItem,
         weaponKey: weaponKey,
         duration: duration,
         initialScale: initialScale,
         maxScale: maxScale,
+        maxOpacity: maxOpacity,
         
         update(dt, elapsed) {
             const progress = Math.min(elapsed / this.duration, 1);
             
             if (progress < 0.3) {
-                // Scale up phase (0-30%)
                 const scaleProgress = progress / 0.3;
                 const currentScale = this.initialScale + (this.maxScale - this.initialScale) * scaleProgress;
                 this.model.scale.set(currentScale, currentScale, currentScale);
             } else {
-                // Fade out phase (30-100%)
                 const fadeProgress = (progress - 0.3) / 0.7;
                 this.materials.forEach((mat) => {
-                    if (!mat.transparent) {
-                        mat.transparent = true;
-                    }
-                    mat.opacity = 1 - fadeProgress;
+                    mat.opacity = this.maxOpacity * (1 - fadeProgress);
                 });
             }
             
@@ -7881,9 +7882,9 @@ function spawnShockwave(position, color, radius) {
     
     const material = new THREE.PointsMaterial({
         color: color,
-        size: 8,
+        size: 4,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.45,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         sizeAttenuation: true
@@ -7911,8 +7912,8 @@ function spawnShockwave(position, color, radius) {
             }
             this.geometry.attributes.position.needsUpdate = true;
             
-            this.material.opacity = 0.9 * (1 - progress);
-            this.material.size = 8 + progress * 12;
+            this.material.opacity = 0.45 * (1 - progress);
+            this.material.size = 4 + progress * 6;
             
             return progress < 1;
         },
@@ -7941,18 +7942,18 @@ function spawnMegaExplosion(position) {
     });
     const core = new THREE.Mesh(vfxGeometryCache.megaCore, coreMaterial);
     core.position.copy(position);
-    core.scale.set(20, 20, 20); // Scale unit sphere to size 20
+    core.scale.set(10, 10, 10);
     scene.add(core);
     
     addVfxEffect({
         type: 'megaExplosionCore',
         mesh: core,
         material: coreMaterial,
-        baseScale: 20,
+        baseScale: 10,
         currentScaleMultiplier: 1,
-        currentOpacity: 1,
-        scaleSpeed: 18, // was 0.3 per frame at 60fps = 18/s
-        fadeSpeed: 9, // was 0.15 per frame at 60fps = 9/s
+        currentOpacity: 0.5,
+        scaleSpeed: 18,
+        fadeSpeed: 9,
         
         update(dt, elapsed) {
             this.currentScaleMultiplier += this.scaleSpeed * dt;
@@ -7985,10 +7986,10 @@ function spawnMegaExplosion(position) {
         posX: posX,
         posY: posY,
         posZ: posZ,
-        baseFireballScale: 30,
-        baseInnerScale: 20,
+        baseFireballScale: 15,
+        baseInnerScale: 10,
         currentScaleMultiplier: 1,
-        currentOpacity: 0.8,
+        currentOpacity: 0.4,
         scaleSpeed: 7.2, // was 0.12 per frame at 60fps = 7.2/s
         fadeSpeed: 1.8, // was 0.03 per frame at 60fps = 1.8/s
         
@@ -8001,7 +8002,7 @@ function spawnMegaExplosion(position) {
                 this.fireballMaterial = new THREE.MeshBasicMaterial({
                     color: 0xff4400,
                     transparent: true,
-                    opacity: 0.8
+                    opacity: 0.4
                 });
                 this.fireball = new THREE.Mesh(vfxGeometryCache.megaFireball, this.fireballMaterial);
                 this.fireball.position.set(this.posX, this.posY, this.posZ);
@@ -8011,7 +8012,7 @@ function spawnMegaExplosion(position) {
                 this.innerMaterial = new THREE.MeshBasicMaterial({
                     color: 0xffaa00,
                     transparent: true,
-                    opacity: 0.9
+                    opacity: 0.45
                 });
                 this.inner = new THREE.Mesh(vfxGeometryCache.megaInner, this.innerMaterial);
                 this.inner.position.set(this.posX, this.posY, this.posZ);
@@ -8082,7 +8083,7 @@ function spawnMegaExplosion(position) {
                     this.material = new THREE.MeshBasicMaterial({
                         color: 0x333333,
                         transparent: true,
-                        opacity: 0.4
+                        opacity: 0.2
                     });
                     this.mesh = new THREE.Mesh(vfxGeometryCache.smokeCloud, this.material);
                     this.mesh.position.set(this.smokePosX, this.smokePosY, this.smokePosZ);
@@ -8098,7 +8099,7 @@ function spawnMegaExplosion(position) {
                 
                 this.mesh.position.y += this.riseSpeed * dt;
                 this.mesh.scale.setScalar(this.smokeSize * (1 + progress * 0.5));
-                this.material.opacity = 0.4 * (1 - progress);
+                this.material.opacity = 0.2 * (1 - progress);
                 
                 return progress < 1;
             },
