@@ -362,98 +362,126 @@ function updatePanoramaAnimation(deltaTime) {
 }
 
 // Create floating underwater particles for dynamic atmosphere
+// ==================== GPU PARTICLE BUBBLE SYSTEM (Fresnel Rim + Soft Fade) ====================
+const BUBBLE_PARAMS = {
+    count: 500,
+    riseSpeed: 0.57,
+    wobbleAmp: 0.15,
+    opacity: 0.33,
+    fresnelPower: 2.5,
+    innerAlpha: 0.092
+};
+
+let _bubblePositions = null;
+let _bubbleSizes = null;
+let _bubbleVelocities = [];
+
 function createUnderwaterParticles() {
-    if (!PANORAMA_CONFIG.dynamicEffects.floatingParticles) return;
-    
-    const config = PANORAMA_CONFIG.dynamicEffects;
-    const particleCount = config.particleCount;
-    const spread = config.particleSpread;
-    
-    const positions = new Float32Array(particleCount * 3);
-    const sizes = new Float32Array(particleCount);
-    const velocities = [];
-    
-    for (let i = 0; i < particleCount; i++) {
-        positions[i * 3] = (Math.random() - 0.5) * spread;
-        positions[i * 3 + 1] = (Math.random() - 0.5) * spread;
-        positions[i * 3 + 2] = (Math.random() - 0.5) * spread;
-        
-        sizes[i] = config.particleMinSize + Math.random() * (config.particleMaxSize - config.particleMinSize);
-        
-        velocities.push({
-            x: (Math.random() - 0.5) * 0.1,
-            y: config.particleSpeed * (0.5 + Math.random() * 0.5),
-            z: (Math.random() - 0.5) * 0.1
+    const { width, depth, floorY } = CONFIG.aquarium;
+    const topY = floorY + CONFIG.aquarium.height;
+    const N = BUBBLE_PARAMS.count;
+
+    const geo = new THREE.BufferGeometry();
+    _bubblePositions = new Float32Array(N * 3);
+    _bubbleSizes = new Float32Array(N);
+    _bubbleVelocities = [];
+
+    for (let i = 0; i < N; i++) {
+        _bubblePositions[i * 3]     = (Math.random() - 0.5) * width;
+        _bubblePositions[i * 3 + 1] = floorY + Math.random() * (topY - floorY);
+        _bubblePositions[i * 3 + 2] = (Math.random() - 0.5) * depth;
+        _bubbleSizes[i] = (0.15 + Math.random() * 1.65) * 12.0;
+        _bubbleVelocities.push({
+            vy: 0.2 + Math.random() * 0.6,
+            wobblePhase: Math.random() * Math.PI * 2,
+            wobbleFreq: 0.4 + Math.random() * 1.2,
+            wobbleAmpX: 0.05 + Math.random() * 0.15,
+            wobbleAmpZ: 0.03 + Math.random() * 0.1
         });
     }
-    
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    
-    const bubbleCanvas = document.createElement('canvas');
-    bubbleCanvas.width = 32;
-    bubbleCanvas.height = 32;
-    const ctx = bubbleCanvas.getContext('2d');
-    ctx.beginPath();
-    ctx.arc(16, 16, 14, 0, Math.PI * 2);
-    const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 14);
-    grad.addColorStop(0, 'rgba(255,255,255,0.8)');
-    grad.addColorStop(0.5, 'rgba(170,221,255,0.4)');
-    grad.addColorStop(1, 'rgba(170,221,255,0)');
-    ctx.fillStyle = grad;
-    ctx.fill();
-    const bubbleTexture = new THREE.CanvasTexture(bubbleCanvas);
+    geo.setAttribute('position', new THREE.BufferAttribute(_bubblePositions, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(_bubbleSizes, 1));
 
-    const material = new THREE.PointsMaterial({
-        color: 0xaaddff,
-        size: 3,
+    const bvs = [
+        'attribute float size;',
+        'varying float vSize;',
+        'void main() {',
+        '  vSize = size;',
+        '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+        '  gl_PointSize = size * (300.0 / -mv.z);',
+        '  gl_Position = projectionMatrix * mv;',
+        '}'
+    ].join('\n');
+
+    const bfs = [
+        'uniform float uOpacity;',
+        'uniform float uFresnelPower;',
+        'uniform float uInnerAlpha;',
+        'uniform vec3 uColor;',
+        'uniform vec3 uRimColor;',
+        'varying float vSize;',
+        'void main() {',
+        '  vec2 uv = gl_PointCoord * 2.0 - 1.0;',
+        '  float d = length(uv);',
+        '  if (d > 1.0) discard;',
+        '  float rim = pow(d, uFresnelPower);',
+        '  float innerFade = smoothstep(0.0, 0.5, d);',
+        '  float outerFade = 1.0 - smoothstep(0.85, 1.0, d);',
+        '  vec3 col = mix(uColor * uInnerAlpha, uRimColor, rim);',
+        '  float alpha = (innerFade * 0.3 + rim * 0.7) * outerFade * uOpacity;',
+        '  float hl = pow(max(0.0, 1.0 - length(uv - vec2(-0.3, -0.3))), 8.0) * 0.6;',
+        '  col += vec3(hl);',
+        '  float hl2 = pow(max(0.0, 1.0 - length(uv - vec2(0.2, 0.25))), 10.0) * 0.25;',
+        '  col += vec3(hl2);',
+        '  gl_FragColor = vec4(col, alpha);',
+        '}'
+    ].join('\n');
+
+    const mat = new THREE.ShaderMaterial({
+        uniforms: {
+            uOpacity:      { value: BUBBLE_PARAMS.opacity },
+            uFresnelPower: { value: BUBBLE_PARAMS.fresnelPower },
+            uInnerAlpha:   { value: BUBBLE_PARAMS.innerAlpha },
+            uColor:        { value: new THREE.Color(0.55, 0.82, 1.0) },
+            uRimColor:     { value: new THREE.Color(0.85, 0.95, 1.0) }
+        },
+        vertexShader: bvs,
+        fragmentShader: bfs,
         transparent: true,
-        opacity: 0.4,
         blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        sizeAttenuation: true,
-        map: bubbleTexture
+        depthWrite: false
     });
-    
-    underwaterParticleSystem = new THREE.Points(geometry, material);
-    underwaterParticleSystem.userData.velocities = velocities;
-    underwaterParticleSystem.userData.spread = spread;
+
+    underwaterParticleSystem = new THREE.Points(geo, mat);
     scene.add(underwaterParticleSystem);
-    
-    console.log(`[PANORAMA] Created ${particleCount} floating underwater particles`);
+    console.log(`[ATMOSPHERE] Created ${N} GPU particle bubbles (fresnel rim + soft fade)`);
 }
 
-// Update floating particles animation (called from animate loop)
 function updateUnderwaterParticles(deltaTime) {
     if (!underwaterParticleSystem) return;
-    
-    const positions = underwaterParticleSystem.geometry.attributes.position.array;
-    const velocities = underwaterParticleSystem.userData.velocities;
-    const spread = underwaterParticleSystem.userData.spread;
-    const halfSpread = spread / 2;
-    
-    for (let i = 0; i < velocities.length; i++) {
-        const idx = i * 3;
-        
-        // Update position
-        positions[idx] += velocities[i].x * deltaTime * 60;
-        positions[idx + 1] += velocities[i].y * deltaTime * 60;
-        positions[idx + 2] += velocities[i].z * deltaTime * 60;
-        
-        // Wrap around when particle goes out of bounds
-        if (positions[idx + 1] > halfSpread) {
-            positions[idx + 1] = -halfSpread;
-            positions[idx] = (Math.random() - 0.5) * spread;
-            positions[idx + 2] = (Math.random() - 0.5) * spread;
+
+    const { floorY } = CONFIG.aquarium;
+    const topY = floorY + CONFIG.aquarium.height;
+    const { width, depth } = CONFIG.aquarium;
+    const time = performance.now() * 0.001;
+    const pos = _bubblePositions;
+
+    for (let i = 0; i < _bubbleVelocities.length; i++) {
+        const v = _bubbleVelocities[i];
+        const i3 = i * 3;
+        pos[i3 + 1] += v.vy * BUBBLE_PARAMS.riseSpeed * deltaTime * 60;
+        pos[i3]     += Math.sin(time * v.wobbleFreq + v.wobblePhase) * v.wobbleAmpX * BUBBLE_PARAMS.wobbleAmp * deltaTime * 60;
+        pos[i3 + 2] += Math.cos(time * v.wobbleFreq * 0.7 + v.wobblePhase) * v.wobbleAmpZ * BUBBLE_PARAMS.wobbleAmp * deltaTime * 60;
+        if (pos[i3 + 1] > topY) {
+            pos[i3]     = (Math.random() - 0.5) * width;
+            pos[i3 + 1] = floorY;
+            pos[i3 + 2] = (Math.random() - 0.5) * depth;
         }
-        
-        // Add slight horizontal drift
-        positions[idx] += Math.sin(performance.now() * 0.001 + i) * 0.02;
-        positions[idx + 2] += Math.cos(performance.now() * 0.001 + i * 0.7) * 0.02;
     }
-    
     underwaterParticleSystem.geometry.attributes.position.needsUpdate = true;
+    underwaterParticleSystem.material.uniforms.uOpacity.value      = BUBBLE_PARAMS.opacity;
+    underwaterParticleSystem.material.uniforms.uFresnelPower.value = BUBBLE_PARAMS.fresnelPower;
+    underwaterParticleSystem.material.uniforms.uInnerAlpha.value   = BUBBLE_PARAMS.innerAlpha;
 }
 
 // ==================== UNDERWATER GOD RAYS (Light Shafts from Surface) ====================
@@ -565,6 +593,319 @@ function updateGodRays(time) {
 
         ray.material.uniforms.uOpacity.value = opacity;
     }
+}
+
+// ==================== VOLUMETRIC GOD RAY PARTICLES ====================
+const RAY_PARTICLE_PARAMS = {
+    count: 2000,
+    speed: 0.39,
+    size: 3.5,
+    opacity: 0.63,
+    beamCount: 10
+};
+
+let _rayParticlePoints = null;
+let _rayParticleGeo = null;
+let _rayPositions = null;
+let _rayVelocities = [];
+
+function createGodRayParticles() {
+    const { width, depth, floorY } = CONFIG.aquarium;
+    const topY = floorY + CONFIG.aquarium.height;
+    const N = RAY_PARTICLE_PARAMS.count;
+
+    _rayParticleGeo = new THREE.BufferGeometry();
+    _rayPositions = new Float32Array(N * 3);
+    _rayVelocities = [];
+    const sizes = new Float32Array(N);
+
+    for (let i = 0; i < N; i++) {
+        const bi = Math.floor(Math.random() * RAY_PARTICLE_PARAMS.beamCount);
+        const bx = (bi / RAY_PARTICLE_PARAMS.beamCount - 0.5) * width + (Math.random() - 0.5) * 30;
+        const by = floorY + Math.random() * (topY - floorY);
+        const bz = (Math.random() - 0.5) * depth * 0.5 - 50;
+        _rayPositions[i * 3]     = bx;
+        _rayPositions[i * 3 + 1] = by;
+        _rayPositions[i * 3 + 2] = bz;
+        sizes[i] = (1.0 + Math.random() * 2.5) * RAY_PARTICLE_PARAMS.size;
+        _rayVelocities.push({
+            vy: -(0.1 + Math.random() * 0.3),
+            drift: (Math.random() - 0.5) * 0.05,
+            beamX: bx,
+            beamZ: bz,
+            scatter: 10 + Math.random() * 20,
+            phase: Math.random() * Math.PI * 2
+        });
+    }
+    _rayParticleGeo.setAttribute('position', new THREE.BufferAttribute(_rayPositions, 3));
+    _rayParticleGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const rvs = [
+        'attribute float size;',
+        'varying float vAlpha;',
+        'void main() {',
+        '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+        '  gl_PointSize = size * (250.0 / -mv.z);',
+        '  vAlpha = smoothstep(-450.0, 400.0, position.y);',
+        '  gl_Position = projectionMatrix * mv;',
+        '}'
+    ].join('\n');
+
+    const rfs = [
+        'uniform float uOpacity;',
+        'uniform vec3 uColor;',
+        'varying float vAlpha;',
+        'void main() {',
+        '  float d = length(gl_PointCoord * 2.0 - 1.0);',
+        '  if (d > 1.0) discard;',
+        '  float soft = 1.0 - d * d;',
+        '  float glow = exp(-d * 3.0) * 0.6;',
+        '  float alpha = (soft * 0.4 + glow) * vAlpha * uOpacity;',
+        '  gl_FragColor = vec4(uColor, alpha);',
+        '}'
+    ].join('\n');
+
+    const rayMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uOpacity: { value: RAY_PARTICLE_PARAMS.opacity },
+            uColor:   { value: new THREE.Color(0.5, 0.8, 1.0) }
+        },
+        vertexShader: rvs,
+        fragmentShader: rfs,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    _rayParticlePoints = new THREE.Points(_rayParticleGeo, rayMat);
+    scene.add(_rayParticlePoints);
+    console.log(`[ATMOSPHERE] Created ${N} volumetric god ray particles`);
+}
+
+function updateGodRayParticles(time, deltaTime) {
+    if (!_rayParticlePoints) return;
+    const { floorY } = CONFIG.aquarium;
+    const topY = floorY + CONFIG.aquarium.height;
+    const pos = _rayPositions;
+
+    for (let i = 0; i < _rayVelocities.length; i++) {
+        const v = _rayVelocities[i];
+        const i3 = i * 3;
+        pos[i3 + 1] += v.vy * RAY_PARTICLE_PARAMS.speed * deltaTime * 60;
+        pos[i3]     += Math.sin(time * 0.3 + v.phase) * v.drift * deltaTime * 60;
+        if (pos[i3 + 1] < floorY) {
+            pos[i3]     = v.beamX + (Math.random() - 0.5) * v.scatter;
+            pos[i3 + 1] = topY;
+            pos[i3 + 2] = v.beamZ + (Math.random() - 0.5) * v.scatter;
+        }
+    }
+    _rayParticleGeo.attributes.position.needsUpdate = true;
+    _rayParticlePoints.material.uniforms.uOpacity.value = RAY_PARTICLE_PARAMS.opacity;
+}
+
+// ==================== FLOATING DUST PARTICLES ====================
+const DUST_PARAMS = {
+    count: 600,
+    size: 2.0,
+    opacity: 0.2,
+    speed: 0.08
+};
+
+let _dustPoints = null;
+let _dustGeo = null;
+let _dustPositions = null;
+let _dustVelocities = [];
+
+function createDustParticles() {
+    const { width, depth, floorY } = CONFIG.aquarium;
+    const topY = floorY + CONFIG.aquarium.height;
+    const N = DUST_PARAMS.count;
+
+    _dustGeo = new THREE.BufferGeometry();
+    _dustPositions = new Float32Array(N * 3);
+    _dustVelocities = [];
+    const sizes = new Float32Array(N);
+
+    for (let i = 0; i < N; i++) {
+        _dustPositions[i * 3]     = (Math.random() - 0.5) * width;
+        _dustPositions[i * 3 + 1] = floorY + Math.random() * (topY - floorY);
+        _dustPositions[i * 3 + 2] = (Math.random() - 0.5) * depth;
+        sizes[i] = (0.5 + Math.random() * 1.5) * DUST_PARAMS.size;
+        _dustVelocities.push({
+            vx: (Math.random() - 0.5) * 0.08,
+            vy: (Math.random() - 0.5) * 0.04,
+            vz: (Math.random() - 0.5) * 0.06,
+            phase: Math.random() * Math.PI * 2
+        });
+    }
+    _dustGeo.setAttribute('position', new THREE.BufferAttribute(_dustPositions, 3));
+    _dustGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const dvs = [
+        'attribute float size;',
+        'void main() {',
+        '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+        '  gl_PointSize = size * (200.0 / -mv.z);',
+        '  gl_Position = projectionMatrix * mv;',
+        '}'
+    ].join('\n');
+
+    const dfs = [
+        'uniform float uOpacity;',
+        'void main() {',
+        '  float d = length(gl_PointCoord * 2.0 - 1.0);',
+        '  if (d > 1.0) discard;',
+        '  float a = exp(-d * d * 4.0) * uOpacity;',
+        '  gl_FragColor = vec4(0.6, 0.8, 0.95, a);',
+        '}'
+    ].join('\n');
+
+    const dustMat = new THREE.ShaderMaterial({
+        uniforms: { uOpacity: { value: DUST_PARAMS.opacity } },
+        vertexShader: dvs,
+        fragmentShader: dfs,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    _dustPoints = new THREE.Points(_dustGeo, dustMat);
+    scene.add(_dustPoints);
+    console.log(`[ATMOSPHERE] Created ${N} floating dust particles`);
+}
+
+function updateDustParticles(time, deltaTime) {
+    if (!_dustPoints) return;
+    const { width, depth, floorY } = CONFIG.aquarium;
+    const topY = floorY + CONFIG.aquarium.height;
+    const halfW = width / 2;
+    const halfD = depth / 2;
+    const pos = _dustPositions;
+
+    for (let i = 0; i < _dustVelocities.length; i++) {
+        const v = _dustVelocities[i];
+        const i3 = i * 3;
+        pos[i3]     += (v.vx + Math.sin(time * 0.15 + v.phase) * 0.02) * DUST_PARAMS.speed * deltaTime * 60;
+        pos[i3 + 1] += (v.vy + Math.cos(time * 0.1  + v.phase) * 0.01) * DUST_PARAMS.speed * deltaTime * 60;
+        pos[i3 + 2] += (v.vz + Math.sin(time * 0.12 + v.phase * 1.3) * 0.015) * DUST_PARAMS.speed * deltaTime * 60;
+        if (Math.abs(pos[i3]) > halfW || pos[i3 + 1] > topY || pos[i3 + 1] < floorY || Math.abs(pos[i3 + 2]) > halfD) {
+            pos[i3]     = (Math.random() - 0.5) * width * 0.8;
+            pos[i3 + 1] = floorY + Math.random() * (topY - floorY);
+            pos[i3 + 2] = (Math.random() - 0.5) * depth * 0.8;
+        }
+    }
+    _dustGeo.attributes.position.needsUpdate = true;
+    _dustPoints.material.uniforms.uOpacity.value = DUST_PARAMS.opacity;
+}
+
+// ==================== EFFECT COMPOSER POST-PROCESSING ====================
+const POST_PARAMS = {
+    bloomStrength: 0.57,
+    bloomRadius: 0.54,
+    bloomThreshold: 0.75,
+    godRayIntensity: 0.5,
+    depthTintStrength: 0.13,
+    causticIntensity: 0.21,
+    distortionIntensity: 0.0,
+    distortionFrequency: 5.0,
+    distortionSpeed: 0.25
+};
+
+let _effectComposer = null;
+let _underwaterPass = null;
+let _bloomPass = null;
+
+function setupEffectComposer() {
+    if (!renderer || !scene || !camera) return;
+    if (typeof THREE.EffectComposer === 'undefined') {
+        console.warn('[ATMOSPHERE] EffectComposer not loaded, skipping post-processing');
+        return;
+    }
+
+    _effectComposer = new THREE.EffectComposer(renderer);
+    _effectComposer.addPass(new THREE.RenderPass(scene, camera));
+
+    _bloomPass = new THREE.UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        POST_PARAMS.bloomStrength,
+        POST_PARAMS.bloomRadius,
+        POST_PARAMS.bloomThreshold
+    );
+    _effectComposer.addPass(_bloomPass);
+
+    const wvs = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+
+    const wfs = [
+        'uniform sampler2D tDiffuse;',
+        'uniform float uTime;',
+        'uniform float uIntensity;',
+        'uniform float uFrequency;',
+        'uniform float uSpeed;',
+        'uniform float uGodRayIntensity;',
+        'uniform float uDepthTintStrength;',
+        'uniform float uCausticIntensity;',
+        'varying vec2 vUv;',
+        'float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+        'float noise(vec2 p) {',
+        '  vec2 i = floor(p), f = fract(p);',
+        '  f = f * f * (3.0 - 2.0 * f);',
+        '  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);',
+        '}',
+        'void main() {',
+        '  vec2 uv = vUv;',
+        '  float r1 = sin(uv.x * uFrequency + uTime * uSpeed) * cos(uv.y * uFrequency * 0.8 + uTime * uSpeed * 0.7);',
+        '  float r2 = sin(uv.y * uFrequency * 1.2 - uTime * uSpeed * 0.9) * cos(uv.x * uFrequency * 0.6 + uTime * uSpeed * 0.5);',
+        '  uv += vec2(r1, r2) * uIntensity;',
+        '  vec4 col = texture2D(tDiffuse, uv);',
+        '  float rayAcc = 0.0;',
+        '  vec2 lp = vec2(0.5, 0.0);',
+        '  vec2 d = (uv - lp) * 0.012;',
+        '  vec2 sp = uv;',
+        '  float dc = 1.0;',
+        '  for (int i = 0; i < 28; i++) {',
+        '    sp -= d;',
+        '    rayAcc += texture2D(tDiffuse, clamp(sp, 0.0, 1.0)).g * dc;',
+        '    dc *= 0.965;',
+        '  }',
+        '  rayAcc /= 28.0;',
+        '  col.rgb += vec3(0.3, 0.6, 0.9) * rayAcc * uGodRayIntensity * smoothstep(0.55, 0.0, uv.y);',
+        '  float c1 = noise(uv * 16.0 + uTime * vec2(0.22, 0.13));',
+        '  float c2 = noise(uv * 22.0 - uTime * vec2(0.16, 0.28));',
+        '  col.rgb += vec3(0.2, 0.5, 0.7) * pow(abs(c1 - c2), 1.5) * uCausticIntensity * smoothstep(0.3, 0.85, uv.y);',
+        '  col.rgb = mix(col.rgb, vec3(0.01, 0.1, 0.25), smoothstep(0.15, 0.9, uv.y) * uDepthTintStrength);',
+        '  vec2 vig = (vUv - 0.5) * 2.0;',
+        '  col.rgb *= clamp(1.0 - dot(vig, vig) * 0.2, 0.0, 1.0);',
+        '  gl_FragColor = col;',
+        '}'
+    ].join('\n');
+
+    _underwaterPass = new THREE.ShaderPass({
+        uniforms: {
+            tDiffuse:           { value: null },
+            uTime:              { value: 0 },
+            uIntensity:         { value: POST_PARAMS.distortionIntensity },
+            uFrequency:         { value: POST_PARAMS.distortionFrequency },
+            uSpeed:             { value: POST_PARAMS.distortionSpeed },
+            uGodRayIntensity:   { value: POST_PARAMS.godRayIntensity },
+            uDepthTintStrength: { value: POST_PARAMS.depthTintStrength },
+            uCausticIntensity:  { value: POST_PARAMS.causticIntensity }
+        },
+        vertexShader: wvs,
+        fragmentShader: wfs
+    });
+    _effectComposer.addPass(_underwaterPass);
+
+    console.log('[ATMOSPHERE] EffectComposer initialized (Bloom + Underwater Shader)');
+}
+
+function updatePostProcessing(time) {
+    if (!_underwaterPass) return;
+    const u = _underwaterPass.uniforms;
+    u.uTime.value              = time;
+    u.uIntensity.value         = POST_PARAMS.distortionIntensity;
+    u.uFrequency.value         = POST_PARAMS.distortionFrequency;
+    u.uSpeed.value             = POST_PARAMS.distortionSpeed;
+    u.uGodRayIntensity.value   = POST_PARAMS.godRayIntensity;
+    u.uDepthTintStrength.value = POST_PARAMS.depthTintStrength;
+    u.uCausticIntensity.value  = POST_PARAMS.causticIntensity;
 }
 
 // ==================== UNDERWATER CSS OVERLAY (Vignette + Color Tint) ====================
@@ -9443,8 +9784,11 @@ function initGameScene() {
     createUnderwaterParticles();
     
     createGodRays();
+    createGodRayParticles();
+    createDustParticles();
     createUnderwaterOverlay();
     createCaustics();
+    setupEffectComposer();
     
     updateLoadingProgress(92, 'Pre-initializing effect pools...');
     // PERFORMANCE FIX: Pre-initialize ALL pools to avoid any first-use stutter
@@ -18247,6 +18591,8 @@ function setupEventListeners() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        if (_effectComposer) _effectComposer.setSize(window.innerWidth, window.innerHeight);
+        if (_bloomPass) _bloomPass.setSize(window.innerWidth, window.innerHeight);
         updateSpreadCrosshairPositions();
     });
     
@@ -18893,7 +19239,10 @@ function animate() {
     updatePanoramaAnimation(deltaTime);
     
     updateGodRays(currentTime / 1000);
+    updateGodRayParticles(currentTime / 1000, deltaTime);
+    updateDustParticles(currentTime / 1000, deltaTime);
     updateCaustics(currentTime / 1000);
+    updatePostProcessing(currentTime / 1000);
     
     // Smooth camera transitions (for CENTER VIEW button and auto-panning)
     updateSmoothCameraTransition(deltaTime);
@@ -19097,8 +19446,12 @@ function animate() {
             console.log('[PERF-DIAG] FPS:', Math.round(1 / deltaTime));
         }
         
-        // Render
-        renderer.render(scene, camera);
+        // Render (use EffectComposer if available, otherwise fallback to direct render)
+        if (_effectComposer) {
+            _effectComposer.render();
+        } else {
+            renderer.render(scene, camera);
+        }
     
     updateCrosshairCanvasOverlay(currentTime);
     update3xSideCrosshairPositions();
