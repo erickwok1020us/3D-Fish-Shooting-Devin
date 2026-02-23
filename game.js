@@ -1281,6 +1281,60 @@ const _balanceAudit = {
 };
 window._balanceAudit = _balanceAudit;
 
+// ==================== HIT DEBUG OVERLAY ====================
+const _hitDebug = {
+    enabled: false,
+    log: [],
+    maxEntries: 40,
+    stats: { totalShots: 0, hits: 0, misses: 0, flashCalls: 0, flashSkips: 0 },
+    _div: null,
+    _visible: false,
+    add(entry) {
+        if (!this.enabled) return;
+        entry.t = performance.now();
+        this.log.push(entry);
+        if (this.log.length > this.maxEntries) this.log.shift();
+        this._render();
+    },
+    toggle() {
+        this.enabled = !this.enabled;
+        this._visible = this.enabled;
+        if (!this._div) this._createDiv();
+        this._div.style.display = this._visible ? 'block' : 'none';
+        if (this.enabled) this._render();
+    },
+    _createDiv() {
+        this._div = document.createElement('div');
+        this._div.id = 'hit-debug-overlay';
+        this._div.style.cssText = 'position:fixed;top:8px;left:8px;width:520px;max-height:70vh;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font:11px monospace;padding:8px;z-index:99999;pointer-events:auto;border:1px solid #0f0;border-radius:4px;display:none;';
+        document.body.appendChild(this._div);
+    },
+    _render() {
+        if (!this._div || !this._visible) return;
+        const s = this.stats;
+        const hitRate = s.totalShots > 0 ? ((s.hits / s.totalShots) * 100).toFixed(1) : '0.0';
+        let html = `<div style="color:#ff0;margin-bottom:4px;font-size:12px;font-weight:bold;">HIT DEBUG [H to toggle]</div>`;
+        html += `<div style="color:#aaa;margin-bottom:6px;">Shots:${s.totalShots} Hit:${s.hits} Miss:${s.misses} (${hitRate}%) | Flash:${s.flashCalls} Skip:${s.flashSkips}</div>`;
+        html += `<table style="width:100%;border-collapse:collapse;font-size:10px;"><tr style="color:#ff0;border-bottom:1px solid #333;"><th>ms</th><th>wpn</th><th>type</th><th>fish</th><th>boss</th><th>hit</th><th>flash</th><th>detail</th></tr>`;
+        for (let i = this.log.length - 1; i >= 0; i--) {
+            const e = this.log[i];
+            const age = ((performance.now() - e.t) / 1000).toFixed(1);
+            const hitColor = e.hit ? '#0f0' : '#f44';
+            const flashColor = e.flash === 'YES' ? '#0f0' : e.flash === 'SKIP' ? '#f80' : '#f44';
+            html += `<tr style="border-bottom:1px solid #222;"><td>${age}s</td><td>${e.weapon||'-'}</td><td style="color:#8af;">${e.type||'-'}</td><td>${e.fish||'-'}</td><td>${e.boss?'BOSS':'-'}</td><td style="color:${hitColor};">${e.hit?'HIT':'MISS'}</td><td style="color:${flashColor};">${e.flash||'-'}</td><td style="color:#888;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.detail||''}</td></tr>`;
+        }
+        html += '</table>';
+        this._div.innerHTML = html;
+    },
+    reset() {
+        this.log = [];
+        this.stats = { totalShots: 0, hits: 0, misses: 0, flashCalls: 0, flashSkips: 0 };
+        this._render();
+    }
+};
+window._hitDebug = _hitDebug;
+document.addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') { if (!e.ctrlKey && !e.altKey && !e.metaKey) _hitDebug.toggle(); } });
+
 // ==================== GLB FISH MODEL LOADER (PDF Spec Compliant) ====================
 const glbLoaderState = {
     manifest: null,
@@ -14805,7 +14859,10 @@ class Fish {
     }
     
     flashHit() {
+        let flashResult = 'NONE';
+        let flashDetail = '';
         if (this.glbLoaded && this.glbMeshes) {
+            let emissiveCount = 0;
             this.glbMeshes.forEach(mesh => {
                 if (mesh.material && 'emissive' in mesh.material) {
                     if (!mesh._origEmissive) {
@@ -14814,8 +14871,11 @@ class Fish {
                     }
                     mesh.material.emissive.set(0xffffff);
                     mesh.material.emissiveIntensity = 1.0;
+                    emissiveCount++;
                 }
             });
+            flashResult = emissiveCount > 0 ? 'YES' : 'SKIP';
+            flashDetail = `glb:${this.glbMeshes.length}meshes,${emissiveCount}emissive`;
             setTimeout(() => {
                 if (this.isActive && this.glbMeshes) {
                     this.glbMeshes.forEach(mesh => {
@@ -14833,13 +14893,24 @@ class Fish {
             }
             this.body.material.emissive.set(0xffffff);
             this.body.material.emissiveIntensity = 1.0;
+            flashResult = 'YES';
+            flashDetail = 'body-fallback';
             setTimeout(() => {
                 if (this.isActive && this.body && this.body.material && this.body._origEmissive) {
                     this.body.material.emissive.copy(this.body._origEmissive);
                     this.body.material.emissiveIntensity = this.body._origEmissiveIntensity;
                 }
             }, 80);
+        } else {
+            flashResult = 'SKIP';
+            flashDetail = `glbLoaded=${this.glbLoaded},glbMeshes=${!!this.glbMeshes}(${this.glbMeshes?this.glbMeshes.length:'null'}),body=${!!this.body}`;
         }
+        if (_hitDebug.enabled) {
+            if (flashResult === 'SKIP') _hitDebug.stats.flashSkips++;
+            else _hitDebug.stats.flashCalls++;
+        }
+        this._lastFlashResult = flashResult;
+        this._lastFlashDetail = flashDetail;
     }
     
     takeDamage(damage, weaponKey, spreadIndex) {
@@ -17124,6 +17195,24 @@ function fireHitscanRay(origin, direction, weaponKey, spreadIndex) {
 
     spawnTracerBeamVFX(origin, closestHit ? beamEnd.clone() : beamEnd.clone(), weapon.color, weaponKey);
 
+    if (_hitDebug.enabled) {
+        _hitDebug.stats.totalShots++;
+        const fishForm = closestHit ? (closestHit.form || closestHit.config?.species || '?') : null;
+        const isBoss = closestHit ? !!closestHit.isBoss : false;
+        if (closestHit) {
+            _hitDebug.stats.hits++;
+            _hitDebug.add({
+                weapon: weaponKey, type: weapon.type === 'rocket' ? 'rocket(AOE)' : 'hitscan',
+                fish: fishForm, boss: isBoss, hit: true,
+                flash: closestHit._lastFlashResult || '?', 
+                detail: `t=${closestT.toFixed(0)} spread=${spreadIndex||0} ${closestHit._lastFlashDetail||''}`
+            });
+        } else {
+            _hitDebug.stats.misses++;
+            _hitDebug.add({ weapon: weaponKey, type: 'hitscan', fish: null, boss: false, hit: false, flash: '-', detail: 'no fish hit' });
+        }
+    }
+
     return { hit: !!closestHit, fish: closestHit, hitPoint: hitPoint, beamEnd: beamEnd.clone() };
 }
 
@@ -17258,6 +17347,24 @@ function fireLaserBeam(origin, direction, weaponKey) {
         playWeaponHitSound(weaponKey);
     }
     
+    if (_hitDebug.enabled) {
+        _hitDebug.stats.totalShots++;
+        if (firstHit.length > 0) {
+            const hit = firstHit[0];
+            const fishForm = hit.fish.form || hit.fish.config?.species || '?';
+            _hitDebug.stats.hits++;
+            _hitDebug.add({
+                weapon: weaponKey, type: 'laser',
+                fish: fishForm, boss: !!hit.fish.isBoss, hit: true,
+                flash: hit.fish._lastFlashResult || '?',
+                detail: `t=${hit.distance.toFixed(0)} ${hit.fish._lastFlashDetail||''}`
+            });
+        } else {
+            _hitDebug.stats.misses++;
+            _hitDebug.add({ weapon: weaponKey, type: 'laser', fish: null, boss: false, hit: false, flash: '-', detail: 'no fish hit' });
+        }
+    }
+
     const beamEndPoint = firstHit.length > 0 ? firstHit[0].hitPoint : laserTempVectors.rayEnd.clone();
     const hitPoints = firstHit.map(h => h.hitPoint);
     spawnLaserHitscanVFX(origin, beamEndPoint, hitPoints, weapon.color);
@@ -17482,6 +17589,16 @@ function triggerExplosion(center, weaponKey) {
             showCrosshairRingFlash();
             createHitParticles(fish.group.position, weapon.color, 3);
             hitAny = true;
+            
+            if (_hitDebug.enabled) {
+                const fishForm = fish.form || fish.config?.species || '?';
+                _hitDebug.add({
+                    weapon: weaponKey, type: 'explosion',
+                    fish: fishForm, boss: !!fish.isBoss, hit: true,
+                    flash: fish._lastFlashResult || '?',
+                    detail: `AOE dist=${hitFishList[i].distance.toFixed(0)} dmg=${damage} ${fish._lastFlashDetail||''}`
+                });
+            }
             
             if (i < results.length) {
                 const result = results[i];
