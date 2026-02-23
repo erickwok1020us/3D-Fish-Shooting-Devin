@@ -15405,7 +15405,7 @@ const RTP_MONEY_SCALE = 1000;
 const RTP_SCALE = 10000;
 const RTP_P_SCALE = 1000000;
 const RTP_ROCKET_MAX_TARGETS = 6;
-const RTP_LASER_MAX_TARGETS = 10;
+const RTP_LASER_MAX_TARGETS = 6;
 
 const RTP_WEAPON_RTP_MANUAL_FP = {
     '1x': 9200,
@@ -17263,32 +17263,41 @@ function fireLaserBeam(origin, direction, weaponKey) {
     
     hitFish.sort((a, b) => a.distance - b.distance);
     
-    // NON-PIERCING: Only hit the closest (first) fish along the ray
-    const firstHit = hitFish.length > 0 ? [hitFish[0]] : [];
+    const pierceTargets = hitFish.slice(0, RTP_LASER_MAX_TARGETS);
     
-    if (firstHit.length > 0 && !multiplayerMode) {
-        const hit = firstHit[0];
-        const result = clientRTPEngine.handleSingleTargetHit(
-            CLIENT_RTP_PLAYER_ID, hit.fish.rtpFishId, weaponKey, hit.fish.rtpTier, gameState.autoShoot
+    if (pierceTargets.length > 0 && !multiplayerMode) {
+        const rtpHitList = pierceTargets.map((h, i) => ({
+            fishId: h.fish.rtpFishId,
+            tier: h.fish.rtpTier,
+            distance: i + 1
+        }));
+        const results = clientRTPEngine.handleMultiTargetHit(
+            CLIENT_RTP_PLAYER_ID, rtpHitList, weaponKey, 'laser', gameState.autoShoot
         );
-        hit.fish.hp -= damage;
-        hit.fish.flashHit();
-        showCrosshairRingFlash();
-        createHitParticles(hit.hitPoint, weapon.color, 12);
-        playWeaponHitSound(weaponKey);
-        if (result && result.kill && hit.fish.isActive) {
-            hit.fish.die(weaponKey, result.reward, result.rewardFp);
+        for (let i = 0; i < pierceTargets.length; i++) {
+            const hit = pierceTargets[i];
+            hit.fish.hp -= damage;
+            hit.fish.flashHit();
+            showCrosshairRingFlash();
+            createHitParticles(hit.hitPoint, weapon.color, 12);
+            playWeaponHitSound(weaponKey);
+            if (i < results.length) {
+                const result = results[i];
+                if (result && result.kill && hit.fish.isActive) {
+                    hit.fish.die(weaponKey, result.reward, result.rewardFp);
+                }
+            }
         }
-    } else if (firstHit.length > 0) {
-        const hit = firstHit[0];
-        hit.fish.takeDamage(damage, weaponKey);
-        createHitParticles(hit.hitPoint, weapon.color, 12);
-        playWeaponHitSound(weaponKey);
+    } else if (pierceTargets.length > 0) {
+        for (const hit of pierceTargets) {
+            hit.fish.takeDamage(damage, weaponKey);
+            createHitParticles(hit.hitPoint, weapon.color, 12);
+            playWeaponHitSound(weaponKey);
+        }
     }
     
-    const beamEndPoint = firstHit.length > 0 ? firstHit[0].hitPoint : laserTempVectors.rayEnd.clone();
-    const hitPoints = firstHit.map(h => h.hitPoint);
-    spawnLaserHitscanVFX(origin, beamEndPoint, hitPoints, weapon.color);
+    const hitPoints = pierceTargets.map(h => h.hitPoint);
+    spawnLaserHitscanVFX(origin, laserTempVectors.rayEnd.clone(), hitPoints, weapon.color);
     triggerScreenShakeWithStrength(8, 100);
 }
 
