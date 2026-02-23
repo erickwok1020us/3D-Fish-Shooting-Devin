@@ -7113,21 +7113,58 @@ function showCrosshairRingFlash(spreadIndex) {
         }
     }
     const ring = document.createElement('div');
-    const ringSz = CROSSHAIR_SIZE;
-    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:${ringSz}px;height:${ringSz}px;border:2px solid rgba(255,20,60,0.95);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 12px rgba(255,20,60,0.9),0 0 20px rgba(255,60,80,0.6),inset 0 0 6px rgba(255,120,120,0.4);`;
+    const ringSz = 24;
+    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:${ringSz}px;height:${ringSz}px;border:2.5px solid rgba(255,20,60,1);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 10px rgba(255,20,60,1),0 0 18px rgba(255,60,80,0.7),inset 0 0 5px rgba(255,120,120,0.5);`;
     document.body.appendChild(ring);
     if (targetEl) {
         targetEl.classList.add('hit-flash');
-        setTimeout(function() { targetEl.classList.remove('hit-flash'); }, 300);
+        setTimeout(function() { targetEl.classList.remove('hit-flash'); }, 250);
     }
     const startT = performance.now();
     function animRing(t) {
-        const p = Math.min((t - startT) / 300, 1);
-        ring.style.transform = `translate(-50%,-50%) scale(${1 + p * 0.8})`;
+        const p = Math.min((t - startT) / 250, 1);
+        ring.style.transform = `translate(-50%,-50%) scale(${1 + p * 0.6})`;
         ring.style.opacity = String(1 - p * p);
         if (p < 1) requestAnimationFrame(animRing); else ring.remove();
     }
     requestAnimationFrame(animRing);
+}
+
+function showKillSkull() {
+    var cx, cy;
+    if (gameState.viewMode === 'fps') {
+        cx = window.innerWidth / 2;
+        cy = window.innerHeight / 2;
+    } else {
+        var chEl = document.getElementById('crosshair');
+        cx = chEl ? (parseFloat(chEl.style.left) || window.innerWidth / 2) : window.innerWidth / 2;
+        cy = chEl ? (parseFloat(chEl.style.top) || window.innerHeight / 2) : window.innerHeight / 2;
+    }
+    const skull = document.createElement('div');
+    skull.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="rgba(255,40,60,0.95)"><path d="M12 2C6.48 2 2 6.48 2 12c0 3.07 1.39 5.81 3.57 7.63L5 22h3l.5-2h7l.5 2h3l-.57-2.37C20.61 17.81 22 15.07 22 12c0-5.52-4.48-10-10-10zM8.5 14c-.83 0-1.5-.67-1.5-1.5S7.67 11 8.5 11s1.5.67 1.5 1.5S9.33 14 8.5 14zm7 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
+    skull.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%) scale(0.2);pointer-events:none;z-index:10002;opacity:0;filter:drop-shadow(0 0 6px rgba(255,20,60,0.9)) drop-shadow(0 0 12px rgba(255,60,80,0.5));`;
+    document.body.appendChild(skull);
+    const startT = performance.now();
+    function animSkull(t) {
+        const elapsed = t - startT;
+        const p = Math.min(elapsed / 350, 1);
+        if (p < 0.25) {
+            const ep = p / 0.25;
+            skull.style.transform = `translate(-50%,-50%) scale(${0.2 + ep * 1.2})`;
+            skull.style.opacity = String(ep);
+        } else {
+            const ep = (p - 0.25) / 0.75;
+            skull.style.transform = `translate(-50%,-50%) scale(${1.4 - ep * 0.4})`;
+            skull.style.opacity = String(1 - ep * 0.05);
+        }
+        if (p >= 1) {
+            const fadeP = Math.min((elapsed - 350) / 150, 1);
+            skull.style.opacity = String(0.95 * (1 - fadeP));
+            if (fadeP >= 1) { skull.remove(); return; }
+        }
+        requestAnimationFrame(animSkull);
+    }
+    requestAnimationFrame(animSkull);
 }
 
 // Temp vectors for muzzle flash barrel direction calculation(avoid per-shot allocations)
@@ -15324,6 +15361,8 @@ class Fish {
         }
         
         const deathPosition = this.group.position.clone();
+        
+        showKillSkull();
         
         // HIT SOUND LOGIC: Do NOT play hit sound on fish death
         // Hit sound is now played in bullet collision ONLY when fish survives
