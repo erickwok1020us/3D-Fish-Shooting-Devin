@@ -17577,7 +17577,7 @@ function _triggerAirflowGain() {
 let _lastBalanceForFlash = null;
 function updateUI() {
     const balanceEl = document.getElementById('balance-value');
-    const newBalance = (gameState.balance / BALANCE_SCALE).toFixed(2);
+    const newBalance = String(Math.round(gameState.balance / BALANCE_SCALE));
     balanceEl.textContent = newBalance;
     
     if (_lastBalanceForFlash !== null && _lastBalanceForFlash !== newBalance) {
