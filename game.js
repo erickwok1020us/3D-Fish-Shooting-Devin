@@ -18217,7 +18217,18 @@ function updateUI() {
 function selectWeapon(weaponKey) {
     if (!gameState.weaponSelected) return;
     
+    if (gameState.currentWeapon === weaponKey) {
+        console.log(`Weapon ${weaponKey} is already selected. Skipping re-initialization.`);
+        return;
+    }
+    
+    const prevYaw = cannonGroup ? cannonGroup.rotation.y : 0;
+    const prevPitch = cannonPitchGroup ? cannonPitchGroup.rotation.x : 0;
+    
     applyWeaponToCannon(weaponKey);
+    
+    if (cannonGroup) cannonGroup.rotation.y = prevYaw;
+    if (cannonPitchGroup) cannonPitchGroup.rotation.x = prevPitch;
     
     playSound('weaponSwitch');
     
