@@ -9984,34 +9984,88 @@ window.startMultiplayerGame = function(manager) {
             if (!fish) return;
             if (fish.userData._hitFlashActive) return;
             fish.userData._hitFlashActive = true;
-            const _tint = new THREE.Color(1.0, 0.4, 0.4);
-            const _factor = 0.35;
+            const _tint = new THREE.Color(1.0, 0.3, 0.3);
+            const _peakTint = 0.70;
+            const _emissiveBoost = 0.15;
+            const _emissiveDur = 50;
+            const _tintDecayDur = 200;
+            const _scalePulse = 1.05;
+            const _scaleDur = 100;
+            const _jitterAmp = 0.1;
+            const _jitterDur = 100;
+            if (!fish._origScale) fish._origScale = fish.scale.clone();
+            const origScale = fish._origScale;
+            fish.scale.set(origScale.x * _scalePulse, origScale.y * _scalePulse, origScale.z * _scalePulse);
             fish.traverse(function(child) {
                 if (child.isMesh && child.material && child.material.color) {
-                    if (!child._origColor) {
-                        child._origColor = child.material.color.clone();
+                    if (!child._origColor) child._origColor = child.material.color.clone();
+                    child.material.color.copy(child._origColor.clone().lerp(_tint, _peakTint));
+                    if (child.material.emissiveIntensity !== undefined) {
+                        if (!child._origEmissive) child._origEmissive = child.material.emissiveIntensity;
+                        child.material.emissiveIntensity = child._origEmissive + _emissiveBoost;
                     }
-                    const tinted = child._origColor.clone().lerp(_tint, _factor);
-                    child.material.color.copy(tinted);
                 }
             });
             const mpFlashStart = performance.now();
-            function _mpFlashFade(t) {
-                const p = Math.min((t - mpFlashStart) / 300, 1);
-                if (!fish.parent) { fish.userData._hitFlashActive = false; return; }
+            var _origPos = null;
+            function _mpJuiceFade(t) {
+                const elapsed = t - mpFlashStart;
+                if (!fish.parent) { _mpFinalRestore(); return; }
+                if (elapsed < _scaleDur) {
+                    const sp = elapsed / _scaleDur;
+                    const es = 1.0 + (_scalePulse - 1.0) * (1.0 - sp * sp);
+                    fish.scale.set(origScale.x * es, origScale.y * es, origScale.z * es);
+                } else if (fish.scale.x !== origScale.x) {
+                    fish.scale.copy(origScale);
+                }
+                if (elapsed < _jitterDur) {
+                    if (!_origPos) _origPos = fish.position.clone();
+                    fish.position.set(
+                        _origPos.x + (Math.random() - 0.5) * 2 * _jitterAmp,
+                        _origPos.y + (Math.random() - 0.5) * 2 * _jitterAmp,
+                        _origPos.z + (Math.random() - 0.5) * 2 * _jitterAmp
+                    );
+                } else if (_origPos) {
+                    fish.position.copy(_origPos);
+                    _origPos = null;
+                }
+                if (elapsed >= _emissiveDur) {
+                    fish.traverse(function(child) {
+                        if (child.isMesh && child.material && child._origEmissive !== undefined) {
+                            child.material.emissiveIntensity = child._origEmissive;
+                            child._origEmissive = undefined;
+                        }
+                    });
+                }
+                const tintP = Math.min(elapsed / _tintDecayDur, 1);
+                const tintFactor = _peakTint * Math.pow(1 - tintP, 3);
                 fish.traverse(function(child) {
                     if (child.isMesh && child.material && child._origColor) {
-                        const c = child._origColor.clone().lerp(_tint, _factor * (1 - p));
-                        child.material.color.copy(c);
-                        if (p >= 1) {
-                            child.material.color.copy(child._origColor);
+                        if (tintP >= 1) child.material.color.copy(child._origColor);
+                        else child.material.color.copy(child._origColor.clone().lerp(_tint, tintFactor));
+                    }
+                });
+                if (tintP < 1 || elapsed < _scaleDur || elapsed < _jitterDur) {
+                    requestAnimationFrame(_mpJuiceFade);
+                } else {
+                    _mpFinalRestore();
+                }
+            }
+            function _mpFinalRestore() {
+                if (fish._origScale) fish.scale.copy(fish._origScale);
+                if (_origPos) { fish.position.copy(_origPos); _origPos = null; }
+                fish.traverse(function(child) {
+                    if (child.isMesh && child.material) {
+                        if (child._origColor) child.material.color.copy(child._origColor);
+                        if (child._origEmissive !== undefined) {
+                            child.material.emissiveIntensity = child._origEmissive;
+                            child._origEmissive = undefined;
                         }
                     }
                 });
-                if (p < 1) requestAnimationFrame(_mpFlashFade);
-                else fish.userData._hitFlashActive = false;
+                fish.userData._hitFlashActive = false;
             }
-            requestAnimationFrame(_mpFlashFade);
+            requestAnimationFrame(_mpJuiceFade);
         };
 
         multiplayerManager.onFishKilled = function(data) {
@@ -15120,99 +15174,144 @@ class Fish {
     flashHit() {
         if (this._flashTimer) clearTimeout(this._flashTimer);
         const isBoss = !!this.isBoss;
-        const flashIntensity = isBoss ? 1.2 : 0.4;
-        const flashDuration = 300;
-        const _hitTintColor = new THREE.Color(1.0, 0.4, 0.4);
-        const _maxTintFactor = 0.35; // 35% tint cap (below 40%)
+        const _hitTintColor = new THREE.Color(1.0, 0.3, 0.3);
+        const _peakTint = 0.70;
+        const _emissiveBoost = 0.15;
+        const _emissiveDur = 50;
+        const _tintDecayDur = 200;
+        const _scalePulse = isBoss ? 1.03 : 1.05;
+        const _scaleDur = 100;
+        const _jitterAmp = 0.1;
+        const _jitterDur = 100;
+        const flashStart = performance.now();
+        const selfRef = this;
 
-        if (isBoss) {
-            this.group.traverse(child => {
-                if (child.isMesh && child.material && child.material.color) {
-                    if (!child._origColor) {
-                        child._origColor = child.material.color.clone();
-                    }
-                    const tinted = child._origColor.clone().lerp(_hitTintColor, _maxTintFactor);
-                    child.material.color.copy(tinted);
-                }
-            });
-            if (bossGlowEffect && bossGlowEffect.material) {
-                bossGlowEffect._savedOpacity = bossGlowEffect.material.opacity;
-                bossGlowEffect.material.opacity = 0.1;
-            }
-            const bossFlashStart = performance.now();
-            const bossFlashDur = flashDuration;
-            const bossSelf = this;
-            function _bossFlashFade(t) {
-                const p = Math.min((t - bossFlashStart) / bossFlashDur, 1);
-                if (!bossSelf.isActive) { _bossFlashRestore(); return; }
-                const factor = _maxTintFactor * (1 - p);
-                bossSelf.group.traverse(child => {
-                    if (child.isMesh && child.material && child._origColor) {
-                        const c = child._origColor.clone().lerp(_hitTintColor, factor);
-                        child.material.color.copy(c);
-                        if (p >= 1) {
-                            child.material.color.copy(child._origColor);
-                        }
-                    }
-                });
-                if (p < 1) requestAnimationFrame(_bossFlashFade); else _bossFlashRestore();
-            }
-            function _bossFlashRestore() {
-                if (bossGlowEffect && bossGlowEffect.material && bossGlowEffect._savedOpacity !== undefined) {
-                    bossGlowEffect.material.opacity = bossGlowEffect._savedOpacity;
-                }
-            }
-            requestAnimationFrame(_bossFlashFade);
-        } else if (this.glbLoaded && this.glbMeshes) {
-            this.glbMeshes.forEach(mesh => {
-                if (mesh.material && mesh.material.color) {
-                    if (!mesh._origColor) {
-                        mesh._origColor = mesh.material.color.clone();
-                    }
-                    const tinted = mesh._origColor.clone().lerp(_hitTintColor, _maxTintFactor);
-                    mesh.material.color.copy(tinted);
-                }
-            });
-            const glbFlashStart = performance.now();
-            const glbFlashDur = flashDuration;
-            const glbFlashSelf = this;
-            function _glbFlashFade(t) {
-                const p = Math.min((t - glbFlashStart) / glbFlashDur, 1);
-                if (!glbFlashSelf.isActive || !glbFlashSelf.glbMeshes) return;
-                const factor = _maxTintFactor * (1 - p);
-                glbFlashSelf.glbMeshes.forEach(mesh => {
-                    if (mesh.material && mesh._origColor) {
-                        const c = mesh._origColor.clone().lerp(_hitTintColor, factor);
-                        mesh.material.color.copy(c);
-                        if (p >= 1) {
-                            mesh.material.color.copy(mesh._origColor);
-                        }
-                    }
-                });
-                if (p < 1) requestAnimationFrame(_glbFlashFade);
-            }
-            requestAnimationFrame(_glbFlashFade);
-        } else if (this.body && this.body.material && this.body.material.color) {
-            if (!this.body._origColor) {
-                this.body._origColor = this.body.material.color.clone();
-            }
-            const tinted = this.body._origColor.clone().lerp(_hitTintColor, _maxTintFactor);
-            this.body.material.color.copy(tinted);
-            const bodyFlashStart = performance.now();
-            const bodyFlashDur = flashDuration;
-            const selfB = this;
-            function _bodyFlashFade(t) {
-                const p = Math.min((t - bodyFlashStart) / bodyFlashDur, 1);
-                if (!selfB.isActive || !selfB.body || !selfB.body.material || !selfB.body._origColor) return;
-                const c = selfB.body._origColor.clone().lerp(_hitTintColor, _maxTintFactor * (1 - p));
-                selfB.body.material.color.copy(c);
-                if (p >= 1) {
-                    selfB.body.material.color.copy(selfB.body._origColor);
-                }
-                if (p < 1) requestAnimationFrame(_bodyFlashFade);
-            }
-            requestAnimationFrame(_bodyFlashFade);
+        if (!this.group) return;
+        if (!this._origGroupScale) {
+            this._origGroupScale = this.group.scale.clone();
         }
+        const origScale = this._origGroupScale;
+        this.group.scale.set(
+            origScale.x * _scalePulse,
+            origScale.y * _scalePulse,
+            origScale.z * _scalePulse
+        );
+
+        const _applyTint = (meshOrChild, factor) => {
+            if (!meshOrChild.material || !meshOrChild.material.color) return;
+            if (!meshOrChild._origColor) {
+                meshOrChild._origColor = meshOrChild.material.color.clone();
+            }
+            const c = meshOrChild._origColor.clone().lerp(_hitTintColor, factor);
+            meshOrChild.material.color.copy(c);
+        };
+        const _restoreColor = (meshOrChild) => {
+            if (meshOrChild.material && meshOrChild._origColor) {
+                meshOrChild.material.color.copy(meshOrChild._origColor);
+            }
+        };
+
+        const _traverseMeshes = (fn) => {
+            if (isBoss) {
+                selfRef.group.traverse(child => { if (child.isMesh) fn(child); });
+            } else if (selfRef.glbLoaded && selfRef.glbMeshes) {
+                selfRef.glbMeshes.forEach(fn);
+            } else if (selfRef.body) {
+                fn(selfRef.body);
+            }
+        };
+
+        _traverseMeshes(m => {
+            _applyTint(m, _peakTint);
+            if (m.material && m.material.emissiveIntensity !== undefined) {
+                if (!m._origEmissive) m._origEmissive = m.material.emissiveIntensity;
+                m.material.emissiveIntensity = m._origEmissive + _emissiveBoost;
+            }
+        });
+
+        if (isBoss && bossGlowEffect && bossGlowEffect.material) {
+            bossGlowEffect._savedOpacity = bossGlowEffect.material.opacity;
+            bossGlowEffect.material.opacity = 0.1;
+        }
+
+        function _impactJuiceFade(t) {
+            const elapsed = t - flashStart;
+            if (!selfRef.isActive || !selfRef.group) {
+                _finalRestore();
+                return;
+            }
+
+            if (elapsed < _scaleDur) {
+                const sp = elapsed / _scaleDur;
+                const easedScale = 1.0 + (_scalePulse - 1.0) * (1.0 - sp * sp);
+                selfRef.group.scale.set(
+                    origScale.x * easedScale,
+                    origScale.y * easedScale,
+                    origScale.z * easedScale
+                );
+            } else if (selfRef.group.scale.x !== origScale.x) {
+                selfRef.group.scale.copy(origScale);
+            }
+
+            if (elapsed < _jitterDur) {
+                const jx = (Math.random() - 0.5) * 2 * _jitterAmp;
+                const jy = (Math.random() - 0.5) * 2 * _jitterAmp;
+                const jz = (Math.random() - 0.5) * 2 * _jitterAmp;
+                if (!selfRef._origGroupPos) selfRef._origGroupPos = selfRef.group.position.clone();
+                selfRef.group.position.set(
+                    selfRef._origGroupPos.x + jx,
+                    selfRef._origGroupPos.y + jy,
+                    selfRef._origGroupPos.z + jz
+                );
+            } else if (selfRef._origGroupPos) {
+                selfRef.group.position.copy(selfRef._origGroupPos);
+                selfRef._origGroupPos = null;
+            }
+
+            if (elapsed >= _emissiveDur) {
+                _traverseMeshes(m => {
+                    if (m.material && m._origEmissive !== undefined) {
+                        m.material.emissiveIntensity = m._origEmissive;
+                        m._origEmissive = undefined;
+                    }
+                });
+            }
+
+            const tintP = Math.min(elapsed / _tintDecayDur, 1);
+            const tintFactor = _peakTint * Math.pow(1 - tintP, 3);
+            _traverseMeshes(m => {
+                if (tintP >= 1) _restoreColor(m);
+                else _applyTint(m, tintFactor);
+            });
+
+            if (tintP < 1 || elapsed < _scaleDur || elapsed < _jitterDur) {
+                requestAnimationFrame(_impactJuiceFade);
+            } else {
+                _finalRestore();
+            }
+        }
+
+        function _finalRestore() {
+            if (selfRef.group && selfRef._origGroupScale) {
+                selfRef.group.scale.copy(selfRef._origGroupScale);
+            }
+            if (selfRef.group && selfRef._origGroupPos) {
+                selfRef.group.position.copy(selfRef._origGroupPos);
+                selfRef._origGroupPos = null;
+            }
+            _traverseMeshes(m => {
+                _restoreColor(m);
+                if (m.material && m._origEmissive !== undefined) {
+                    m.material.emissiveIntensity = m._origEmissive;
+                    m._origEmissive = undefined;
+                }
+            });
+            if (isBoss && bossGlowEffect && bossGlowEffect.material && bossGlowEffect._savedOpacity !== undefined) {
+                bossGlowEffect.material.opacity = bossGlowEffect._savedOpacity;
+            }
+        }
+
+        requestAnimationFrame(_impactJuiceFade);
     }
     
     takeDamage(damage, weaponKey, spreadIndex) {
