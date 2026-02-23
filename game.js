@@ -1,6 +1,17 @@
 // Fish Shooter 3D - Clean Aquarium Version
 // Using Three.js for 3D rendering
 
+// ==================== RESPONSIVE UI SCALING SYSTEM ====================
+const UI_REF_W = 1920;
+const UI_REF_H = 1080;
+
+function updateUIScale() {
+    const scale = Math.min(window.innerWidth / UI_REF_W, window.innerHeight / UI_REF_H);
+    document.documentElement.style.setProperty('--ui-scale', scale);
+}
+updateUIScale();
+window.addEventListener('resize', updateUIScale);
+
 // ==================== SPHERICAL PANORAMA BACKGROUND SYSTEM ====================
 // Sky-sphere mesh approach for full control over panorama positioning and animation
 // Benefits: Can tilt to show seafloor, add dynamic rotation, wider effective view
@@ -6432,7 +6443,7 @@ function showGovernanceNotification(message, level) {
     if (_govNotifTimer) { clearTimeout(_govNotifTimer); }
     if (_govNotifEl && _govNotifEl.parentNode) { _govNotifEl.remove(); }
     const el = document.createElement('div');
-    el.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:10000;' +
+    el.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%) scale(var(--ui-scale));transform-origin:top center;z-index:10000;' +
         'padding:10px 24px;border-radius:8px;font-family:sans-serif;font-size:14px;font-weight:600;' +
         'pointer-events:none;opacity:0;transition:opacity 0.3s;' +
         (level === 'error'
@@ -9205,7 +9216,7 @@ const _afDebug = {
         if (this.el) return;
         const div = document.createElement('div');
         div.id = 'autofire-debug';
-        div.style.cssText = 'position:fixed;bottom:8px;right:8px;background:rgba(0,0,0,0.75);color:#0ff;font-family:monospace;font-size:12px;padding:8px 12px;border-radius:6px;z-index:99999;pointer-events:none;display:none;line-height:1.6;white-space:pre;';
+        div.style.cssText = 'position:fixed;bottom:8px;right:8px;background:rgba(0,0,0,0.75);color:#0ff;font-family:monospace;font-size:12px;padding:8px 12px;border-radius:6px;z-index:99999;pointer-events:none;display:none;line-height:1.6;white-space:pre;transform:scale(var(--ui-scale));transform-origin:bottom right;';
         document.body.appendChild(div);
         this.el = div;
     },
@@ -9603,7 +9614,7 @@ window.startMultiplayerGame = function(manager) {
     (function() {
         var d = document.createElement('div');
         d.id = 'kill-debug-overlay';
-        d.style.cssText = 'position:fixed;top:8px;right:8px;background:rgba(0,0,0,0.75);color:#0f0;font:11px monospace;padding:6px 10px;z-index:99999;pointer-events:none;max-height:260px;overflow:hidden;border-radius:4px;min-width:280px';
+        d.style.cssText = 'position:fixed;top:8px;right:8px;background:rgba(0,0,0,0.75);color:#0f0;font:11px monospace;padding:6px 10px;z-index:99999;pointer-events:none;max-height:260px;overflow:hidden;border-radius:4px;min-width:280px;transform:scale(var(--ui-scale));transform-origin:top right';
         d.innerHTML = '[RTP Debug] waiting...';
         document.body.appendChild(d);
         window._killDebug.el = d;
@@ -18017,7 +18028,7 @@ function createRmbZoomHint() {
     if (rmbHintEl) return rmbHintEl;
     const el = document.createElement('div');
     el.id = 'rmb-zoom-hint';
-    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);margin-left:390px;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:10001;pointer-events:none;';
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%) scale(var(--ui-scale));transform-origin:bottom center;margin-left:390px;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:10001;pointer-events:none;';
     const mouseSvg = `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" stroke="rgba(0,255,200,0.6)" stroke-width="1.5" fill="none"/>
         <line x1="14" y1="1.5" x2="14" y2="18" stroke="rgba(0,255,200,0.6)" stroke-width="1"/>
@@ -18419,7 +18430,7 @@ function toggleHelpPanel() {
         styleEl = document.createElement('style');
         styleEl.id = 'shortcut-help-styles';
         styleEl.textContent = `
-#help-panel { position: fixed; right: 20px; bottom: 140px; background: rgba(0,0,0,0.8); border: 1px solid #3a7; border-radius: 10px; padding: 16px; z-index: 10000; display: none; width: 300px; color: #cceeff; }
+#help-panel { position: fixed; right: 20px; bottom: 140px; background: rgba(0,0,0,0.8); border: 1px solid #3a7; border-radius: 10px; padding: 16px; z-index: 10000; display: none; width: 300px; color: #cceeff; transform: scale(var(--ui-scale)); transform-origin: bottom right; }
 #help-panel.visible { display: block; }
 #help-panel .help-row { display:flex; align-items:center; gap:15px; padding:6px 0; color:#cceeff; font-size:14px; }
 #help-panel .key { background: linear-gradient(180deg,#4488cc,#2266aa); color:#fff; padding:4px 12px; border-radius:6px; font-weight:bold; font-size:12px; min-width:60px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.3); }
@@ -18792,6 +18803,8 @@ function updateFPSDebugOverlay() {
             border-radius: 4px;
             z-index: 10000;
             pointer-events: none;
+            transform: scale(var(--ui-scale));
+            transform-origin: top left;
         `;
         document.body.appendChild(overlay);
     }
@@ -19132,7 +19145,8 @@ function createBossUI() {
         position: fixed;
         top: 20px;
         left: 50%;
-        transform: translateX(-50%);
+        transform: translateX(-50%) scale(var(--ui-scale));
+        transform-origin: top center;
         text-align: center;
         pointer-events: none;
         z-index: 1000;
@@ -19211,7 +19225,7 @@ function createBossWaitingUI() {
         position: fixed;
         top: 16px;
         left: 50%;
-        transform: translateX(-50%) scale(1.1);
+        transform: translateX(-50%) scale(calc(1.1 * var(--ui-scale)));
         transform-origin: top center;
         z-index: 900;
         pointer-events: none;
