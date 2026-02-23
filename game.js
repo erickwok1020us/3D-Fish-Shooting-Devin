@@ -6860,13 +6860,15 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
     });
 }
 
+const BARREL_SPACING_3X = 20;
+let _3xCrosshairStyle = 'bracket';
 const pelletStates = [
     { hit: false, timer: 0 },
     { hit: false, timer: 0 },
     { hit: false, timer: 0 }
 ];
 function get3xCrosshairSpreadPx() {
-    const barrelSpacing = 8;
+    const barrelSpacing = BARREL_SPACING_3X;
     const fov = camera ? camera.fov : 60;
     const halfFovRad = (fov / 2) * Math.PI / 180;
     const refDist = 500;
@@ -6883,9 +6885,33 @@ function initCrosshairCanvas() {
     crosshairCanvas = document.getElementById('crosshair-canvas');
     if (!crosshairCanvas) return;
     crosshairCtx = crosshairCanvas.getContext('2d');
+    try {
+        const saved = localStorage.getItem('x3-style');
+        if (saved && (saved === 'bracket' || saved === 'triple_dot' || saved === 'wide_circle')) {
+            _3xCrosshairStyle = saved;
+        }
+    } catch (e) {}
     resizeCrosshairCanvas();
     window.addEventListener('resize', resizeCrosshairCanvas);
 }
+
+window.set3xCrosshairStyle = function(style) {
+    if (style === 'bracket' || style === 'triple_dot' || style === 'wide_circle') {
+        _3xCrosshairStyle = style;
+        try { localStorage.setItem('x3-style', style); } catch (e) {}
+        console.log('[3x] Crosshair style =', style);
+    } else {
+        console.warn('[3x] Invalid style. Use: bracket | triple_dot | wide_circle');
+    }
+};
+
+window.cycle3xCrosshairStyle = function() {
+    const arr = ['bracket', 'triple_dot', 'wide_circle'];
+    const i = arr.indexOf(_3xCrosshairStyle);
+    const next = arr[(i + 1) % arr.length];
+    window.set3xCrosshairStyle(next);
+};
+
 
 function resizeCrosshairCanvas() {
     if (!crosshairCanvas) return;
@@ -6900,31 +6926,54 @@ function resizeCrosshairCanvas() {
 
 function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
     const spread = get3xCrosshairSpreadPx();
-    const pts = [
-        { x: cx - spread, y: cy },
-        { x: cx, y: cy },
-        { x: cx + spread, y: cy }
-    ];
+    if (_3xCrosshairStyle === 'bracket') {
+        _draw3xBracket(ctx, cx, cy, spread, time);
+    } else if (_3xCrosshairStyle === 'triple_dot') {
+        _draw3xTripleDot(ctx, cx, cy, spread, time);
+    } else if (_3xCrosshairStyle === 'wide_circle') {
+        _draw3xWideCircle(ctx, cx, cy, spread, time);
+    }
+}
 
+function _draw3xBracket(ctx, cx, cy, spread, time) {
+    const col = 'rgba(170,255,204,';
+    const pulse = 1 + Math.sin(time * 0.004) * 0.03;
+    const h = 28 * pulse;
+    const w = 10 * pulse;
+    const lw = 2;
+    ctx.strokeStyle = col + '0.85)';
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.moveTo(cx - spread - w, cy - h); ctx.lineTo(cx - spread, cy - h); ctx.lineTo(cx - spread, cy + h); ctx.lineTo(cx - spread - w, cy + h);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + spread + w, cy - h); ctx.lineTo(cx + spread, cy - h); ctx.lineTo(cx + spread, cy + h); ctx.lineTo(cx + spread + w, cy + h);
+    ctx.stroke();
+    const dotR = 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    [-spread, 0, spread].forEach(off => {
+        ctx.beginPath(); ctx.arc(cx + off, cy, dotR, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.strokeStyle = col + '0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(cx - spread, cy); ctx.lineTo(cx + spread, cy); ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+function _draw3xTripleDot(ctx, cx, cy, spread, time) {
+    const pts = [{ x: cx - spread, y: cy }, { x: cx, y: cy }, { x: cx + spread, y: cy }];
     const basePulse = 1 + Math.sin(time * 0.004) * 0.04;
-
     pts.forEach((p, i) => {
         const mainColor = i === 1 ? 'rgba(170,255,204,0.9)' : 'rgba(170,255,204,0.65)';
         const glowColor = 'rgba(170,255,204,0.2)';
-        const dotColor = 'rgba(255,255,255,0.9)';
-        const sizeMultiplier = basePulse;
-
-        const size = (i === 1 ? 20 : 16) * sizeMultiplier;
+        const size = (i === 1 ? 20 : 16) * basePulse;
         const arm = size;
-
         const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, size * 2.5);
-        glow.addColorStop(0, glowColor);
-        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        glow.addColorStop(0, glowColor); glow.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = glow;
         ctx.fillRect(p.x - size * 2.5, p.y - size * 2.5, size * 5, size * 5);
-
-        ctx.strokeStyle = mainColor;
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = mainColor; ctx.lineWidth = 1;
         const gap = 5;
         ctx.beginPath();
         ctx.moveTo(p.x, p.y - arm); ctx.lineTo(p.x, p.y - gap);
@@ -6932,13 +6981,30 @@ function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
         ctx.moveTo(p.x - arm, p.y); ctx.lineTo(p.x - gap, p.y);
         ctx.moveTo(p.x + gap, p.y); ctx.lineTo(p.x + arm, p.y);
         ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
-        ctx.fillStyle = dotColor;
-        ctx.fill();
-
+        ctx.beginPath(); ctx.arc(p.x, p.y, 1, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
     });
+}
+
+function _draw3xWideCircle(ctx, cx, cy, spread, time) {
+    const col = 'rgba(170,255,204,';
+    const pulse = 1 + Math.sin(time * 0.004) * 0.03;
+    const rx = (spread + 16) * pulse;
+    const ry = 30 * pulse;
+    ctx.strokeStyle = col + '0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = col + '0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx * 0.7, ry * 0.7, 0, 0, Math.PI * 2); ctx.stroke();
+    const dotR = 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    [-spread, 0, spread].forEach(off => {
+        ctx.beginPath(); ctx.arc(cx + off, cy, dotR, 0, Math.PI * 2); ctx.fill();
+    });
+    const armLen = 6;
+    ctx.strokeStyle = col + '0.7)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx, cy - armLen); ctx.lineTo(cx, cy + armLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - armLen, cy); ctx.lineTo(cx + armLen, cy); ctx.stroke();
 }
 
 function updateCrosshairCanvasOverlay(currentTime) {
@@ -12330,7 +12396,7 @@ function autoFireAtFish(targetFish) {
     
     // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
     if (weapon.type === 'spread') {
-        const barrelSpacing = 8;
+        const barrelSpacing = BARREL_SPACING_3X;
         const right = new THREE.Vector3().crossVectors(direction, fireBulletTempVectors.yAxis).normalize();
         const leftMuzzle = muzzlePos.clone().addScaledVector(right, -barrelSpacing);
         const rightMuzzle = muzzlePos.clone().addScaledVector(right, barrelSpacing);
@@ -16901,7 +16967,7 @@ function fireBullet(targetX, targetY) {
     
     // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
     if (weapon.type === 'spread') {
-        const barrelSpacing = 8;
+        const barrelSpacing = BARREL_SPACING_3X;
         const right = new THREE.Vector3().crossVectors(direction, fireBulletTempVectors.yAxis).normalize();
         const leftMuzzle = muzzlePos.clone().addScaledVector(right, -barrelSpacing);
         const rightMuzzle = muzzlePos.clone().addScaledVector(right, barrelSpacing);
