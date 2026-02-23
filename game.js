@@ -17532,6 +17532,8 @@ function triggerExplosion(center, weaponKey) {
                 if (result && result.kill && fish.isActive) {
                     fish.die(weaponKey, result.reward, result.rewardFp);
                 }
+            } else {
+                createHitParticles(fish.group.position, '#888888', 1);
             }
         }
     } else {
@@ -17814,7 +17816,11 @@ function addKillFeedEntry(fishForm, rewardAmount) {
     const list = document.getElementById('kill-feed-list');
     if (!list) return;
 
-    const imageUrl = FISH_KILLLOG_IMAGES[fishForm] || 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="24" font-size="24">🐟</text></svg>');
+    let imageUrl = FISH_KILLLOG_IMAGES[fishForm];
+    if (!imageUrl) {
+        console.warn('[KILL-LOG] Missing icon for fishForm "' + fishForm + '" — expected 19 mapped species. Check FISH_KILLLOG_IMAGES config.');
+        imageUrl = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#ff0040" opacity="0.7"/><text x="16" y="22" text-anchor="middle" font-size="14" fill="#fff">?</text></svg>');
+    }
     const name = formatFishName(fishForm);
 
     killFeedRecords.push({ imageUrl, name, reward: rewardAmount });
