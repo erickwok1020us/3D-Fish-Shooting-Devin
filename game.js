@@ -11760,7 +11760,7 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 60,
         hitscanFireGate: 8,
-        autoFireAlignGate: 5,
+        autoFireAlignGate: 2,
         trackSpeed: 22.0,
         maxRotSpeed: 2.0,
         initialLockMs: 250,
@@ -11928,7 +11928,6 @@ const TargetingService = {
         if (!fish) return true;
         if (!fish.isActive) return true;
         if (fish.hp !== undefined && fish.hp <= 0) return true;
-        if (!this._isInExitCone(fish.group.position, refPos)) return true;
         return false;
     },
 
@@ -12006,22 +12005,6 @@ const TargetingService = {
         const isFps = gameState.viewMode === 'fps';
         const refPos = isFps ? camera.position : muzzlePos;
 
-        if (s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
-            for (const fish of activeFish) {
-                if (!fish.isActive || !fish.isBoss) continue;
-                if (fish.hp !== undefined && fish.hp <= 0) continue;
-                if (now - s.lastBossReleaseMs > c.bossCooldownMs && this._isInAutoFireCone(fish.group.position, refPos)) {
-                    s.lockedTarget = fish;
-                    s.phase = 'transition';
-                    s.phaseStart = now;
-                    s.startYaw = s.currentYaw;
-                    s.startPitch = s.currentPitch;
-                    s.lockStartMs = now;
-                    s.shotsAtCurrent = 0;
-                    break;
-                }
-            }
-        }
 
         if (s.phase === 'idle') {
             const target = this._pick8xNewTarget(refPos, now);
@@ -12090,7 +12073,7 @@ const TargetingService = {
             dPitch = this._clampRotDelta(dPitch, maxStep * 3);
             s.currentYaw   = s.startYaw   + dYaw;
             s.currentPitch = s.startPitch  + dPitch;
-            if (t >= 1) { s.phase = 'firing'; canFire = true; }
+            if (t >= 1) { s.phase = 'firing'; }
         } else if (s.phase === 'firing') {
             const factor = 1 - Math.exp(-c.trackSpeed / 60);
             let dYaw   = this._wrapDelta(clampedYaw - s.currentYaw)   * factor;
@@ -12099,7 +12082,6 @@ const TargetingService = {
             dPitch = this._clampRotDelta(dPitch, maxStep);
             s.currentYaw   += dYaw;
             s.currentPitch += dPitch;
-            canFire = true;
         } else if (s.phase === 'transition') {
             const t = Math.min(1, elapsed / c.transitionMs);
             const ease = this._smoothstep(t);
@@ -12109,11 +12091,19 @@ const TargetingService = {
             dPitch = this._clampRotDelta(dPitch, maxStep * 3);
             s.currentYaw   = s.startYaw   + dYaw;
             s.currentPitch = s.startPitch  + dPitch;
-            if (t >= 1) { s.phase = 'firing'; canFire = true; }
+            if (t >= 1) { s.phase = 'firing'; }
         }
 
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
+
+        if (s.phase === 'firing' || s.phase === 'locking' || s.phase === 'transition') {
+            const fwd = this._getCannonForward(new THREE.Vector3());
+            const toFish = fish.group.position.clone().sub(muzzlePos).normalize();
+            const dot = fwd.dot(toFish);
+            const angleDeg = Math.acos(Math.min(1, Math.max(-1, dot))) * (180 / Math.PI);
+            if (angleDeg <= c.autoFireAlignGate) canFire = true;
+        }
 
         return { target: fish, canFire };
     },
