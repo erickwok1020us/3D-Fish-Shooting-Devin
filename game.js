@@ -6860,15 +6860,15 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
     });
 }
 
-const BARREL_SPACING_3X = 20;
-let _3xCrosshairStyle = 'bracket';
+const WEAPON_3X_SPREAD_WIDTH = 20;
+let _3xCrosshairStyle = 'triple_dot';
 const pelletStates = [
-    { hit: false, timer: 0 },
-    { hit: false, timer: 0 },
-    { hit: false, timer: 0 }
+    { hit: false, timer: 0, kill: false, killTimer: 0 },
+    { hit: false, timer: 0, kill: false, killTimer: 0 },
+    { hit: false, timer: 0, kill: false, killTimer: 0 }
 ];
 function get3xCrosshairSpreadPx() {
-    const barrelSpacing = BARREL_SPACING_3X;
+    const barrelSpacing = WEAPON_3X_SPREAD_WIDTH;
     const fov = camera ? camera.fov : 60;
     const halfFovRad = (fov / 2) * Math.PI / 180;
     const refDist = 500;
@@ -6924,7 +6924,73 @@ function resizeCrosshairCanvas() {
     }
 }
 
+function _update3xPelletTimers(dt) {
+    for (var i = 0; i < 3; i++) {
+        if (pelletStates[i].hit) {
+            pelletStates[i].timer -= dt;
+            if (pelletStates[i].timer <= 0) { pelletStates[i].hit = false; pelletStates[i].timer = 0; }
+        }
+        if (pelletStates[i].kill) {
+            pelletStates[i].killTimer -= dt;
+            if (pelletStates[i].killTimer <= 0) { pelletStates[i].kill = false; pelletStates[i].killTimer = 0; }
+        }
+    }
+}
+
+function trigger3xHit(laneIndex) {
+    var idx = laneIndex === -1 ? 0 : (laneIndex === 1 ? 2 : 1);
+    pelletStates[idx].hit = true;
+    pelletStates[idx].timer = 250;
+}
+
+function trigger3xKill(laneIndex) {
+    var idx = laneIndex === -1 ? 0 : (laneIndex === 1 ? 2 : 1);
+    pelletStates[idx].kill = true;
+    pelletStates[idx].killTimer = 500;
+}
+
+function _getLaneColor(laneIdx, baseAlpha) {
+    if (pelletStates[laneIdx].hit) return 'rgba(255,40,60,' + baseAlpha + ')';
+    return 'rgba(0,255,200,' + baseAlpha + ')';
+}
+
+function _drawSkullAtLane(ctx, px, py, laneIdx) {
+    if (!pelletStates[laneIdx].kill) return;
+    var t = pelletStates[laneIdx].killTimer;
+    var totalDur = 500;
+    var p = 1 - (t / totalDur);
+    var scale, opacity;
+    if (p < 0.2) {
+        scale = 0.3 + (p / 0.2) * 1.0;
+        opacity = p / 0.2;
+    } else {
+        scale = 1.3 - (p - 0.2) * 0.375;
+        opacity = 1 - Math.pow((p - 0.2) / 0.8, 2);
+    }
+    ctx.save();
+    ctx.translate(px, py - 20 * p);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = Math.max(0, opacity);
+    ctx.fillStyle = 'rgba(255,40,60,0.95)';
+    ctx.beginPath();
+    ctx.arc(0, -2, 7, Math.PI, 0, false);
+    ctx.arc(0, -2, 7, 0, Math.PI, false);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(-2.5, -3, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(2.5, -3, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,40,60,0.95)';
+    ctx.fillRect(-3.5, 4, 2, 2.5);
+    ctx.fillRect(-0.75, 4, 1.5, 3);
+    ctx.fillRect(1.5, 4, 2, 2.5);
+    ctx.shadowColor = 'rgba(255,20,60,0.8)';
+    ctx.shadowBlur = 8;
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
 function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
+    _update3xPelletTimers(dt);
     const spread = get3xCrosshairSpreadPx();
     if (_3xCrosshairStyle === 'bracket') {
         _draw3xBracket(ctx, cx, cy, spread, time);
@@ -6933,78 +6999,158 @@ function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
     } else if (_3xCrosshairStyle === 'wide_circle') {
         _draw3xWideCircle(ctx, cx, cy, spread, time);
     }
+    var lanes = [cx - spread, cx, cx + spread];
+    for (var li = 0; li < 3; li++) {
+        _drawSkullAtLane(ctx, lanes[li], cy, li);
+    }
+}
+
+function _drawTechCircleLane(ctx, px, py, radius, laneIdx, isCenter) {
+    var alpha = isCenter ? 0.5 : 0.4;
+    var col = _getLaneColor(laneIdx, alpha);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.arc(px, py, radius, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    var armLen = radius + 5;
+    var armStart = radius - 3;
+    var armAlpha = isCenter ? 0.85 : 0.7;
+    var armCol = _getLaneColor(laneIdx, armAlpha);
+    ctx.strokeStyle = armCol;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(px, py - armStart); ctx.lineTo(px, py - armLen);
+    ctx.moveTo(px, py + armStart); ctx.lineTo(px, py + armLen);
+    ctx.moveTo(px - armStart, py); ctx.lineTo(px - armLen, py);
+    ctx.moveTo(px + armStart, py); ctx.lineTo(px + armLen, py);
+    ctx.stroke();
+    if (isCenter) {
+        var diagRad = radius - 1;
+        var diagOut = radius + 3;
+        ctx.strokeStyle = _getLaneColor(laneIdx, 0.3);
+        ctx.lineWidth = 0.8;
+        var diags = [45, 135, 225, 315];
+        ctx.beginPath();
+        for (var d = 0; d < diags.length; d++) {
+            var rad = (diags[d] - 90) * Math.PI / 180;
+            ctx.moveTo(px + Math.cos(rad) * diagRad, py + Math.sin(rad) * diagRad);
+            ctx.lineTo(px + Math.cos(rad) * diagOut, py + Math.sin(rad) * diagOut);
+        }
+        ctx.stroke();
+    }
+    ctx.fillStyle = pelletStates[laneIdx].hit ? 'rgba(255,100,120,0.95)' : 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(px, py, 1.5, 0, Math.PI * 2); ctx.fill();
+    if (pelletStates[laneIdx].hit) {
+        var hitT = pelletStates[laneIdx].timer / 250;
+        var ringR = radius + (1 - hitT) * 8;
+        ctx.strokeStyle = 'rgba(255,40,60,' + (hitT * 0.7).toFixed(2) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(px, py, ringR, 0, Math.PI * 2); ctx.stroke();
+    }
 }
 
 function _draw3xBracket(ctx, cx, cy, spread, time) {
-    const col = 'rgba(170,255,204,';
-    const pulse = 1 + Math.sin(time * 0.004) * 0.03;
-    const h = 28 * pulse;
-    const w = 10 * pulse;
-    const lw = 2;
-    ctx.strokeStyle = col + '0.85)';
-    ctx.lineWidth = lw;
-    ctx.beginPath();
-    ctx.moveTo(cx - spread - w, cy - h); ctx.lineTo(cx - spread, cy - h); ctx.lineTo(cx - spread, cy + h); ctx.lineTo(cx - spread - w, cy + h);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx + spread + w, cy - h); ctx.lineTo(cx + spread, cy - h); ctx.lineTo(cx + spread, cy + h); ctx.lineTo(cx + spread + w, cy + h);
-    ctx.stroke();
-    const dotR = 2;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    [-spread, 0, spread].forEach(off => {
-        ctx.beginPath(); ctx.arc(cx + off, cy, dotR, 0, Math.PI * 2); ctx.fill();
-    });
-    ctx.strokeStyle = col + '0.4)';
+    var pulse = 1 + Math.sin(time * 0.004) * 0.03;
+    var bh = 22 * pulse;
+    var bw = 8 * pulse;
+    var offsets = [-spread, 0, spread];
+    for (var i = 0; i < 3; i++) {
+        var px = cx + offsets[i];
+        var col = _getLaneColor(i, 0.8);
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px - bw, cy - bh); ctx.lineTo(px, cy - bh); ctx.lineTo(px, cy + bh); ctx.lineTo(px - bw, cy + bh);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px + bw, cy - bh); ctx.lineTo(px, cy - bh); ctx.lineTo(px, cy + bh); ctx.lineTo(px + bw, cy + bh);
+        ctx.stroke();
+        var armLen = bh + 5;
+        ctx.strokeStyle = _getLaneColor(i, 0.6);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px, cy - armLen); ctx.lineTo(px, cy - bh - 1);
+        ctx.moveTo(px, cy + bh + 1); ctx.lineTo(px, cy + armLen);
+        ctx.stroke();
+        ctx.fillStyle = pelletStates[i].hit ? 'rgba(255,100,120,0.95)' : 'rgba(255,255,255,0.9)';
+        ctx.beginPath(); ctx.arc(px, cy, 1.5, 0, Math.PI * 2); ctx.fill();
+        if (pelletStates[i].hit) {
+            var hitT = pelletStates[i].timer / 250;
+            ctx.strokeStyle = 'rgba(255,40,60,' + (hitT * 0.8).toFixed(2) + ')';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(px - bw * 1.2, cy - bh * (1 + (1 - hitT) * 0.3));
+            ctx.lineTo(px, cy - bh * (1 + (1 - hitT) * 0.3));
+            ctx.lineTo(px, cy + bh * (1 + (1 - hitT) * 0.3));
+            ctx.lineTo(px - bw * 1.2, cy + bh * (1 + (1 - hitT) * 0.3));
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(px + bw * 1.2, cy - bh * (1 + (1 - hitT) * 0.3));
+            ctx.lineTo(px, cy - bh * (1 + (1 - hitT) * 0.3));
+            ctx.lineTo(px, cy + bh * (1 + (1 - hitT) * 0.3));
+            ctx.lineTo(px + bw * 1.2, cy + bh * (1 + (1 - hitT) * 0.3));
+            ctx.stroke();
+        }
+    }
+    ctx.strokeStyle = _getLaneColor(1, 0.25);
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath(); ctx.moveTo(cx - spread, cy); ctx.lineTo(cx + spread, cy); ctx.stroke();
     ctx.setLineDash([]);
 }
-
 function _draw3xTripleDot(ctx, cx, cy, spread, time) {
-    const pts = [{ x: cx - spread, y: cy }, { x: cx, y: cy }, { x: cx + spread, y: cy }];
-    const basePulse = 1 + Math.sin(time * 0.004) * 0.04;
-    pts.forEach((p, i) => {
-        const mainColor = i === 1 ? 'rgba(170,255,204,0.9)' : 'rgba(170,255,204,0.65)';
-        const glowColor = 'rgba(170,255,204,0.2)';
-        const size = (i === 1 ? 20 : 16) * basePulse;
-        const arm = size;
-        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, size * 2.5);
-        glow.addColorStop(0, glowColor); glow.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = glow;
-        ctx.fillRect(p.x - size * 2.5, p.y - size * 2.5, size * 5, size * 5);
-        ctx.strokeStyle = mainColor; ctx.lineWidth = 1;
-        const gap = 5;
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y - arm); ctx.lineTo(p.x, p.y - gap);
-        ctx.moveTo(p.x, p.y + gap); ctx.lineTo(p.x, p.y + arm);
-        ctx.moveTo(p.x - arm, p.y); ctx.lineTo(p.x - gap, p.y);
-        ctx.moveTo(p.x + gap, p.y); ctx.lineTo(p.x + arm, p.y);
-        ctx.stroke();
-        ctx.beginPath(); ctx.arc(p.x, p.y, 1, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
-    });
+    var basePulse = 1 + Math.sin(time * 0.004) * 0.04;
+    var offsets = [-spread, 0, spread];
+    for (var i = 0; i < 3; i++) {
+        var px = cx + offsets[i];
+        var isCenter = i === 1;
+        var r = (isCenter ? 14 : 11) * basePulse;
+        _drawTechCircleLane(ctx, px, cy, r, i, isCenter);
+    }
+    ctx.strokeStyle = _getLaneColor(1, 0.2);
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(cx - spread, cy); ctx.lineTo(cx + spread, cy); ctx.stroke();
+    ctx.setLineDash([]);
 }
 
 function _draw3xWideCircle(ctx, cx, cy, spread, time) {
-    const col = 'rgba(170,255,204,';
-    const pulse = 1 + Math.sin(time * 0.004) * 0.03;
-    const rx = (spread + 16) * pulse;
-    const ry = 30 * pulse;
-    ctx.strokeStyle = col + '0.55)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = col + '0.25)';
+    var pulse = 1 + Math.sin(time * 0.004) * 0.03;
+    var rx = (spread + 16) * pulse;
+    var ry = 28 * pulse;
+    var ellipseHit = pelletStates[0].hit || pelletStates[1].hit || pelletStates[2].hit;
+    ctx.strokeStyle = ellipseHit ? 'rgba(255,40,60,0.45)' : 'rgba(0,255,200,0.35)';
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.ellipse(cx, cy, rx * 0.7, ry * 0.7, 0, 0, Math.PI * 2); ctx.stroke();
-    const dotR = 2;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    [-spread, 0, spread].forEach(off => {
-        ctx.beginPath(); ctx.arc(cx + off, cy, dotR, 0, Math.PI * 2); ctx.fill();
-    });
-    const armLen = 6;
-    ctx.strokeStyle = col + '0.7)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(cx, cy - armLen); ctx.lineTo(cx, cy + armLen); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx - armLen, cy); ctx.lineTo(cx + armLen, cy); ctx.stroke();
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = ellipseHit ? 'rgba(255,40,60,0.2)' : 'rgba(0,255,200,0.15)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx * 0.65, ry * 0.65, 0, 0, Math.PI * 2); ctx.stroke();
+    var offsets = [-spread, 0, spread];
+    for (var i = 0; i < 3; i++) {
+        var px = cx + offsets[i];
+        var tickH = 6;
+        ctx.strokeStyle = _getLaneColor(i, 0.7);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px, cy - ry - 2); ctx.lineTo(px, cy - ry - 2 - tickH);
+        ctx.moveTo(px, cy + ry + 2); ctx.lineTo(px, cy + ry + 2 + tickH);
+        ctx.stroke();
+        ctx.fillStyle = pelletStates[i].hit ? 'rgba(255,100,120,0.95)' : 'rgba(255,255,255,0.9)';
+        ctx.beginPath(); ctx.arc(px, cy, 1.5, 0, Math.PI * 2); ctx.fill();
+        if (pelletStates[i].hit) {
+            var hitT = pelletStates[i].timer / 250;
+            var ringR = 10 + (1 - hitT) * 6;
+            ctx.strokeStyle = 'rgba(255,40,60,' + (hitT * 0.6).toFixed(2) + ')';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(px, cy, ringR, 0, Math.PI * 2); ctx.stroke();
+        }
+    }
+    ctx.strokeStyle = _getLaneColor(1, 0.5);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx - rx - 4, cy); ctx.lineTo(cx + rx + 4, cy); ctx.stroke();
 }
 
 function updateCrosshairCanvasOverlay(currentTime) {
@@ -7196,7 +7342,10 @@ function showCrosshairRingFlash(spreadIndex) {
     requestAnimationFrame(animRing);
 }
 
-function showKillSkull() {
+function showKillSkull(spreadIndex) {
+    if (gameState.currentWeapon === '3x' && spreadIndex !== undefined) {
+        trigger3xKill(spreadIndex);
+    }
     var cx, cy;
     if (gameState.viewMode === 'fps') {
         cx = window.innerWidth / 2;
@@ -7206,6 +7355,7 @@ function showKillSkull() {
         cx = chEl ? (parseFloat(chEl.style.left) || window.innerWidth / 2) : window.innerWidth / 2;
         cy = chEl ? (parseFloat(chEl.style.top) || window.innerHeight / 2) : window.innerHeight / 2;
     }
+    if (gameState.currentWeapon === '3x' && spreadIndex !== undefined) return;
     const skull = document.createElement('div');
     skull.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="rgba(255,40,60,0.95)"><path d="M12 2C6.48 2 2 6.48 2 12c0 3.07 1.39 5.81 3.57 7.63L5 22h3l.5-2h7l.5 2h3l-.57-2.37C20.61 17.81 22 15.07 22 12c0-5.52-4.48-10-10-10zM8.5 14c-.83 0-1.5-.67-1.5-1.5S7.67 11 8.5 11s1.5.67 1.5 1.5S9.33 14 8.5 14zm7 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
     skull.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%) scale(0.2);pointer-events:none;z-index:10002;opacity:0;background:transparent;filter:drop-shadow(0 0 6px rgba(255,20,60,0.9)) drop-shadow(0 0 12px rgba(255,60,80,0.5));`;
@@ -12396,7 +12546,7 @@ function autoFireAtFish(targetFish) {
     
     // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
     if (weapon.type === 'spread') {
-        const barrelSpacing = BARREL_SPACING_3X;
+        const barrelSpacing = WEAPON_3X_SPREAD_WIDTH;
         const right = new THREE.Vector3().crossVectors(direction, fireBulletTempVectors.yAxis).normalize();
         const leftMuzzle = muzzlePos.clone().addScaledVector(right, -barrelSpacing);
         const rightMuzzle = muzzlePos.clone().addScaledVector(right, barrelSpacing);
@@ -15556,6 +15706,9 @@ class Fish {
         const fishPos = this.group ? this.group.position : null;
         showHitMarker(spreadIndex, fishPos, this);
         showCrosshairRingFlash(spreadIndex);
+        if (gameState.currentWeapon === '3x' && spreadIndex !== undefined) {
+            trigger3xHit(spreadIndex);
+        }
         
         this.flashHit();
         
@@ -15568,7 +15721,7 @@ class Fish {
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
                 );
                 if (result.kill) {
-                    this.die(weaponKey, result.reward, result.rewardFp);
+                    this.die(weaponKey, result.reward, result.rewardFp, spreadIndex);
                     return true;
                 }
             } else if (weapon.type === 'projectile') {
@@ -15576,7 +15729,7 @@ class Fish {
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
                 );
                 if (result.kill) {
-                    this.die(weaponKey, result.reward, result.rewardFp);
+                    this.die(weaponKey, result.reward, result.rewardFp, spreadIndex);
                     return true;
                 }
             }
@@ -15585,7 +15738,7 @@ class Fish {
         return false;
     }
     
-    die(weaponKey, rtpReward, rewardFp) {
+    die(weaponKey, rtpReward, rewardFp, spreadIndex) {
         if (!this.isActive) {
             console.warn('[FISH] die() called on already-dead fish, skipping');
             return;
@@ -15638,7 +15791,7 @@ class Fish {
         
         const deathPosition = this.group.position.clone();
         
-        showKillSkull();
+        showKillSkull(spreadIndex);
         
         // HIT SOUND LOGIC: Do NOT play hit sound on fish death
         // Hit sound is now played in bullet collision ONLY when fish survives
@@ -16967,7 +17120,7 @@ function fireBullet(targetX, targetY) {
     
     // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
     if (weapon.type === 'spread') {
-        const barrelSpacing = BARREL_SPACING_3X;
+        const barrelSpacing = WEAPON_3X_SPREAD_WIDTH;
         const right = new THREE.Vector3().crossVectors(direction, fireBulletTempVectors.yAxis).normalize();
         const leftMuzzle = muzzlePos.clone().addScaledVector(right, -barrelSpacing);
         const rightMuzzle = muzzlePos.clone().addScaledVector(right, barrelSpacing);
