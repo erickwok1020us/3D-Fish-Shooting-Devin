@@ -6866,13 +6866,14 @@ const pelletStates = [
     { hit: false, timer: 0 }
 ];
 function get3xCrosshairSpreadPx() {
-    const spreadDeg = CONFIG.weapons['3x'].spreadAngle;
-    const spreadRad = spreadDeg * Math.PI / 180;
+    const barrelSpacing = 8;
     const fov = camera ? camera.fov : 60;
     const halfFovRad = (fov / 2) * Math.PI / 180;
+    const refDist = 500;
+    const angularOffset = Math.atan(barrelSpacing / refDist);
     const aspect = window.innerWidth / window.innerHeight;
     const halfHFovRad = Math.atan(Math.tan(halfFovRad) * aspect);
-    return Math.tan(spreadRad) / Math.tan(halfHFovRad) * (window.innerWidth / 2);
+    return Math.tan(angularOffset) / Math.tan(halfHFovRad) * (window.innerWidth / 2);
 }
 let crosshairCanvas = null;
 let crosshairCtx = null;
@@ -11858,7 +11859,7 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 60,
         hitscanFireGate: 8,
-        autoFireAlignGate: 2,
+        autoFireAlignGate: 15,
         trackSpeed: 22.0,
         maxRotSpeed: 2.0,
         initialLockMs: 250,
@@ -12142,6 +12143,7 @@ const TargetingService = {
         let aimPos = fish.group.position.clone();
         if (fish.ellipsoidHalfExtents) {
             const he = fish.ellipsoidHalfExtents;
+            aimPos.y += he.y * 0.5;
             if (!fish._aimOffsetSeed) fish._aimOffsetSeed = Math.random() * 1000;
             const t = performance.now() * 0.0003 + fish._aimOffsetSeed;
             const wobbleScale = fish.isBoss ? 0.3 : 0.15;
@@ -12200,7 +12202,18 @@ const TargetingService = {
             const toFish = fish.group.position.clone().sub(muzzlePos).normalize();
             const dot = fwd.dot(toFish);
             const angleDeg = Math.acos(Math.min(1, Math.max(-1, dot))) * (180 / Math.PI);
-            if (angleDeg <= c.autoFireAlignGate) canFire = true;
+            const isReady = angleDeg <= c.autoFireAlignGate;
+            if (isReady) {
+                canFire = true;
+            }
+            if (!canFire) {
+                let blockReason = '';
+                if (!isReady) blockReason = `Align: ${angleDeg.toFixed(1)}° > gate ${c.autoFireAlignGate}°`;
+                else if (gameState.balance < CONFIG.weapons[gameState.currentWeapon].cost * BALANCE_SCALE) blockReason = 'Block: Balance';
+                else if (gameState.cooldown > 0) blockReason = 'Block: Cooldown';
+                else blockReason = 'Block: Unknown';
+                console.log(`[AutoFire] phase=${s.phase} angle=${angleDeg.toFixed(1)}° isReady=${isReady} | ${blockReason}`);
+            }
         }
 
         return { target: fish, canFire };
@@ -12302,14 +12315,17 @@ function autoFireAtFish(targetFish) {
         ).normalize();
     }
     
+    muzzlePos.addScaledVector(direction, 5);
+    
     // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
     if (weapon.type === 'spread') {
-        const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
+        const barrelSpacing = 8;
+        const right = new THREE.Vector3().crossVectors(direction, fireBulletTempVectors.yAxis).normalize();
+        const leftMuzzle = muzzlePos.clone().addScaledVector(right, -barrelSpacing);
+        const rightMuzzle = muzzlePos.clone().addScaledVector(right, barrelSpacing);
         fireHitscanRay(muzzlePos, direction, weaponKey, 0);
-        fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-        fireHitscanRay(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
-        fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-        fireHitscanRay(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
+        fireHitscanRay(leftMuzzle, direction, weaponKey, -1);
+        fireHitscanRay(rightMuzzle, direction, weaponKey, 1);
     } else if (weapon.type === 'laser') {
         fireLaserBeam(muzzlePos, direction, weaponKey);
     } else {
@@ -16840,6 +16856,7 @@ function fireBullet(targetX, targetY) {
     // PERFORMANCE: Use temp vector instead of creating new Vector3
     cannonMuzzle.getWorldPosition(fireBulletTempVectors.muzzlePos);
     const muzzlePos = fireBulletTempVectors.muzzlePos;
+    muzzlePos.addScaledVector(direction, 5);
     
     // DEBUG_AIM: Log aim direction data to verify crosshair accuracy
     // In FPS mode, direction should exactly match camera's forward direction (rayDir)
@@ -16873,12 +16890,13 @@ function fireBullet(targetX, targetY) {
     
     // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
     if (weapon.type === 'spread') {
-        const spreadAngle = weapon.spreadAngle * (Math.PI / 180);
+        const barrelSpacing = 8;
+        const right = new THREE.Vector3().crossVectors(direction, fireBulletTempVectors.yAxis).normalize();
+        const leftMuzzle = muzzlePos.clone().addScaledVector(right, -barrelSpacing);
+        const rightMuzzle = muzzlePos.clone().addScaledVector(right, barrelSpacing);
         fireHitscanRay(muzzlePos, direction, weaponKey, 0);
-        fireBulletTempVectors.leftDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, spreadAngle);
-        fireHitscanRay(muzzlePos, fireBulletTempVectors.leftDir, weaponKey, -1);
-        fireBulletTempVectors.rightDir.copy(direction).applyAxisAngle(fireBulletTempVectors.yAxis, -spreadAngle);
-        fireHitscanRay(muzzlePos, fireBulletTempVectors.rightDir, weaponKey, 1);
+        fireHitscanRay(leftMuzzle, direction, weaponKey, -1);
+        fireHitscanRay(rightMuzzle, direction, weaponKey, 1);
     } else if (weapon.type === 'laser') {
         fireLaserBeam(muzzlePos, direction, weaponKey);
     } else if (weapon.type === 'rocket') {
