@@ -593,7 +593,7 @@
         #shot-counter-strip .glass-panel .shot-digit {
             flex: 1;
             min-width: 0;
-            height: 46px;
+            height: 54px;
             background: rgba(0, 10, 25, 0.9);
             border: 1px solid rgba(0, 200, 255, 0.12);
             border-radius: 6px;
@@ -601,12 +601,13 @@
             align-items: center;
             justify-content: center;
             font-family: 'Orbitron', monospace;
-            font-size: 26px;
+            font-size: 30px;
             font-weight: 900;
             color: rgba(0, 180, 255, 0.12);
             transition: color 0.2s, text-shadow 0.2s, border-color 0.2s;
             transform: scaleY(1.26);
             transform-origin: center;
+            padding-bottom: 2px;
         }
         #shot-counter-strip .glass-panel .shot-digit.filled {
             color: #00ffcc;
@@ -622,7 +623,19 @@
         }
         #weapon-panel .auto-left { display: flex; align-items: center; gap: 8px; }
         #weapon-panel .auto-sep { color: rgba(0, 200, 255, 0.55); font-size: 12px; }
-        #weapon-panel .auto-kbd { font-family: 'Orbitron', monospace; font-size: 11px; letter-spacing: 1.5px; color: rgba(0, 200, 255, 0.8); text-shadow: 0 0 6px rgba(0, 200, 255, 0.2); }
+        #weapon-panel .auto-kbd {
+            font-family: 'Orbitron', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: rgba(0, 255, 100, 0.85);
+            background: rgba(0, 40, 30, 0.85);
+            border: 1px solid rgba(0, 255, 100, 0.45);
+            border-radius: 3px;
+            padding: 3px 8px;
+            line-height: 1;
+            text-shadow: 0 0 6px rgba(0, 255, 100, 0.3);
+        }
         #weapon-panel .auto-label {
             font-size: 12px;
             font-weight: 700;
