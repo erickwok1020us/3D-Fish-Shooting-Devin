@@ -820,16 +820,28 @@ function setupEffectComposer() {
         return;
     }
 
-    _effectComposer = new THREE.EffectComposer(renderer);
+    const dpr = renderer.getPixelRatio();
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    const rtParams = {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat
+    };
+    const rt = new THREE.WebGLRenderTarget(w * dpr, h * dpr, rtParams);
+    _effectComposer = new THREE.EffectComposer(renderer, rt);
     _effectComposer.addPass(new THREE.RenderPass(scene, camera));
 
     _bloomPass = new THREE.UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        new THREE.Vector2(w * dpr, h * dpr),
         POST_PARAMS.bloomStrength,
         POST_PARAMS.bloomRadius,
         POST_PARAMS.bloomThreshold
     );
     _effectComposer.addPass(_bloomPass);
+
+    console.log('[ATMOSPHERE] EffectComposer DPR:', dpr, 'RT size:', w * dpr, 'x', h * dpr);
 
     const wvs = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
 
@@ -18591,8 +18603,16 @@ function setupEventListeners() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
-        if (_effectComposer) _effectComposer.setSize(window.innerWidth, window.innerHeight);
-        if (_bloomPass) _bloomPass.setSize(window.innerWidth, window.innerHeight);
+        const dpr = renderer.getPixelRatio();
+        const rw = window.innerWidth * dpr;
+        const rh = window.innerHeight * dpr;
+        if (_effectComposer) {
+            _effectComposer.renderTarget1.setSize(rw, rh);
+            _effectComposer.renderTarget2.setSize(rw, rh);
+            for (let i = 0; i < _effectComposer.passes.length; i++) {
+                _effectComposer.passes[i].setSize(rw, rh);
+            }
+        }
         updateSpreadCrosshairPositions();
     });
     
