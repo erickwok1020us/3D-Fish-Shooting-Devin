@@ -11533,6 +11533,26 @@ const TargetingService = {
         return delta;
     },
 
+    _rayHitsTargetFish(origin, dir, fish) {
+        const fishPos = fish.group.position;
+        const halfExt = fish.ellipsoidHalfExtents;
+        const fishYaw = fish._currentYaw || 0;
+        if (halfExt) {
+            const result = rayHitsEllipsoid(origin, dir, fishPos, halfExt, fishYaw, 8);
+            return result.hit && result.t >= 5;
+        }
+        const fishRadius = fish.boundingRadius || 20;
+        const relX = fishPos.x - origin.x;
+        const relY = fishPos.y - origin.y;
+        const relZ = fishPos.z - origin.z;
+        const t = relX * dir.x + relY * dir.y + relZ * dir.z;
+        if (t < 5) return false;
+        const cpX = origin.x + dir.x * t - fishPos.x;
+        const cpY = origin.y + dir.y * t - fishPos.y;
+        const cpZ = origin.z + dir.z * t - fishPos.z;
+        return (cpX * cpX + cpY * cpY + cpZ * cpZ) <= fishRadius * fishRadius;
+    },
+
     _lastTick: 0,
 
     tick() {
@@ -11594,12 +11614,12 @@ const TargetingService = {
             }
         }
 
-        if (is8x && s.lockedTarget && s.lockedTarget.isActive && (s.phase === 'firing' || s.phase === 'locking')) {
+        if (s.lockedTarget && s.lockedTarget.isActive && (s.phase === 'firing' || s.phase === 'locking')) {
             const lockTime = now - s.lockStartMs;
             const outOfCone = !this._isInAutoFireCone(s.lockedTarget.group.position, refPos);
             if (outOfCone || s.shotsAtCurrent >= c.maxShotsPerTarget || (lockTime > c.maxLockTimeMs && s.shotsAtCurrent >= c.minShotsBeforeDrop)) {
                 if (s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
-                const next = this._pick8xNewTarget(refPos, now);
+                const next = is8x ? this._pick8xNewTarget(refPos, now) : this._pickTarget(muzzlePos);
                 if (next && next !== s.lockedTarget) {
                     s.lockedTarget = next;
                     s.phase = 'transition';
@@ -11678,26 +11698,21 @@ const TargetingService = {
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
 
-        if (canFire && is8x && !gameState.autoShoot) {
-            const crosshairDir = getCrosshairRay();
-            if (crosshairDir && fish) {
-                const gateRef = is8xFps ? camera.position : muzzlePos;
-                const fishDir = new THREE.Vector3().copy(fish.group.position).sub(gateRef).normalize();
-                const dotVal = Math.min(1, Math.max(-1, crosshairDir.dot(fishDir)));
-                const angleDeg = Math.acos(dotVal) * (180 / Math.PI);
-                if (angleDeg > this.config.hitscanFireGate) canFire = false;
+        if (canFire && fish) {
+            if (gameState.autoShoot) {
+                const gateOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
+                const fwd = new THREE.Vector3();
+                this._getCannonForward(fwd);
+                if (!this._rayHitsTargetFish(gateOrigin, fwd, fish)) canFire = false;
             } else {
-                canFire = false;
+                const crosshairDir = getCrosshairRay();
+                if (crosshairDir) {
+                    const gateOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
+                    if (!this._rayHitsTargetFish(gateOrigin, crosshairDir, fish)) canFire = false;
+                } else {
+                    canFire = false;
+                }
             }
-        }
-
-        if (canFire && is8x && gameState.autoShoot) {
-            const fwd = new THREE.Vector3();
-            this._getCannonForward(fwd);
-            const toFish = new THREE.Vector3().copy(fish.group.position).sub(trackOrigin).normalize();
-            const dotVal = Math.min(1, Math.max(-1, fwd.dot(toFish)));
-            const angleDeg = Math.acos(dotVal) * (180 / Math.PI);
-            if (angleDeg > this.config.autoFireAlignGate) canFire = false;
         }
 
         return { target: fish, canFire };
