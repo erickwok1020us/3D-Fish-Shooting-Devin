@@ -7879,10 +7879,10 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish) {
     scene.add(hitEffectModel);
     
     // Register with VFX manager instead of using own RAF loop
-    const duration = 200; // 200ms - ultra-short pop
+    const duration = 500; // 500ms - smooth fade out
     const initialScale = scale * 0.15;
     const maxScale = scale * 0.5;
-    const maxOpacity = 0.25;
+    const maxOpacity = 0.30;
     
     materials.forEach((mat) => {
         mat.transparent = true;
@@ -7903,14 +7903,15 @@ function spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish) {
         update(dt, elapsed) {
             const progress = Math.min(elapsed / this.duration, 1);
             
-            if (progress < 0.3) {
-                const scaleProgress = progress / 0.3;
+            if (progress < 0.15) {
+                const scaleProgress = progress / 0.15;
                 const currentScale = this.initialScale + (this.maxScale - this.initialScale) * scaleProgress;
                 this.model.scale.set(currentScale, currentScale, currentScale);
             } else {
-                const fadeProgress = (progress - 0.3) / 0.7;
+                const fadeProgress = (progress - 0.15) / 0.85;
+                const alpha = this.maxOpacity * (1 - fadeProgress * fadeProgress);
                 this.materials.forEach((mat) => {
-                    mat.opacity = this.maxOpacity * (1 - fadeProgress);
+                    mat.opacity = Math.max(0, alpha);
                 });
             }
             
@@ -10103,10 +10104,10 @@ window.startMultiplayerGame = function(manager) {
             if (fish.userData._hitFlashActive) return;
             fish.userData._hitFlashActive = true;
             const _tint = new THREE.Color(1.0, 0.3, 0.3);
-            const _peakTint = 0.70;
-            const _emissiveBoost = 0.15;
+            const _peakTint = 0.85;
+            const _emissiveBoost = 0.20;
             const _emissiveDur = 50;
-            const _tintDecayDur = 200;
+            const _tintDecayDur = 300;
             const _scalePulse = 1.05;
             const _scaleDur = 100;
             const _jitterAmp = 0.1;
@@ -15293,10 +15294,10 @@ class Fish {
         if (this._flashTimer) clearTimeout(this._flashTimer);
         const isBoss = !!this.isBoss;
         const _hitTintColor = new THREE.Color(1.0, 0.3, 0.3);
-        const _peakTint = 0.70;
-        const _emissiveBoost = 0.15;
+        const _peakTint = 0.85;
+        const _emissiveBoost = 0.20;
         const _emissiveDur = 50;
-        const _tintDecayDur = 200;
+        const _tintDecayDur = 300;
         const _scalePulse = isBoss ? 1.03 : 1.05;
         const _scaleDur = 100;
         const _jitterAmp = 0.1;
@@ -17122,7 +17123,7 @@ function createHitParticles(position, color, count) {
                 (Math.random() - 0.5) * 150
             );
             // PERFORMANCE: No clone() needed - Particle.spawn() uses copy() internally
-            particle.spawn(position, velocity, color, 2 + Math.random() * 3, 0.15);
+            particle.spawn(position, velocity, color, 2 + Math.random() * 3, 0.5);
             activeParticles.push(particle);
         }
     }
