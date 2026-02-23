@@ -639,7 +639,7 @@ function updateCaustics(time) {
 const WEAPON_CONFIG = {
     '1x': {
         multiplier: 1, cost: 1, damage: 100, shotsPerSecond: 2.5,
-        type: 'projectile', speed: 2000,
+        type: 'projectile', speed: 4000,
         piercing: false, spreadAngle: 0, aoeRadius: 0, damageEdge: 0, laserWidth: 0,
         convergenceDistance: 1400,
 
@@ -657,7 +657,7 @@ const WEAPON_CONFIG = {
         bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         hitEffectRotationFix: false, hitEffectPlanar: true,
         bulletTint: null,
-        fpsCameraBackDist: 115, fpsCameraUpOffset: 40,
+        fpsCameraBackDist: 115, fpsCameraUpOffset: 75,
         emissiveBoost: 0.4,
 
         color: 0xcccccc, size: 0.8,
@@ -669,7 +669,7 @@ const WEAPON_CONFIG = {
     },
     '3x': {
         multiplier: 3, cost: 3, damage: 100, shotsPerSecond: 2.5,
-        type: 'spread', speed: 2000,
+        type: 'spread', speed: 4000,
         piercing: false, spreadAngle: 15, aoeRadius: 0, damageEdge: 0, laserWidth: 0,
         convergenceDistance: 1400,
 
@@ -699,7 +699,7 @@ const WEAPON_CONFIG = {
     },
     '5x': {
         multiplier: 5, cost: 5, damage: 200, shotsPerSecond: 2.5,
-        type: 'rocket', speed: 2000,
+        type: 'rocket', speed: 4000,
         piercing: false, spreadAngle: 0, aoeRadius: 120, damageEdge: 80, laserWidth: 0,
         convergenceDistance: 1400,
 
@@ -717,7 +717,7 @@ const WEAPON_CONFIG = {
         bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         hitEffectRotationFix: false, hitEffectPlanar: false,
         bulletTint: null,
-        fpsCameraBackDist: 150, fpsCameraUpOffset: 85,
+        fpsCameraBackDist: 150, fpsCameraUpOffset: 75,
         emissiveBoost: 0.4,
 
         color: 0xffdd00, size: 0.8,
@@ -11509,22 +11509,12 @@ const TargetingService = {
         return candidates[0].fish;
     },
 
-    _pickTarget(muzzlePos) {
-        if (gameState.currentWeapon === '8x' && gameState.viewMode === 'fps') {
-            const camRay = getCrosshairRay();
-            if (camRay) return this.findNearestInCrosshairCone(camera.position, camRay, this.config.searchConeAngle);
-        }
-        const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
-        return this.findNearestInCrosshairCone(muzzlePos, fwd, this.config.searchConeAngle);
+    _pickTarget(muzzlePos, refPos, now) {
+        return this._pick8xNewTarget(refPos || muzzlePos, now || performance.now());
     },
 
-    _pickFallback(muzzlePos) {
-        if (gameState.currentWeapon === '8x' && gameState.viewMode === 'fps') {
-            const camRay = getCrosshairRay();
-            if (camRay) return this.findNearestInCrosshairCone(camera.position, camRay, this.config.searchConeAngle);
-        }
-        const fwd = this._getCannonForward(autoFireTempVectors.crosshairDir);
-        return this.findNearestInCrosshairCone(muzzlePos, fwd, this.config.searchConeAngle);
+    _pickFallback(muzzlePos, refPos, now) {
+        return this._pick8xNewTarget(refPos || muzzlePos, now || performance.now());
     },
 
     _clampRotDelta(delta, maxStep) {
@@ -11566,9 +11556,8 @@ const TargetingService = {
 
         this._initFromCannon();
 
-        const is8x = gameState.currentWeapon === '8x';
-        const is8xFps = is8x && gameState.viewMode === 'fps';
-        const refPos = is8xFps ? camera.position : muzzlePos;
+        const isFps = gameState.viewMode === 'fps';
+        const refPos = isFps ? camera.position : muzzlePos;
 
         if (gameState.bossActive && s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
             const bossCheck = this.findNearest(refPos);
@@ -11584,7 +11573,7 @@ const TargetingService = {
         }
 
         if (s.phase === 'idle') {
-            const target = is8x ? this._pick8xNewTarget(refPos, now) : this._pickTarget(muzzlePos);
+            const target = this._pick8xNewTarget(refPos, now);
             if (target) {
                 s.lockedTarget = target;
                 s.phase = 'locking';
@@ -11598,7 +11587,7 @@ const TargetingService = {
         }
 
         if (s.lockedTarget && !s.lockedTarget.isActive) {
-            const next = is8x ? this._pick8xNewTarget(refPos, now) : this._pickFallback(muzzlePos);
+            const next = this._pick8xNewTarget(refPos, now);
             if (next) {
                 s.lockedTarget = next;
                 s.phase = 'transition';
@@ -11619,7 +11608,7 @@ const TargetingService = {
             const outOfCone = !this._isInAutoFireCone(s.lockedTarget.group.position, refPos);
             if (outOfCone || s.shotsAtCurrent >= c.maxShotsPerTarget || (lockTime > c.maxLockTimeMs && s.shotsAtCurrent >= c.minShotsBeforeDrop)) {
                 if (s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
-                const next = is8x ? this._pick8xNewTarget(refPos, now) : this._pickTarget(muzzlePos);
+                const next = this._pick8xNewTarget(refPos, now);
                 if (next && next !== s.lockedTarget) {
                     s.lockedTarget = next;
                     s.phase = 'transition';
@@ -11643,20 +11632,21 @@ const TargetingService = {
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
         let aimPos = fish.group.position.clone();
-        if (fish.isBoss && fish.ellipsoidHalfExtents) {
+        if (fish.ellipsoidHalfExtents) {
             const he = fish.ellipsoidHalfExtents;
             if (!fish._aimOffsetSeed) fish._aimOffsetSeed = Math.random() * 1000;
             const t = performance.now() * 0.0003 + fish._aimOffsetSeed;
-            aimPos.x += Math.sin(t * 2.1) * he.x * 0.3;
-            aimPos.y += Math.sin(t * 1.7) * he.y * 0.2;
-            aimPos.z += Math.cos(t * 1.3) * he.z * 0.3;
+            const wobbleScale = fish.isBoss ? 0.3 : 0.15;
+            aimPos.x += Math.sin(t * 2.1) * he.x * wobbleScale;
+            aimPos.y += Math.sin(t * 1.7) * he.y * (wobbleScale * 0.67);
+            aimPos.z += Math.cos(t * 1.3) * he.z * wobbleScale;
         }
         const weapon = CONFIG.weapons[gameState.currentWeapon];
         if (weapon.speed && fish.velocity) {
             const dist = muzzlePos.distanceTo(aimPos);
             aimPos.add(fish.velocity.clone().multiplyScalar(dist / weapon.speed));
         }
-        const trackOrigin = (is8x && gameState.autoShoot) ? refPos : muzzlePos;
+        const trackOrigin = (gameState.autoShoot && isFps) ? refPos : muzzlePos;
         const dir = aimPos.clone().sub(trackOrigin).normalize();
         const clampedYaw   = Math.max(-c.yawLimit, Math.min(c.yawLimit, Math.atan2(dir.x, dir.z)));
         const clampedPitch = Math.max(c.pitchMin, Math.min(c.pitchMax, Math.asin(dir.y)));
@@ -14805,7 +14795,41 @@ class Fish {
     }
     
     flashHit() {
-        if (this.glbLoaded && this.glbMeshes) {
+        if (this._flashTimer) clearTimeout(this._flashTimer);
+        const isBoss = !!this.isBoss;
+        const flashIntensity = isBoss ? 3.0 : 1.0;
+        const flashDuration = isBoss ? 150 : 80;
+
+        if (isBoss) {
+            this.group.traverse(child => {
+                if (child.isMesh && child.material && 'emissive' in child.material) {
+                    if (!child._origEmissive) {
+                        child._origEmissive = child.material.emissive.clone();
+                        child._origEmissiveIntensity = child.material.emissiveIntensity;
+                    }
+                    child.material.emissive.set(0xffffff);
+                    child.material.emissiveIntensity = flashIntensity;
+                }
+            });
+            if (bossGlowEffect && bossGlowEffect.material) {
+                bossGlowEffect._savedOpacity = bossGlowEffect.material.opacity;
+                bossGlowEffect.material.opacity = 0.1;
+            }
+            this._flashTimer = setTimeout(() => {
+                this._flashTimer = null;
+                if (this.isActive) {
+                    this.group.traverse(child => {
+                        if (child.isMesh && child.material && child._origEmissive) {
+                            child.material.emissive.copy(child._origEmissive);
+                            child.material.emissiveIntensity = child._origEmissiveIntensity;
+                        }
+                    });
+                }
+                if (bossGlowEffect && bossGlowEffect.material && bossGlowEffect._savedOpacity !== undefined) {
+                    bossGlowEffect.material.opacity = bossGlowEffect._savedOpacity;
+                }
+            }, flashDuration);
+        } else if (this.glbLoaded && this.glbMeshes) {
             this.glbMeshes.forEach(mesh => {
                 if (mesh.material && 'emissive' in mesh.material) {
                     if (!mesh._origEmissive) {
@@ -14813,10 +14837,11 @@ class Fish {
                         mesh._origEmissiveIntensity = mesh.material.emissiveIntensity;
                     }
                     mesh.material.emissive.set(0xffffff);
-                    mesh.material.emissiveIntensity = 1.0;
+                    mesh.material.emissiveIntensity = flashIntensity;
                 }
             });
-            setTimeout(() => {
+            this._flashTimer = setTimeout(() => {
+                this._flashTimer = null;
                 if (this.isActive && this.glbMeshes) {
                     this.glbMeshes.forEach(mesh => {
                         if (mesh.material && mesh._origEmissive) {
@@ -14825,20 +14850,21 @@ class Fish {
                         }
                     });
                 }
-            }, 80);
+            }, flashDuration);
         } else if (this.body && this.body.material && 'emissive' in this.body.material) {
             if (!this.body._origEmissive) {
                 this.body._origEmissive = this.body.material.emissive.clone();
                 this.body._origEmissiveIntensity = this.body.material.emissiveIntensity;
             }
             this.body.material.emissive.set(0xffffff);
-            this.body.material.emissiveIntensity = 1.0;
-            setTimeout(() => {
+            this.body.material.emissiveIntensity = flashIntensity;
+            this._flashTimer = setTimeout(() => {
+                this._flashTimer = null;
                 if (this.isActive && this.body && this.body.material && this.body._origEmissive) {
                     this.body.material.emissive.copy(this.body._origEmissive);
                     this.body.material.emissiveIntensity = this.body._origEmissiveIntensity;
                 }
-            }, 80);
+            }, flashDuration);
         }
     }
     
@@ -17155,12 +17181,12 @@ function spawnTracerBeamVFX(muzzlePos, beamEnd, color, weaponKey) {
     addVfxEffect({
         type: 'hitscanTracer',
         core, glow, coreGeo, coreMat, glowGeo, glowMat,
-        duration: 120,
+        duration: 60,
         update(dt, elapsed) {
             const progress = elapsed / this.duration;
-            this.coreMat.opacity = 0.85 * Math.max(0, 1.0 - progress * 3);
-            this.glowMat.opacity = 0.35 * Math.max(0, 1.0 - progress * 2.5);
-            const shrink = 1.0 - progress * 0.5;
+            this.coreMat.opacity = 0.85 * Math.max(0, 1.0 - progress * 4);
+            this.glowMat.opacity = 0.35 * Math.max(0, 1.0 - progress * 3.5);
+            const shrink = 1.0 - progress * 0.7;
             this.core.scale.set(shrink, 1, shrink);
             return progress < 1;
         },
