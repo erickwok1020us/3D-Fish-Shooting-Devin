@@ -11344,23 +11344,20 @@ function aimCannon(targetX, targetY) {
 }
 
 // ==================== TARGETING SERVICE ====================
-// Centralized auto-fire targeting: config, state machine, and target selection.
-// All targeting parameters live here — adjust values without touching logic.
+// Centralized auto-fire targeting: "Sticky Hunter" system.
+// Once locked, stays on target until fish dies or leaves valid play area.
 const TargetingService = {
     config: {
         yawLimit:   46.75 * (Math.PI / 180),
         pitchMax:   42.5  * (Math.PI / 180),
         pitchMin:  -29.75 * (Math.PI / 180),
-        searchConeAngle: 55,
+        searchConeAngle: 60,
         hitscanFireGate: 8,
         autoFireAlignGate: 5,
         trackSpeed: 22.0,
         maxRotSpeed: 2.0,
         initialLockMs: 250,
         transitionMs:  200,
-        maxLockTimeMs: 5000,
-        maxShotsPerTarget: 10,
-        minShotsBeforeDrop: 5,
         bossCooldownMs: 2000,
     },
 
@@ -11386,6 +11383,14 @@ const TargetingService = {
         s.initialized = false;
         s.shotsAtCurrent = 0;
         s.lockStartMs = 0;
+    },
+
+    _isTargetValid(fish, refPos) {
+        if (!fish) return false;
+        if (!fish.isActive) return false;
+        if (fish.hp !== undefined && fish.hp <= 0) return false;
+        if (!this._isInAutoFireCone(fish.group.position, refPos)) return false;
+        return true;
     },
 
     _initFromCannon() {
@@ -11500,30 +11505,24 @@ const TargetingService = {
         const c = this.config, s = this.state;
         for (const fish of activeFish) {
             if (!fish.isActive || !fish.isBoss) continue;
+            if (fish.hp !== undefined && fish.hp <= 0) continue;
             if (now - s.lastBossReleaseMs > c.bossCooldownMs && this._isInAutoFireCone(fish.group.position, refPos)) return fish;
         }
-        const candidates = [];
+        let nearest = null, nearestDistSq = Infinity;
         for (const fish of activeFish) {
             if (!fish.isActive || fish.isBoss) continue;
+            if (fish.hp !== undefined && fish.hp <= 0) continue;
+            if (!this._isInAutoFireCone(fish.group.position, refPos)) continue;
             const dx = fish.group.position.x - refPos.x;
             const dy = fish.group.position.y - refPos.y;
             const dz = fish.group.position.z - refPos.z;
             const distSq = dx * dx + dy * dy + dz * dz;
-            if (distSq > 2000000) continue;
-            if (!this._isInAutoFireCone(fish.group.position, refPos)) continue;
-            const score = this._priorityScore(fish, refPos);
-            candidates.push({ fish, score, distSq });
-        }
-        if (candidates.length === 0) return null;
-        candidates.sort((a, b) => b.score - a.score);
-        if (candidates.length >= 2) {
-            const top = candidates[0];
-            const runner = candidates[1];
-            if (top.score > 0 && runner.score / top.score > 0.85) {
-                if (runner.distSq < top.distSq) return runner.fish;
+            if (distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearest = fish;
             }
         }
-        return candidates[0].fish;
+        return nearest;
     },
 
     _pickTarget(muzzlePos, refPos, now) {
@@ -11576,16 +11575,20 @@ const TargetingService = {
         const isFps = gameState.viewMode === 'fps';
         const refPos = isFps ? camera.position : muzzlePos;
 
-        if (gameState.bossActive && s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
-            const bossCheck = this.findNearest(refPos);
-            if (bossCheck.primary && bossCheck.primary.isBoss) {
-                s.lockedTarget = bossCheck.primary;
-                s.phase = 'transition';
-                s.phaseStart = now;
-                s.startYaw = s.currentYaw;
-                s.startPitch = s.currentPitch;
-                s.lockStartMs = now;
-                s.shotsAtCurrent = 0;
+        if (s.lockedTarget && s.lockedTarget.isActive && !s.lockedTarget.isBoss) {
+            for (const fish of activeFish) {
+                if (!fish.isActive || !fish.isBoss) continue;
+                if (fish.hp !== undefined && fish.hp <= 0) continue;
+                if (now - s.lastBossReleaseMs > c.bossCooldownMs && this._isInAutoFireCone(fish.group.position, refPos)) {
+                    s.lockedTarget = fish;
+                    s.phase = 'transition';
+                    s.phaseStart = now;
+                    s.startYaw = s.currentYaw;
+                    s.startPitch = s.currentPitch;
+                    s.lockStartMs = now;
+                    s.shotsAtCurrent = 0;
+                    break;
+                }
             }
         }
 
@@ -11603,7 +11606,8 @@ const TargetingService = {
             return { target: null, canFire: false };
         }
 
-        if (s.lockedTarget && !s.lockedTarget.isActive) {
+        if (!this._isTargetValid(s.lockedTarget, refPos)) {
+            if (s.lockedTarget && s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
             const next = this._pick8xNewTarget(refPos, now);
             if (next) {
                 s.lockedTarget = next;
@@ -11617,31 +11621,6 @@ const TargetingService = {
                 this.reset();
                 this._initFromCannon();
                 return { target: null, canFire: false };
-            }
-        }
-
-        if (s.lockedTarget && s.lockedTarget.isActive && (s.phase === 'firing' || s.phase === 'locking')) {
-            const lockTime = now - s.lockStartMs;
-            const outOfCone = !this._isInAutoFireCone(s.lockedTarget.group.position, refPos);
-            if (outOfCone || s.shotsAtCurrent >= c.maxShotsPerTarget || (lockTime > c.maxLockTimeMs && s.shotsAtCurrent >= c.minShotsBeforeDrop)) {
-                if (s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
-                const next = this._pick8xNewTarget(refPos, now);
-                if (next && next !== s.lockedTarget) {
-                    s.lockedTarget = next;
-                    s.phase = 'transition';
-                    s.phaseStart = now;
-                    s.startYaw = s.currentYaw;
-                    s.startPitch = s.currentPitch;
-                    s.lockStartMs = now;
-                    s.shotsAtCurrent = 0;
-                } else if (!next) {
-                    this.reset();
-                    this._initFromCannon();
-                    return { target: null, canFire: false };
-                } else {
-                    s.lockStartMs = now;
-                    s.shotsAtCurrent = 0;
-                }
             }
         }
 
@@ -11704,23 +11683,6 @@ const TargetingService = {
 
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
-
-        if (canFire && fish) {
-            if (gameState.autoShoot) {
-                const gateOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
-                const fwd = new THREE.Vector3();
-                this._getCannonForward(fwd);
-                if (!this._rayHitsTargetFish(gateOrigin, fwd, fish)) canFire = false;
-            } else {
-                const crosshairDir = getCrosshairRay();
-                if (crosshairDir) {
-                    const gateOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
-                    if (!this._rayHitsTargetFish(gateOrigin, crosshairDir, fish)) canFire = false;
-                } else {
-                    canFire = false;
-                }
-            }
-        }
 
         return { target: fish, canFire };
     },
@@ -11803,15 +11765,13 @@ function autoFireAtFish(targetFish) {
     cannonMuzzle.getWorldPosition(muzzlePos);
     
     let direction;
-    if (weapon.type === 'laser') {
-        if (gameState.autoShoot && targetFish) {
-            direction = autoFireTempVectors.direction;
-            const aimOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
-            direction.copy(targetFish.group.position).sub(aimOrigin).normalize();
-        } else {
-            direction = getCrosshairRay();
-            if (!direction) return false;
-        }
+    if (gameState.autoShoot && targetFish) {
+        direction = autoFireTempVectors.direction;
+        const aimOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
+        direction.copy(targetFish.group.position).sub(aimOrigin).normalize();
+    } else if (weapon.type === 'laser') {
+        direction = getCrosshairRay();
+        if (!direction) return false;
     } else {
         direction = autoFireTempVectors.direction;
         const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
