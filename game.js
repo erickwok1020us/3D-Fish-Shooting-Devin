@@ -11864,8 +11864,9 @@ const TargetingService = {
         pitchMin:  -29.75 * (Math.PI / 180),
         searchConeAngle: 60,
         hitscanFireGate: 8,
-        autoFireAlignGate: 6,
-        trackSpeed: 48.0,
+        autoFireAlignGate: 3,
+        trackSpeed: 25,
+        lerpSmoothing: 0.15,
         maxRotSpeed: 4.0,
         initialLockMs: 250,
         transitionMs:  200,
@@ -12180,7 +12181,7 @@ const TargetingService = {
             s.currentPitch = s.startPitch  + dPitch;
             if (t >= 1) { s.phase = 'firing'; }
         } else if (s.phase === 'firing') {
-            const factor = 1 - Math.exp(-c.trackSpeed / 60);
+            const factor = c.lerpSmoothing;
             let dYaw   = this._wrapDelta(clampedYaw - s.currentYaw)   * factor;
             let dPitch = (clampedPitch - s.currentPitch) * factor;
             dYaw   = this._clampRotDelta(dYaw,   maxStep);
@@ -12202,7 +12203,7 @@ const TargetingService = {
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
 
-        if (s.phase === 'firing' || s.phase === 'locking' || s.phase === 'transition') {
+        if (s.phase === 'firing') {
             const fwd = this._getCannonForward(new THREE.Vector3());
             const toFish = fish.group.position.clone().sub(muzzlePos).normalize();
             const dot = fwd.dot(toFish);
