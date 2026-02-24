@@ -10231,6 +10231,11 @@ function initGameScene() {
         stopVideoBackground();
         var gc = document.getElementById('game-container');
         if (gc) gc.style.display = 'block';
+        var ls = document.getElementById('loading-screen');
+        if (ls) {
+            ls.style.display = 'none';
+            ls.style.pointerEvents = 'none';
+        }
         gameState.isInGameScene = true;
         initKillFeedSlots();
         var vTag = document.getElementById('pr-version-tag');
@@ -10250,25 +10255,7 @@ function initGameScene() {
         
         createCannon();
         showRmbZoomHint();
-        
-        var mapWaitStart = performance.now();
-        function waitForMapRender() {
-            if (window._mapAddedToScene || (performance.now() - mapWaitStart > 30000)) {
-                requestAnimationFrame(function() {
-                    requestAnimationFrame(function() {
-                        var ls = document.getElementById('loading-screen');
-                        if (ls) {
-                            ls.style.display = 'none';
-                            ls.style.pointerEvents = 'none';
-                        }
-                    });
-                });
-                return;
-            }
-            requestAnimationFrame(waitForMapRender);
-        }
-        requestAnimationFrame(waitForMapRender);
-    }, 500);
+    }, 100);
 }
 
 function showWeaponPicker() {

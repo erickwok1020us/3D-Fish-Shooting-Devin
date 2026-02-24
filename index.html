@@ -1151,6 +1151,7 @@
             letter-spacing: 2px;
             text-transform: uppercase;
             text-shadow: 0 0 8px rgba(0, 200, 255, 0.3);
+            pointer-events: none;
         }
         .loading-container .qs-divider {
             display: none;
@@ -1657,19 +1658,24 @@
             text-transform: uppercase;
             text-shadow: 0 0 14px rgba(0, 255, 255, 0.55);
             cursor: pointer;
-            transition: all 0.25s ease;
+            transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
             box-shadow: 0 0 10px rgba(0, 220, 255, 0.08);
             opacity: 0;
             transform: translateY(6px);
+            position: relative;
+            z-index: 10;
+            pointer-events: auto;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
         }
         #qs-start-game:hover {
             border-color: rgba(0, 200, 255, 0.4);
             background: rgba(0, 30, 70, 0.4);
             box-shadow: 0 0 18px rgba(0, 220, 255, 0.16);
-            transform: scale(1.01);
         }
         #qs-start-game:active {
-            transform: scale(0.99);
+            transform: scale(0.95);
+            transition: transform 0.05s ease;
         }
         @keyframes startGameFadeIn {
             from { opacity: 0; transform: translateY(6px); }
@@ -1712,6 +1718,11 @@
     <div id="loading-screen">
         <div class="loading-container">
             <img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img">
+            <div id="loading-bar">
+                <div id="loading-progress"></div>
+            </div>
+            <div id="loading-text">Loading...</div>
+            <button id="qs-start-game">Start Game</button>
             <div id="quality-selector">
                 <div class="qs-buttons">
                     <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
@@ -1729,18 +1740,13 @@
                     <div class="qs-detail" data-quality="medium"></div>
                     <div class="qs-detail" data-quality="high"></div>
                 </div>
-                <div class="qs-remember">
-                    <label class="qs-remember-label">
-                        <input type="checkbox" id="qs-remember-choice">
-                        Remember my choice
-                    </label>
-                </div>
             </div>
-            <div id="loading-bar">
-                <div id="loading-progress"></div>
+            <div class="qs-remember">
+                <label class="qs-remember-label">
+                    <input type="checkbox" id="qs-remember-choice">
+                    Remember my choice
+                </label>
             </div>
-            <div id="loading-text">Loading...</div>
-            <button id="qs-start-game">Start Game</button>
         </div>
     </div>
     
@@ -2250,10 +2256,18 @@
                 };
 
                 if (startBtn) {
-                    startBtn.addEventListener('click', function() {
+                    startBtn.addEventListener('pointerdown', function(e) {
                         if (!startReady) return;
+                        e.preventDefault();
                         window._loadingScreenLocked = true;
                         window._isGameStarted = true;
+                        var ls = document.getElementById('loading-screen');
+                        if (ls) {
+                            ls.style.display = 'none';
+                            ls.style.pointerEvents = 'none';
+                        }
+                        var gc = document.getElementById('game-container');
+                        if (gc) gc.style.display = 'block';
                         if (typeof window.startSinglePlayerGame === 'function') {
                             window.startSinglePlayerGame();
                         }
