@@ -20277,7 +20277,7 @@ function updateBossWaitingTimerUI(secondsLeft) {
     
     if (s > 0 && !gameState.bossActive) {
         if (timerText) timerText.textContent = `${s}s`;
-        bossWaitingUI.style.display = 'block';
+        bossWaitingUI.style.display = 'flex';
         
         if (s <= 10) {
             bossWaitingUI.style.borderColor = 'rgba(255, 50, 0, 0.7)';
