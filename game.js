@@ -7010,6 +7010,26 @@ function drawCrosshairB(ctx, w, h, cx, cy, time, dt) {
     }
 }
 
+function _drawXCrossHit(ctx, px, py, hitT, radius) {
+    var armLen = radius * 0.85;
+    var gap = radius * 0.35;
+    var alpha = hitT * 0.9;
+    var expand = (1 - hitT) * 3;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,30,60,' + alpha.toFixed(2) + ')';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(255,20,60,0.7)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(px - gap, py - gap); ctx.lineTo(px - armLen - expand, py - armLen - expand);
+    ctx.moveTo(px + gap, py - gap); ctx.lineTo(px + armLen + expand, py - armLen - expand);
+    ctx.moveTo(px + gap, py + gap); ctx.lineTo(px + armLen + expand, py + armLen + expand);
+    ctx.moveTo(px - gap, py + gap); ctx.lineTo(px - armLen - expand, py + armLen + expand);
+    ctx.stroke();
+    ctx.restore();
+}
+
 function _drawTechCircleLane(ctx, px, py, radius, laneIdx, isCenter) {
     var alpha = isCenter ? 0.5 : 0.4;
     var col = _getLaneColor(laneIdx, alpha);
@@ -7046,12 +7066,8 @@ function _drawTechCircleLane(ctx, px, py, radius, laneIdx, isCenter) {
     }
     ctx.fillStyle = pelletStates[laneIdx].hit ? 'rgba(255,100,120,0.95)' : 'rgba(255,255,255,0.9)';
     ctx.beginPath(); ctx.arc(px, py, 1.5, 0, Math.PI * 2); ctx.fill();
-    if (pelletStates[laneIdx].hit) {
-        var hitT = pelletStates[laneIdx].timer / 250;
-        var ringR = radius + (1 - hitT) * 8;
-        ctx.strokeStyle = 'rgba(255,40,60,' + (hitT * 0.7).toFixed(2) + ')';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(px, py, ringR, 0, Math.PI * 2); ctx.stroke();
+    if (pelletStates[laneIdx].hit && !pelletStates[laneIdx].kill) {
+        _drawXCrossHit(ctx, px, py, pelletStates[laneIdx].timer / 250, radius);
     }
 }
 
@@ -7080,22 +7096,8 @@ function _draw3xBracket(ctx, cx, cy, spread, time) {
         ctx.stroke();
         ctx.fillStyle = pelletStates[i].hit ? 'rgba(255,100,120,0.95)' : 'rgba(255,255,255,0.9)';
         ctx.beginPath(); ctx.arc(px, cy, 1.5, 0, Math.PI * 2); ctx.fill();
-        if (pelletStates[i].hit) {
-            var hitT = pelletStates[i].timer / 250;
-            ctx.strokeStyle = 'rgba(255,40,60,' + (hitT * 0.8).toFixed(2) + ')';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(px - bw * 1.2, cy - bh * (1 + (1 - hitT) * 0.3));
-            ctx.lineTo(px, cy - bh * (1 + (1 - hitT) * 0.3));
-            ctx.lineTo(px, cy + bh * (1 + (1 - hitT) * 0.3));
-            ctx.lineTo(px - bw * 1.2, cy + bh * (1 + (1 - hitT) * 0.3));
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(px + bw * 1.2, cy - bh * (1 + (1 - hitT) * 0.3));
-            ctx.lineTo(px, cy - bh * (1 + (1 - hitT) * 0.3));
-            ctx.lineTo(px, cy + bh * (1 + (1 - hitT) * 0.3));
-            ctx.lineTo(px + bw * 1.2, cy + bh * (1 + (1 - hitT) * 0.3));
-            ctx.stroke();
+        if (pelletStates[i].hit && !pelletStates[i].kill) {
+            _drawXCrossHit(ctx, px, cy, pelletStates[i].timer / 250, bh * 0.7);
         }
     }
     ctx.strokeStyle = _getLaneColor(1, 0.25);
@@ -7145,12 +7147,8 @@ function _draw3xWideCircle(ctx, cx, cy, spread, time) {
         ctx.stroke();
         ctx.fillStyle = pelletStates[i].hit ? 'rgba(255,100,120,0.95)' : 'rgba(255,255,255,0.9)';
         ctx.beginPath(); ctx.arc(px, cy, 1.5, 0, Math.PI * 2); ctx.fill();
-        if (pelletStates[i].hit) {
-            var hitT = pelletStates[i].timer / 250;
-            var ringR = 10 + (1 - hitT) * 6;
-            ctx.strokeStyle = 'rgba(255,40,60,' + (hitT * 0.6).toFixed(2) + ')';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(px, cy, ringR, 0, Math.PI * 2); ctx.stroke();
+        if (pelletStates[i].hit && !pelletStates[i].kill) {
+            _drawXCrossHit(ctx, px, cy, pelletStates[i].timer / 250, 10);
         }
     }
     ctx.strokeStyle = _getLaneColor(1, 0.5);
@@ -7329,22 +7327,25 @@ function showCrosshairRingFlash(spreadIndex) {
             cy = chEl ? (parseFloat(chEl.style.top) || window.innerHeight / 2) : window.innerHeight / 2;
         }
     }
-    const ring = document.createElement('div');
-    const ringSz = 24;
-    ring.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:${ringSz}px;height:${ringSz}px;border:1.5px solid rgba(255,20,60,0.95);border-radius:50%;background:transparent;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;box-shadow:0 0 6px rgba(255,20,60,0.7),0 0 12px rgba(255,60,80,0.35);`;
-    document.body.appendChild(ring);
+    const xEl = document.createElement('div');
+    const armLen = 14;
+    const gap = 6;
+    xEl.innerHTML = `<svg width="${armLen*2+4}" height="${armLen*2+4}" viewBox="0 0 ${armLen*2+4} ${armLen*2+4}" style="overflow:visible"><g stroke="rgba(255,30,60,0.92)" stroke-width="3" stroke-linecap="round" filter="url(#xglow)"><defs><filter id="xglow"><feGaussianBlur stdDeviation="2.5" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><line x1="${armLen+2-gap}" y1="${armLen+2-gap}" x2="${armLen+2-armLen}" y2="${armLen+2-armLen}"/><line x1="${armLen+2+gap}" y1="${armLen+2-gap}" x2="${armLen+2+armLen}" y2="${armLen+2-armLen}"/><line x1="${armLen+2+gap}" y1="${armLen+2+gap}" x2="${armLen+2+armLen}" y2="${armLen+2+armLen}"/><line x1="${armLen+2-gap}" y1="${armLen+2+gap}" x2="${armLen+2-armLen}" y2="${armLen+2+armLen}"/></g></svg>`;
+    xEl.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%);pointer-events:none;z-index:10001;`;
+    xEl.classList.add('xcross-hit-marker');
+    document.body.appendChild(xEl);
     if (targetEl) {
         targetEl.classList.add('hit-flash');
         setTimeout(function() { targetEl.classList.remove('hit-flash'); }, 250);
     }
     const startT = performance.now();
-    function animRing(t) {
-        const p = Math.min((t - startT) / 250, 1);
-        ring.style.transform = `translate(-50%,-50%) scale(${1 + p * 0.6})`;
-        ring.style.opacity = String(1 - p * p);
-        if (p < 1) requestAnimationFrame(animRing); else ring.remove();
+    function animX(t) {
+        const p = Math.min((t - startT) / 220, 1);
+        xEl.style.transform = `translate(-50%,-50%) scale(${1 + p * 0.35})`;
+        xEl.style.opacity = String(1 - p * p);
+        if (p < 1) requestAnimationFrame(animX); else xEl.remove();
     }
-    requestAnimationFrame(animRing);
+    requestAnimationFrame(animX);
 }
 
 function showKillSkull(spreadIndex) {
@@ -7361,26 +7362,34 @@ function showKillSkull(spreadIndex) {
         cy = chEl ? (parseFloat(chEl.style.top) || window.innerHeight / 2) : window.innerHeight / 2;
     }
     if (gameState.currentWeapon === '3x' && spreadIndex !== undefined) return;
+    var activeX = document.querySelectorAll('.xcross-hit-marker');
+    for (var xi = 0; xi < activeX.length; xi++) {
+        activeX[xi].style.opacity = '0.1';
+    }
     const skull = document.createElement('div');
-    skull.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="rgba(255,40,60,0.95)"><path d="M12 2C6.48 2 2 6.48 2 12c0 3.07 1.39 5.81 3.57 7.63L5 22h3l.5-2h7l.5 2h3l-.57-2.37C20.61 17.81 22 15.07 22 12c0-5.52-4.48-10-10-10zM8.5 14c-.83 0-1.5-.67-1.5-1.5S7.67 11 8.5 11s1.5.67 1.5 1.5S9.33 14 8.5 14zm7 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
-    skull.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%) scale(0.2);pointer-events:none;z-index:10002;opacity:0;background:transparent;filter:drop-shadow(0 0 6px rgba(255,20,60,0.9)) drop-shadow(0 0 12px rgba(255,60,80,0.5));`;
+    skull.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" fill="rgba(255,40,60,0.95)"><path d="M12 2C6.48 2 2 6.48 2 12c0 3.07 1.39 5.81 3.57 7.63L5 22h3l.5-2h7l.5 2h3l-.57-2.37C20.61 17.81 22 15.07 22 12c0-5.52-4.48-10-10-10zM8.5 14c-.83 0-1.5-.67-1.5-1.5S7.67 11 8.5 11s1.5.67 1.5 1.5S9.33 14 8.5 14zm7 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
+    skull.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%) scale(0.2);pointer-events:none;z-index:10002;opacity:0;background:transparent;filter:drop-shadow(0 0 8px rgba(255,20,60,0.9)) drop-shadow(0 0 16px rgba(255,60,80,0.5));`;
     document.body.appendChild(skull);
     const startT = performance.now();
     function animSkull(t) {
         const elapsed = t - startT;
         const p = Math.min(elapsed / 350, 1);
-        if (p < 0.25) {
-            const ep = p / 0.25;
-            skull.style.transform = `translate(-50%,-50%) scale(${0.2 + ep * 1.2})`;
+        if (p < 0.2) {
+            const ep = p / 0.2;
+            skull.style.transform = `translate(-50%,-50%) scale(${0.2 + ep * 1.3})`;
             skull.style.opacity = String(ep);
+        } else if (p < 0.4) {
+            const ep = (p - 0.2) / 0.2;
+            skull.style.transform = `translate(-50%,-50%) scale(${1.5 - ep * 0.3})`;
+            skull.style.opacity = '1';
         } else {
-            const ep = (p - 0.25) / 0.75;
-            skull.style.transform = `translate(-50%,-50%) scale(${1.4 - ep * 0.4})`;
-            skull.style.opacity = String(1 - ep * 0.05);
+            const ep = (p - 0.4) / 0.6;
+            skull.style.transform = `translate(-50%,-50%) scale(${1.2 - ep * 0.15})`;
+            skull.style.opacity = String(1 - Math.pow(ep, 1.5) * 0.1);
         }
         if (p >= 1) {
-            const fadeP = Math.min((elapsed - 350) / 150, 1);
-            skull.style.opacity = String(0.95 * (1 - fadeP));
+            const fadeP = Math.min((elapsed - 350) / 180, 1);
+            skull.style.opacity = String(0.9 * (1 - fadeP));
             if (fadeP >= 1) { skull.remove(); return; }
         }
         requestAnimationFrame(animSkull);
