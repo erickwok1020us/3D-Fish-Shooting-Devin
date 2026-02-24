@@ -1131,7 +1131,7 @@
             border: 1px solid rgba(0, 200, 255, 0.12);
             border-radius: 3px;
             overflow: hidden;
-            margin-top: 12px;
+            margin-top: 4px;
         }
         
         #loading-progress {
@@ -1156,78 +1156,6 @@
             display: none;
         }
         
-        /* Map Loading Overlay - transparent background to show video behind */
-        #map-loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            /* FIX: Use transparent background so video shows through like home page */
-            background: transparent;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-        }
-        
-        /* Map Loading Container - Box frame like lobby */
-        .map-loading-container {
-            background: rgba(0, 0, 0, 0.75);
-            border: 2px solid rgba(100, 150, 255, 0.3);
-            border-radius: 20px;
-            padding: 30px 20px;
-            min-width: 500px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(100, 150, 255, 0.2);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            transform: scale(var(--ui-scale));
-            transform-origin: center;
-        }
-        
-        #map-loading-overlay .game-title-img {
-            max-width: 95%;
-            width: 460px;
-            height: auto;
-            margin-bottom: 20px;
-            animation: titleShake 0.5s ease-in-out infinite;
-        }
-        
-        #map-loading-overlay .loading-info {
-            color: #87ceeb;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-        
-        #map-loading-bar-container {
-            width: 400px;
-            height: 12px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 6px;
-            overflow: hidden;
-            margin-bottom: 15px;
-        }
-        
-        #map-loading-bar {
-            width: 0%;
-            height: 100%;
-            background: linear-gradient(90deg, #00bfff, #00ff88);
-            transition: width 0.2s ease;
-        }
-        
-        #map-loading-percent {
-            color: #00ff88;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        
-        #map-loading-size {
-            color: #6699aa;
-            font-size: 12px;
-            margin-top: 10px;
-        }
         
         
         /* Issue #5: Rare Fish Effects */
@@ -1784,6 +1712,11 @@
     <div id="loading-screen">
         <div class="loading-container">
             <img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img">
+            <div id="loading-bar">
+                <div id="loading-progress"></div>
+            </div>
+            <div id="loading-text">Loading...</div>
+            <button id="qs-start-game">Start Game</button>
             <div id="quality-selector">
                 <div class="qs-buttons">
                     <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
@@ -1808,26 +1741,9 @@
                     </label>
                 </div>
             </div>
-            <div id="loading-bar">
-                <div id="loading-progress"></div>
-            </div>
-            <div id="loading-text">Loading...</div>
-            <button id="qs-start-game">Start Game</button>
         </div>
     </div>
     
-    <!-- Map Loading Overlay -->
-    <div id="map-loading-overlay">
-        <div class="map-loading-container">
-            <img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img">
-            <div class="loading-info">Please wait while the underwater world loads...</div>
-            <div id="map-loading-bar-container">
-                <div id="map-loading-bar"></div>
-            </div>
-            <div id="map-loading-percent">0%</div>
-            <div id="map-loading-size">268 MB</div>
-        </div>
-    </div>
     
     <div id="pr-version-tag">PR #479</div>
     
@@ -2336,6 +2252,7 @@
                 if (startBtn) {
                     startBtn.addEventListener('click', function() {
                         if (!startReady) return;
+                        window._loadingScreenLocked = true;
                         loadingScreen.style.display = 'none';
                         gameContainer.style.display = 'block';
                         if (typeof window.startSinglePlayerGame === 'function') {
