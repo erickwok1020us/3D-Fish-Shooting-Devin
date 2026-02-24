@@ -7436,7 +7436,7 @@ function _showGoldSpring(intAmount) {
     _rewardPopupYOffset++;
     if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
     _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 10 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:#ffd700;-webkit-text-stroke:1.5px #fff;text-shadow:0 0 16px rgba(255,215,0,0.9),0 2px 4px rgba(0,0,0,0.6);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
+    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 10 - yOff}px;font-family:'Orbitron',monospace;font-size:26px;font-weight:800;color:#ffd740;-webkit-text-stroke:2.5px rgba(0,0,0,0.7);text-shadow:0 0 14px rgba(255,215,0,0.8),0 2px 4px rgba(0,0,0,0.6);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
     document.body.appendChild(popup);
     const startT = performance.now();
     function animGold(t) {
@@ -7478,7 +7478,7 @@ function _showArcadeJump(intAmount) {
     _rewardPopupYOffset++;
     if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
     _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 5 - yOff}px;font-family:'Orbitron',monospace;font-size:42px;font-weight:900;color:#ffd700;-webkit-text-stroke:3px #000;text-shadow:0 0 16px rgba(255,215,0,0.8),0 3px 6px rgba(0,0,0,0.7);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
+    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 5 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:800;color:#ffd740;-webkit-text-stroke:2.5px rgba(0,0,0,0.7);text-shadow:0 0 14px rgba(255,215,0,0.8),0 3px 6px rgba(0,0,0,0.7);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
     document.body.appendChild(popup);
     const startT = performance.now();
     const duration = 1400;
@@ -7513,7 +7513,7 @@ function _showNeonPulse(intAmount) {
     _rewardPopupYOffset++;
     if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
     _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 12 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:#39ff14;text-shadow:0 0 10px #39ff14,0 0 20px #39ff14,0 0 40px rgba(57,255,20,0.4);pointer-events:none;z-index:99999;white-space:nowrap;`;
+    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 12 - yOff}px;font-family:'Orbitron',monospace;font-size:26px;font-weight:800;color:#39ff14;-webkit-text-stroke:2px rgba(0,0,0,0.5);text-shadow:0 0 10px #39ff14,0 0 20px #39ff14,0 0 40px rgba(57,255,20,0.4);pointer-events:none;z-index:99999;white-space:nowrap;`;
     document.body.appendChild(popup);
     const startT = performance.now();
     const duration = 1600;
@@ -20222,41 +20222,49 @@ function createBossWaitingUI() {
         pointer-events: none;
         text-align: center;
         display: none;
-        background: linear-gradient(180deg, rgba(0, 15, 35, 0.92), rgba(0, 8, 22, 0.95));
-        border: 2px solid rgba(255, 200, 0, 0.5);
-        border-radius: 8px;
-        padding: 10px 28px;
-        box-shadow: 0 0 24px rgba(255, 200, 0, 0.18), inset 0 0 15px rgba(255, 200, 0, 0.05);
+        width: 200px;
+        height: 66px;
+        border-radius: 33px;
+        background: linear-gradient(165deg, rgba(22, 14, 2, 0.6) 0%, rgba(10, 6, 0, 0.7) 50%, rgba(16, 10, 2, 0.62) 100%);
+        border: 1px solid rgba(255, 170, 40, 0.2);
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 6px 24px rgba(255, 140, 0, 0.08), 0 0 16px rgba(255, 120, 0, 0.04), inset 0 1px 0 rgba(255, 220, 100, 0.08), inset 0 0 25px rgba(255, 130, 0, 0.03);
         font-family: 'Orbitron', monospace;
+        padding: 0;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
     `;
     
     // Timer text
     const timerText = document.createElement('div');
     timerText.id = 'boss-waiting-text';
     timerText.style.cssText = `
-        font-size: 20px;
-        font-weight: 900;
-        font-family: 'Orbitron', monospace;
-        color: #ffdd00;
-        text-shadow: 0 0 12px rgba(255, 200, 0, 0.5), 0 0 24px rgba(255, 200, 0, 0.15);
-        letter-spacing: 2px;
-        -webkit-text-stroke: 0.5px rgba(255, 200, 0, 0.3);
-    `;
-    bossWaitingUI.appendChild(timerText);
-    
-    // Label text
-    const labelText = document.createElement('div');
-    labelText.style.cssText = `
-        font-size: 8px;
+        font-size: 26px;
         font-weight: 700;
         font-family: 'Orbitron', monospace;
-        color: rgba(255, 200, 0, 0.6);
+        color: #ffd040;
+        text-shadow: 0 0 12px rgba(255, 190, 0, 0.5), 0 0 30px rgba(255, 140, 0, 0.15);
         letter-spacing: 2px;
-        text-transform: uppercase;
-        margin-top: 4px;
+        line-height: 1;
     `;
-    labelText.textContent = 'NEXT BOSS';
+    // Label text (top line)
+    const labelText = document.createElement('div');
+    labelText.style.cssText = `
+        font-size: 11px;
+        font-weight: 600;
+        font-family: 'Orbitron', monospace;
+        color: #c89828;
+        letter-spacing: 5px;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+        text-shadow: 0 0 6px rgba(255, 180, 40, 0.2);
+    `;
+    labelText.textContent = 'BOSS TIMER';
     bossWaitingUI.appendChild(labelText);
+    
+    // Timer value (bottom line)
+    bossWaitingUI.appendChild(timerText);
     
     document.body.appendChild(bossWaitingUI);
 }
@@ -20272,7 +20280,7 @@ function updateBossWaitingTimerUI(secondsLeft) {
     
     if (s > 0 && !gameState.bossActive) {
         if (timerText) timerText.textContent = `${s}s`;
-        bossWaitingUI.style.display = 'block';
+        bossWaitingUI.style.display = 'flex';
         
         if (s <= 10) {
             bossWaitingUI.style.borderColor = 'rgba(255, 50, 0, 0.7)';
