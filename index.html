@@ -1698,6 +1698,32 @@
             box-shadow: 0 0 8px #00d4ff;
             border-radius: 1px;
         }
+
+        .qs-remember {
+            display: flex;
+            justify-content: center;
+            margin-top: 6px;
+            width: 100%;
+        }
+        .qs-remember-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Orbitron', monospace;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1.2px;
+            color: rgba(0, 200, 255, 0.55);
+            cursor: pointer;
+            user-select: none;
+            text-transform: uppercase;
+        }
+        #qs-remember-choice {
+            width: 14px;
+            height: 14px;
+            accent-color: #00d4ff;
+        }
+
         #qs-start-game {
             display: none;
             width: 100%;
@@ -1716,6 +1742,8 @@
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 0 20px rgba(0, 255, 150, 0.15);
+            opacity: 0;
+            transform: translateY(6px);
         }
         #qs-start-game:hover {
             background: linear-gradient(135deg, rgba(0, 220, 120, 0.45), rgba(0, 200, 100, 0.3));
@@ -1726,13 +1754,19 @@
         #qs-start-game:active {
             transform: scale(0.98);
         }
+        @keyframes startGameFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
         @keyframes startGamePulse {
             0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 150, 0.15); }
             50% { box-shadow: 0 0 30px rgba(0, 255, 150, 0.35), 0 0 60px rgba(0, 255, 150, 0.1); }
         }
         #qs-start-game.ready {
             display: block;
-            animation: startGamePulse 2s ease-in-out infinite;
+            opacity: 1;
+            transform: translateY(0);
+            animation: startGameFadeIn 0.45s ease-out both, startGamePulse 2s ease-in-out infinite 0.45s;
         }
 
         @media (max-width: 520px) {
@@ -1785,6 +1819,12 @@
                         <span class="qs-btn-label">HIGH</span>
                         <span class="qs-btn-fps">Best Visuals</span>
                     </button>
+                </div>
+                <div class="qs-remember">
+                    <label class="qs-remember-label">
+                        <input type="checkbox" id="qs-remember-choice">
+                        Remember my choice
+                    </label>
                 </div>
             </div>
         </div>
@@ -2090,16 +2130,16 @@
         window.deferLobbyUntilStart = true;
         var QS_DESCRIPTIONS = {
             low: {
-                desktop: 'Integrated GPU / i3',
-                mobile: 'Entry-level / Older Phones'
+                desktop: 'Integrated GPU',
+                mobile: 'Older Phones'
             },
             medium: {
-                desktop: 'GTX 1050 / i5',
-                mobile: 'iPhone 12-14 / Mid-range Android'
+                desktop: 'i5 + GTX 1050',
+                mobile: 'iPhone 12-14'
             },
             high: {
-                desktop: 'RTX 2060 / M1+ / i7',
-                mobile: 'iPhone 15 Pro / Flagship Tablets'
+                desktop: 'i7 + RTX 2060',
+                mobile: 'iPhone 15+ Flagship'
             }
         };
 
@@ -2172,16 +2212,53 @@
             btns.forEach(function(b) { b.classList.remove('active'); });
             var target = document.querySelector('.qs-btn[data-quality="' + quality + '"]');
             if (target) target.classList.add('active');
-            try { localStorage.setItem('graphicsQuality', quality); } catch(e) {}
+
             window._selectedLoadingQuality = quality;
+
+            var rememberEl = document.getElementById('qs-remember-choice');
+            var remember = !!(rememberEl && rememberEl.checked);
+            if (remember) {
+                try {
+                    localStorage.setItem('rememberGraphicsQuality', '1');
+                    localStorage.setItem('graphicsQuality', quality);
+                } catch(e) {}
+            } else {
+                try { localStorage.removeItem('graphicsQuality'); } catch(e) {}
+            }
+
             var graphicsSelect = document.getElementById('graphics-quality');
             if (graphicsSelect) graphicsSelect.value = quality;
         };
 
         function initQualitySelector() {
+            var remember = false;
+            try { remember = localStorage.getItem('rememberGraphicsQuality') === '1'; } catch(e) {}
+            if (!remember) {
+                try { localStorage.removeItem('graphicsQuality'); } catch(e) {}
+            }
+
+            var rememberEl = document.getElementById('qs-remember-choice');
+            if (rememberEl) {
+                rememberEl.checked = remember;
+                rememberEl.addEventListener('change', function() {
+                    var on = !!rememberEl.checked;
+                    try {
+                        if (on) {
+                            localStorage.setItem('rememberGraphicsQuality', '1');
+                            if (window._selectedLoadingQuality) {
+                                localStorage.setItem('graphicsQuality', window._selectedLoadingQuality);
+                            }
+                        } else {
+                            localStorage.removeItem('rememberGraphicsQuality');
+                            localStorage.removeItem('graphicsQuality');
+                        }
+                    } catch(e) {}
+                });
+            }
+
             var saved = null;
             try { saved = localStorage.getItem('graphicsQuality'); } catch(e) {}
-            var initial = (saved && ['low','medium','high'].indexOf(saved) !== -1) ? saved : 'medium';
+            var initial = (remember && saved && ['low','medium','high'].indexOf(saved) !== -1) ? saved : 'medium';
             updateDescriptions(initial);
             window.selectLoadingQuality(initial);
         }
