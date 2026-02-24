@@ -1698,64 +1698,41 @@
             box-shadow: 0 0 8px #00d4ff;
             border-radius: 1px;
         }
-        .qs-device-info {
-            background: rgba(0, 15, 35, 0.5);
-            border: 1px solid rgba(0, 200, 255, 0.12);
-            border-radius: 6px;
-            padding: 10px 12px;
-            margin-top: 2px;
+        #qs-start-game {
+            display: none;
             width: 100%;
-            box-sizing: border-box;
-        }
-        .qs-device-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 4px;
-        }
-        .qs-device-row:last-child { margin-bottom: 0; }
-        .qs-device-icon {
-            font-size: 11px;
-            width: 18px;
-            text-align: center;
-            flex-shrink: 0;
-        }
-        .qs-device-label {
-            font-size: 8px;
-            font-weight: 600;
-            color: rgba(0, 200, 255, 0.5);
-            letter-spacing: 1px;
-            min-width: 62px;
+            padding: 14px 0;
+            margin-top: 14px;
+            background: linear-gradient(135deg, rgba(0, 200, 100, 0.35), rgba(0, 180, 80, 0.2));
+            border: 2px solid rgba(0, 255, 150, 0.5);
+            border-radius: 10px;
+            color: #00ffaa;
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 3px;
             text-transform: uppercase;
+            text-shadow: 0 0 12px rgba(0, 255, 170, 0.5);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 255, 150, 0.15);
         }
-        .qs-device-value {
-            font-size: 8px;
-            font-weight: 500;
-            color: rgba(255, 255, 255, 0.55);
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+        #qs-start-game:hover {
+            background: linear-gradient(135deg, rgba(0, 220, 120, 0.45), rgba(0, 200, 100, 0.3));
+            border-color: rgba(0, 255, 170, 0.7);
+            box-shadow: 0 0 30px rgba(0, 255, 150, 0.3);
+            transform: scale(1.02);
         }
-        .qs-gpu-detected {
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid rgba(0, 200, 255, 0.1);
-            text-align: center;
-            width: 100%;
+        #qs-start-game:active {
+            transform: scale(0.98);
         }
-        .qs-gpu-tag {
-            display: inline-block;
-            font-size: 7px;
-            font-weight: 700;
-            letter-spacing: 1.5px;
-            color: rgba(0, 255, 204, 0.7);
-            background: rgba(0, 255, 204, 0.08);
-            border: 1px solid rgba(0, 255, 204, 0.2);
-            border-radius: 3px;
-            padding: 3px 10px;
-            text-transform: uppercase;
-            text-shadow: 0 0 6px rgba(0, 255, 204, 0.3);
+        @keyframes startGamePulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 150, 0.15); }
+            50% { box-shadow: 0 0 30px rgba(0, 255, 150, 0.35), 0 0 60px rgba(0, 255, 150, 0.1); }
+        }
+        #qs-start-game.ready {
+            display: block;
+            animation: startGamePulse 2s ease-in-out infinite;
         }
 
         @media (max-width: 520px) {
@@ -1769,8 +1746,7 @@
             }
             .qs-btn .qs-btn-label { font-size: 11px; }
             .qs-btn .qs-btn-fps { font-size: 7px; }
-            .qs-device-label { min-width: 50px; font-size: 7px; }
-            .qs-device-value { font-size: 7px; }
+            #qs-start-game { font-size: 12px; letter-spacing: 2px; padding: 12px 0; }
         }
     </style>
 </head>
@@ -1809,26 +1785,7 @@
                         <span class="qs-btn-fps">Best Visuals</span>
                     </button>
                 </div>
-                <div class="qs-device-info">
-                    <div class="qs-device-row">
-                        <span class="qs-device-icon">&#x1F4BB;</span>
-                        <span class="qs-device-label" id="qs-platform-label">Platform</span>
-                        <span class="qs-device-value" id="qs-platform-value">Detecting...</span>
-                    </div>
-                    <div class="qs-device-row">
-                        <span class="qs-device-icon">&#x1F3AE;</span>
-                        <span class="qs-device-label" id="qs-gpu-label">GPU</span>
-                        <span class="qs-device-value" id="qs-gpu-value">Detecting...</span>
-                    </div>
-                    <div class="qs-device-row">
-                        <span class="qs-device-icon">&#x1F4CA;</span>
-                        <span class="qs-device-label">Recommend</span>
-                        <span class="qs-device-value" id="qs-recommend-value">Detecting...</span>
-                    </div>
-                </div>
-                <div class="qs-gpu-detected" id="qs-gpu-detected" style="display:none;">
-                    <span class="qs-gpu-tag" id="qs-gpu-tag"></span>
-                </div>
+                <button id="qs-start-game">Start Game</button>
             </div>
         </div>
     </div>
@@ -2130,6 +2087,7 @@
     <!-- Quality Selector Logic (runs before game.js) -->
     <script>
     (function() {
+        window.deferLobbyUntilStart = true;
         var QS_DESCRIPTIONS = {
             low: {
                 desktop: 'Integrated GPU / i3',
@@ -2221,31 +2179,10 @@
         };
 
         function initQualitySelector() {
-            var platform = detectPlatform();
-            var gpu = detectGPU();
-            var recommended = recommendQuality(gpu);
-
-            var platformEl = document.getElementById('qs-platform-value');
-            var gpuEl = document.getElementById('qs-gpu-value');
-            var recommendEl = document.getElementById('qs-recommend-value');
-            var gpuDetected = document.getElementById('qs-gpu-detected');
-            var gpuTag = document.getElementById('qs-gpu-tag');
-
-            if (platformEl) platformEl.textContent = getPlatformLabel(platform);
-            if (gpuEl) gpuEl.textContent = gpu ? gpu.renderer : 'Not available';
-            if (recommendEl) recommendEl.textContent = recommended.charAt(0).toUpperCase() + recommended.slice(1);
-
-            if (gpu && gpu.renderer && gpu.renderer !== 'Unknown' && gpuDetected && gpuTag) {
-                var short = gpu.renderer.length > 40 ? gpu.renderer.substring(0, 37) + '...' : gpu.renderer;
-                gpuTag.textContent = 'Auto-detected: ' + short;
-                gpuDetected.style.display = 'block';
-            }
-
-            updateDescriptions(recommended);
-
             var saved = null;
             try { saved = localStorage.getItem('graphicsQuality'); } catch(e) {}
-            var initial = (saved && ['low','medium','high'].indexOf(saved) !== -1) ? saved : recommended;
+            var initial = (saved && ['low','medium','high'].indexOf(saved) !== -1) ? saved : 'medium';
+            updateDescriptions(initial);
             window.selectLoadingQuality(initial);
         }
 
@@ -2316,20 +2253,37 @@
             let lobbyInitialized = false;
             
             window.addEventListener('load', function() {
+                const startBtn = document.getElementById('qs-start-game');
+                const loadingText = document.getElementById('loading-text');
+
+                let startReady = false;
+                const setReady = function() {
+                    startReady = true;
+                    if (startBtn) startBtn.classList.add('ready');
+                    if (loadingText) loadingText.textContent = 'Ready';
+                };
+
+                if (startBtn) {
+                    startBtn.addEventListener('click', function() {
+                        if (!startReady) return;
+                        initLobby();
+                    });
+                }
+
                 // Wait for game to finish loading
                 const checkLoaded = setInterval(function() {
                     if (typeof window.gameLoaded !== 'undefined' && window.gameLoaded) {
                         clearInterval(checkLoaded);
                         clearTimeout(fallbackTimeout);
-                        initLobby();
+                        setReady();
                     }
                 }, 100);
-                
-                // Fallback: show lobby after 3 seconds
+
+                // Fallback: allow entering lobby even if gameLoaded isn't set
                 const fallbackTimeout = setTimeout(function() {
                     clearInterval(checkLoaded);
-                    initLobby();
-                }, 3000);
+                    setReady();
+                }, 8000);
             });
             
             function initLobby() {
