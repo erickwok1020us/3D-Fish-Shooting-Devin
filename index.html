@@ -1079,19 +1079,33 @@
             z-index: 1000;
         }
         
-        /* Loading Screen Container - Box frame like lobby */
+        /* Loading Screen Container - Unified glassmorphism panel */
         .loading-container {
-            background: rgba(0, 0, 0, 0.75);
-            border: 2px solid rgba(100, 150, 255, 0.3);
-            border-radius: 20px;
-            padding: 30px 20px;
+            background: rgba(0, 10, 25, 0.55);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(0, 200, 255, 0.3);
+            border-radius: 14px;
+            padding: 30px 28px 18px;
             min-width: 500px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(100, 150, 255, 0.2);
+            max-width: 520px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(0, 100, 200, 0.1), inset 0 0 20px rgba(0, 60, 120, 0.06);
             display: flex;
             flex-direction: column;
             align-items: center;
             transform: scale(var(--ui-scale));
             transform-origin: center;
+            font-family: 'Orbitron', monospace;
+            position: relative;
+            overflow: hidden;
+        }
+        .loading-container::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 15%; right: 15%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.45), transparent);
         }
         
         #loading-screen .game-title-img {
@@ -1116,10 +1130,11 @@
         }
         
         #loading-bar {
-            width: 300px;
-            height: 10px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 5px;
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 40, 80, 0.5);
+            border: 1px solid rgba(0, 200, 255, 0.12);
+            border-radius: 3px;
             overflow: hidden;
         }
         
@@ -1131,9 +1146,21 @@
         }
         
         #loading-text {
-            color: #87ceeb;
-            margin-top: 15px;
-            font-size: 14px;
+            color: rgba(0, 200, 255, 0.65);
+            margin-top: 10px;
+            margin-bottom: 16px;
+            font-size: 9px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(0, 200, 255, 0.3);
+        }
+        .loading-container .qs-divider {
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.2), transparent);
+            margin-bottom: 16px;
         }
         
         /* Map Loading Overlay - transparent background to show video behind */
@@ -1580,29 +1607,9 @@
             box-shadow: 0 0 20px rgba(68,221,255,0.3);
         }
 
-        /* ===== Quality Selector on Loading Screen ===== */
+        /* ===== Quality Selector (inside loading-container) ===== */
         #quality-selector {
-            margin-top: 24px;
-            background: rgba(0, 10, 25, 0.55);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1.5px solid rgba(0, 200, 255, 0.3);
-            border-radius: 14px;
-            padding: 20px 28px 18px;
-            min-width: 340px;
-            max-width: 480px;
-            width: 90%;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(0, 100, 200, 0.1), inset 0 0 20px rgba(0, 60, 120, 0.06);
-            font-family: 'Orbitron', monospace;
-            position: relative;
-            overflow: hidden;
-        }
-        #quality-selector::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 15%; right: 15%;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.45), transparent);
+            width: 100%;
         }
         #quality-selector .qs-header {
             display: flex;
@@ -1691,27 +1698,29 @@
             box-shadow: 0 0 8px #00d4ff;
             border-radius: 1px;
         }
-        #quality-selector .qs-device-info {
+        .qs-device-info {
             background: rgba(0, 15, 35, 0.5);
             border: 1px solid rgba(0, 200, 255, 0.12);
             border-radius: 6px;
             padding: 10px 12px;
             margin-top: 2px;
+            width: 100%;
+            box-sizing: border-box;
         }
-        #quality-selector .qs-device-row {
+        .qs-device-row {
             display: flex;
             align-items: center;
             gap: 8px;
             margin-bottom: 4px;
         }
-        #quality-selector .qs-device-row:last-child { margin-bottom: 0; }
-        #quality-selector .qs-device-icon {
+        .qs-device-row:last-child { margin-bottom: 0; }
+        .qs-device-icon {
             font-size: 11px;
             width: 18px;
             text-align: center;
             flex-shrink: 0;
         }
-        #quality-selector .qs-device-label {
+        .qs-device-label {
             font-size: 8px;
             font-weight: 600;
             color: rgba(0, 200, 255, 0.5);
@@ -1719,7 +1728,7 @@
             min-width: 62px;
             text-transform: uppercase;
         }
-        #quality-selector .qs-device-value {
+        .qs-device-value {
             font-size: 8px;
             font-weight: 500;
             color: rgba(255, 255, 255, 0.55);
@@ -1728,13 +1737,14 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        #quality-selector .qs-gpu-detected {
+        .qs-gpu-detected {
             margin-top: 8px;
             padding-top: 8px;
             border-top: 1px solid rgba(0, 200, 255, 0.1);
             text-align: center;
+            width: 100%;
         }
-        #quality-selector .qs-gpu-tag {
+        .qs-gpu-tag {
             display: inline-block;
             font-size: 7px;
             font-weight: 700;
@@ -1749,10 +1759,9 @@
         }
 
         @media (max-width: 520px) {
-            #quality-selector {
+            .loading-container {
                 min-width: unset;
-                padding: 16px 16px 14px;
-                margin-top: 16px;
+                padding: 20px 16px 14px;
             }
             .qs-btn {
                 padding: 10px 6px 8px;
@@ -1760,8 +1769,8 @@
             }
             .qs-btn .qs-btn-label { font-size: 11px; }
             .qs-btn .qs-btn-fps { font-size: 7px; }
-            #quality-selector .qs-device-label { min-width: 50px; font-size: 7px; }
-            #quality-selector .qs-device-value { font-size: 7px; }
+            .qs-device-label { min-width: 50px; font-size: 7px; }
+            .qs-device-value { font-size: 7px; }
         }
     </style>
 </head>
@@ -1779,46 +1788,47 @@
                 <div id="loading-progress"></div>
             </div>
             <div id="loading-text">Loading...</div>
-        </div>
-        <div id="quality-selector">
-            <div class="qs-header">
-                <div class="qs-dot"></div>
-                <div class="qs-title">Graphics Quality</div>
-                <div class="qs-line"></div>
-            </div>
-            <div class="qs-buttons">
-                <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
-                    <span class="qs-btn-label">LOW</span>
-                    <span class="qs-btn-fps">80+ FPS</span>
-                </button>
-                <button class="qs-btn active" data-quality="medium" onclick="selectLoadingQuality('medium')">
-                    <span class="qs-btn-label">MEDIUM</span>
-                    <span class="qs-btn-fps">60+ FPS</span>
-                </button>
-                <button class="qs-btn" data-quality="high" onclick="selectLoadingQuality('high')">
-                    <span class="qs-btn-label">HIGH</span>
-                    <span class="qs-btn-fps">Best Visuals</span>
-                </button>
-            </div>
-            <div class="qs-device-info">
-                <div class="qs-device-row">
-                    <span class="qs-device-icon">&#x1F4BB;</span>
-                    <span class="qs-device-label" id="qs-platform-label">Platform</span>
-                    <span class="qs-device-value" id="qs-platform-value">Detecting...</span>
+            <div class="qs-divider"></div>
+            <div id="quality-selector">
+                <div class="qs-header">
+                    <div class="qs-dot"></div>
+                    <div class="qs-title">Graphics Quality</div>
+                    <div class="qs-line"></div>
                 </div>
-                <div class="qs-device-row">
-                    <span class="qs-device-icon">&#x1F3AE;</span>
-                    <span class="qs-device-label" id="qs-gpu-label">GPU</span>
-                    <span class="qs-device-value" id="qs-gpu-value">Detecting...</span>
+                <div class="qs-buttons">
+                    <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
+                        <span class="qs-btn-label">LOW</span>
+                        <span class="qs-btn-fps">80+ FPS</span>
+                    </button>
+                    <button class="qs-btn active" data-quality="medium" onclick="selectLoadingQuality('medium')">
+                        <span class="qs-btn-label">MEDIUM</span>
+                        <span class="qs-btn-fps">60+ FPS</span>
+                    </button>
+                    <button class="qs-btn" data-quality="high" onclick="selectLoadingQuality('high')">
+                        <span class="qs-btn-label">HIGH</span>
+                        <span class="qs-btn-fps">Best Visuals</span>
+                    </button>
                 </div>
-                <div class="qs-device-row">
-                    <span class="qs-device-icon">&#x1F4CA;</span>
-                    <span class="qs-device-label">Recommend</span>
-                    <span class="qs-device-value" id="qs-recommend-value">Detecting...</span>
+                <div class="qs-device-info">
+                    <div class="qs-device-row">
+                        <span class="qs-device-icon">&#x1F4BB;</span>
+                        <span class="qs-device-label" id="qs-platform-label">Platform</span>
+                        <span class="qs-device-value" id="qs-platform-value">Detecting...</span>
+                    </div>
+                    <div class="qs-device-row">
+                        <span class="qs-device-icon">&#x1F3AE;</span>
+                        <span class="qs-device-label" id="qs-gpu-label">GPU</span>
+                        <span class="qs-device-value" id="qs-gpu-value">Detecting...</span>
+                    </div>
+                    <div class="qs-device-row">
+                        <span class="qs-device-icon">&#x1F4CA;</span>
+                        <span class="qs-device-label">Recommend</span>
+                        <span class="qs-device-value" id="qs-recommend-value">Detecting...</span>
+                    </div>
                 </div>
-            </div>
-            <div class="qs-gpu-detected" id="qs-gpu-detected" style="display:none;">
-                <span class="qs-gpu-tag" id="qs-gpu-tag"></span>
+                <div class="qs-gpu-detected" id="qs-gpu-detected" style="display:none;">
+                    <span class="qs-gpu-tag" id="qs-gpu-tag"></span>
+                </div>
             </div>
         </div>
     </div>
