@@ -20219,41 +20219,49 @@ function createBossWaitingUI() {
         pointer-events: none;
         text-align: center;
         display: none;
-        background: linear-gradient(180deg, rgba(0, 15, 35, 0.92), rgba(0, 8, 22, 0.95));
-        border: 2px solid rgba(255, 200, 0, 0.5);
-        border-radius: 8px;
-        padding: 10px 28px;
-        box-shadow: 0 0 24px rgba(255, 200, 0, 0.18), inset 0 0 15px rgba(255, 200, 0, 0.05);
+        width: 200px;
+        height: 66px;
+        border-radius: 33px;
+        background: linear-gradient(165deg, rgba(22, 14, 2, 0.6) 0%, rgba(10, 6, 0, 0.7) 50%, rgba(16, 10, 2, 0.62) 100%);
+        border: 1px solid rgba(255, 170, 40, 0.2);
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 6px 24px rgba(255, 140, 0, 0.08), 0 0 16px rgba(255, 120, 0, 0.04), inset 0 1px 0 rgba(255, 220, 100, 0.08), inset 0 0 25px rgba(255, 130, 0, 0.03);
         font-family: 'Orbitron', monospace;
+        padding: 0;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
     `;
     
     // Timer text
     const timerText = document.createElement('div');
     timerText.id = 'boss-waiting-text';
     timerText.style.cssText = `
-        font-size: 20px;
-        font-weight: 900;
-        font-family: 'Orbitron', monospace;
-        color: #ffdd00;
-        text-shadow: 0 0 12px rgba(255, 200, 0, 0.5), 0 0 24px rgba(255, 200, 0, 0.15);
-        letter-spacing: 2px;
-        -webkit-text-stroke: 0.5px rgba(255, 200, 0, 0.3);
-    `;
-    bossWaitingUI.appendChild(timerText);
-    
-    // Label text
-    const labelText = document.createElement('div');
-    labelText.style.cssText = `
-        font-size: 8px;
+        font-size: 26px;
         font-weight: 700;
         font-family: 'Orbitron', monospace;
-        color: rgba(255, 200, 0, 0.6);
+        color: #ffd040;
+        text-shadow: 0 0 12px rgba(255, 190, 0, 0.5), 0 0 30px rgba(255, 140, 0, 0.15);
         letter-spacing: 2px;
-        text-transform: uppercase;
-        margin-top: 4px;
+        line-height: 1;
     `;
-    labelText.textContent = 'NEXT BOSS';
+    // Label text (top line)
+    const labelText = document.createElement('div');
+    labelText.style.cssText = `
+        font-size: 11px;
+        font-weight: 600;
+        font-family: 'Orbitron', monospace;
+        color: #c89828;
+        letter-spacing: 5px;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+        text-shadow: 0 0 6px rgba(255, 180, 40, 0.2);
+    `;
+    labelText.textContent = 'BOSS TIMER';
     bossWaitingUI.appendChild(labelText);
+    
+    // Timer value (bottom line)
+    bossWaitingUI.appendChild(timerText);
     
     document.body.appendChild(bossWaitingUI);
 }
