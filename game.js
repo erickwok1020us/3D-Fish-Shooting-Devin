@@ -9976,38 +9976,67 @@ async function init() {
     // Preload all weapon GLB models (cannon, bullet, hitEffect for each weapon)
     try {
         // Load 1x weapon first (most commonly used)
-        updateProgress(20, 'Loading 1x weapon...');
+        updateProgress(15, 'Loading 1x weapon...');
         await preloadWeaponGLB('1x');
         
         // Load 3x weapon
-        updateProgress(40, 'Loading 3x weapon...');
+        updateProgress(25, 'Loading 3x weapon...');
         await preloadWeaponGLB('3x');
         
-        // 3x weapon fire particle textures DISABLED - using original 3x bullet GLB model
-        // updateProgress(45, 'Loading 3x fire effects...');
-        // await loadFireParticleTextures();
-        
         // Load 5x weapon
-        updateProgress(55, 'Loading 5x weapon...');
+        updateProgress(35, 'Loading 5x weapon...');
         await preloadWeaponGLB('5x');
         
         // Load 8x weapon
-        updateProgress(80, 'Loading 8x weapon...');
+        updateProgress(45, 'Loading 8x weapon...');
         await preloadWeaponGLB('8x');
         
         // Load Coin.glb model for coin drop effects
-        updateProgress(90, 'Loading coin model...');
+        updateProgress(50, 'Loading coin model...');
         await loadCoinGLB();
         
         // Pre-initialize coin model pool to avoid stutter on first coin spawn
-        updateProgress(95, 'Initializing coin pool...');
+        updateProgress(52, 'Initializing coin pool...');
         initCoinModelPool();
         
+        // Preload map GLB so there's no second loading screen
+        updateProgress(55, 'Loading underwater world...');
+        await new Promise((resolve, reject) => {
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                MAP_URL,
+                (gltf) => {
+                    console.log('[PRELOAD] Map GLB loaded successfully');
+                    loadedMapScene = gltf.scene;
+                    loadingProgress.mapLoaded = 100;
+                    resolve();
+                },
+                (xhr) => {
+                    if (xhr.total) {
+                        const mapPct = (xhr.loaded / xhr.total) * 100;
+                        loadingProgress.mapLoaded = mapPct;
+                        const overall = 55 + (mapPct * 0.40);
+                        const loadedMB = (xhr.loaded / 1024 / 1024).toFixed(1);
+                        const totalMB = (xhr.total / 1024 / 1024).toFixed(1);
+                        updateProgress(overall, `Loading underwater world... ${loadedMB}/${totalMB} MB`);
+                    }
+                },
+                (error) => {
+                    console.warn('[PRELOAD] Map GLB failed to load:', error);
+                    resolve();
+                }
+            );
+        });
+        
+        // Preload weapon models for map loading phase (so loadMap3D cache check passes)
+        updateProgress(96, 'Finalizing...');
+        loadingProgress.allWeaponsPreloaded = true;
+        
         updateProgress(100, 'Ready!');
-        console.log('[PRELOAD] All GLB models preloaded successfully');
+        console.log('[PRELOAD] All resources preloaded successfully (including map)');
     } catch (error) {
-        console.warn('[PRELOAD] Some GLB models failed to load:', error);
-        updateProgress(100, 'Ready (some models may load later)');
+        console.warn('[PRELOAD] Some resources failed to load:', error);
+        updateProgress(100, 'Ready (some resources may load later)');
     }
     
     // Hide loading screen and show lobby
@@ -10172,6 +10201,17 @@ function initGameScene() {
     updateLoadingProgress(100, 'Ready!');
     
     setTimeout(function() {
+        // When map was preloaded (cached path), handle game entry here
+        if (window._mapCacheUsed) {
+            stopVideoBackground();
+            var gc = document.getElementById('game-container');
+            if (gc) gc.style.display = 'block';
+            gameState.isInGameScene = true;
+            initKillFeedSlots();
+            var vTag = document.getElementById('pr-version-tag');
+            if (vTag) vTag.style.display = 'none';
+        }
+        
         if (loadingScreen) {
             loadingScreen.style.display = 'none';
         }
@@ -10574,9 +10614,22 @@ function updateCombinedLoadingProgress(bar, percent, sizeInfo, mapProgress, mapL
 }
 
 function loadMap3D(onComplete) {
-    // Check if map is already loaded
+    // Check if map is already loaded (preloaded during init)
     if (loadedMapScene && loadingProgress.allWeaponsPreloaded) {
-        console.log('[MAP] Using cached map and weapons');
+        console.log('[MAP] Using cached map and weapons — skipping overlay');
+        
+        // Apply quality-based optimizations to cached map
+        const quality = performanceState.graphicsQuality;
+        console.log(`[MAP] Applying ${quality} quality optimizations to cached map`);
+        setupMapMaterialsWithQuality(loadedMapScene);
+        optimizeMapTextures(loadedMapScene);
+        if (quality === 'low') {
+            downscaleMapTextures(loadedMapScene, 0.5);
+        }
+        
+        // Mark as _mapCacheUsed so initGameScene handles game entry
+        window._mapCacheUsed = true;
+        
         onComplete(loadedMapScene.clone());
         return;
     }
@@ -10586,7 +10639,7 @@ function loadMap3D(onComplete) {
     const percent = document.getElementById('map-loading-percent');
     const sizeInfo = document.getElementById('map-loading-size');
     
-    // Show loading overlay
+    // Show loading overlay (fallback if map wasn't preloaded)
     overlay.style.display = 'flex';
     
     // Hide the initial loading screen to prevent overlap
