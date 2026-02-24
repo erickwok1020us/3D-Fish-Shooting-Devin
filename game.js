@@ -9971,7 +9971,7 @@ async function init() {
     // Show loading screen during preload
     const loadingScreen = document.getElementById('loading-screen');
     const loadingText = document.getElementById('loading-text');
-    const loadingProgress = document.getElementById('loading-progress');
+    const loadingProgressBar = document.getElementById('loading-progress');
     
     if (loadingScreen) {
         loadingScreen.style.display = 'flex';
@@ -9980,7 +9980,7 @@ async function init() {
     // Update loading progress
     const updateProgress = (percent, text) => {
         if (loadingText) loadingText.textContent = text;
-        if (loadingProgress) loadingProgress.style.width = percent + '%';
+        if (loadingProgressBar) loadingProgressBar.style.width = percent + '%';
     };
     
         updateProgress(5, 'Loading fish models manifest...');
@@ -10228,20 +10228,14 @@ function initGameScene() {
     updateLoadingProgress(100, 'Ready!');
     
     setTimeout(function() {
-        // When map was preloaded (cached path), handle game entry here
-        if (window._mapCacheUsed) {
-            stopVideoBackground();
-            var gc = document.getElementById('game-container');
-            if (gc) gc.style.display = 'block';
-            gameState.isInGameScene = true;
-            initKillFeedSlots();
-            var vTag = document.getElementById('pr-version-tag');
-            if (vTag) vTag.style.display = 'none';
-        }
+        stopVideoBackground();
+        var gc = document.getElementById('game-container');
+        if (gc) gc.style.display = 'block';
+        gameState.isInGameScene = true;
+        initKillFeedSlots();
+        var vTag = document.getElementById('pr-version-tag');
+        if (vTag) vTag.style.display = 'none';
         
-        if (loadingScreen) {
-            loadingScreen.style.display = 'none';
-        }
         gameState.isLoading = false;
         lastTime = performance.now();
         
@@ -10256,6 +10250,24 @@ function initGameScene() {
         
         createCannon();
         showRmbZoomHint();
+        
+        var mapWaitStart = performance.now();
+        function waitForMapRender() {
+            if (window._mapAddedToScene || (performance.now() - mapWaitStart > 30000)) {
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        var ls = document.getElementById('loading-screen');
+                        if (ls) {
+                            ls.style.display = 'none';
+                            ls.style.pointerEvents = 'none';
+                        }
+                    });
+                });
+                return;
+            }
+            requestAnimationFrame(waitForMapRender);
+        }
+        requestAnimationFrame(waitForMapRender);
     }, 500);
 }
 
@@ -10580,8 +10592,10 @@ window.startMultiplayerGame = function(manager) {
 };
 
 function updateLoadingProgress(percent, text) {
-    document.getElementById('loading-progress').style.width = percent + '%';
-    document.getElementById('loading-text').textContent = text;
+    var lp = document.getElementById('loading-progress');
+    var lt = document.getElementById('loading-text');
+    if (lp) lp.style.width = percent + '%';
+    if (lt) lt.textContent = text;
 }
 
 // ==================== 3D MAP LOADING ====================
@@ -10666,7 +10680,7 @@ function loadMap3D(onComplete) {
     const mainLoadingBar = document.getElementById('loading-progress');
     const mainLoadingText = document.getElementById('loading-text');
     const mainBarContainer = document.getElementById('loading-bar');
-    if (!window._loadingScreenLocked && initialLoadingScreen) {
+    if (!window._loadingScreenLocked && !window._isGameStarted && initialLoadingScreen) {
         initialLoadingScreen.style.display = 'flex';
     }
     if (mainLoadingBar) mainLoadingBar.style.width = '0%';
@@ -10723,21 +10737,18 @@ function loadMap3D(onComplete) {
             
             // FIX: Stop video background and show game container AFTER loading is complete
             // This ensures smooth transition without game screen flash
-            stopVideoBackground();
-            const gameContainer = document.getElementById('game-container');
-            if (gameContainer) {
-                gameContainer.style.display = 'block';
+            if (!window._isGameStarted) {
+                stopVideoBackground();
+                const gameContainer = document.getElementById('game-container');
+                if (gameContainer) {
+                    gameContainer.style.display = 'block';
+                }
+                if (initialLoadingScreen) initialLoadingScreen.style.display = 'none';
+                gameState.isInGameScene = true;
+                initKillFeedSlots();
+                var vTag = document.getElementById('pr-version-tag');
+                if (vTag) vTag.style.display = 'none';
             }
-            
-            if (initialLoadingScreen) initialLoadingScreen.style.display = 'none';
-            
-            // FIX: Set isInGameScene AFTER loading is complete
-            // This prevents shooting/camera movement during loading screen
-            gameState.isInGameScene = true;
-            initKillFeedSlots();
-            
-            var vTag = document.getElementById('pr-version-tag');
-            if (vTag) vTag.style.display = 'none';
             
             onComplete(mapScene);
         },
@@ -10766,21 +10777,18 @@ function loadMap3D(onComplete) {
             await weaponPreloadPromise;
             clearInterval(weaponProgressInterval);
             
-            // FIX: Stop video background and show game container even on error
-            stopVideoBackground();
-            const gameContainer = document.getElementById('game-container');
-            if (gameContainer) {
-                gameContainer.style.display = 'block';
+            if (!window._isGameStarted) {
+                stopVideoBackground();
+                const gameContainer = document.getElementById('game-container');
+                if (gameContainer) {
+                    gameContainer.style.display = 'block';
+                }
+                if (initialLoadingScreen) initialLoadingScreen.style.display = 'none';
+                gameState.isInGameScene = true;
+                initKillFeedSlots();
+                var vTag = document.getElementById('pr-version-tag');
+                if (vTag) vTag.style.display = 'none';
             }
-            
-            if (initialLoadingScreen) initialLoadingScreen.style.display = 'none';
-            
-            // FIX: Set isInGameScene even on error so game can proceed
-            gameState.isInGameScene = true;
-            initKillFeedSlots();
-            
-            var vTag = document.getElementById('pr-version-tag');
-            if (vTag) vTag.style.display = 'none';
             
             // Fall back to procedural aquarium
             createProceduralAquarium();
@@ -10932,13 +10940,12 @@ function createAquariumScene() {
     
     // Load 3D map from R2
     loadMap3D((mapScene) => {
-        // Scale and position the map to fit aquarium bounds
         scaleAndPositionMap(mapScene);
         tunnelGroup.add(mapScene);
+        window._mapAddedToScene = true;
         
         extractTerrainObstacles(mapScene);
         
-        // Enhanced debug logging for map verification
         const mapBox = new THREE.Box3().setFromObject(mapScene);
         const mapSize = new THREE.Vector3();
         mapBox.getSize(mapSize);

@@ -1712,11 +1712,6 @@
     <div id="loading-screen">
         <div class="loading-container">
             <img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img">
-            <div id="loading-bar">
-                <div id="loading-progress"></div>
-            </div>
-            <div id="loading-text">Loading...</div>
-            <button id="qs-start-game">Start Game</button>
             <div id="quality-selector">
                 <div class="qs-buttons">
                     <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
@@ -1741,6 +1736,11 @@
                     </label>
                 </div>
             </div>
+            <div id="loading-bar">
+                <div id="loading-progress"></div>
+            </div>
+            <div id="loading-text">Loading...</div>
+            <button id="qs-start-game">Start Game</button>
         </div>
     </div>
     
@@ -2253,8 +2253,7 @@
                     startBtn.addEventListener('click', function() {
                         if (!startReady) return;
                         window._loadingScreenLocked = true;
-                        loadingScreen.style.display = 'none';
-                        gameContainer.style.display = 'block';
+                        window._isGameStarted = true;
                         if (typeof window.startSinglePlayerGame === 'function') {
                             window.startSinglePlayerGame();
                         }
