@@ -1079,26 +1079,40 @@
             z-index: 1000;
         }
         
-        /* Loading Screen Container - Box frame like lobby */
+        /* Loading Screen Container - Unified glassmorphism panel */
         .loading-container {
-            background: rgba(0, 0, 0, 0.75);
-            border: 2px solid rgba(100, 150, 255, 0.3);
-            border-radius: 20px;
-            padding: 30px 20px;
+            background: rgba(0, 10, 25, 0.55);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(0, 200, 255, 0.3);
+            border-radius: 14px;
+            padding: 22px 28px 18px;
             min-width: 500px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(100, 150, 255, 0.2);
+            max-width: 520px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(0, 100, 200, 0.1), inset 0 0 20px rgba(0, 60, 120, 0.06);
             display: flex;
             flex-direction: column;
             align-items: center;
             transform: scale(var(--ui-scale));
             transform-origin: center;
+            font-family: 'Orbitron', monospace;
+            position: relative;
+            overflow: hidden;
+        }
+        .loading-container::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 15%; right: 15%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.45), transparent);
         }
         
-        #loading-screen .game-title-img {
-            max-width: 95%;
-            width: 460px;
-            height: auto;
-            margin-bottom: 30px;
+                #loading-screen .game-title-img {
+                    max-width: 95%;
+                    width: 460px;
+                    height: auto;
+                    margin-bottom: 12px;
             animation: titleShake 0.5s ease-in-out infinite;
         }
         
@@ -1116,10 +1130,11 @@
         }
         
         #loading-bar {
-            width: 300px;
-            height: 10px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 5px;
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 40, 80, 0.5);
+            border: 1px solid rgba(0, 200, 255, 0.12);
+            border-radius: 3px;
             overflow: hidden;
         }
         
@@ -1131,9 +1146,18 @@
         }
         
         #loading-text {
-            color: #87ceeb;
-            margin-top: 15px;
-            font-size: 14px;
+            color: rgba(0, 200, 255, 0.65);
+            margin-top: 6px;
+            margin-bottom: 10px;
+            font-size: 9px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(0, 200, 255, 0.3);
+        }
+        .loading-container .qs-divider {
+            display: none;
         }
         
         /* Map Loading Overlay - transparent background to show video behind */
@@ -1579,6 +1603,179 @@
             transform: translateY(-4px);
             box-shadow: 0 0 20px rgba(68,221,255,0.3);
         }
+
+        /* ===== Quality Selector (inside loading-container) ===== */
+        #quality-selector {
+            width: 100%;
+        }
+        #quality-selector .qs-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        #quality-selector .qs-details {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+        .qs-detail {
+            flex: 1;
+            text-align: center;
+            font-family: 'Orbitron', monospace;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: rgba(0, 200, 255, 0.5);
+            line-height: 1.3;
+            transition: all 0.25s ease;
+            min-height: 18px;
+        }
+        .qs-detail.active {
+            color: rgba(0, 255, 238, 0.88);
+            text-shadow: 0 0 12px rgba(0, 255, 238, 0.4);
+        }
+        .qs-btn {
+            flex: 1;
+            position: relative;
+            padding: 10px 8px;
+            background: rgba(0, 20, 50, 0.5);
+            border: 2px solid rgba(0, 150, 255, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            text-align: center;
+            font-family: 'Orbitron', monospace;
+        }
+        .qs-btn .qs-btn-label {
+            font-size: 13px;
+            font-weight: 800;
+            color: rgba(0, 180, 255, 0.4);
+            letter-spacing: 1px;
+            display: block;
+            transition: all 0.25s ease;
+        }
+        .qs-btn .qs-btn-fps {
+            font-size: 8px;
+            font-weight: 600;
+            color: rgba(0, 200, 255, 0.3);
+            letter-spacing: 0.5px;
+            margin-top: 3px;
+            display: block;
+            transition: all 0.25s ease;
+        }
+        .qs-btn:hover {
+            border-color: rgba(0, 200, 255, 0.4);
+            background: rgba(0, 30, 70, 0.4);
+        }
+        .qs-btn:hover .qs-btn-label { color: rgba(0, 220, 255, 0.7); }
+        .qs-btn.active {
+            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.3), rgba(0, 60, 140, 0.18));
+            border: 2.5px solid #00e0ff;
+            box-shadow: 0 0 20px rgba(0, 220, 255, 0.25), inset 0 0 12px rgba(0, 200, 255, 0.1);
+        }
+        .qs-btn.active .qs-btn-label {
+            color: #00ffff;
+            text-shadow: 0 0 14px rgba(0, 255, 255, 0.7), 0 0 28px rgba(0, 255, 255, 0.15);
+        }
+        .qs-btn.active .qs-btn-fps {
+            color: rgba(0, 255, 238, 0.65);
+            text-shadow: 0 0 6px rgba(0, 255, 238, 0.3);
+        }
+        .qs-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px; left: 15%; right: 15%;
+            height: 2px;
+            background: #00d4ff;
+            box-shadow: 0 0 8px #00d4ff;
+            border-radius: 1px;
+        }
+
+        .qs-remember {
+            display: flex;
+            justify-content: center;
+            margin-top: 6px;
+            width: 100%;
+        }
+        .qs-remember-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Orbitron', monospace;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1.2px;
+            color: rgba(0, 200, 255, 0.55);
+            cursor: pointer;
+            user-select: none;
+            text-transform: uppercase;
+        }
+        #qs-remember-choice {
+            width: 14px;
+            height: 14px;
+            accent-color: #00d4ff;
+        }
+
+        #qs-start-game {
+            display: none;
+            width: 100%;
+            padding: 14px 0;
+            margin-top: 0;
+            margin-bottom: 10px;
+            background: rgba(0, 20, 50, 0.5);
+            border: 2px solid rgba(0, 150, 255, 0.2);
+            border-radius: 8px;
+            color: #00ffff;
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            text-shadow: 0 0 14px rgba(0, 255, 255, 0.55);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            box-shadow: 0 0 10px rgba(0, 220, 255, 0.08);
+            opacity: 0;
+            transform: translateY(6px);
+        }
+        #qs-start-game:hover {
+            border-color: rgba(0, 200, 255, 0.4);
+            background: rgba(0, 30, 70, 0.4);
+            box-shadow: 0 0 18px rgba(0, 220, 255, 0.16);
+            transform: scale(1.01);
+        }
+        #qs-start-game:active {
+            transform: scale(0.99);
+        }
+        @keyframes startGameFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes startGamePulse {
+            0%, 100% { box-shadow: 0 0 16px rgba(0, 220, 255, 0.18), inset 0 0 10px rgba(0, 200, 255, 0.08); }
+            50% { box-shadow: 0 0 26px rgba(0, 220, 255, 0.32), 0 0 54px rgba(0, 220, 255, 0.12), inset 0 0 12px rgba(0, 200, 255, 0.12); }
+        }
+        #qs-start-game.ready {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.3), rgba(0, 60, 140, 0.18));
+            border: 2.5px solid #00e0ff;
+            animation: startGameFadeIn 0.45s ease-out both, startGamePulse 2s ease-in-out infinite 0.45s;
+        }
+
+        @media (max-width: 520px) {
+            .loading-container {
+                min-width: unset;
+                padding: 20px 16px 14px;
+            }
+            .qs-btn {
+                padding: 8px 6px;
+            }
+            .qs-btn .qs-btn-label { font-size: 11px; }
+            .qs-detail { font-size: 8px; min-height: 16px; }
+            #qs-start-game { font-size: 12px; letter-spacing: 2px; padding: 12px 0; }
+        }
     </style>
 </head>
 <body>
@@ -1595,6 +1792,31 @@
                 <div id="loading-progress"></div>
             </div>
             <div id="loading-text">Loading...</div>
+            <button id="qs-start-game">Start Game</button>
+            <div id="quality-selector">
+                <div class="qs-buttons">
+                    <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
+                        <span class="qs-btn-label">LOW</span>
+                    </button>
+                    <button class="qs-btn active" data-quality="medium" onclick="selectLoadingQuality('medium')">
+                        <span class="qs-btn-label">MEDIUM</span>
+                    </button>
+                    <button class="qs-btn" data-quality="high" onclick="selectLoadingQuality('high')">
+                        <span class="qs-btn-label">HIGH</span>
+                    </button>
+                </div>
+                <div class="qs-details">
+                    <div class="qs-detail" data-quality="low"></div>
+                    <div class="qs-detail" data-quality="medium"></div>
+                    <div class="qs-detail" data-quality="high"></div>
+                </div>
+                <div class="qs-remember">
+                    <label class="qs-remember-label">
+                        <input type="checkbox" id="qs-remember-choice">
+                        Remember my choice
+                    </label>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -1892,6 +2114,152 @@
         <div id="crosshair-3x-right" class="crosshair-3x-side" style="display:none;"></div>
     </div>
     
+    <!-- Quality Selector Logic (runs before game.js) -->
+    <script>
+    (function() {
+        window.deferLobbyUntilStart = true;
+        var QS_DESCRIPTIONS = {
+            low: {
+                desktop: 'Basic',
+                mobile: 'Basic'
+            },
+            medium: {
+                desktop: 'Balanced',
+                mobile: 'Balanced'
+            },
+            high: {
+                desktop: 'Ultra',
+                mobile: 'Ultra'
+            }
+        };
+
+        function detectPlatform() {
+            var ua = navigator.userAgent || '';
+            if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
+                if (/iPad|Macintosh/i.test(ua) && 'ontouchend' in document) return 'tablet';
+                return 'mobile';
+            }
+            if (/Macintosh|Mac OS X/i.test(ua)) return 'mac';
+            if (/Windows/i.test(ua)) return 'windows';
+            if (/Linux/i.test(ua)) return 'linux';
+            return 'desktop';
+        }
+
+        function isMobileDevice() {
+            var p = detectPlatform();
+            return p === 'mobile' || p === 'tablet';
+        }
+
+        function detectGPU() {
+            try {
+                var c = document.createElement('canvas');
+                var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+                if (!gl) return null;
+                var ext = gl.getExtension('WEBGL_debug_renderer_info');
+                if (!ext) return { vendor: 'Unknown', renderer: 'Unknown (extension blocked)' };
+                return {
+                    vendor: gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) || 'Unknown',
+                    renderer: gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || 'Unknown'
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function recommendQuality(gpu) {
+            if (!gpu || !gpu.renderer) return 'medium';
+            var r = gpu.renderer.toLowerCase();
+            if (/rtx\s*(30|40|50)|radeon\s*rx\s*(6[89]|7)|apple\s*m[2-9]|apple\s*m1\s*(pro|max|ultra)/i.test(r)) return 'high';
+            if (/rtx\s*20|gtx\s*1[0-9]{3}|radeon\s*rx\s*(5[5-9]|6[0-7])|apple\s*m1|apple\s*gpu/i.test(r)) return 'medium';
+            if (/intel\s*(hd|uhd|iris)|mali|adreno\s*(5|6[0-2])|powervr|swiftshader/i.test(r)) return 'low';
+            if (/apple/i.test(r)) return 'medium';
+            return 'medium';
+        }
+
+        function getPlatformLabel(platform) {
+            var labels = { mobile: 'Mobile', tablet: 'Tablet', mac: 'macOS', windows: 'Windows', linux: 'Linux', desktop: 'Desktop' };
+            return labels[platform] || 'Desktop';
+        }
+
+        function updateDescriptions(quality) {
+            var mobile = isMobileDevice();
+            var key = mobile ? 'mobile' : 'desktop';
+            ['low','medium','high'].forEach(function(q) {
+                var desc = QS_DESCRIPTIONS[q] ? QS_DESCRIPTIONS[q][key] : '';
+                var el = document.querySelector('.qs-detail[data-quality="' + q + '"]');
+                if (el) el.textContent = desc;
+            });
+        }
+
+        window.selectLoadingQuality = function(quality) {
+            var btns = document.querySelectorAll('.qs-btn');
+            btns.forEach(function(b) { b.classList.remove('active'); });
+            var target = document.querySelector('.qs-btn[data-quality="' + quality + '"]');
+            if (target) target.classList.add('active');
+
+            var details = document.querySelectorAll('.qs-detail');
+            details.forEach(function(d) {
+                d.classList.toggle('active', d.getAttribute('data-quality') === quality);
+            });
+
+            window._selectedLoadingQuality = quality;
+
+            var rememberEl = document.getElementById('qs-remember-choice');
+            var remember = !!(rememberEl && rememberEl.checked);
+            if (remember) {
+                try {
+                    localStorage.setItem('rememberGraphicsQuality', '1');
+                    localStorage.setItem('graphicsQuality', quality);
+                } catch(e) {}
+            } else {
+                try { localStorage.removeItem('graphicsQuality'); } catch(e) {}
+            }
+
+            var graphicsSelect = document.getElementById('graphics-quality');
+            if (graphicsSelect) graphicsSelect.value = quality;
+        };
+
+        function initQualitySelector() {
+            var remember = false;
+            try { remember = localStorage.getItem('rememberGraphicsQuality') === '1'; } catch(e) {}
+            if (!remember) {
+                try { localStorage.removeItem('graphicsQuality'); } catch(e) {}
+            }
+
+            var rememberEl = document.getElementById('qs-remember-choice');
+            if (rememberEl) {
+                rememberEl.checked = remember;
+                rememberEl.addEventListener('change', function() {
+                    var on = !!rememberEl.checked;
+                    try {
+                        if (on) {
+                            localStorage.setItem('rememberGraphicsQuality', '1');
+                            if (window._selectedLoadingQuality) {
+                                localStorage.setItem('graphicsQuality', window._selectedLoadingQuality);
+                            }
+                        } else {
+                            localStorage.removeItem('rememberGraphicsQuality');
+                            localStorage.removeItem('graphicsQuality');
+                        }
+                    } catch(e) {}
+                });
+            }
+
+            var saved = null;
+            try { saved = localStorage.getItem('graphicsQuality'); } catch(e) {}
+            var initial = (remember && saved && ['low','medium','high'].indexOf(saved) !== -1) ? saved : 'medium';
+            updateDescriptions(initial);
+            window.selectLoadingQuality(initial);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initQualitySelector);
+        } else {
+            initQualitySelector();
+        }
+    })();
+    </script>
+
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- GLTFLoader for 3D map loading -->
@@ -1951,20 +2319,43 @@
             let lobbyInitialized = false;
             
             window.addEventListener('load', function() {
+                const startBtn = document.getElementById('qs-start-game');
+                const loadingBar = document.getElementById('loading-bar');
+                const loadingText = document.getElementById('loading-text');
+
+                let startReady = false;
+                const setReady = function() {
+                    startReady = true;
+                    if (loadingBar) loadingBar.style.display = 'none';
+                    if (loadingText) loadingText.style.display = 'none';
+                    if (startBtn) startBtn.classList.add('ready');
+                };
+
+                if (startBtn) {
+                    startBtn.addEventListener('click', function() {
+                        if (!startReady) return;
+                        loadingScreen.style.display = 'none';
+                        gameContainer.style.display = 'block';
+                        if (typeof window.startSinglePlayerGame === 'function') {
+                            window.startSinglePlayerGame();
+                        }
+                    });
+                }
+
                 // Wait for game to finish loading
                 const checkLoaded = setInterval(function() {
                     if (typeof window.gameLoaded !== 'undefined' && window.gameLoaded) {
                         clearInterval(checkLoaded);
                         clearTimeout(fallbackTimeout);
-                        initLobby();
+                        setReady();
                     }
                 }, 100);
-                
-                // Fallback: show lobby after 3 seconds
+
+                // Fallback: allow entering lobby even if gameLoaded isn't set
                 const fallbackTimeout = setTimeout(function() {
                     clearInterval(checkLoaded);
-                    initLobby();
-                }, 3000);
+                    setReady();
+                }, 8000);
             });
             
             function initLobby() {

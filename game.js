@@ -10011,19 +10011,22 @@ async function init() {
     }
     
     // Hide loading screen and show lobby
-    if (loadingScreen) {
-        loadingScreen.style.display = 'none';
-    }
-    
-    // Show the multiplayer lobby (only if user hasn't already started a game)
-    // FIX: Prevent race condition where preload finishes after user clicks "Single Player"
-    // which would incorrectly show the lobby and hide the game
-    const lobby = document.getElementById('multiplayer-lobby');
-    if (lobby && !gameState.isInGameScene) {
-        lobby.style.display = 'flex';
-        console.log('Lobby initialized - GLB models preloaded');
-    } else if (gameState.isInGameScene) {
-        console.log('[PRELOAD] Skipping lobby display - user already in game scene');
+    // Some flows defer lobby until the user clicks Start Game on loading screen
+    if (!window.deferLobbyUntilStart) {
+        if (loadingScreen) {
+            loadingScreen.style.display = 'none';
+        }
+
+        // Show the multiplayer lobby (only if user hasn't already started a game)
+        // FIX: Prevent race condition where preload finishes after user clicks "Single Player"
+        // which would incorrectly show the lobby and hide the game
+        const lobby = document.getElementById('multiplayer-lobby');
+        if (lobby && !gameState.isInGameScene) {
+            lobby.style.display = 'flex';
+            console.log('Lobby initialized - GLB models preloaded');
+        } else if (gameState.isInGameScene) {
+            console.log('[PRELOAD] Skipping lobby display - user already in game scene');
+        }
     }
     
     window.gameLoaded = true;
