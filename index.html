@@ -1157,10 +1157,7 @@
             text-shadow: 0 0 8px rgba(0, 200, 255, 0.3);
         }
         .loading-container .qs-divider {
-            width: 100%;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.2), transparent);
-            margin-bottom: 16px;
+            display: none;
         }
         
         /* Map Loading Overlay - transparent background to show video behind */
@@ -1611,40 +1608,36 @@
         #quality-selector {
             width: 100%;
         }
-        #quality-selector .qs-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-        #quality-selector .qs-dot {
-            width: 5px; height: 5px;
-            background: #00d4ff;
-            box-shadow: 0 0 6px #00d4ff;
-            border-radius: 1px;
-            transform: rotate(45deg);
-        }
-        #quality-selector .qs-title {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 3px;
-            color: #00d4ff;
-            text-shadow: 0 0 8px rgba(0, 200, 255, 0.4);
-            text-transform: uppercase;
-        }
-        #quality-selector .qs-line {
-            flex: 1; height: 1px;
-            background: linear-gradient(90deg, rgba(0, 200, 255, 0.3), transparent);
-        }
         #quality-selector .qs-buttons {
             display: flex;
             gap: 8px;
-            margin-bottom: 12px;
+            margin-bottom: 6px;
+        }
+        #quality-selector .qs-details {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+        .qs-detail {
+            flex: 1;
+            text-align: center;
+            font-family: 'Orbitron', monospace;
+            font-size: 8px;
+            font-weight: 600;
+            letter-spacing: 0.6px;
+            color: rgba(0, 200, 255, 0.32);
+            line-height: 1.2;
+            transition: all 0.25s ease;
+            min-height: 18px;
+        }
+        .qs-detail.active {
+            color: rgba(0, 255, 238, 0.72);
+            text-shadow: 0 0 10px rgba(0, 255, 238, 0.25);
         }
         .qs-btn {
             flex: 1;
             position: relative;
-            padding: 12px 8px 10px;
+            padding: 10px 8px;
             background: rgba(0, 20, 50, 0.5);
             border: 2px solid rgba(0, 150, 255, 0.2);
             border-radius: 8px;
@@ -1652,7 +1645,6 @@
             transition: all 0.25s ease;
             text-align: center;
             font-family: 'Orbitron', monospace;
-            min-height: 52px;
         }
         .qs-btn .qs-btn-label {
             font-size: 13px;
@@ -1728,44 +1720,47 @@
             display: none;
             width: 100%;
             padding: 14px 0;
-            margin-top: 14px;
-            background: linear-gradient(135deg, rgba(0, 200, 100, 0.35), rgba(0, 180, 80, 0.2));
-            border: 2px solid rgba(0, 255, 150, 0.5);
-            border-radius: 10px;
-            color: #00ffaa;
+            margin-top: 6px;
+            margin-bottom: 10px;
+            background: rgba(0, 20, 50, 0.5);
+            border: 2px solid rgba(0, 150, 255, 0.2);
+            border-radius: 8px;
+            color: #00ffff;
             font-family: 'Orbitron', monospace;
             font-size: 14px;
             font-weight: 800;
             letter-spacing: 3px;
             text-transform: uppercase;
-            text-shadow: 0 0 12px rgba(0, 255, 170, 0.5);
+            text-shadow: 0 0 14px rgba(0, 255, 255, 0.55);
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 0 20px rgba(0, 255, 150, 0.15);
+            transition: all 0.25s ease;
+            box-shadow: 0 0 10px rgba(0, 220, 255, 0.08);
             opacity: 0;
             transform: translateY(6px);
         }
         #qs-start-game:hover {
-            background: linear-gradient(135deg, rgba(0, 220, 120, 0.45), rgba(0, 200, 100, 0.3));
-            border-color: rgba(0, 255, 170, 0.7);
-            box-shadow: 0 0 30px rgba(0, 255, 150, 0.3);
-            transform: scale(1.02);
+            border-color: rgba(0, 200, 255, 0.4);
+            background: rgba(0, 30, 70, 0.4);
+            box-shadow: 0 0 18px rgba(0, 220, 255, 0.16);
+            transform: scale(1.01);
         }
         #qs-start-game:active {
-            transform: scale(0.98);
+            transform: scale(0.99);
         }
         @keyframes startGameFadeIn {
             from { opacity: 0; transform: translateY(6px); }
             to { opacity: 1; transform: translateY(0); }
         }
         @keyframes startGamePulse {
-            0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 150, 0.15); }
-            50% { box-shadow: 0 0 30px rgba(0, 255, 150, 0.35), 0 0 60px rgba(0, 255, 150, 0.1); }
+            0%, 100% { box-shadow: 0 0 16px rgba(0, 220, 255, 0.18), inset 0 0 10px rgba(0, 200, 255, 0.08); }
+            50% { box-shadow: 0 0 26px rgba(0, 220, 255, 0.32), 0 0 54px rgba(0, 220, 255, 0.12), inset 0 0 12px rgba(0, 200, 255, 0.12); }
         }
         #qs-start-game.ready {
             display: block;
             opacity: 1;
             transform: translateY(0);
+            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.3), rgba(0, 60, 140, 0.18));
+            border: 2.5px solid #00e0ff;
             animation: startGameFadeIn 0.45s ease-out both, startGamePulse 2s ease-in-out infinite 0.45s;
         }
 
@@ -1775,11 +1770,10 @@
                 padding: 20px 16px 14px;
             }
             .qs-btn {
-                padding: 10px 6px 8px;
-                min-height: 46px;
+                padding: 8px 6px;
             }
             .qs-btn .qs-btn-label { font-size: 11px; }
-            .qs-btn .qs-btn-fps { font-size: 7px; }
+            .qs-detail { font-size: 7px; min-height: 16px; }
             #qs-start-game { font-size: 12px; letter-spacing: 2px; padding: 12px 0; }
         }
     </style>
@@ -1799,26 +1793,22 @@
             </div>
             <div id="loading-text">Loading...</div>
             <button id="qs-start-game">Start Game</button>
-            <div class="qs-divider"></div>
             <div id="quality-selector">
-                <div class="qs-header">
-                    <div class="qs-dot"></div>
-                    <div class="qs-title">Graphics Quality</div>
-                    <div class="qs-line"></div>
-                </div>
                 <div class="qs-buttons">
                     <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
                         <span class="qs-btn-label">LOW</span>
-                        <span class="qs-btn-fps">80+ FPS</span>
                     </button>
                     <button class="qs-btn active" data-quality="medium" onclick="selectLoadingQuality('medium')">
                         <span class="qs-btn-label">MEDIUM</span>
-                        <span class="qs-btn-fps">60+ FPS</span>
                     </button>
                     <button class="qs-btn" data-quality="high" onclick="selectLoadingQuality('high')">
                         <span class="qs-btn-label">HIGH</span>
-                        <span class="qs-btn-fps">Best Visuals</span>
                     </button>
+                </div>
+                <div class="qs-details">
+                    <div class="qs-detail" data-quality="low"></div>
+                    <div class="qs-detail" data-quality="medium"></div>
+                    <div class="qs-detail" data-quality="high"></div>
                 </div>
                 <div class="qs-remember">
                     <label class="qs-remember-label">
@@ -2194,16 +2184,10 @@
         function updateDescriptions(quality) {
             var mobile = isMobileDevice();
             var key = mobile ? 'mobile' : 'desktop';
-            var btns = document.querySelectorAll('.qs-btn');
-            btns.forEach(function(btn) {
-                var q = btn.getAttribute('data-quality');
+            ['low','medium','high'].forEach(function(q) {
                 var desc = QS_DESCRIPTIONS[q] ? QS_DESCRIPTIONS[q][key] : '';
-                var fpsEl = btn.querySelector('.qs-btn-fps');
-                if (fpsEl) {
-                    if (q === 'low') fpsEl.textContent = '80+ FPS · ' + desc;
-                    else if (q === 'medium') fpsEl.textContent = '60+ FPS · ' + desc;
-                    else fpsEl.textContent = 'Best Visuals · ' + desc;
-                }
+                var el = document.querySelector('.qs-detail[data-quality="' + q + '"]');
+                if (el) el.textContent = desc;
             });
         }
 
@@ -2212,6 +2196,11 @@
             btns.forEach(function(b) { b.classList.remove('active'); });
             var target = document.querySelector('.qs-btn[data-quality="' + quality + '"]');
             if (target) target.classList.add('active');
+
+            var details = document.querySelectorAll('.qs-detail');
+            details.forEach(function(d) {
+                d.classList.toggle('active', d.getAttribute('data-quality') === quality);
+            });
 
             window._selectedLoadingQuality = quality;
 
