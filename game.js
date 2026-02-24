@@ -12475,7 +12475,7 @@ const TargetingService = {
             }
         }
 
-        const fish = s.lockedTarget;
+        let fish = s.lockedTarget;
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
         if (fish && !fish.isBoss && (s.phase === 'locking' || s.phase === 'firing' || s.phase === 'transition')) {
@@ -12492,6 +12492,7 @@ const TargetingService = {
                     s.startPitch = s.currentPitch;
                     s.lockStartMs = now;
                     s.shotsAtCurrent = 0;
+                    fish = boss;
                 }
             }
         }
