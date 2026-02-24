@@ -2253,8 +2253,7 @@
                     startBtn.addEventListener('click', function() {
                         if (!startReady) return;
                         window._loadingScreenLocked = true;
-                        if (loadingScreen) loadingScreen.remove();
-                        gameContainer.style.display = 'block';
+                        window._isGameStarted = true;
                         if (typeof window.startSinglePlayerGame === 'function') {
                             window.startSinglePlayerGame();
                         }
