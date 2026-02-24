@@ -10032,6 +10032,11 @@ async function init() {
         updateProgress(96, 'Finalizing...');
         loadingProgress.allWeaponsPreloaded = true;
         
+        // Set _mapCacheUsed so Start Game gate knows map is ready
+        if (loadedMapScene) {
+            window._mapCacheUsed = true;
+        }
+        
         updateProgress(100, 'Ready!');
         console.log('[PRELOAD] All resources preloaded successfully (including map)');
     } catch (error) {
@@ -10077,11 +10082,12 @@ function initGameScene() {
     const quality = performanceState.graphicsQuality;
     console.log(`[INIT] Using graphics quality: ${quality}`);
     
-    // Only re-show loading screen if map wasn't preloaded (fallback path)
-    // When map is cached, Start Game already hid the loading screen — don't flash it back
+    // If map was preloaded (cached), skip showing loading screen entirely
     const loadingScreen = document.getElementById('loading-screen');
     const loadingText = document.getElementById('loading-text');
-    if (loadingScreen && !window._mapCacheUsed) {
+    if (window._mapCacheUsed) {
+        console.log('[INIT] Map cached — skipping loading screen display in initGameScene');
+    } else if (loadingScreen) {
         loadingScreen.style.display = 'flex';
     }
     

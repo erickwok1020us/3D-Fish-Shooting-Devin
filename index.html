@@ -1131,6 +1131,7 @@
             border: 1px solid rgba(0, 200, 255, 0.12);
             border-radius: 3px;
             overflow: hidden;
+            margin-top: 12px;
         }
         
         #loading-progress {
@@ -1779,15 +1780,10 @@
         <source src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Loading_video.mp4" type="video/mp4">
     </video>
     
-    <!-- Loading Screen -->
+    <!-- Loading Screen (unified single panel) -->
     <div id="loading-screen">
         <div class="loading-container">
             <img src="https://pub-7ce92369324549518cd89a6712c6b6e4.r2.dev/Fish-shooter-3D%20title.png" alt="3D Fish Shooter" class="game-title-img">
-            <div id="loading-bar">
-                <div id="loading-progress"></div>
-            </div>
-            <div id="loading-text">Loading...</div>
-            <button id="qs-start-game">Start Game</button>
             <div id="quality-selector">
                 <div class="qs-buttons">
                     <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
@@ -1812,6 +1808,11 @@
                     </label>
                 </div>
             </div>
+            <div id="loading-bar">
+                <div id="loading-progress"></div>
+            </div>
+            <div id="loading-text">Loading...</div>
+            <button id="qs-start-game">Start Game</button>
         </div>
     </div>
     
@@ -2205,9 +2206,13 @@
                 try {
                     localStorage.setItem('rememberGraphicsQuality', '1');
                     localStorage.setItem('graphicsQuality', quality);
+                    localStorage.setItem('game_quality', quality);
                 } catch(e) {}
             } else {
-                try { localStorage.removeItem('graphicsQuality'); } catch(e) {}
+                try {
+                    localStorage.removeItem('graphicsQuality');
+                    localStorage.removeItem('game_quality');
+                } catch(e) {}
             }
 
             var graphicsSelect = document.getElementById('graphics-quality');
@@ -2231,10 +2236,12 @@
                             localStorage.setItem('rememberGraphicsQuality', '1');
                             if (window._selectedLoadingQuality) {
                                 localStorage.setItem('graphicsQuality', window._selectedLoadingQuality);
+                                localStorage.setItem('game_quality', window._selectedLoadingQuality);
                             }
                         } else {
                             localStorage.removeItem('rememberGraphicsQuality');
                             localStorage.removeItem('graphicsQuality');
+                            localStorage.removeItem('game_quality');
                         }
                     } catch(e) {}
                 });
@@ -2337,20 +2344,22 @@
                     });
                 }
 
-                // Wait for game to finish loading
+                // Wait for BOTH gameLoaded AND _mapCacheUsed before showing Start Game
                 const checkLoaded = setInterval(function() {
-                    if (typeof window.gameLoaded !== 'undefined' && window.gameLoaded) {
+                    var loaded = typeof window.gameLoaded !== 'undefined' && window.gameLoaded;
+                    var mapCached = !!window._mapCacheUsed;
+                    if (loaded && mapCached) {
                         clearInterval(checkLoaded);
                         clearTimeout(fallbackTimeout);
                         setReady();
                     }
                 }, 100);
 
-                // Fallback: allow entering lobby even if gameLoaded isn't set
+                // Fallback: allow entering even if map preload failed
                 const fallbackTimeout = setTimeout(function() {
                     clearInterval(checkLoaded);
                     setReady();
-                }, 8000);
+                }, 30000);
             });
             
             function initLobby() {
