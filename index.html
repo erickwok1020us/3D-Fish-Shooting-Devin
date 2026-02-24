@@ -1764,6 +1764,7 @@
                 <div id="loading-progress"></div>
             </div>
             <div id="loading-text">Loading...</div>
+            <button id="qs-start-game">Start Game</button>
             <div class="qs-divider"></div>
             <div id="quality-selector">
                 <div class="qs-header">
@@ -1785,7 +1786,6 @@
                         <span class="qs-btn-fps">Best Visuals</span>
                     </button>
                 </div>
-                <button id="qs-start-game">Start Game</button>
             </div>
         </div>
     </div>
@@ -2254,13 +2254,15 @@
             
             window.addEventListener('load', function() {
                 const startBtn = document.getElementById('qs-start-game');
+                const loadingBar = document.getElementById('loading-bar');
                 const loadingText = document.getElementById('loading-text');
 
                 let startReady = false;
                 const setReady = function() {
                     startReady = true;
+                    if (loadingBar) loadingBar.style.display = 'none';
+                    if (loadingText) loadingText.style.display = 'none';
                     if (startBtn) startBtn.classList.add('ready');
-                    if (loadingText) loadingText.textContent = 'Ready';
                 };
 
                 if (startBtn) {
