@@ -1021,8 +1021,9 @@ const WEAPON_CONFIG = {
     },
     '3x': {
         multiplier: 3, cost: 3, damage: 100, shotsPerSecond: 2.5,
-        type: 'spread', speed: 4000,
-        piercing: false, spreadAngle: 15, aoeRadius: 0, damageEdge: 0, laserWidth: 0,
+        type: 'burst', speed: 4000,
+        burstCount: 3,
+        piercing: false, spreadAngle: 0, aoeRadius: 0, damageEdge: 0, laserWidth: 0,
         convergenceDistance: 1400,
 
         soundVolume: 1.0,
@@ -1585,7 +1586,10 @@ const gameState = {
     fpsCannonSide: 'right',  // FPS weapon hand side (fixed right)
     isScoping: false,        // Right-click scope zoom active
     scopeTargetFov: 60,      // Target FOV for scope zoom (60=normal FPS, 30=zoomed)
-    weaponSelected: false    // Plan B: true after player picks initial weapon
+    weaponSelected: false,   // Plan B: true after player picks initial weapon
+    burstShotsRemaining: 0,
+    burstTimer: 0,
+    burstInProgress: false
 };
 
 // ==================== BALANCE AUDIT GUARD (T1 Regression) ====================
@@ -12514,8 +12518,8 @@ function autoFireAtFish(targetFish) {
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
     
-    // Check cooldown
     if (gameState.cooldown > 0) return false;
+    if (gameState.burstInProgress) return false;
     
     if (gameState.balance < weapon.cost * BALANCE_SCALE) return false;
     
@@ -12558,15 +12562,52 @@ function autoFireAtFish(targetFish) {
     
     muzzlePos.addScaledVector(direction, 5);
     
-    // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
-    if (weapon.type === 'spread') {
-        const barrelSpacing = WEAPON_3X_SPREAD_WIDTH;
-        const right = new THREE.Vector3().crossVectors(direction, fireBulletTempVectors.yAxis).normalize();
-        const leftMuzzle = muzzlePos.clone().addScaledVector(right, -barrelSpacing);
-        const rightMuzzle = muzzlePos.clone().addScaledVector(right, barrelSpacing);
-        fireHitscanRay(muzzlePos, direction, weaponKey, 0);
-        fireHitscanRay(leftMuzzle, direction, weaponKey, -1);
-        fireHitscanRay(rightMuzzle, direction, weaponKey, 1);
+    if (weapon.type === 'burst') {
+        var burstCount = weapon.burstCount || 3;
+        var burstInterval = (1 / weapon.shotsPerSecond * 1000) / burstCount;
+        fireHitscanRay(muzzlePos, direction, weaponKey);
+        playWeaponShot(weaponKey);
+        spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+        showCrosshairRingFlash();
+        var wCfgB = WeaponSystem.getConfig(weaponKey);
+        var recoilB = wCfgB ? wCfgB.recoilStrength : 5;
+        if (gameState.viewMode === 'fps') {
+            fpsCameraRecoilState.maxPitchOffset = recoilB * 0.001;
+            fpsCameraRecoilState.active = true;
+            fpsCameraRecoilState.phase = 'kick';
+            fpsCameraRecoilState.kickStartTime = performance.now();
+            fpsCameraRecoilState.kickDuration = 20;
+            fpsCameraRecoilState.returnDuration = 50;
+        } else if (cannonBarrel) {
+            var correctYB = wCfgB.cannonYOffset !== undefined ? wCfgB.cannonYOffset : 20;
+            barrelRecoilState.originalPosition.set(0, correctYB, 0);
+            barrelRecoilState.recoilVector.set(0, -1, 0);
+            barrelRecoilState.recoilDistance = recoilB * 0.2;
+            barrelRecoilState.active = true;
+            barrelRecoilState.phase = 'kick';
+            barrelRecoilState.kickStartTime = performance.now();
+            barrelRecoilState.kickDuration = 20;
+            barrelRecoilState.returnDuration = 50;
+        }
+        gameState.burstInProgress = true;
+        gameState.burstShotsRemaining = burstCount - 1;
+        for (var bi = 1; bi < burstCount; bi++) {
+            (function(shotIdx) {
+                setTimeout(function() {
+                    if (gameState.currentWeapon !== weaponKey) {
+                        gameState.burstInProgress = false;
+                        gameState.burstShotsRemaining = 0;
+                        return;
+                    }
+                    _fireBurstShotAuto(weaponKey);
+                    gameState.burstShotsRemaining--;
+                    if (gameState.burstShotsRemaining <= 0) {
+                        gameState.burstInProgress = false;
+                    }
+                }, burstInterval * shotIdx);
+            })(bi);
+        }
+        return true;
     } else if (weapon.type === 'laser') {
         fireLaserBeam(muzzlePos, direction, weaponKey);
     } else {
@@ -15730,7 +15771,7 @@ class Fish {
             const weapon = CONFIG.weapons[weaponKey];
             if (!weapon) {
                 console.warn(`[RTP] takeDamage: no weapon found for key='${weaponKey}'`);
-            } else if (weapon.type === 'spread') {
+            } else if (weapon.type === 'spread' || weapon.type === 'burst') {
                 const result = clientRTPEngine.handleShotgunHit(
                     CLIENT_RTP_PLAYER_ID, this.rtpFishId, weaponKey, this.rtpTier, gameState.autoShoot
                 );
@@ -16728,7 +16769,7 @@ class Bullet {
             this.glbModel.rotation.copy(glbConfig.bulletRotationFix);
         }
         
-        const isProjectile = (weapon.type === 'projectile' || weapon.type === 'spread' || weapon.type === 'rocket' || weapon.type === 'laser');
+        const isProjectile = (weapon.type === 'projectile' || weapon.type === 'spread' || weapon.type === 'burst' || weapon.type === 'rocket' || weapon.type === 'laser');
         if (isProjectile) {
             const vfx = WEAPON_VFX_CONFIG[weaponKey];
             this.glowTrailMat.color.setHex(vfx ? vfx.trailColor : 0xffffff);
@@ -16833,7 +16874,7 @@ class Bullet {
             if (collision.hit) {
                 bulletTempVectors.bulletDir.copy(this.velocity).normalize();
                 
-                if (weapon.type === 'projectile' || weapon.type === 'spread') {
+                if (weapon.type === 'projectile' || weapon.type === 'spread' || weapon.type === 'burst') {
                     bulletTempVectors.fishToBullet.copy(bulletTempVectors.hitPos).sub(fishPos).normalize();
                     const surfaceDist = halfExt
                         ? Math.min(halfExt.x, halfExt.y, halfExt.z) * 0.8
@@ -16947,6 +16988,97 @@ function spawnBulletFromDirection(origin, direction, weaponKey, spreadIndex) {
     return bullet;
 }
 
+function _fireBurstShot(weaponKey, shotIndex) {
+    var weapon = CONFIG.weapons[weaponKey];
+    var aimX, aimY;
+    if (gameState.viewMode === 'fps') {
+        aimX = window.innerWidth / 2;
+        aimY = window.innerHeight / 2;
+    } else {
+        aimX = gameState.mouseX;
+        aimY = gameState.mouseY;
+    }
+    var aimResult = getAimDirectionAndTarget(aimX, aimY, fireBulletTempVectors.multiplayerDir, fireBulletTempVectors.targetPoint);
+    var direction = aimResult.direction;
+    cannonMuzzle.getWorldPosition(fireBulletTempVectors.muzzlePos);
+    var muzzlePos = fireBulletTempVectors.muzzlePos;
+    muzzlePos.addScaledVector(direction, 5);
+    fireHitscanRay(muzzlePos, direction, weaponKey);
+    playWeaponShot(weaponKey);
+    spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+    var chEl = document.getElementById('crosshair');
+    if (chEl) {
+        chEl.classList.remove('firing');
+        void chEl.offsetWidth;
+        chEl.classList.add('firing');
+    }
+    showCrosshairRingFlash();
+    var wCfg = WeaponSystem.getConfig(weaponKey);
+    var recoilStrength = wCfg ? wCfg.recoilStrength : 5;
+    if (gameState.viewMode === 'fps') {
+        fpsCameraRecoilState.maxPitchOffset = recoilStrength * 0.002;
+        fpsCameraRecoilState.active = true;
+        fpsCameraRecoilState.phase = 'kick';
+        fpsCameraRecoilState.kickStartTime = performance.now();
+        fpsCameraRecoilState.kickDuration = 25;
+        fpsCameraRecoilState.returnDuration = 60;
+    } else if (cannonBarrel) {
+        barrelRecoilState.originalPosition.copy(cannonBarrel.position);
+        barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
+        barrelRecoilState.recoilDistance = recoilStrength * 1.2;
+        barrelRecoilState.active = true;
+        barrelRecoilState.phase = 'kick';
+        barrelRecoilState.kickStartTime = performance.now();
+        barrelRecoilState.kickDuration = 25;
+        barrelRecoilState.returnDuration = 60;
+    }
+}
+
+function _fireBurstShotAuto(weaponKey) {
+    var weapon = CONFIG.weapons[weaponKey];
+    cannonMuzzle.getWorldPosition(autoFireTempVectors.muzzlePos);
+    var muzzlePos = autoFireTempVectors.muzzlePos;
+    var direction = autoFireTempVectors.direction;
+    var yaw = cannonGroup ? cannonGroup.rotation.y : 0;
+    var pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+    direction.set(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch)
+    ).normalize();
+    muzzlePos.addScaledVector(direction, 5);
+    fireHitscanRay(muzzlePos, direction, weaponKey);
+    playWeaponShot(weaponKey);
+    spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+    var chEl = document.getElementById('crosshair');
+    if (chEl) {
+        chEl.classList.remove('firing');
+        void chEl.offsetWidth;
+        chEl.classList.add('firing');
+    }
+    showCrosshairRingFlash();
+    var wCfg = WeaponSystem.getConfig(weaponKey);
+    var recoilStrength = wCfg ? wCfg.recoilStrength : 5;
+    if (gameState.viewMode === 'fps') {
+        fpsCameraRecoilState.maxPitchOffset = recoilStrength * 0.001;
+        fpsCameraRecoilState.active = true;
+        fpsCameraRecoilState.phase = 'kick';
+        fpsCameraRecoilState.kickStartTime = performance.now();
+        fpsCameraRecoilState.kickDuration = 20;
+        fpsCameraRecoilState.returnDuration = 50;
+    } else if (cannonBarrel) {
+        var correctY = wCfg.cannonYOffset !== undefined ? wCfg.cannonYOffset : 20;
+        barrelRecoilState.originalPosition.set(0, correctY, 0);
+        barrelRecoilState.recoilVector.set(0, -1, 0);
+        barrelRecoilState.recoilDistance = recoilStrength * 0.2;
+        barrelRecoilState.active = true;
+        barrelRecoilState.phase = 'kick';
+        barrelRecoilState.kickStartTime = performance.now();
+        barrelRecoilState.kickDuration = 20;
+        barrelRecoilState.returnDuration = 50;
+    }
+}
+
 function fireBullet(targetX, targetY) {
     if (!gameState.isInGameScene) return false;
     if (!gameState.weaponSelected) return false;
@@ -16955,32 +17087,14 @@ function fireBullet(targetX, targetY) {
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
     
-    // Check cooldown - use shotsPerSecond to calculate cooldown
     if (gameState.cooldown > 0) return false;
+    if (gameState.burstInProgress) return false;
     
     const chEl = document.getElementById('crosshair');
     if (chEl) {
         chEl.classList.remove('firing');
         void chEl.offsetWidth;
         chEl.classList.add('firing');
-    }
-    const vspreadEl = document.getElementById('crosshair-vspread');
-    if (vspreadEl && vspreadEl.style.display !== 'none') {
-        vspreadEl.classList.remove('firing');
-        void vspreadEl.offsetWidth;
-        vspreadEl.classList.add('firing');
-    }
-    const sideL = document.getElementById('crosshair-3x-left');
-    const sideR = document.getElementById('crosshair-3x-right');
-    if (sideL && sideL.style.display !== 'none') {
-        sideL.classList.remove('firing');
-        void sideL.offsetWidth;
-        sideL.classList.add('firing');
-    }
-    if (sideR && sideR.style.display !== 'none') {
-        sideR.classList.remove('firing');
-        void sideR.offsetWidth;
-        sideR.classList.add('firing');
     }
     
     // MULTIPLAYER MODE: Send shoot to server, don't do local balance/cost handling
@@ -17134,14 +17248,50 @@ function fireBullet(targetX, targetY) {
     }
     
     // HITSCAN SYSTEM: All weapons use instant raycast hit detection (no physical bullets)
-    if (weapon.type === 'spread') {
-        const barrelSpacing = WEAPON_3X_SPREAD_WIDTH;
-        const right = new THREE.Vector3().crossVectors(direction, fireBulletTempVectors.yAxis).normalize();
-        const leftMuzzle = muzzlePos.clone().addScaledVector(right, -barrelSpacing);
-        const rightMuzzle = muzzlePos.clone().addScaledVector(right, barrelSpacing);
-        fireHitscanRay(muzzlePos, direction, weaponKey, 0);
-        fireHitscanRay(leftMuzzle, direction, weaponKey, -1);
-        fireHitscanRay(rightMuzzle, direction, weaponKey, 1);
+    if (weapon.type === 'burst') {
+        var burstCount = weapon.burstCount || 3;
+        var burstInterval = (1 / weapon.shotsPerSecond * 1000) / burstCount;
+        fireHitscanRay(muzzlePos, direction, weaponKey);
+        spawnMuzzleFlash(weaponKey, muzzlePos, direction);
+        showCrosshairRingFlash();
+        var config0 = WEAPON_VFX_CONFIG[weaponKey];
+        var recoil0 = config0 ? config0.recoilStrength : 5;
+        if (gameState.viewMode === 'fps') {
+            fpsCameraRecoilState.maxPitchOffset = recoil0 * 0.003;
+            fpsCameraRecoilState.active = true;
+            fpsCameraRecoilState.phase = 'kick';
+            fpsCameraRecoilState.kickStartTime = performance.now();
+            fpsCameraRecoilState.kickDuration = 25;
+            fpsCameraRecoilState.returnDuration = 60;
+        } else if (cannonBarrel) {
+            barrelRecoilState.originalPosition.copy(cannonBarrel.position);
+            barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
+            barrelRecoilState.recoilDistance = recoil0 * 1.5;
+            barrelRecoilState.active = true;
+            barrelRecoilState.phase = 'kick';
+            barrelRecoilState.kickStartTime = performance.now();
+            barrelRecoilState.kickDuration = 25;
+            barrelRecoilState.returnDuration = 60;
+        }
+        gameState.burstInProgress = true;
+        gameState.burstShotsRemaining = burstCount - 1;
+        for (var bi = 1; bi < burstCount; bi++) {
+            (function(shotIdx) {
+                setTimeout(function() {
+                    if (gameState.currentWeapon !== weaponKey) {
+                        gameState.burstInProgress = false;
+                        gameState.burstShotsRemaining = 0;
+                        return;
+                    }
+                    _fireBurstShot(weaponKey, shotIdx);
+                    gameState.burstShotsRemaining--;
+                    if (gameState.burstShotsRemaining <= 0) {
+                        gameState.burstInProgress = false;
+                    }
+                }, burstInterval * shotIdx);
+            })(bi);
+        }
+        return true;
     } else if (weapon.type === 'laser') {
         fireLaserBeam(muzzlePos, direction, weaponKey);
     } else if (weapon.type === 'rocket') {
@@ -17152,35 +17302,24 @@ function fireBullet(targetX, targetY) {
     
     spawnMuzzleFlash(weaponKey, muzzlePos, direction);
     
-    // Issue #14: Start charge effect for 5x and 8x weapons (visual only, doesn't delay shot)
     if (weaponKey === '5x' || weaponKey === '8x') {
         startCannonChargeEffect(weaponKey);
     }
     
-    // Issue #14: Enhanced cannon recoil animation based on weapon
-    // IMPROVED: Two-phase recoil (kick + return) with backward movement for realistic feel
     const config = WEAPON_VFX_CONFIG[weaponKey];
     const recoilStrength = config ? config.recoilStrength : 5;
     
     if (gameState.viewMode === 'fps') {
-        // FPS MODE: Camera pitch kick (visual feedback without moving camera position)
-        // This gives recoil feel without breaking the muzzle-based camera positioning
-        fpsCameraRecoilState.maxPitchOffset = recoilStrength * 0.003;  // Convert to radians (small kick)
+        fpsCameraRecoilState.maxPitchOffset = recoilStrength * 0.003;
         fpsCameraRecoilState.active = true;
         fpsCameraRecoilState.phase = 'kick';
         fpsCameraRecoilState.kickStartTime = performance.now();
         fpsCameraRecoilState.kickDuration = 30 + recoilStrength;
         fpsCameraRecoilState.returnDuration = 100 + recoilStrength * 4;
     } else if (cannonBarrel) {
-        // THIRD-PERSON MODE: Barrel position recoil
-        // Store original position
         barrelRecoilState.originalPosition.copy(cannonBarrel.position);
-        
-        // Calculate recoil direction (opposite to firing direction)
         barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
-        barrelRecoilState.recoilDistance = recoilStrength * 2;  // Scale for visual impact
-        
-        // Start kick phase
+        barrelRecoilState.recoilDistance = recoilStrength * 2;
         barrelRecoilState.active = true;
         barrelRecoilState.phase = 'kick';
         barrelRecoilState.kickStartTime = performance.now();
@@ -17962,11 +18101,6 @@ function fireHitscanRay(origin, direction, weaponKey, spreadIndex) {
         if (weapon.type === 'rocket') {
             triggerExplosion(beamEnd.clone(), weaponKey);
             triggerScreenShakeWithStrength(6, 80);
-        } else if (weapon.type === 'spread') {
-            closestHit.takeDamage(damage, weaponKey, spreadIndex);
-            createHitParticles(beamEnd, weapon.color, 5);
-            spawnWeaponHitEffect(weaponKey, beamEnd.clone(), closestHit, dir);
-            playWeaponHitSound(weaponKey);
         } else {
             closestHit.takeDamage(damage, weaponKey, spreadIndex);
             createHitParticles(beamEnd, weapon.color, 5);
@@ -18467,6 +18601,9 @@ function selectWeapon(weaponKey) {
         return;
     }
     
+    gameState.burstInProgress = false;
+    gameState.burstShotsRemaining = 0;
+    
     const prevYaw = cannonGroup ? cannonGroup.rotation.y : 0;
     const prevPitch = cannonPitchGroup ? cannonPitchGroup.rotation.x : 0;
     
@@ -18570,24 +18707,8 @@ function updateCrosshairForWeapon(weaponKey) {
     }
     const sideL = document.getElementById('crosshair-3x-left');
     const sideR = document.getElementById('crosshair-3x-right');
-    if (weaponKey === '3x') {
-        if (sideL) {
-            sideL.style.display = 'block';
-            sideL.style.width = sz + 'px';
-            sideL.style.height = sz + 'px';
-            sideL.innerHTML = createTechCircleSVG(sz);
-        }
-        if (sideR) {
-            sideR.style.display = 'block';
-            sideR.style.width = sz + 'px';
-            sideR.style.height = sz + 'px';
-            sideR.innerHTML = createTechCircleSVG(sz);
-        }
-        update3xSideCrosshairPositions();
-    } else {
-        if (sideL) sideL.style.display = 'none';
-        if (sideR) sideR.style.display = 'none';
-    }
+    if (sideL) sideL.style.display = 'none';
+    if (sideR) sideR.style.display = 'none';
 }
 
 function updateSpreadCrosshairPositions() {
