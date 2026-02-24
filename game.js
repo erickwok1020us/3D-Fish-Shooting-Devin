@@ -1201,6 +1201,7 @@ const CONFIG = {
         height: 900,    // Y axis (1.5x from 600)
         depth: 1200,    // Z axis (1.5x from 800)
         floorY: -450,   // Bottom of tank (1.5x from -300)
+        fishFloorY: -260, // Absolute minimum Y for all fish — above turret top (CANNON_BASE_Y ≈ -337.5 + ~77)
         glassThickness: 20
     },
     
@@ -4338,10 +4339,10 @@ const FISH_BEHAVIOR_CONFIG = {
     // Tank: floorY=-450, height=900, so range is -450 to 450
     depthBands: {
         surface: { min: 100, max: 350 },      // Near top (flying fish, mahi-mahi)
-        midWater: { min: -100, max: 150 },    // Middle (medium predators)
-        reef: { min: -280, max: -50 },        // Reef zone (coral reef fish, small schooling fish)
-        bottom: { min: -350, max: -150 },     // Near bottom (grouper, seahorse)
-        fullColumn: { min: -300, max: 300 }   // Anywhere (large predators)
+        midWater: { min: -50, max: 200 },     // Middle — biased upward for visual leveling
+        reef: { min: -200, max: 0 },          // Reef zone — raised above turret level
+        bottom: { min: -220, max: -60 },      // Near bottom — clamped above fishFloorY (-260)
+        fullColumn: { min: -200, max: 300 }   // Anywhere — raised floor above turret
     },
     
     // Default behavior parameters by category
@@ -4408,7 +4409,9 @@ function getFishBehaviorConfig(species, category) {
 
 // Get depth band bounds
 function getDepthBandBounds(bandName) {
-    return FISH_BEHAVIOR_CONFIG.depthBands[bandName] || FISH_BEHAVIOR_CONFIG.depthBands.midWater;
+    const band = FISH_BEHAVIOR_CONFIG.depthBands[bandName] || FISH_BEHAVIOR_CONFIG.depthBands.midWater;
+    const floor = CONFIG.aquarium.fishFloorY;
+    return { min: Math.max(band.min, floor), max: Math.max(band.max, floor + 50) };
 }
 
 // ==================== LEADER-FOLLOWER SCHOOLING SYSTEM ====================
@@ -9847,10 +9850,10 @@ function updateWeaponVFX(deltaTime) {
             // Decay knockback velocity
             fish.knockbackVelocity.multiplyScalar(0.9);
             
-            // Clamp to aquarium bounds
+            // Clamp to aquarium bounds (respects fishFloorY)
             const { width, height, depth } = CONFIG.aquarium;
             fish.group.position.x = Math.max(-width/2 + 50, Math.min(width/2 - 50, fish.group.position.x));
-            fish.group.position.y = Math.max(-height/2 + 50, Math.min(height/2 - 50, fish.group.position.y));
+            fish.group.position.y = Math.max(CONFIG.aquarium.fishFloorY, Math.min(CONFIG.aquarium.floorY + height - 50, fish.group.position.y));
             fish.group.position.z = Math.max(-depth/2 + 50, Math.min(depth/2 - 50, fish.group.position.z));
             
             if (fish.knockbackTime <= 0) {
@@ -14280,9 +14283,10 @@ class Fish {
         this.behaviorState.noiseTime = Math.random() * 100; // Random start time for variety
         
         // Set base depth within the species' preferred depth band
-        // Spawn position Y is used as initial hint, clamped to depth band
+        // Bias toward upper 2/3 of depth band for natural middle-to-upper layer preference
+        const bandUpperBias = depthBand.min * 0.3 + depthBand.max * 0.7;
         this.behaviorState.baseDepth = Math.max(depthBand.min, 
-            Math.min(depthBand.max, position.y));
+            Math.min(depthBand.max, position.y * 0.5 + bandUpperBias * 0.5));
         
         // Issue #5: Trigger rare fish effects for tier4 (boss fish)
         triggerRareFishEffects(this.tier);
@@ -14607,11 +14611,14 @@ class Fish {
                 Math.sin(randomAngle) * this.speed
             );
             
-            // Reset position to center of aquarium if position is NaN
+            // Reset position to middle-upper zone of aquarium if position is NaN
             if (posNaN) {
+                const _nanFloor = CONFIG.aquarium.fishFloorY;
+                const _nanCeil = CONFIG.aquarium.floorY + CONFIG.aquarium.height - 50;
+                const _nanMidUpper = _nanFloor + (_nanCeil - _nanFloor) * 0.6;
                 this.group.position.set(
                     (Math.random() - 0.5) * CONFIG.aquarium.width * 0.5,
-                    CONFIG.aquarium.floorY + CONFIG.aquarium.height * 0.5,
+                    _nanMidUpper + (Math.random() - 0.5) * (_nanCeil - _nanFloor) * 0.3,
                     (Math.random() - 0.5) * CONFIG.aquarium.depth * 0.5
                 );
             }
@@ -14639,6 +14646,23 @@ class Fish {
         
         // Update position (using addScaledVector to avoid clone() allocation)
         this.group.position.addScaledVector(this.velocity, deltaTime);
+        
+        // HARD CLAMP: Enforce aquarium bounding box — fish can never escape these limits
+        const _hcAq = CONFIG.aquarium;
+        const _hcPos = this.group.position;
+        const _hcHardMargin = 50;
+        const _hcMinX = -_hcAq.width / 2 + _hcHardMargin;
+        const _hcMaxX = _hcAq.width / 2 - _hcHardMargin;
+        const _hcMinY = _hcAq.fishFloorY;
+        const _hcMaxY = _hcAq.floorY + _hcAq.height - _hcHardMargin;
+        const _hcMinZ = -_hcAq.depth / 2 + _hcHardMargin;
+        const _hcMaxZ = _hcAq.depth / 2 - _hcHardMargin;
+        if (_hcPos.x < _hcMinX) { _hcPos.x = _hcMinX; if (this.velocity.x < 0) this.velocity.x *= -0.3; }
+        else if (_hcPos.x > _hcMaxX) { _hcPos.x = _hcMaxX; if (this.velocity.x > 0) this.velocity.x *= -0.3; }
+        if (_hcPos.y < _hcMinY) { _hcPos.y = _hcMinY; if (this.velocity.y < 0) this.velocity.y *= -0.3; }
+        else if (_hcPos.y > _hcMaxY) { _hcPos.y = _hcMaxY; if (this.velocity.y > 0) this.velocity.y *= -0.3; }
+        if (_hcPos.z < _hcMinZ) { _hcPos.z = _hcMinZ; if (this.velocity.z < 0) this.velocity.z *= -0.3; }
+        else if (_hcPos.z > _hcMaxZ) { _hcPos.z = _hcMaxZ; if (this.velocity.z > 0) this.velocity.z *= -0.3; }
         
         // Terrain hard stop: rollback + emergency yaw if fish penetrates terrain
         this.checkTerrainHardStop();
@@ -14768,7 +14792,7 @@ class Fish {
                 const sShapeArena = CONFIG.fishArena;
                 const sShapeMinX = -sShapeAquarium.width / 2 + sShapeArena.marginX;
                 const sShapeMaxX = sShapeAquarium.width / 2 - sShapeArena.marginX;
-                const sShapeMinY = sShapeAquarium.floorY + sShapeArena.marginY;
+                const sShapeMinY = Math.max(sShapeAquarium.floorY + sShapeArena.marginY, CONFIG.aquarium.fishFloorY);
                 const sShapeMaxY = sShapeAquarium.floorY + sShapeAquarium.height - sShapeArena.marginY;
                 const sShapeMinZ = -sShapeAquarium.depth / 2 + sShapeArena.marginZ;
                 const sShapeMaxZ = sShapeAquarium.depth / 2 - sShapeArena.marginZ;
@@ -14832,7 +14856,7 @@ class Fish {
                 const sShapeHardMargin = 50; // Extra margin beyond fishArena for hard clamp
                 const sShapeHardMinX = -sShapeAquarium.width / 2 + sShapeHardMargin;
                 const sShapeHardMaxX = sShapeAquarium.width / 2 - sShapeHardMargin;
-                const sShapeHardMinY = sShapeAquarium.floorY + sShapeHardMargin;
+                const sShapeHardMinY = Math.max(sShapeAquarium.floorY + sShapeHardMargin, CONFIG.aquarium.fishFloorY);
                 const sShapeHardMaxY = sShapeAquarium.floorY + sShapeAquarium.height - sShapeHardMargin;
                 const sShapeHardMinZ = -sShapeAquarium.depth / 2 + sShapeHardMargin;
                 const sShapeHardMaxZ = sShapeAquarium.depth / 2 - sShapeHardMargin;
@@ -15365,7 +15389,7 @@ class Fish {
         // Calculate bounds inside the tank with margins
         const minX = -width / 2 + marginX;
         const maxX = width / 2 - marginX;
-        const minY = floorY + marginY;
+        const minY = Math.max(floorY + marginY, CONFIG.aquarium.fishFloorY);
         const maxY = floorY + height - marginY;
         const minZ = -depth / 2 + marginZ;
         const maxZ = depth / 2 - marginZ;
@@ -16181,8 +16205,7 @@ function getRandomFishPositionIn3DSpace() {
     
     const minX = -width / 2 + marginX;
     const maxX = width / 2 - marginX;
-    const cannonY = floorY + 30;
-    const minY = cannonY + 250;
+    const minY = Math.max(CONFIG.aquarium.fishFloorY + 90, CONFIG.aquarium.floorY + 230);
     const maxY = floorY + height - marginY;
     const minZ = -depth / 2 + marginZ;
     const maxZ = depth / 2 - marginZ;
