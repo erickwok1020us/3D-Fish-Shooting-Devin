@@ -10212,9 +10212,8 @@ function initGameScene() {
             if (vTag) vTag.style.display = 'none';
         }
         
-        if (loadingScreen) {
-            loadingScreen.style.display = 'none';
-        }
+        var ls = document.getElementById('loading-screen');
+        if (ls) ls.style.display = 'none';
         gameState.isLoading = false;
         lastTime = performance.now();
         
@@ -10553,8 +10552,10 @@ window.startMultiplayerGame = function(manager) {
 };
 
 function updateLoadingProgress(percent, text) {
-    document.getElementById('loading-progress').style.width = percent + '%';
-    document.getElementById('loading-text').textContent = text;
+    var lp = document.getElementById('loading-progress');
+    var lt = document.getElementById('loading-text');
+    if (lp) lp.style.width = percent + '%';
+    if (lt) lt.textContent = text;
 }
 
 // ==================== 3D MAP LOADING ====================
