@@ -1540,6 +1540,7 @@ const gameState = {
     cooldown: 0,
     isLoading: true,
     isPaused: false,
+    settingsOpen: false,
     autoShoot: false,
     mouseX: window.innerWidth / 2,
     mouseY: window.innerHeight / 2,
@@ -16940,6 +16941,7 @@ function spawnBulletFromDirection(origin, direction, weaponKey, spreadIndex) {
 function fireBullet(targetX, targetY) {
     if (!gameState.isInGameScene) return false;
     if (!gameState.weaponSelected) return false;
+    if (gameState.settingsOpen) return false;
     
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
@@ -17337,7 +17339,7 @@ function createParticleSystems() {
 
 function createBubbleSystem() {
     setInterval(() => {
-        if (gameState.isLoading || gameState.isPaused) return;
+        if (gameState.isLoading) return;
         
         const { width, depth, floorY, height } = CONFIG.aquarium;
         
@@ -18903,6 +18905,8 @@ function setupEventListeners() {
         gameState.mouseX = e.clientX;
         gameState.mouseY = e.clientY;
         
+        if (gameState.settingsOpen) return;
+        
         // FPS MODE: Free mouse look (no button required)
         if (gameState.viewMode === 'fps') {
             // Use Pointer Lock API if available and locked
@@ -19017,6 +19021,7 @@ function setupEventListeners() {
     // Left click to shoot
     container.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
+        if (gameState.settingsOpen) return;
         
         // Don't shoot if clicking on UI elements
         if (e.target.closest('#weapon-panel') || 
@@ -19087,6 +19092,7 @@ function setupEventListeners() {
     // Right-click: scope zoom (hold) + camera drag
     container.addEventListener('mousedown', (e) => {
         if (e.button === 2) {  // Right mouse button
+            if (gameState.settingsOpen) return;
             gameState.isRightDragging = true;
             gameState.rightDragStartX = e.clientX;
             gameState.rightDragStartY = e.clientY;
@@ -19155,6 +19161,8 @@ function setupEventListeners() {
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
             return;
         }
+        
+        if (gameState.settingsOpen && e.key !== 'Escape') return;
         
         // Weapon switching: 1-4 keys (also works on weapon picker screen)
         if (e.key === '1') {
@@ -19249,16 +19257,14 @@ function toggleSettingsPanel() {
     const container = document.getElementById('game-container');
 
     if (nowVisible) {
-        // Enter pause/menu: show cursor and unlock pointer
-        gameState.isPaused = true;
+        gameState.settingsOpen = true;
         if (document.pointerLockElement) {
             document.exitPointerLock();
         }
         if (container) container.classList.remove('fps-hide-cursor');
         document.body.style.cursor = 'default';
     } else {
-        // Resume game: hide cursor and re-lock pointer (FPS mode only)
-        gameState.isPaused = false;
+        gameState.settingsOpen = false;
         if (container) container.classList.add('fps-hide-cursor');
         if (gameState.viewMode === 'fps' && gameState.weaponSelected && gameState.isInGameScene && container && container.requestPointerLock) {
             container.requestPointerLock();
@@ -19695,7 +19701,7 @@ function animate() {
     deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
     lastTime = currentTime;
     
-    if (gameState.isLoading || gameState.isPaused) return;
+    if (gameState.isLoading) return;
     
     // Update cooldown
     if (gameState.cooldown > 0) {
@@ -20888,15 +20894,14 @@ function initSettingsUI() {
     if (settingsContainer) {
         settingsContainer.addEventListener('click', (e) => {
             e.stopPropagation();
-            settingsPanel.classList.toggle('visible');
+            toggleSettingsPanel();
         });
     }
     
-    // Close button
     if (closeBtn) {
         closeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            settingsPanel.classList.remove('visible');
+            if (settingsPanel.classList.contains('visible')) toggleSettingsPanel();
         });
     }
     
