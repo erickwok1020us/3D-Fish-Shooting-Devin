@@ -7436,7 +7436,7 @@ function _showGoldSpring(intAmount) {
     _rewardPopupYOffset++;
     if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
     _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 10 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:#ffd700;-webkit-text-stroke:1.5px #fff;text-shadow:0 0 16px rgba(255,215,0,0.9),0 2px 4px rgba(0,0,0,0.6);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
+    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 10 - yOff}px;font-family:'Orbitron',monospace;font-size:26px;font-weight:800;color:#ffd740;-webkit-text-stroke:2.5px rgba(0,0,0,0.7);text-shadow:0 0 14px rgba(255,215,0,0.8),0 2px 4px rgba(0,0,0,0.6);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
     document.body.appendChild(popup);
     const startT = performance.now();
     function animGold(t) {
@@ -7478,7 +7478,7 @@ function _showArcadeJump(intAmount) {
     _rewardPopupYOffset++;
     if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
     _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 5 - yOff}px;font-family:'Orbitron',monospace;font-size:42px;font-weight:900;color:#ffd700;-webkit-text-stroke:3px #000;text-shadow:0 0 16px rgba(255,215,0,0.8),0 3px 6px rgba(0,0,0,0.7);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
+    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 5 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:800;color:#ffd740;-webkit-text-stroke:2.5px rgba(0,0,0,0.7);text-shadow:0 0 14px rgba(255,215,0,0.8),0 3px 6px rgba(0,0,0,0.7);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
     document.body.appendChild(popup);
     const startT = performance.now();
     const duration = 1400;
@@ -7513,7 +7513,7 @@ function _showNeonPulse(intAmount) {
     _rewardPopupYOffset++;
     if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
     _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 12 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:#39ff14;text-shadow:0 0 10px #39ff14,0 0 20px #39ff14,0 0 40px rgba(57,255,20,0.4);pointer-events:none;z-index:99999;white-space:nowrap;`;
+    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 12 - yOff}px;font-family:'Orbitron',monospace;font-size:26px;font-weight:800;color:#39ff14;-webkit-text-stroke:2px rgba(0,0,0,0.5);text-shadow:0 0 10px #39ff14,0 0 20px #39ff14,0 0 40px rgba(57,255,20,0.4);pointer-events:none;z-index:99999;white-space:nowrap;`;
     document.body.appendChild(popup);
     const startT = performance.now();
     const duration = 1600;
