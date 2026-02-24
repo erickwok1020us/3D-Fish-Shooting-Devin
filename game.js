@@ -6860,7 +6860,7 @@ function triggerScreenFlash(color = 0xffffff, duration = 100, opacity = 0.3) {
     });
 }
 
-const WEAPON_3X_SPREAD_WIDTH = 20;
+const WEAPON_3X_SPREAD_WIDTH = 40;
 let _3xCrosshairStyle = 'triple_dot';
 const pelletStates = [
     { hit: false, timer: 0, kill: false, killTimer: 0 },
@@ -6960,31 +6960,35 @@ function _drawSkullAtLane(ctx, px, py, laneIdx) {
     var totalDur = 500;
     var p = 1 - (t / totalDur);
     var scale, opacity;
-    if (p < 0.2) {
-        scale = 0.3 + (p / 0.2) * 1.0;
-        opacity = p / 0.2;
+    if (p < 0.15) {
+        scale = 0.5 + (p / 0.15) * 1.0;
+        opacity = 0.3 + (p / 0.15) * 0.7;
+    } else if (p < 0.35) {
+        scale = 1.5 - ((p - 0.15) / 0.2) * 0.3;
+        opacity = 1.0;
     } else {
-        scale = 1.3 - (p - 0.2) * 0.375;
-        opacity = 1 - Math.pow((p - 0.2) / 0.8, 2);
+        scale = 1.2 - ((p - 0.35) / 0.65) * 0.2;
+        opacity = 1.0 - Math.pow((p - 0.35) / 0.65, 1.5);
     }
     ctx.save();
-    ctx.translate(px, py - 20 * p);
+    ctx.translate(px, py - 25 * p);
     ctx.scale(scale, scale);
-    ctx.globalAlpha = Math.max(0, opacity);
+    ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+    ctx.shadowColor = 'rgba(255,20,60,0.9)';
+    ctx.shadowBlur = 12;
     ctx.fillStyle = 'rgba(255,40,60,0.95)';
     ctx.beginPath();
-    ctx.arc(0, -2, 7, Math.PI, 0, false);
-    ctx.arc(0, -2, 7, 0, Math.PI, false);
+    ctx.arc(0, -2, 8, Math.PI, 0, false);
+    ctx.arc(0, -2, 8, 0, Math.PI, false);
     ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.fillStyle = '#111';
-    ctx.beginPath(); ctx.arc(-2.5, -3, 1.8, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(2.5, -3, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-3, -3.5, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -3.5, 2.2, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = 'rgba(255,40,60,0.95)';
-    ctx.fillRect(-3.5, 4, 2, 2.5);
-    ctx.fillRect(-0.75, 4, 1.5, 3);
-    ctx.fillRect(1.5, 4, 2, 2.5);
-    ctx.shadowColor = 'rgba(255,20,60,0.8)';
-    ctx.shadowBlur = 8;
+    ctx.fillRect(-4, 5, 2.5, 3);
+    ctx.fillRect(-0.75, 5, 1.5, 3.5);
+    ctx.fillRect(1.5, 5, 2.5, 3);
     ctx.restore();
     ctx.globalAlpha = 1;
 }
