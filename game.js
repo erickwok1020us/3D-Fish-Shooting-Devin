@@ -10235,7 +10235,7 @@ function initGameScene() {
     setTimeout(function() {
         stopVideoBackground();
         var gc = document.getElementById('game-container');
-        if (gc) gc.style.display = 'block';
+        if (gc) gc.classList.add('visible');
         var ls = document.getElementById('loading-screen');
         if (ls) {
             ls.style.display = 'none';
@@ -10732,9 +10732,7 @@ function loadMap3D(onComplete) {
             if (!window._isGameStarted) {
                 stopVideoBackground();
                 const gameContainer = document.getElementById('game-container');
-                if (gameContainer) {
-                    gameContainer.style.display = 'block';
-                }
+                if (gameContainer) gameContainer.classList.add('visible');
                 if (initialLoadingScreen) initialLoadingScreen.style.display = 'none';
                 gameState.isInGameScene = true;
                 initKillFeedSlots();
@@ -10772,9 +10770,7 @@ function loadMap3D(onComplete) {
             if (!window._isGameStarted) {
                 stopVideoBackground();
                 const gameContainer = document.getElementById('game-container');
-                if (gameContainer) {
-                    gameContainer.style.display = 'block';
-                }
+                if (gameContainer) gameContainer.classList.add('visible');
                 if (initialLoadingScreen) initialLoadingScreen.style.display = 'none';
                 gameState.isInGameScene = true;
                 initKillFeedSlots();

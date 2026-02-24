@@ -29,8 +29,12 @@
             width: 100vw;
             height: 100vh;
             position: relative;
-            /* FIX: Hide game container by default to prevent flash on page load */
-            display: none;
+            display: block;
+            opacity: 0;
+            transition: opacity 0.8s ease-in;
+        }
+        #game-container.visible {
+            opacity: 1;
         }
         
         /* FPS mode: Hide mouse cursor (only crosshair visible) */
@@ -1073,11 +1077,15 @@
             justify-content: center;
             z-index: 1000;
             opacity: 1;
-            transition: opacity 0.5s ease-out;
+            transition: opacity 0.8s ease-out;
         }
         #loading-screen.fade-out {
             opacity: 0;
             pointer-events: none;
+        }
+        #loading-screen.pressing {
+            opacity: 0.5;
+            transition: opacity 0.1s ease-out;
         }
         
         /* Loading Screen Container - Unified glassmorphism panel */
@@ -2288,22 +2296,32 @@
                         window._loadingScreenLocked = true;
                         window._isGameStarted = true;
                         var ls = document.getElementById('loading-screen');
+                        var gc = document.getElementById('game-container');
+                        startBtn.style.transform = 'scale(0.95)';
                         if (ls) {
                             ls.style.pointerEvents = 'none';
-                            ls.classList.add('fade-out');
+                            ls.classList.add('pressing');
                         }
-                        var gc = document.getElementById('game-container');
-                        if (gc) gc.style.display = 'block';
                         requestAnimationFrame(function() {
-                            if (typeof window.startSinglePlayerGame === 'function') {
-                                window.startSinglePlayerGame();
-                            }
-                        });
-                        setTimeout(function() {
                             if (ls) {
-                                ls.style.display = 'none';
+                                ls.classList.remove('pressing');
+                                ls.classList.add('fade-out');
                             }
-                        }, 500);
+                            if (gc) gc.classList.add('visible');
+                            setTimeout(function() {
+                                if (typeof window.startSinglePlayerGame === 'function') {
+                                    window.startSinglePlayerGame();
+                                }
+                            }, 0);
+                        });
+                        if (ls) {
+                            ls.addEventListener('transitionend', function handler(evt) {
+                                if (evt.propertyName === 'opacity' && ls.classList.contains('fade-out')) {
+                                    ls.style.display = 'none';
+                                    ls.removeEventListener('transitionend', handler);
+                                }
+                            });
+                        }
                     });
                 }
 
