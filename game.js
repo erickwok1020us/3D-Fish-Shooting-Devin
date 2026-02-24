@@ -10077,14 +10077,13 @@ function initGameScene() {
     const quality = performanceState.graphicsQuality;
     console.log(`[INIT] Using graphics quality: ${quality}`);
     
-    // Show loading screen
+    // Only re-show loading screen if map wasn't preloaded (fallback path)
+    // When map is cached, Start Game already hid the loading screen — don't flash it back
     const loadingScreen = document.getElementById('loading-screen');
     const loadingText = document.getElementById('loading-text');
-    if (loadingScreen) {
+    if (loadingScreen && !window._mapCacheUsed) {
         loadingScreen.style.display = 'flex';
     }
-    
-    updateLoadingProgress(10, 'Initializing Three.js...');
     
     // Issue #6: Initialize audio system
     initAudio();
