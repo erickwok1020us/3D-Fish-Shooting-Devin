@@ -1072,6 +1072,12 @@
             align-items: center;
             justify-content: center;
             z-index: 1000;
+            opacity: 1;
+            transition: opacity 0.25s ease-out;
+        }
+        #loading-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
         }
         
         /* Loading Screen Container - Unified glassmorphism panel */
@@ -1530,6 +1536,19 @@
         }
 
         /* ===== Quality Selector (inside loading-container) ===== */
+        .qs-section-header {
+            width: 100%;
+            text-align: center;
+            font-family: 'Orbitron', monospace;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 2.5px;
+            color: rgba(0, 220, 255, 0.7);
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(0, 220, 255, 0.4);
+            margin-bottom: 8px;
+            pointer-events: none;
+        }
         #quality-selector {
             width: 100%;
         }
@@ -1596,7 +1615,11 @@
         .qs-btn.active {
             background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.3), rgba(0, 60, 140, 0.18));
             border: 2.5px solid #00e0ff;
-            box-shadow: 0 0 20px rgba(0, 220, 255, 0.25), inset 0 0 12px rgba(0, 200, 255, 0.1);
+            animation: qsBtnBreathe 2s ease-in-out infinite;
+        }
+        @keyframes qsBtnBreathe {
+            0%, 100% { box-shadow: 0 0 14px rgba(0, 220, 255, 0.2), inset 0 0 10px rgba(0, 200, 255, 0.08); }
+            50% { box-shadow: 0 0 28px rgba(0, 220, 255, 0.45), 0 0 56px rgba(0, 220, 255, 0.12), inset 0 0 14px rgba(0, 200, 255, 0.15); }
         }
         .qs-btn.active .qs-btn-label {
             color: #00ffff;
@@ -1643,10 +1666,12 @@
 
         #qs-start-game {
             display: none;
-            width: 100%;
-            padding: 14px 0;
+            width: calc(100% + 24px);
+            padding: 18px 12px;
             margin-top: 0;
             margin-bottom: 10px;
+            margin-left: -12px;
+            margin-right: -12px;
             background: rgba(0, 20, 50, 0.5);
             border: 2px solid rgba(0, 150, 255, 0.2);
             border-radius: 8px;
@@ -1669,13 +1694,16 @@
             touch-action: manipulation;
         }
         #qs-start-game:hover {
-            border-color: rgba(0, 200, 255, 0.4);
-            background: rgba(0, 30, 70, 0.4);
-            box-shadow: 0 0 18px rgba(0, 220, 255, 0.16);
+            border-color: rgba(0, 200, 255, 0.5);
+            background: rgba(0, 40, 90, 0.5);
+            box-shadow: 0 0 22px rgba(0, 220, 255, 0.22);
         }
         #qs-start-game:active {
             transform: scale(0.95);
-            transition: transform 0.05s ease;
+            background: rgba(0, 60, 120, 0.6);
+            border-color: rgba(0, 255, 255, 0.7);
+            box-shadow: 0 0 30px rgba(0, 220, 255, 0.35);
+            transition: transform 0.05s ease, background 0.05s ease, border-color 0.05s ease;
         }
         @keyframes startGameFadeIn {
             from { opacity: 0; transform: translateY(6px); }
@@ -1704,7 +1732,8 @@
             }
             .qs-btn .qs-btn-label { font-size: 11px; }
             .qs-detail { font-size: 8px; min-height: 16px; }
-            #qs-start-game { font-size: 12px; letter-spacing: 2px; padding: 12px 0; }
+            #qs-start-game { font-size: 12px; letter-spacing: 2px; padding: 14px 12px; }
+            .qs-section-header { font-size: 8px; letter-spacing: 2px; }
         }
     </style>
 </head>
@@ -1723,6 +1752,7 @@
             </div>
             <div id="loading-text">Loading...</div>
             <button id="qs-start-game">Start Game</button>
+            <div class="qs-section-header">Select Graphics Quality</div>
             <div id="quality-selector">
                 <div class="qs-buttons">
                     <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
@@ -2259,18 +2289,25 @@
                     startBtn.addEventListener('pointerdown', function(e) {
                         if (!startReady) return;
                         e.preventDefault();
+                        startReady = false;
                         window._loadingScreenLocked = true;
                         window._isGameStarted = true;
                         var ls = document.getElementById('loading-screen');
                         if (ls) {
-                            ls.style.display = 'none';
-                            ls.style.pointerEvents = 'none';
+                            ls.classList.add('fade-out');
                         }
                         var gc = document.getElementById('game-container');
                         if (gc) gc.style.display = 'block';
-                        if (typeof window.startSinglePlayerGame === 'function') {
-                            window.startSinglePlayerGame();
-                        }
+                        requestAnimationFrame(function() {
+                            setTimeout(function() {
+                                if (ls) {
+                                    ls.style.display = 'none';
+                                }
+                                if (typeof window.startSinglePlayerGame === 'function') {
+                                    window.startSinglePlayerGame();
+                                }
+                            }, 0);
+                        });
                     });
                 }
 
