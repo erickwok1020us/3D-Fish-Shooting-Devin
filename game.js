@@ -1047,7 +1047,7 @@ const WEAPON_CONFIG = {
         cannonColor: 0xff8888, cannonEmissive: 0xff6666,
         muzzleColor: 0xffaaaa, trailColor: 0xffbbbb,
         hitColor: 0xffaaaa, ringColor: 0xffaaaa,
-        recoilStrength: 8, screenShakeOnHit: 1.0,
+        recoilStrength: 4, screenShakeOnHit: 0.5,
         chargeTime: 0,
     },
     '5x': {
@@ -1081,7 +1081,7 @@ const WEAPON_CONFIG = {
         chargeTime: 0.2,
     },
     '8x': {
-        multiplier: 8, cost: 8, damage: 350, shotsPerSecond: 1.0,
+        multiplier: 8, cost: 8, damage: 350, shotsPerSecond: 2.5,
         type: 'laser', speed: 0,
         piercing: true, spreadAngle: 0, aoeRadius: 0, damageEdge: 0, laserWidth: 8,
         convergenceDistance: 1400,
@@ -1108,7 +1108,7 @@ const WEAPON_CONFIG = {
         muzzleColor: 0xff4400, trailColor: 0xff6600,
         hitColor: 0xff2200, ringColor: 0xff2200,
         recoilStrength: 15, screenShakeOnHit: 3,
-        chargeTime: 0.3,
+        chargeTime: 0,
     },
 };
 
