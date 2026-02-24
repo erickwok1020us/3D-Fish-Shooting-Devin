@@ -1579,6 +1579,190 @@
             transform: translateY(-4px);
             box-shadow: 0 0 20px rgba(68,221,255,0.3);
         }
+
+        /* ===== Quality Selector on Loading Screen ===== */
+        #quality-selector {
+            margin-top: 24px;
+            background: rgba(0, 10, 25, 0.55);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(0, 200, 255, 0.3);
+            border-radius: 14px;
+            padding: 20px 28px 18px;
+            min-width: 340px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(0, 100, 200, 0.1), inset 0 0 20px rgba(0, 60, 120, 0.06);
+            font-family: 'Orbitron', monospace;
+            position: relative;
+            overflow: hidden;
+        }
+        #quality-selector::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 15%; right: 15%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.45), transparent);
+        }
+        #quality-selector .qs-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        #quality-selector .qs-dot {
+            width: 5px; height: 5px;
+            background: #00d4ff;
+            box-shadow: 0 0 6px #00d4ff;
+            border-radius: 1px;
+            transform: rotate(45deg);
+        }
+        #quality-selector .qs-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            color: #00d4ff;
+            text-shadow: 0 0 8px rgba(0, 200, 255, 0.4);
+            text-transform: uppercase;
+        }
+        #quality-selector .qs-line {
+            flex: 1; height: 1px;
+            background: linear-gradient(90deg, rgba(0, 200, 255, 0.3), transparent);
+        }
+        #quality-selector .qs-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .qs-btn {
+            flex: 1;
+            position: relative;
+            padding: 12px 8px 10px;
+            background: rgba(0, 20, 50, 0.5);
+            border: 2px solid rgba(0, 150, 255, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            text-align: center;
+            font-family: 'Orbitron', monospace;
+            min-height: 52px;
+        }
+        .qs-btn .qs-btn-label {
+            font-size: 13px;
+            font-weight: 800;
+            color: rgba(0, 180, 255, 0.4);
+            letter-spacing: 1px;
+            display: block;
+            transition: all 0.25s ease;
+        }
+        .qs-btn .qs-btn-fps {
+            font-size: 8px;
+            font-weight: 600;
+            color: rgba(0, 200, 255, 0.3);
+            letter-spacing: 0.5px;
+            margin-top: 3px;
+            display: block;
+            transition: all 0.25s ease;
+        }
+        .qs-btn:hover {
+            border-color: rgba(0, 200, 255, 0.4);
+            background: rgba(0, 30, 70, 0.4);
+        }
+        .qs-btn:hover .qs-btn-label { color: rgba(0, 220, 255, 0.7); }
+        .qs-btn.active {
+            background: radial-gradient(ellipse at center, rgba(0, 150, 255, 0.3), rgba(0, 60, 140, 0.18));
+            border: 2.5px solid #00e0ff;
+            box-shadow: 0 0 20px rgba(0, 220, 255, 0.25), inset 0 0 12px rgba(0, 200, 255, 0.1);
+        }
+        .qs-btn.active .qs-btn-label {
+            color: #00ffff;
+            text-shadow: 0 0 14px rgba(0, 255, 255, 0.7), 0 0 28px rgba(0, 255, 255, 0.15);
+        }
+        .qs-btn.active .qs-btn-fps {
+            color: rgba(0, 255, 238, 0.65);
+            text-shadow: 0 0 6px rgba(0, 255, 238, 0.3);
+        }
+        .qs-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px; left: 15%; right: 15%;
+            height: 2px;
+            background: #00d4ff;
+            box-shadow: 0 0 8px #00d4ff;
+            border-radius: 1px;
+        }
+        #quality-selector .qs-device-info {
+            background: rgba(0, 15, 35, 0.5);
+            border: 1px solid rgba(0, 200, 255, 0.12);
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-top: 2px;
+        }
+        #quality-selector .qs-device-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        #quality-selector .qs-device-row:last-child { margin-bottom: 0; }
+        #quality-selector .qs-device-icon {
+            font-size: 11px;
+            width: 18px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        #quality-selector .qs-device-label {
+            font-size: 8px;
+            font-weight: 600;
+            color: rgba(0, 200, 255, 0.5);
+            letter-spacing: 1px;
+            min-width: 62px;
+            text-transform: uppercase;
+        }
+        #quality-selector .qs-device-value {
+            font-size: 8px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.55);
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #quality-selector .qs-gpu-detected {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0, 200, 255, 0.1);
+            text-align: center;
+        }
+        #quality-selector .qs-gpu-tag {
+            display: inline-block;
+            font-size: 7px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: rgba(0, 255, 204, 0.7);
+            background: rgba(0, 255, 204, 0.08);
+            border: 1px solid rgba(0, 255, 204, 0.2);
+            border-radius: 3px;
+            padding: 3px 10px;
+            text-transform: uppercase;
+            text-shadow: 0 0 6px rgba(0, 255, 204, 0.3);
+        }
+
+        @media (max-width: 520px) {
+            #quality-selector {
+                min-width: unset;
+                padding: 16px 16px 14px;
+                margin-top: 16px;
+            }
+            .qs-btn {
+                padding: 10px 6px 8px;
+                min-height: 46px;
+            }
+            .qs-btn .qs-btn-label { font-size: 11px; }
+            .qs-btn .qs-btn-fps { font-size: 7px; }
+            #quality-selector .qs-device-label { min-width: 50px; font-size: 7px; }
+            #quality-selector .qs-device-value { font-size: 7px; }
+        }
     </style>
 </head>
 <body>
@@ -1595,6 +1779,47 @@
                 <div id="loading-progress"></div>
             </div>
             <div id="loading-text">Loading...</div>
+        </div>
+        <div id="quality-selector">
+            <div class="qs-header">
+                <div class="qs-dot"></div>
+                <div class="qs-title">Graphics Quality</div>
+                <div class="qs-line"></div>
+            </div>
+            <div class="qs-buttons">
+                <button class="qs-btn" data-quality="low" onclick="selectLoadingQuality('low')">
+                    <span class="qs-btn-label">LOW</span>
+                    <span class="qs-btn-fps">80+ FPS</span>
+                </button>
+                <button class="qs-btn active" data-quality="medium" onclick="selectLoadingQuality('medium')">
+                    <span class="qs-btn-label">MEDIUM</span>
+                    <span class="qs-btn-fps">60+ FPS</span>
+                </button>
+                <button class="qs-btn" data-quality="high" onclick="selectLoadingQuality('high')">
+                    <span class="qs-btn-label">HIGH</span>
+                    <span class="qs-btn-fps">Best Visuals</span>
+                </button>
+            </div>
+            <div class="qs-device-info">
+                <div class="qs-device-row">
+                    <span class="qs-device-icon">&#x1F4BB;</span>
+                    <span class="qs-device-label" id="qs-platform-label">Platform</span>
+                    <span class="qs-device-value" id="qs-platform-value">Detecting...</span>
+                </div>
+                <div class="qs-device-row">
+                    <span class="qs-device-icon">&#x1F3AE;</span>
+                    <span class="qs-device-label" id="qs-gpu-label">GPU</span>
+                    <span class="qs-device-value" id="qs-gpu-value">Detecting...</span>
+                </div>
+                <div class="qs-device-row">
+                    <span class="qs-device-icon">&#x1F4CA;</span>
+                    <span class="qs-device-label">Recommend</span>
+                    <span class="qs-device-value" id="qs-recommend-value">Detecting...</span>
+                </div>
+            </div>
+            <div class="qs-gpu-detected" id="qs-gpu-detected" style="display:none;">
+                <span class="qs-gpu-tag" id="qs-gpu-tag"></span>
+            </div>
         </div>
     </div>
     
@@ -1892,6 +2117,136 @@
         <div id="crosshair-3x-right" class="crosshair-3x-side" style="display:none;"></div>
     </div>
     
+    <!-- Quality Selector Logic (runs before game.js) -->
+    <script>
+    (function() {
+        var QS_DESCRIPTIONS = {
+            low: {
+                desktop: 'Integrated GPU / i3',
+                mobile: 'Entry-level / Older Phones'
+            },
+            medium: {
+                desktop: 'GTX 1050 / i5',
+                mobile: 'iPhone 12-14 / Mid-range Android'
+            },
+            high: {
+                desktop: 'RTX 2060 / M1+ / i7',
+                mobile: 'iPhone 15 Pro / Flagship Tablets'
+            }
+        };
+
+        function detectPlatform() {
+            var ua = navigator.userAgent || '';
+            if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
+                if (/iPad|Macintosh/i.test(ua) && 'ontouchend' in document) return 'tablet';
+                return 'mobile';
+            }
+            if (/Macintosh|Mac OS X/i.test(ua)) return 'mac';
+            if (/Windows/i.test(ua)) return 'windows';
+            if (/Linux/i.test(ua)) return 'linux';
+            return 'desktop';
+        }
+
+        function isMobileDevice() {
+            var p = detectPlatform();
+            return p === 'mobile' || p === 'tablet';
+        }
+
+        function detectGPU() {
+            try {
+                var c = document.createElement('canvas');
+                var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+                if (!gl) return null;
+                var ext = gl.getExtension('WEBGL_debug_renderer_info');
+                if (!ext) return { vendor: 'Unknown', renderer: 'Unknown (extension blocked)' };
+                return {
+                    vendor: gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) || 'Unknown',
+                    renderer: gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || 'Unknown'
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function recommendQuality(gpu) {
+            if (!gpu || !gpu.renderer) return 'medium';
+            var r = gpu.renderer.toLowerCase();
+            if (/rtx\s*(30|40|50)|radeon\s*rx\s*(6[89]|7)|apple\s*m[2-9]|apple\s*m1\s*(pro|max|ultra)/i.test(r)) return 'high';
+            if (/rtx\s*20|gtx\s*1[0-9]{3}|radeon\s*rx\s*(5[5-9]|6[0-7])|apple\s*m1|apple\s*gpu/i.test(r)) return 'medium';
+            if (/intel\s*(hd|uhd|iris)|mali|adreno\s*(5|6[0-2])|powervr|swiftshader/i.test(r)) return 'low';
+            if (/apple/i.test(r)) return 'medium';
+            return 'medium';
+        }
+
+        function getPlatformLabel(platform) {
+            var labels = { mobile: 'Mobile', tablet: 'Tablet', mac: 'macOS', windows: 'Windows', linux: 'Linux', desktop: 'Desktop' };
+            return labels[platform] || 'Desktop';
+        }
+
+        function updateDescriptions(quality) {
+            var mobile = isMobileDevice();
+            var key = mobile ? 'mobile' : 'desktop';
+            var btns = document.querySelectorAll('.qs-btn');
+            btns.forEach(function(btn) {
+                var q = btn.getAttribute('data-quality');
+                var desc = QS_DESCRIPTIONS[q] ? QS_DESCRIPTIONS[q][key] : '';
+                var fpsEl = btn.querySelector('.qs-btn-fps');
+                if (fpsEl) {
+                    if (q === 'low') fpsEl.textContent = '80+ FPS · ' + desc;
+                    else if (q === 'medium') fpsEl.textContent = '60+ FPS · ' + desc;
+                    else fpsEl.textContent = 'Best Visuals · ' + desc;
+                }
+            });
+        }
+
+        window.selectLoadingQuality = function(quality) {
+            var btns = document.querySelectorAll('.qs-btn');
+            btns.forEach(function(b) { b.classList.remove('active'); });
+            var target = document.querySelector('.qs-btn[data-quality="' + quality + '"]');
+            if (target) target.classList.add('active');
+            try { localStorage.setItem('graphicsQuality', quality); } catch(e) {}
+            window._selectedLoadingQuality = quality;
+            var graphicsSelect = document.getElementById('graphics-quality');
+            if (graphicsSelect) graphicsSelect.value = quality;
+        };
+
+        function initQualitySelector() {
+            var platform = detectPlatform();
+            var gpu = detectGPU();
+            var recommended = recommendQuality(gpu);
+
+            var platformEl = document.getElementById('qs-platform-value');
+            var gpuEl = document.getElementById('qs-gpu-value');
+            var recommendEl = document.getElementById('qs-recommend-value');
+            var gpuDetected = document.getElementById('qs-gpu-detected');
+            var gpuTag = document.getElementById('qs-gpu-tag');
+
+            if (platformEl) platformEl.textContent = getPlatformLabel(platform);
+            if (gpuEl) gpuEl.textContent = gpu ? gpu.renderer : 'Not available';
+            if (recommendEl) recommendEl.textContent = recommended.charAt(0).toUpperCase() + recommended.slice(1);
+
+            if (gpu && gpu.renderer && gpu.renderer !== 'Unknown' && gpuDetected && gpuTag) {
+                var short = gpu.renderer.length > 40 ? gpu.renderer.substring(0, 37) + '...' : gpu.renderer;
+                gpuTag.textContent = 'Auto-detected: ' + short;
+                gpuDetected.style.display = 'block';
+            }
+
+            updateDescriptions(recommended);
+
+            var saved = null;
+            try { saved = localStorage.getItem('graphicsQuality'); } catch(e) {}
+            var initial = (saved && ['low','medium','high'].indexOf(saved) !== -1) ? saved : recommended;
+            window.selectLoadingQuality(initial);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initQualitySelector);
+        } else {
+            initQualitySelector();
+        }
+    })();
+    </script>
+
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- GLTFLoader for 3D map loading -->
