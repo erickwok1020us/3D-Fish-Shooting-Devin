@@ -1080,7 +1080,7 @@ const WEAPON_CONFIG = {
         chargeTime: 0.2,
     },
     '8x': {
-        multiplier: 8, cost: 8, damage: 350, shotsPerSecond: 1.0,
+        multiplier: 8, cost: 8, damage: 350, shotsPerSecond: 2.5,
         type: 'laser', speed: 0,
         piercing: true, spreadAngle: 0, aoeRadius: 0, damageEdge: 0, laserWidth: 8,
         convergenceDistance: 1400,
@@ -1107,7 +1107,7 @@ const WEAPON_CONFIG = {
         muzzleColor: 0xff4400, trailColor: 0xff6600,
         hitColor: 0xff2200, ringColor: 0xff2200,
         recoilStrength: 15, screenShakeOnHit: 3,
-        chargeTime: 0.3,
+        chargeTime: 0,
     },
 };
 
@@ -18118,7 +18118,7 @@ function fireLaserBeam(origin, direction, weaponKey) {
     
     const hitPoints = pierceTargets.map(h => h.hitPoint);
     spawnLaserHitscanVFX(origin, laserTempVectors.rayEnd.clone(), hitPoints, weapon.color);
-    triggerScreenShakeWithStrength(8, 100);
+    triggerScreenShakeWithStrength(4, 60);
 }
 
 // Hitscan laser VFX: visual beam from muzzle to hit point + muzzle flash + per-hit sparks
@@ -18193,7 +18193,7 @@ function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
     const brightRed = 0xff0000;
     
     for (const hitPt of hitPoints) {
-        const sparkCount = 12;
+        const sparkCount = 6;
         for (let i = 0; i < sparkCount; i++) {
             const sparkMaterial = new THREE.MeshBasicMaterial({
                 color: i % 3 === 0 ? 0xffffff : brightRed,
@@ -18228,31 +18228,31 @@ function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
         beamOuterGeo, beamOuterMat,
         impactFlashGeo, impactFlashMat,
         sparkGeometry,
-        duration: 350,
+        duration: 180,
         
         update(dt, elapsed) {
             const progress = elapsed / this.duration;
             
-            const muzzleFade = Math.max(0, 1.0 - progress * 5);
-            this.muzzleFlashMaterial.opacity = 0.95 * muzzleFade;
-            const muzzleScale = 1.0 + progress * 2;
+            const muzzleFade = Math.max(0, 1.0 - progress * 8);
+            this.muzzleFlashMaterial.opacity = 0.85 * muzzleFade;
+            const muzzleScale = 1.0 + progress * 3;
             this.muzzleFlash.scale.set(muzzleScale, muzzleScale, muzzleScale);
             
-            this.glowMaterial.opacity = 0.5 * Math.max(0, 1.0 - progress * 3);
-            const glowScale = 1.0 + progress * 3;
+            this.glowMaterial.opacity = 0.4 * Math.max(0, 1.0 - progress * 5);
+            const glowScale = 1.0 + progress * 4;
             this.glowSphere.scale.set(glowScale, glowScale, glowScale);
             
-            const beamFade = Math.max(0, 1.0 - progress * 4);
-            this.beamCoreMat.opacity = 0.95 * beamFade;
-            this.beamGlowMat.opacity = 0.4 * beamFade;
-            this.beamOuterMat.opacity = 0.12 * beamFade;
-            const beamShrink = 1.0 - progress * 0.3;
+            const beamFade = Math.max(0, 1.0 - progress * 6);
+            this.beamCoreMat.opacity = 0.9 * beamFade;
+            this.beamGlowMat.opacity = 0.35 * beamFade;
+            this.beamOuterMat.opacity = 0.1 * beamFade;
+            const beamShrink = 1.0 - progress * 0.5;
             this.beamCore.scale.set(beamShrink, 1, beamShrink);
-            this.beamGlow.scale.set(1.0 + progress * 0.5, 1, 1.0 + progress * 0.5);
+            this.beamGlow.scale.set(1.0 + progress * 0.3, 1, 1.0 + progress * 0.3);
             
-            const impactFade = Math.max(0, 1.0 - progress * 3);
-            this.impactFlashMat.opacity = 0.9 * impactFade;
-            const impactScale = 1.0 + progress * 4;
+            const impactFade = Math.max(0, 1.0 - progress * 5);
+            this.impactFlashMat.opacity = 0.8 * impactFade;
+            const impactScale = 1.0 + progress * 5;
             this.impactFlash.scale.set(impactScale, impactScale, impactScale);
             
             for (const spark of this.allSparks) {
