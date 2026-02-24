@@ -10222,6 +10222,11 @@ function initGameScene() {
     
     console.log('[PRELOAD] All effect pools pre-initialized (VFX geometry, muzzle flash, coin, effect, fireball, lightning arc, audio, score pop, coin shaders)');
     
+    if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+        console.log('[GPU] Warm-up render complete — pipeline primed');
+    }
+    
     updateLoadingProgress(95, 'Setting up controls...');
     setupEventListeners();
     
