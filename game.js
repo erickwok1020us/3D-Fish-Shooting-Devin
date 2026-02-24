@@ -1526,6 +1526,27 @@ const CONFIG = {
     }
 };
 
+// ==================== DYNAMIC FISH FLOOR (Bowl Shape) ====================
+// Returns the effective minimum Y for fish at a given X/Z position.
+// Center of tank uses the flat fishFloorY (-260), edges ramp up to clear
+// tall peripheral decorations (coral reefs, seaweed) via smoothstep.
+function getDynamicFishFloorY(x, z) {
+    const aq = CONFIG.aquarium;
+    const baseFloor = aq.fishFloorY;
+    const halfW = aq.width / 2;
+    const halfD = aq.depth / 2;
+    const safeX = halfW * 0.55;
+    const safeZ = halfD * 0.4;
+    const edgeRise = 350;
+    const absX = Math.abs(x);
+    const absZ = Math.abs(z);
+    const tx = absX > safeX ? (absX - safeX) / (halfW - safeX) : 0;
+    const tz = absZ > safeZ ? (absZ - safeZ) / (halfD - safeZ) : 0;
+    const t = Math.min(1, Math.max(tx, tz));
+    const s = t * t * (3 - 2 * t);
+    return baseFloor + edgeRise * s;
+}
+
 // ==================== BALANCE SCALE (Fixed-Point Integer Math) ====================
 // All balance arithmetic uses integer millicredits to avoid IEEE 754 float drift.
 // BALANCE_SCALE matches RTP_MONEY_SCALE (1000) so RTP rewardFp can be added directly.
@@ -4412,6 +4433,8 @@ function getDepthBandBounds(bandName) {
     const band = FISH_BEHAVIOR_CONFIG.depthBands[bandName] || FISH_BEHAVIOR_CONFIG.depthBands.midWater;
     const floor = CONFIG.aquarium.fishFloorY;
     return { min: Math.max(band.min, floor), max: Math.max(band.max, floor + 50) };
+    // NOTE: depth bands use static fishFloorY as baseline; runtime dynamic bowl floor
+    // is enforced separately in hard clamp and boundary forces via getDynamicFishFloorY()
 }
 
 // ==================== LEADER-FOLLOWER SCHOOLING SYSTEM ====================
@@ -9853,7 +9876,8 @@ function updateWeaponVFX(deltaTime) {
             // Clamp to aquarium bounds (respects fishFloorY)
             const { width, height, depth } = CONFIG.aquarium;
             fish.group.position.x = Math.max(-width/2 + 50, Math.min(width/2 - 50, fish.group.position.x));
-            fish.group.position.y = Math.max(CONFIG.aquarium.fishFloorY, Math.min(CONFIG.aquarium.floorY + height - 50, fish.group.position.y));
+            const _kbDynFloor = getDynamicFishFloorY(fish.group.position.x, fish.group.position.z);
+            fish.group.position.y = Math.max(_kbDynFloor, Math.min(CONFIG.aquarium.floorY + height - 50, fish.group.position.y));
             fish.group.position.z = Math.max(-depth/2 + 50, Math.min(depth/2 - 50, fish.group.position.z));
             
             if (fish.knockbackTime <= 0) {
@@ -14653,7 +14677,7 @@ class Fish {
         const _hcHardMargin = 50;
         const _hcMinX = -_hcAq.width / 2 + _hcHardMargin;
         const _hcMaxX = _hcAq.width / 2 - _hcHardMargin;
-        const _hcMinY = _hcAq.fishFloorY;
+        const _hcMinY = getDynamicFishFloorY(_hcPos.x, _hcPos.z);
         const _hcMaxY = _hcAq.floorY + _hcAq.height - _hcHardMargin;
         const _hcMinZ = -_hcAq.depth / 2 + _hcHardMargin;
         const _hcMaxZ = _hcAq.depth / 2 - _hcHardMargin;
@@ -14792,7 +14816,7 @@ class Fish {
                 const sShapeArena = CONFIG.fishArena;
                 const sShapeMinX = -sShapeAquarium.width / 2 + sShapeArena.marginX;
                 const sShapeMaxX = sShapeAquarium.width / 2 - sShapeArena.marginX;
-                const sShapeMinY = Math.max(sShapeAquarium.floorY + sShapeArena.marginY, CONFIG.aquarium.fishFloorY);
+                const sShapeMinY = Math.max(sShapeAquarium.floorY + sShapeArena.marginY, getDynamicFishFloorY(this.group.position.x, this.group.position.z));
                 const sShapeMaxY = sShapeAquarium.floorY + sShapeAquarium.height - sShapeArena.marginY;
                 const sShapeMinZ = -sShapeAquarium.depth / 2 + sShapeArena.marginZ;
                 const sShapeMaxZ = sShapeAquarium.depth / 2 - sShapeArena.marginZ;
@@ -14856,7 +14880,7 @@ class Fish {
                 const sShapeHardMargin = 50; // Extra margin beyond fishArena for hard clamp
                 const sShapeHardMinX = -sShapeAquarium.width / 2 + sShapeHardMargin;
                 const sShapeHardMaxX = sShapeAquarium.width / 2 - sShapeHardMargin;
-                const sShapeHardMinY = Math.max(sShapeAquarium.floorY + sShapeHardMargin, CONFIG.aquarium.fishFloorY);
+                const sShapeHardMinY = Math.max(sShapeAquarium.floorY + sShapeHardMargin, getDynamicFishFloorY(sShapePos.x, sShapePos.z));
                 const sShapeHardMaxY = sShapeAquarium.floorY + sShapeAquarium.height - sShapeHardMargin;
                 const sShapeHardMinZ = -sShapeAquarium.depth / 2 + sShapeHardMargin;
                 const sShapeHardMaxZ = sShapeAquarium.depth / 2 - sShapeHardMargin;
@@ -15389,7 +15413,7 @@ class Fish {
         // Calculate bounds inside the tank with margins
         const minX = -width / 2 + marginX;
         const maxX = width / 2 - marginX;
-        const minY = Math.max(floorY + marginY, CONFIG.aquarium.fishFloorY);
+        const minY = Math.max(floorY + marginY, getDynamicFishFloorY(pos.x, pos.z));
         const maxY = floorY + height - marginY;
         const minZ = -depth / 2 + marginZ;
         const maxZ = depth / 2 - marginZ;
@@ -16205,7 +16229,6 @@ function getRandomFishPositionIn3DSpace() {
     
     const minX = -width / 2 + marginX;
     const maxX = width / 2 - marginX;
-    const minY = Math.max(CONFIG.aquarium.fishFloorY + 90, CONFIG.aquarium.floorY + 230);
     const maxY = floorY + height - marginY;
     const minZ = -depth / 2 + marginZ;
     const maxZ = depth / 2 - marginZ;
@@ -16220,8 +16243,9 @@ function getRandomFishPositionIn3DSpace() {
         let x, y, z, horizontalDist;
         do {
             x = minX + Math.random() * (maxX - minX);
-            y = minY + Math.random() * (maxY - minY);
             z = minZ + Math.random() * (maxZ - minZ);
+            const spawnFloor = Math.max(getDynamicFishFloorY(x, z) + 90, CONFIG.aquarium.floorY + 230);
+            y = spawnFloor + Math.random() * (maxY - spawnFloor);
             horizontalDist = Math.sqrt(x*x + z*z);
         } while (horizontalDist < minHorizontalDistFromCannon);
         
