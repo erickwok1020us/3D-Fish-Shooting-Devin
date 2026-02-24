@@ -10644,14 +10644,20 @@ function loadMap3D(onComplete) {
     const percent = document.getElementById('map-loading-percent');
     const sizeInfo = document.getElementById('map-loading-size');
     
-    // Show loading overlay (fallback if map wasn't preloaded)
-    overlay.style.display = 'flex';
+    // NEVER show the separate map-loading-overlay — use main loading screen instead
+    if (overlay) overlay.style.display = 'none';
     
-    // Hide the initial loading screen to prevent overlap
+    // Keep the main loading screen visible for fallback progress
     const initialLoadingScreen = document.getElementById('loading-screen');
+    const mainLoadingBar = document.getElementById('loading-progress');
+    const mainLoadingText = document.getElementById('loading-text');
     if (initialLoadingScreen) {
-        initialLoadingScreen.style.display = 'none';
+        initialLoadingScreen.style.display = 'flex';
     }
+    if (mainLoadingBar) mainLoadingBar.style.width = '0%';
+    if (mainLoadingText) mainLoadingText.textContent = 'Loading map...';
+    var mainBar = document.getElementById('loading-bar');
+    if (mainBar) mainBar.style.display = 'block';
     
     // PRELOAD FIX: Start weapon preloading in parallel with map loading
     const weaponPreloadPromise = preloadAllWeaponsSync();
@@ -10711,8 +10717,9 @@ function loadMap3D(onComplete) {
                 gameContainer.style.display = 'block';
             }
             
-            // Hide loading overlay
-            overlay.style.display = 'none';
+            // Hide all loading overlays
+            if (overlay) overlay.style.display = 'none';
+            if (initialLoadingScreen) initialLoadingScreen.style.display = 'none';
             
             // FIX: Set isInGameScene AFTER loading is complete
             // This prevents shooting/camera movement during loading screen
@@ -10730,11 +10737,18 @@ function loadMap3D(onComplete) {
                 const mapPercent = (xhr.loaded / xhr.total) * 100;
                 loadingProgress.mapLoaded = mapPercent;
                 
-                // Update combined progress
+                // Update combined progress (overlay bar)
                 updateCombinedLoadingProgress(bar, percent, sizeInfo, mapPercent, xhr.loaded, xhr.total);
+                
+                // Also pipe progress to main loading screen bar
+                if (mainLoadingBar) mainLoadingBar.style.width = mapPercent.toFixed(0) + '%';
+                if (mainLoadingText) {
+                    const loadedMB = (xhr.loaded / 1024 / 1024).toFixed(1);
+                    const totalMB = (xhr.total / 1024 / 1024).toFixed(1);
+                    mainLoadingText.textContent = 'Loading map... ' + loadedMB + '/' + totalMB + ' MB';
+                }
             } else {
-                // Indeterminate progress
-                percent.textContent = 'Loading...';
+                if (mainLoadingText) mainLoadingText.textContent = 'Loading map...';
             }
         },
         // onError callback
@@ -10752,7 +10766,8 @@ function loadMap3D(onComplete) {
                 gameContainer.style.display = 'block';
             }
             
-            overlay.style.display = 'none';
+            if (overlay) overlay.style.display = 'none';
+            if (initialLoadingScreen) initialLoadingScreen.style.display = 'none';
             
             // FIX: Set isInGameScene even on error so game can proceed
             gameState.isInGameScene = true;
