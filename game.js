@@ -19936,7 +19936,7 @@ function initFPSMode() {
     // FIX: Reset FPS yaw/pitch to ensure camera faces forward on game start
     // This fixes the issue where camera was facing left on initial game entry
     // Initial pitch set to 15 degrees upward for optimal fish viewing (shows fish pool center)
-    const FPS_INITIAL_PITCH = 0 * (Math.PI / 180);  // 0 degrees — level resting view (straight ahead at fish plane)
+    const FPS_INITIAL_PITCH = -10 * (Math.PI / 180);  // -10 degrees — looking slightly down at fish swimming plane
     gameState.fpsYaw = 0;  // Face forward (toward fish pool center)
     gameState.fpsPitch = FPS_INITIAL_PITCH;
     
@@ -19972,7 +19972,7 @@ function initFPSMode() {
     
     // Wider FOV in FPS mode
     if (camera) {
-        camera.fov = 68;  // Tight cinematic FOV — reduced from 75 to eliminate fisheye edge stretching
+        camera.fov = FPS_CAMERA_PRESETS[_activeCameraPreset].fov;  // FOV from active camera preset
         camera.updateProjectionMatrix();
     }
     
@@ -20021,11 +20021,43 @@ const FPS_YAW_MAX = 90 * (Math.PI / 180);     // ±90° yaw (180° total horizon
 const FPS_PITCH_MIN = -47.5 * (Math.PI / 180);  // -47.5° (look down)
 const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5° vertical
 
-// FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
-// These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
-const FPS_CAMERA_BACK_DIST_DEFAULT = 150;   // Distance behind muzzle — increased for "barrel-over" iron sight feel
-const FPS_CAMERA_UP_OFFSET_DEFAULT = 45;    // Camera ABOVE barrel — looking down along top of cannon (no more rat perspective)
+// FPS Camera positioning — mutable for preset switching via console
+// Use window.setCameraPreset('A'|'B'|'C') to toggle between presets
+const FPS_CAMERA_PRESETS = {
+    A: { name: 'The Gunner (High & Far)',      upOffset: 250, backDist: 450, fov: 62, pitch: -10 },
+    B: { name: 'The Commando (Mid-height)',     upOffset: 150, backDist: 300, fov: 68, pitch: -10 },
+    C: { name: 'The Cinematic Sniper (Tight)',  upOffset: 180, backDist: 550, fov: 55, pitch: -10 }
+};
+let FPS_CAMERA_BACK_DIST_DEFAULT = 250;   // Active back distance (preset A default)
+let FPS_CAMERA_UP_OFFSET_DEFAULT = 250;   // Active up offset (preset A default)
 const FPS_CANNON_SIDE_OFFSET = 5;           // Near-center turret positioning
+let _activeCameraPreset = 'A';              // Track active preset
+
+// Console-accessible preset switcher: window.setCameraPreset('A'), ('B'), or ('C')
+window.setCameraPreset = function(preset) {
+    const key = String(preset).toUpperCase();
+    const cfg = FPS_CAMERA_PRESETS[key];
+    if (!cfg) {
+        console.warn('[CameraPreset] Invalid preset:', preset, '— use A, B, or C');
+        return;
+    }
+    _activeCameraPreset = key;
+    FPS_CAMERA_UP_OFFSET_DEFAULT = cfg.upOffset;
+    FPS_CAMERA_BACK_DIST_DEFAULT = cfg.backDist;
+    // Apply FOV
+    if (camera) {
+        camera.fov = cfg.fov;
+        camera.updateProjectionMatrix();
+    }
+    // Apply initial pitch (looking slightly down)
+    const pitchRad = cfg.pitch * (Math.PI / 180);
+    gameState.fpsPitch = pitchRad;
+    if (cannonPitchGroup) cannonPitchGroup.rotation.x = -pitchRad;
+    // Update camera immediately
+    if (gameState.viewMode === 'fps') updateFPSCamera();
+    console.log(`[CameraPreset] Switched to Preset ${key}: "${cfg.name}" — UP=${cfg.upOffset}, BACK=${cfg.backDist}, FOV=${cfg.fov}, Pitch=${cfg.pitch}°`);
+    return `Active: Preset ${key} — ${cfg.name}`;
+};
 
 // Update FPS camera position and rotation
 // Camera follows the cannon's muzzle - cannon rotation is the single source of truth
