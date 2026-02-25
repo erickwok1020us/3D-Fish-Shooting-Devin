@@ -25,11 +25,15 @@ const PANORAMA_CONFIG = {
     fogColor: 0x0a4d6c,
     fogNear: 600,
     fogFar: 3500,
-    bgDrift: {
-        ampX: 0.005,
-        ampY: 0.003,
-        freqX: 0.00012,
-        freqY: 0.00009
+    // Sky-sphere settings
+    skySphere: {
+        radius: 4000,           // Large sphere to encompass entire scene
+        segments: 128,          // Increased sphere detail for 8K quality
+        tiltX: -15 * (Math.PI / 180),  // Tilt panorama down so seafloor appears at bottom (-15°)
+        // Dynamic animation settings
+        rotationSpeedY: 0.0005,  // Very slow Y-axis rotation (rad/frame) for subtle movement
+        bobAmplitude: 0.003,     // Subtle X-axis bobbing amplitude
+        bobSpeed: 0.0003         // Bobbing speed
     },
     // 8K HD texture quality settings
     textureQuality: {
@@ -189,61 +193,124 @@ document.addEventListener('DOMContentLoaded', function() {
 // Load and create sky-sphere panorama background
 // Uses inverted sphere mesh for full control over positioning and animation
 // 8K HD Quality: Applies anisotropic filtering and mipmaps for maximum sharpness
-function applyAspectFillUV() {}
-
 function loadPanoramaBackground() {
     if (!PANORAMA_CONFIG.enabled) return;
 
-    const container = document.getElementById('game-container');
-    if (!container) return;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+
+    function createSkySphereWithTexture(texture, imageUrl) {
+        texture.colorSpace = THREE.SRGBColorSpace;
+
+        const qualityConfig = PANORAMA_CONFIG.textureQuality;
+        if (qualityConfig && renderer && renderer.capabilities) {
+            const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+            texture.anisotropy = Math.min(qualityConfig.anisotropy || 16, maxAnisotropy);
+            console.log('[PANORAMA] Anisotropic filtering:', texture.anisotropy, '(GPU max:', maxAnisotropy + ')');
+        }
+        texture.generateMipmaps = true;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.needsUpdate = true;
+
+        panoramaTexture = texture;
+
+        const bgTexture = texture.clone();
+        bgTexture.mapping = THREE.EquirectangularReflectionMapping;
+        bgTexture.needsUpdate = true;
+        scene.background = bgTexture;
+
+        const config = PANORAMA_CONFIG.skySphere;
+        const geometry = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            fog: false,
+            depthWrite: false,
+            depthTest: false,
+            side: THREE.BackSide
+        });
+
+        panoramaSkySphere = new THREE.Mesh(geometry, material);
+        panoramaSkySphere.name = 'panoramaSkySphere';
+        panoramaSkySphere.frustumCulled = false;
+        panoramaSkySphere.rotation.x = config.tiltX;
+        panoramaSkySphere.renderOrder = -1000;
+        scene.add(panoramaSkySphere);
+
+        if (texture.image) {
+            const imgW = texture.image.width;
+            const imgH = texture.image.height;
+            console.log('[PANORAMA] === TEXTURE DIAGNOSTIC ===');
+            console.log('[PANORAMA] Image loaded:', imgW + 'x' + imgH, 'from', imageUrl);
+            if (renderer && renderer.capabilities) {
+                const maxTexSize = renderer.capabilities.maxTextureSize;
+                console.log('[PANORAMA] GPU maxTextureSize:', maxTexSize);
+                if (imgW > maxTexSize || imgH > maxTexSize) {
+                    console.warn('[PANORAMA] WARNING: Image exceeds GPU limit! Will be downscaled to',
+                        Math.min(imgW, maxTexSize) + 'x' + Math.min(imgH, maxTexSize));
+                }
+            }
+            if (renderer) {
+                console.log('[PANORAMA] Renderer pixelRatio:', renderer.getPixelRatio());
+                console.log('[PANORAMA] Canvas size:', renderer.domElement.width + 'x' + renderer.domElement.height);
+            }
+            console.log('[PANORAMA] Graphics quality:', performanceState.graphicsQuality);
+            console.log('[PANORAMA] === END DIAGNOSTIC ===');
+        }
+
+        scene.fog = new THREE.Fog(
+            PANORAMA_CONFIG.fogColor,
+            PANORAMA_CONFIG.fogNear,
+            PANORAMA_CONFIG.fogFar
+        );
+    }
 
     const cacheBust = '?v=' + Date.now();
-    const imageUrl = PANORAMA_CONFIG.imageUrl + cacheBust;
-    console.log('[BG] Loading CSS background from:', imageUrl);
+    const imageUrlWithCacheBust = PANORAMA_CONFIG.imageUrl + cacheBust;
+    console.log('[PANORAMA] Loading from:', imageUrlWithCacheBust);
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function() {
-        console.log('[BG] === TEXTURE DIAGNOSTIC ===');
-        console.log('[BG] Image loaded:', img.naturalWidth + 'x' + img.naturalHeight);
-        console.log('[BG] Method: CSS background-image (camera-independent)');
-        console.log('[BG] === END DIAGNOSTIC ===');
-
-        container.style.backgroundImage = 'url(' + imageUrl + ')';
-        container.style.backgroundSize = 'cover';
-        container.style.backgroundPosition = 'center center';
-        container.style.backgroundRepeat = 'no-repeat';
-        panoramaTexture = { _cssMode: true };
-    };
-    img.onerror = function() {
-        console.warn('[BG] Failed to load background from R2');
-        if (PANORAMA_CONFIG.fallbackUrl) {
-            container.style.backgroundImage = 'url(' + PANORAMA_CONFIG.fallbackUrl + ')';
-            container.style.backgroundSize = 'cover';
-            container.style.backgroundPosition = 'center center';
-            container.style.backgroundRepeat = 'no-repeat';
-            panoramaTexture = { _cssMode: true };
+    loader.load(
+        imageUrlWithCacheBust,
+        (texture) => {
+            createSkySphereWithTexture(texture, PANORAMA_CONFIG.imageUrl);
+        },
+        undefined,
+        (error) => {
+            console.warn('[PANORAMA] Failed to load panorama from R2:', error.message || error);
+            if (PANORAMA_CONFIG.fallbackUrl) {
+                console.log('[PANORAMA] Trying fallback image:', PANORAMA_CONFIG.fallbackUrl);
+                loader.load(
+                    PANORAMA_CONFIG.fallbackUrl,
+                    (texture) => {
+                        createSkySphereWithTexture(texture, PANORAMA_CONFIG.fallbackUrl);
+                    },
+                    undefined,
+                    (fallbackError) => {
+                        console.warn('[PANORAMA] Fallback also failed, using solid color:', fallbackError);
+                        scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+                    }
+                );
+            } else {
+                scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+            }
         }
-    };
-    img.src = imageUrl;
-
-    scene.background = null;
-    scene.fog = new THREE.Fog(
-        PANORAMA_CONFIG.fogColor,
-        PANORAMA_CONFIG.fogNear,
-        PANORAMA_CONFIG.fogFar
     );
 }
 
-function updatePanoramaAnimation() {
-    if (!panoramaTexture || !panoramaTexture._cssMode) return;
-    const container = document.getElementById('game-container');
-    if (!container) return;
-    const cfg = PANORAMA_CONFIG.bgDrift;
-    const t = performance.now();
-    const dx = Math.sin(t * cfg.freqX) * cfg.ampX * 100;
-    const dy = Math.sin(t * cfg.freqY + 1.57) * cfg.ampY * 100;
-    container.style.backgroundPosition = 'calc(50% + ' + dx.toFixed(2) + 'px) calc(50% + ' + dy.toFixed(2) + 'px)';
+function updatePanoramaAnimation(deltaTime) {
+    if (!panoramaSkySphere) return;
+
+    const config = PANORAMA_CONFIG.skySphere;
+    const time = performance.now();
+
+    panoramaSkySphere.rotation.y += config.rotationSpeedY * deltaTime * 60;
+
+    const bobOffset = Math.sin(time * config.bobSpeed) * config.bobAmplitude;
+    panoramaSkySphere.rotation.x = config.tiltX + bobOffset;
+
+    if (camera) {
+        panoramaSkySphere.position.copy(camera.position);
+    }
 }
 
 // Create floating underwater particles for dynamic atmosphere
@@ -10003,7 +10070,6 @@ function initGameScene() {
     
     // Create scene
     scene = new THREE.Scene();
-    scene.background = null;
     scene.fog = new THREE.Fog(PANORAMA_CONFIG.fogColor, PANORAMA_CONFIG.fogNear, PANORAMA_CONFIG.fogFar);
     
     // Load panorama background (async, replaces solid color when loaded)
