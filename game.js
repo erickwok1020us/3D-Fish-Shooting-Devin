@@ -20631,7 +20631,8 @@ function createBossCrosshair(bossFish) {
     const baseSize = bossFish.config.size;
     
     // === OUTER RING (CYAN / NEON BLUE) — 12 segments, clockwise ===
-    const outerR = baseSize * 1.8;
+    // HALO SCALE FIX: Increase multiplier from 1.8x to 3.0x so halo is not hidden inside large T6 boss models
+    const outerR = baseSize * 3.0;
     const outerSegments = 12;
     const outerGap = 0.08;
     
@@ -20671,7 +20672,8 @@ function createBossCrosshair(bossFish) {
     crosshairGroup.add(outerRingGroup);
     
     // === INNER RING (AMBER GOLD) — 8 segments, counter-clockwise ===
-    const innerR = baseSize * 1.2;
+    // HALO SCALE FIX: Increase multiplier from 1.2x to 2.0x so inner ring is visible outside large T6 boss models
+    const innerR = baseSize * 2.0;
     const innerSegments = 8;
     const innerGap = 0.12;
     
@@ -20813,7 +20815,8 @@ function removeBossCrosshair() {
 
 function addBossGlowEffect(bossFish, glowColor) {
     // Add pulsing glow effect to boss fish
-    const glowGeometry = new THREE.SphereGeometry(bossFish.config.size * 1.3, 16, 16);
+    // GLOW SCALE FIX: Increase multiplier from 1.3x to 2.5x for T6 boss models
+    const glowGeometry = new THREE.SphereGeometry(bossFish.config.size * 2.5, 16, 16);
     const glowMaterial = new THREE.MeshBasicMaterial({
         color: glowColor,
         transparent: true,
@@ -20976,6 +20979,11 @@ function spawnBossFish() {
             const fish = freeFish.pop();
             if (fish) {
                 fish.config = bossConfig;
+                // REWARD FIX: Update tier + rtpTier so RTP engine uses correct T5/T6 reward table
+                // Without this, recycled fish (e.g. sardine=T1) keeps its old rtpTier and pays T1 rewards
+                fish.tier = bossType.baseSpecies;
+                fish.rtpTier = getFishRTPTier(bossType.baseSpecies);
+                fish.form = bossType.baseSpecies;
                 fish.createMesh();
                 
                 const offset = new THREE.Vector3(
@@ -21006,6 +21014,11 @@ function spawnBossFish() {
         const fish = freeFish.pop();
         if (fish) {
             fish.config = bossConfig;
+            // REWARD FIX: Update tier + rtpTier so RTP engine uses correct T5/T6 reward table
+            // Without this, recycled fish (e.g. sardine=T1) keeps its old rtpTier and pays T1 rewards
+            fish.tier = bossType.baseSpecies;
+            fish.rtpTier = getFishRTPTier(bossType.baseSpecies);
+            fish.form = bossType.baseSpecies;
             fish.createMesh();
             fish.spawn(getRandomFishPositionIn3DSpace());
             fish.isBoss = true;
