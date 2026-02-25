@@ -7427,154 +7427,78 @@ function showKillSkull(spreadIndex) {
     requestAnimationFrame(animSkull);
 }
 
-let _rewardPopupYOffset = 0;
-let _rewardPopupResetTimer = null;
-let _rewardPopupStyle = 'arcade_jump';
+const _projVec = new THREE.Vector3();
+function _worldToScreen(pos3D) {
+    if (!camera || !renderer) return null;
+    _projVec.copy(pos3D).project(camera);
+    const w = renderer.domElement.clientWidth;
+    const h = renderer.domElement.clientHeight;
+    return { x: (_projVec.x * 0.5 + 0.5) * w, y: (-_projVec.y * 0.5 + 0.5) * h };
+}
 
-function onScoreConfirmed(fishForm, rewardAmount) {
+function onScoreConfirmed(fishForm, rewardAmount, screenPos) {
     const rewardInt = Math.round(rewardAmount);
     if (rewardInt <= 0) return;
     addKillFeedEntry(fishForm, rewardInt);
-    showRewardFloat(rewardInt);
+    _showFlyToBalance(rewardInt, screenPos);
     updateUI();
 }
 
-function showRewardFloat(amount) {
-    if (!amount || amount <= 0) return;
-    const intAmount = Math.round(amount);
-    if (intAmount <= 0) return;
-    if (_rewardPopupStyle === 'gold_spring') {
-        _showGoldSpring(intAmount);
-    } else if (_rewardPopupStyle === 'arcade_jump') {
-        _showArcadeJump(intAmount);
-    } else if (_rewardPopupStyle === 'neon_pulse') {
-        _showNeonPulse(intAmount);
-    }
-}
-
-function _showGoldSpring(intAmount) {
+function _showFlyToBalance(intAmount, screenPos) {
     const bd = document.getElementById('balance-display');
     if (!bd) return;
-    const rect = bd.getBoundingClientRect();
-    const popup = document.createElement('div');
-    popup.textContent = '+' + intAmount.toLocaleString();
-    const yOff = _rewardPopupYOffset * 35;
-    _rewardPopupYOffset++;
-    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
-    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 10 - yOff}px;font-family:'Orbitron',monospace;font-size:26px;font-weight:800;color:#ffd740;-webkit-text-stroke:2.5px rgba(0,0,0,0.7);text-shadow:0 0 14px rgba(255,215,0,0.8),0 2px 4px rgba(0,0,0,0.6);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
-    document.body.appendChild(popup);
-    const startT = performance.now();
-    function animGold(t) {
-        const elapsed = t - startT;
-        const p = Math.min(elapsed / 1400, 1);
-        let scaleVal, yMove, shakeX = 0;
-        if (p < 0.12) {
-            scaleVal = (p / 0.12) * 1.5;
-            yMove = 0;
-        } else if (p < 0.25) {
-            const sp = (p - 0.12) / 0.13;
-            scaleVal = 1.5 - sp * 0.5;
-            yMove = -sp * 10;
-            shakeX = (Math.random() - 0.5) * 4;
-        } else if (p < 0.45) {
-            const sp = (p - 0.25) / 0.2;
-            scaleVal = 1.0;
-            yMove = -10 - sp * 30;
-            shakeX = (Math.random() - 0.5) * 2 * (1 - sp);
-        } else {
-            scaleVal = 1.0;
-            yMove = -40 - (p - 0.45) * 20;
-        }
-        const opacity = p < 0.4 ? 1 : Math.max(0, 1 - ((p - 0.4) / 0.6));
-        popup.style.transform = `translate(${shakeX}px, ${yMove}px) scale(${scaleVal})`;
-        popup.style.opacity = String(opacity);
-        if (p < 1) requestAnimationFrame(animGold); else popup.remove();
+    const targetRect = bd.getBoundingClientRect();
+    const targetX = targetRect.left + targetRect.width * 0.5;
+    const targetY = targetRect.top + targetRect.height * 0.5;
+    
+    let startX, startY;
+    if (screenPos && typeof screenPos.x === 'number' && typeof screenPos.y === 'number') {
+        startX = screenPos.x;
+        startY = screenPos.y;
+    } else {
+        startX = window.innerWidth * 0.5;
+        startY = window.innerHeight * 0.4;
     }
-    requestAnimationFrame(animGold);
-}
-
-function _showArcadeJump(intAmount) {
-    const bd = document.getElementById('balance-display');
-    if (!bd) return;
-    const rect = bd.getBoundingClientRect();
+    
     const popup = document.createElement('div');
     popup.textContent = '+' + intAmount.toLocaleString();
-    const yOff = _rewardPopupYOffset * 30;
-    _rewardPopupYOffset++;
-    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
-    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 5 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:800;color:#ffd740;-webkit-text-stroke:2.5px rgba(0,0,0,0.7);text-shadow:0 0 14px rgba(255,215,0,0.8),0 3px 6px rgba(0,0,0,0.7);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
+    popup.style.cssText = `position:fixed;left:${startX}px;top:${startY}px;font-family:'Orbitron',monospace;font-size:24px;font-weight:800;color:#ffd740;-webkit-text-stroke:1.5px rgba(0,0,0,0.6);text-shadow:0 0 12px rgba(255,215,0,0.7),0 0 24px rgba(255,180,0,0.4);pointer-events:none;z-index:99999;white-space:nowrap;transform:translate(-50%,-50%) scale(1.2);opacity:1;`;
     document.body.appendChild(popup);
+    
     const startT = performance.now();
-    const duration = 1400;
-    const peakHeight = 140 + yOff * 0.6;
-    const driftX = (Math.random() - 0.5) * 40;
-    function animJump(t) {
-        const p = Math.min((t - startT) / duration, 1);
-        const yParabola = -4 * peakHeight * p * (p - 1);
-        const xDrift = driftX * p;
-        const opacity = p < 0.8 ? 1 : Math.max(0, 1 - ((p - 0.8) / 0.2));
-        const scaleIn = p < 0.12 ? 0.5 + (p / 0.12) * 0.7 : 1.2; // 強烈彈出
-        const apexBouncePhase = Math.max(0, (0.5 - Math.abs(p - 0.5)) / 0.5); // 於頂點微彈
-        const apexBounce = 1 + 0.05 * Math.sin(apexBouncePhase * Math.PI);
-        const landPhase = Math.max(0, (p - 0.92) / 0.08);
-        const landBounce = landPhase > 0 ? 1 - Math.sin(landPhase * Math.PI) * 0.12 * (1 - landPhase) : 1; // 落地彈跳
-        const scale = scaleIn * apexBounce * landBounce;
-        const yBounce = landPhase > 0 ? Math.sin(landPhase * Math.PI) * 16 * (1 - landPhase) : 0;
-        popup.style.transform = `translate(${xDrift}px, ${-(yParabola - yBounce)}px) scale(${scale})`;
-        popup.style.opacity = String(opacity);
-        if (p < 1) requestAnimationFrame(animJump); else popup.remove();
+    const duration = 800;
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    
+    function cubicBezierEase(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     }
-    requestAnimationFrame(animJump);
-}
-
-function _showNeonPulse(intAmount) {
-    const bd = document.getElementById('balance-display');
-    if (!bd) return;
-    const rect = bd.getBoundingClientRect();
-    const popup = document.createElement('div');
-    popup.textContent = '+' + intAmount.toLocaleString();
-    const yOff = _rewardPopupYOffset * 35;
-    _rewardPopupYOffset++;
-    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
-    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 12 - yOff}px;font-family:'Orbitron',monospace;font-size:26px;font-weight:800;color:#39ff14;-webkit-text-stroke:2px rgba(0,0,0,0.5);text-shadow:0 0 10px #39ff14,0 0 20px #39ff14,0 0 40px rgba(57,255,20,0.4);pointer-events:none;z-index:99999;white-space:nowrap;`;
-    document.body.appendChild(popup);
-    const startT = performance.now();
-    const duration = 1600;
-    _animateBalanceCountUp(intAmount);
-    function animNeon(t) {
+    
+    function animFly(t) {
         const elapsed = t - startT;
         const p = Math.min(elapsed / duration, 1);
-        const pulseFreq = Math.sin(elapsed * 0.015) * 0.15;
-        const scale = 1 + pulseFreq * (1 - p);
-        const glow = p < 0.5 ? 1 : 1 - (p - 0.5) / 0.5;
-        const opacity = p < 0.6 ? 1 : Math.max(0, 1 - ((p - 0.6) / 0.4));
-        popup.style.transform = `translateY(${-p * 30}px) scale(${scale})`;
+        const ease = cubicBezierEase(p);
+        
+        const curX = startX + dx * ease;
+        const curY = startY + dy * ease;
+        
+        const scale = 1.2 - 0.5 * ease;
+        const opacity = 1 - 0.7 * ease;
+        
+        popup.style.left = curX + 'px';
+        popup.style.top = curY + 'px';
+        popup.style.transform = `translate(-50%,-50%) scale(${scale})`;
         popup.style.opacity = String(opacity);
-        popup.style.textShadow = `0 0 ${10 + glow * 15}px #39ff14,0 0 ${20 + glow * 25}px #39ff14,0 0 ${40 + glow * 30}px rgba(57,255,20,${0.4 * glow})`;
-        if (p < 1) requestAnimationFrame(animNeon); else popup.remove();
+        
+        if (p < 1) {
+            requestAnimationFrame(animFly);
+        } else {
+            popup.remove();
+        }
     }
-    requestAnimationFrame(animNeon);
+    requestAnimationFrame(animFly);
 }
 
-function _animateBalanceCountUp(addAmount) {
-    const balanceEl = document.getElementById('balance-value');
-    if (!balanceEl) return;
-    const startVal = parseInt(balanceEl.textContent.replace(/,/g, '')) || 0;
-    const endVal = startVal + addAmount;
-    const startT = performance.now();
-    const dur = 400;
-    function tick(t) {
-        const p = Math.min((t - startT) / dur, 1);
-        const ease = 1 - Math.pow(1 - p, 2);
-        const current = Math.round(startVal + (endVal - startVal) * ease);
-        balanceEl.textContent = String(current);
-        if (p < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-}
 
 // Temp vectors for muzzle flash barrel direction calculation(avoid per-shot allocations)
 const muzzleFlashTemp = {
@@ -15978,7 +15902,7 @@ class Fish {
             for (let ci = 0; ci < coinCount; ci++) {
                 spawnWaitingCoin(deathPosition, 0);
             }
-            onScoreConfirmed(this.form, this.config.reward);
+            onScoreConfirmed(this.form, this.config.reward, _worldToScreen(deathPosition));
         } else {
             updateComboOnKill();
             
@@ -16013,7 +15937,7 @@ class Fish {
                 gameState.score += Math.floor(winDisplay);
             }
             
-            onScoreConfirmed(this.form, winDisplay);
+            onScoreConfirmed(this.form, winDisplay, _worldToScreen(deathPosition));
             // Note: No "miss" sound or gray particles - every kill now has coin feedback
         }
         
