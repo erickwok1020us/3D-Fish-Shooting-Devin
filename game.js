@@ -26,12 +26,10 @@ const PANORAMA_CONFIG = {
     fogNear: 600,
     fogFar: 3500,
     bgDrift: {
-        speedX: 0.000008,
-        speedY: 0.000005,
-        bobAmpX: 0.003,
-        bobAmpY: 0.002,
-        bobFreqX: 0.00015,
-        bobFreqY: 0.00012
+        ampX: 0.005,
+        ampY: 0.003,
+        freqX: 0.00012,
+        freqY: 0.00009
     },
     // 8K HD texture quality settings
     textureQuality: {
@@ -54,8 +52,6 @@ let panoramaTexture = null;
 let panoramaSkySphere = null;
 let bgBaseOffsetX = 0;
 let bgBaseOffsetY = 0;
-let bgDriftX = 0;
-let bgDriftY = 0;
 let underwaterParticleSystem = null;
 let underwaterParticles = [];
 
@@ -232,8 +228,8 @@ function loadPanoramaBackground() {
         texture.generateMipmaps = true;
         texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
 
         applyAspectFillUV(texture);
         bgBaseOffsetX = texture.offset.x;
@@ -305,17 +301,13 @@ function loadPanoramaBackground() {
     );
 }
 
-function updatePanoramaAnimation(deltaTime) {
+function updatePanoramaAnimation() {
     if (!panoramaTexture) return;
     const cfg = PANORAMA_CONFIG.bgDrift;
     const t = performance.now();
-    bgDriftX += cfg.speedX * deltaTime * 60;
-    bgDriftY += cfg.speedY * deltaTime * 60;
-    const bobX = Math.sin(t * cfg.bobFreqX) * cfg.bobAmpX;
-    const bobY = Math.cos(t * cfg.bobFreqY) * cfg.bobAmpY;
     panoramaTexture.offset.set(
-        bgBaseOffsetX + bgDriftX + bobX,
-        bgBaseOffsetY + bgDriftY + bobY
+        bgBaseOffsetX + Math.sin(t * cfg.freqX) * cfg.ampX,
+        bgBaseOffsetY + Math.sin(t * cfg.freqY + 1.57) * cfg.ampY
     );
 }
 
