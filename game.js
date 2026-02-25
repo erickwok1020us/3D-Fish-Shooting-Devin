@@ -7315,14 +7315,14 @@ function showKillSkull(spreadIndex) {
 let _rewardStackEntries = [];
 const _REWARD_STACK_MAX = 5;
 const _REWARD_ENTRY_DURATION = 2200;
-const _REWARD_ENTRY_HEIGHT = 36;
 
 function _getOrCreateRewardStack() {
     let container = document.getElementById('reward-popup-stack');
     if (container) return container;
     container = document.createElement('div');
     container.id = 'reward-popup-stack';
-    container.style.cssText = 'position:fixed;pointer-events:none;z-index:99998;display:flex;flex-direction:column-reverse;align-items:flex-start;gap:4px;';
+    const uiScale = getComputedStyle(document.documentElement).getPropertyValue('--ui-scale').trim() || '1';
+    container.style.cssText = 'position:fixed;pointer-events:none;z-index:99998;display:flex;flex-direction:column-reverse;align-items:flex-start;gap:4px;transform:scale(' + uiScale + ');transform-origin:bottom left;';
     document.body.appendChild(container);
     return container;
 }
@@ -7415,6 +7415,7 @@ function _showNeonAbyssReward(intAmount) {
     });
 
     setTimeout(function() {
+        entry.style.animation = 'none';
         entry.style.opacity = '0';
         entry.style.transform = 'translateX(8px) scale(0.95)';
         setTimeout(function() {
@@ -7425,24 +7426,7 @@ function _showNeonAbyssReward(intAmount) {
     }, _REWARD_ENTRY_DURATION);
 }
 
-function _animateBalanceCountUp(addAmount) {
-    const balanceEl = document.getElementById('balance-value');
-    if (!balanceEl) return;
-    const startVal = parseInt(balanceEl.textContent.replace(/,/g, '')) || 0;
-    const endVal = startVal + addAmount;
-    const startT = performance.now();
-    const dur = 400;
-    function tick(t) {
-        const p = Math.min((t - startT) / dur, 1);
-        const ease = 1 - Math.pow(1 - p, 2);
-        const current = Math.round(startVal + (endVal - startVal) * ease);
-        balanceEl.textContent = String(current);
-        if (p < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-}
-
-// Temp vectors for muzzle flash barrel direction calculation(avoid per-shot allocations)
+// Temp vectorsfor muzzle flash barrel direction calculation(avoid per-shot allocations)
 const muzzleFlashTemp = {
     barrelForward: new THREE.Vector3(),
     worldQuat: new THREE.Quaternion(),
