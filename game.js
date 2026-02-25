@@ -12301,29 +12301,44 @@ function aimCannon(targetX, targetY) {
 }
 
 // ==================== TARGETING SERVICE ====================
-// Centralized auto-fire targeting: "Sticky Hunter" system.
-// Once locked, stays on target until fish dies or leaves valid play area.
+// ==================== SMART AUTO-FIRE TARGET SELECTOR ====================
+// Refactored targeting with strict binary priority rules:
+//   P1: Boss (isBoss || hasBossHint) within Lock Cone
+//   P2: Nearest lockable fish (ignore tier) within Lock Cone
+//   Tie-break: lower numeric fishId (rtpFishId)
+// Lock-on state machine: sticky lock until Dead/Invalidated/Despawned,
+// except Boss preemption (P2→P1 switch on next fire tick).
+// Target selection refreshes every 100ms (not every frame) for performance.
+// Visual tracking via Quaternion.Slerp on turret rotation.
+// Client only sends Fire(direction, weaponId, targetId) — zero RTP impact.
+
 const TargetingService = {
     config: {
+        // Geometric lock constraints
+        LOCK_FOV_DEGREES: 60,                                    // Lock cone half-angle (Vector3.Dot check)
+        LOCK_MAX_DISTANCE: 2500.0,                               // Max lock distance in world units (game scale)
+        // Cannon rotation limits (kept from original for physical turret clamping)
         yawLimit:   46.75 * (Math.PI / 180),
         pitchMax:   42.5  * (Math.PI / 180),
         pitchMin:  -29.75 * (Math.PI / 180),
-        searchConeAngle: 60,
-        hitscanFireGate: 8,
-        autoFireAlignGate: 8,
-        forceFireMs: 500,
+        // Firing gates
+        autoFireAlignGate: 8,                                    // Degrees — cannon must be within this angle to fire
+        forceFireMs: 500,                                        // Force fire after this many ms locked
+        // Turret tracking
         trackSpeed: 25,
         lerpSmoothing: 0.15,
         maxRotSpeed: 4.0,
-        initialLockMs: 250,
-        transitionMs:  200,
-        bossCooldownMs: 2000,
-        hysteresisExitDeg: 30,
+        slerpFactor: 0.12,                                       // Quaternion.Slerp interpolation factor
+        // Phase timings
+        initialLockMs: 250,                                      // Time to slew onto first target
+        transitionMs:  200,                                      // Time to slew between targets
+        // Target selection refresh interval (100ms = 10Hz, not every frame)
+        targetRefreshMs: 100,
     },
 
     state: {
         lockedTarget: null,
-        phase: 'idle',
+        phase: 'idle',           // idle | locking | firing | transition
         phaseStart: 0,
         currentYaw: 0,
         currentPitch: 0,
@@ -12332,10 +12347,22 @@ const TargetingService = {
         initialized: false,
         shotsAtCurrent: 0,
         lockStartMs: 0,
-        lastBossReleaseMs: 0,
+        lastTargetScanMs: 0,     // Timestamp of last target selection scan
+        _cachedScanResult: null,  // Cached target from last scan
     },
 
-    reset(){
+    // Pre-allocated temp vectors to avoid per-tick GC pressure
+    _tempVecs: {
+        muzzlePos: new THREE.Vector3(),
+        toFish: new THREE.Vector3(),
+        cannonFwd: new THREE.Vector3(),
+        fwdXZ: new THREE.Vector3(),
+        toFishXZ: new THREE.Vector3(),
+        targetQuat: new THREE.Quaternion(),
+        currentQuat: new THREE.Quaternion(),
+    },
+
+    reset() {
         const s = this.state;
         s.lockedTarget = null;
         s.phase = 'idle';
@@ -12343,14 +12370,111 @@ const TargetingService = {
         s.initialized = false;
         s.shotsAtCurrent = 0;
         s.lockStartMs = 0;
+        s.lastTargetScanMs = 0;
+        s._cachedScanResult = null;
     },
 
-    _isTargetValid(fish, refPos) {
-        if (!fish) return false;
-        if (!fish.isActive) return false;
-        if (fish.hp !== undefined && fish.hp <= 0) return false;
-        if (!this._isInAutoFireCone(fish.group.position, refPos)) return false;
-        return true;
+    // ---- Helper: extract numeric ID from rtpFishId string (e.g. 'f123' → 123) ----
+    _fishIdNum(fish) {
+        if (!fish || !fish.rtpFishId) return Infinity;
+        const n = parseInt(fish.rtpFishId.replace(/\D/g, ''), 10);
+        return isNaN(n) ? Infinity : n;
+    },
+
+    // ---- Helper: check if fish is a P1 target (Boss priority) ----
+    _isBossPriority(fish) {
+        return !!(fish.isBoss || fish.hasBossHint || bossCrosshairMap.has(fish));
+    },
+
+    // ---- Lock Constraint: FOV + Distance check using Vector3.Dot ----
+    _isInLockCone(fishPos, refPos) {
+        const c = this.config;
+        const tv = this._tempVecs;
+        const dx = fishPos.x - refPos.x;
+        const dy = fishPos.y - refPos.y;
+        const dz = fishPos.z - refPos.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        const maxDistSq = c.LOCK_MAX_DISTANCE * c.LOCK_MAX_DISTANCE;
+        if (distSq > maxDistSq) return false;
+        const dist = Math.sqrt(distSq);
+        if (dist < 1) return true;
+        // Also enforce turret yaw/pitch limits
+        const yaw = Math.atan2(dx / dist, dz / dist);
+        const pitch = Math.asin(dy / dist);
+        const margin = 3 * (Math.PI / 180);
+        if (Math.abs(yaw) > (c.yawLimit - margin)) return false;
+        if (pitch > (c.pitchMax - margin) || pitch < (c.pitchMin + margin)) return false;
+        // FOV check: angle between cannon forward and fish direction
+        this._getCannonForward(tv.cannonFwd);
+        tv.toFish.set(dx / dist, dy / dist, dz / dist);
+        const dot = tv.cannonFwd.dot(tv.toFish);
+        const halfFovRad = c.LOCK_FOV_DEGREES * (Math.PI / 180);
+        const cosHalfFov = Math.cos(halfFovRad);
+        return dot >= cosHalfFov;
+    },
+
+    // ---- Lock Constraint: Broader check for maintaining existing lock ----
+    // Uses turret limits only (no FOV cone), so fish doesn't flicker at edges
+    _isInTurretRange(fishPos, refPos) {
+        const c = this.config;
+        const dx = fishPos.x - refPos.x;
+        const dy = fishPos.y - refPos.y;
+        const dz = fishPos.z - refPos.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        const maxDistSq = c.LOCK_MAX_DISTANCE * c.LOCK_MAX_DISTANCE;
+        if (distSq > maxDistSq) return false;
+        const dist = Math.sqrt(distSq);
+        if (dist < 1) return true;
+        const yaw = Math.atan2(dx / dist, dz / dist);
+        const pitch = Math.asin(dy / dist);
+        return Math.abs(yaw) <= c.yawLimit && pitch >= c.pitchMin && pitch <= c.pitchMax;
+    },
+
+    // ---- Should release lock on current target? ----
+    _shouldReleaseLock(fish, refPos) {
+        if (!fish) return true;
+        if (!fish.isActive) return true;                         // Despawned
+        if (fish.hp !== undefined && fish.hp <= 0) return true;  // Dead (server kill)
+        if (!this._isInTurretRange(fish.group.position, refPos)) return true;  // Left turret range
+        return false;
+    },
+
+    // ---- Target selection: P1 Boss → P2 Nearest → tie-break by fishId ----
+    _selectTarget(refPos) {
+        let bestP1 = null, bestP1Dist = Infinity, bestP1Id = Infinity;
+        let bestP2 = null, bestP2Dist = Infinity, bestP2Id = Infinity;
+
+        for (let i = 0; i < activeFish.length; i++) {
+            const fish = activeFish[i];
+            if (!fish.isActive) continue;
+            if (fish.hp !== undefined && fish.hp <= 0) continue;
+            if (!this._isInLockCone(fish.group.position, refPos)) continue;
+
+            const dx = fish.group.position.x - refPos.x;
+            const dy = fish.group.position.y - refPos.y;
+            const dz = fish.group.position.z - refPos.z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            const fishIdNum = this._fishIdNum(fish);
+
+            if (this._isBossPriority(fish)) {
+                // P1: Boss priority — nearest boss, tie-break by lower fishId
+                if (distSq < bestP1Dist || (distSq === bestP1Dist && fishIdNum < bestP1Id)) {
+                    bestP1 = fish;
+                    bestP1Dist = distSq;
+                    bestP1Id = fishIdNum;
+                }
+            } else {
+                // P2: Proximity — nearest fish (ignore tier), tie-break by lower fishId
+                if (distSq < bestP2Dist || (distSq === bestP2Dist && fishIdNum < bestP2Id)) {
+                    bestP2 = fish;
+                    bestP2Dist = distSq;
+                    bestP2Id = fishIdNum;
+                }
+            }
+        }
+
+        // P1 takes absolute priority over P2
+        return bestP1 || bestP2;
     },
 
     _initFromCannon() {
@@ -12360,62 +12484,6 @@ const TargetingService = {
             s.currentPitch = cannonPitchGroup  ? -cannonPitchGroup.rotation.x : 0;
             s.initialized  = true;
         }
-    },
-
-    findNearest(muzzlePos) {
-        const c = this.config;
-        const locked = this.state.lockedTarget;
-        const hysteresis = 0.85;
-        let bestBoss = null, bestBossDist = Infinity;
-        let best = null, bestDist = Infinity;
-        let second = null, secondDist = Infinity;
-        for (const fish of activeFish) {
-            if (!fish.isActive) continue;
-            const pos = fish.group.position;
-            const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
-            const dir = new THREE.Vector3(dx, dy, dz).normalize();
-            const yaw   = Math.atan2(dir.x, dir.z);
-            const pitch = Math.asin(dir.y);
-            if (Math.abs(yaw) > c.yawLimit) continue;
-            if (pitch > c.pitchMax || pitch < c.pitchMin) continue;
-            let dist = dx * dx + dy * dy + dz * dz;
-            if (fish.isBoss) {
-                if (dist < bestBossDist) { bestBossDist = dist; bestBoss = fish; }
-                continue;
-            }
-            if (locked && fish === locked) dist *= hysteresis;
-            if (dist < bestDist) {
-                second = best; secondDist = bestDist;
-                best = fish; bestDist = dist;
-            } else if (dist < secondDist) {
-                second = fish; secondDist = dist;
-            }
-        }
-        if (bestBoss) return { primary: bestBoss, fallback: best || second };
-        return { primary: best, fallback: second };
-    },
-
-    findNearestInCrosshairCone(muzzlePos, crosshairDir, coneAngleDeg) {
-        const cosThreshold = Math.cos((coneAngleDeg || 9) * Math.PI / 180);
-        let best = null, bestDist = Infinity;
-        let bestBoss = null, bestBossDist = Infinity;
-        for (const fish of activeFish) {
-            if (!fish.isActive) continue;
-            const pos = fish.group.position;
-            const dx = pos.x - muzzlePos.x, dy = pos.y - muzzlePos.y, dz = pos.z - muzzlePos.z;
-            const dist = dx * dx + dy * dy + dz * dz;
-            const len = Math.sqrt(dist);
-            if (len < 0.001) continue;
-            const dot = (dx * crosshairDir.x + dy * crosshairDir.y + dz * crosshairDir.z) / len;
-            if (dot < cosThreshold) continue;
-            if (fish.isBoss) {
-                if (dist < bestBossDist) { bestBossDist = dist; bestBoss = fish; }
-                continue;
-            }
-            if (dist < bestDist) { best = fish; bestDist = dist; }
-        }
-        if (bestBoss) return bestBoss;
-        return best;
     },
 
     _smoothstep(t) { return t * t * (3 - 2 * t); },
@@ -12444,90 +12512,13 @@ const TargetingService = {
         return pos;
     },
 
-    _priorityScore(fish, refPos) {
-        const tierWeights = { tier1: 1, tier2: 1.2, tier3: 1.5, tier4: 2, tier5: 2.5, tier6: 3 };
-        const tw = tierWeights[fish.tier] || 1;
-        const reward = (fish.config && fish.config.reward) || 1;
-        const dx = fish.group.position.x - refPos.x;
-        const dy = fish.group.position.y - refPos.y;
-        const dz = fish.group.position.z - refPos.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        return tw * reward / (dist + 1);
-    },
-
-    _isInAutoFireCone(fishPos, refPos) {
-        const c = this.config;
-        const margin = 3 * (Math.PI / 180);
-        const dx = fishPos.x - refPos.x;
-        const dy = fishPos.y - refPos.y;
-        const dz = fishPos.z - refPos.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist < 1) return true;
-        const yaw = Math.atan2(dx / dist, dz / dist);
-        const pitch = Math.asin(dy / dist);
-        return Math.abs(yaw) <= (c.yawLimit - margin) && pitch >= (c.pitchMin + margin) && pitch <= (c.pitchMax - margin);
-    },
-
-    _isInExitCone(fishPos, refPos) {
-        const c = this.config;
-        const exitRad = c.hysteresisExitDeg * (Math.PI / 180);
-        const dx = fishPos.x - refPos.x;
-        const dy = fishPos.y - refPos.y;
-        const dz = fishPos.z - refPos.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist < 1) return true;
-        const yaw = Math.atan2(dx / dist, dz / dist);
-        const pitch = Math.asin(dy / dist);
-        return Math.abs(yaw) <= (c.yawLimit + exitRad) &&
-               pitch >= (c.pitchMin - exitRad) &&
-               pitch <= (c.pitchMax + exitRad);
-    },
-
-    _shouldReleaseLock(fish, refPos) {
-        if (!fish) return true;
-        if (!fish.isActive) return true;
-        if (fish.hp !== undefined && fish.hp <= 0) return true;
-        return false;
-    },
-
-    _pick8xNewTarget(refPos, now) {
-        const c = this.config, s = this.state;
-        for (const fish of activeFish) {
-            if (!fish.isActive || !fish.isBoss) continue;
-            if (fish.hp !== undefined && fish.hp <= 0) continue;
-            if (now - s.lastBossReleaseMs > c.bossCooldownMs && this._isInAutoFireCone(fish.group.position, refPos)) return fish;
-        }
-        let nearest = null, nearestDistSq = Infinity;
-        for (const fish of activeFish) {
-            if (!fish.isActive || fish.isBoss) continue;
-            if (fish.hp !== undefined && fish.hp <= 0) continue;
-            if (!this._isInAutoFireCone(fish.group.position, refPos)) continue;
-            const dx = fish.group.position.x - refPos.x;
-            const dy = fish.group.position.y - refPos.y;
-            const dz = fish.group.position.z - refPos.z;
-            const distSq = dx * dx + dy * dy + dz * dz;
-            if (distSq < nearestDistSq) {
-                nearestDistSq = distSq;
-                nearest = fish;
-            }
-        }
-        return nearest;
-    },
-
-    _pickTarget(muzzlePos, refPos, now) {
-        return this._pick8xNewTarget(refPos || muzzlePos, now || performance.now());
-    },
-
-    _pickFallback(muzzlePos, refPos, now) {
-        return this._pick8xNewTarget(refPos || muzzlePos, now || performance.now());
-    },
-
     _clampRotDelta(delta, maxStep) {
         if (delta >  maxStep) return maxStep;
         if (delta < -maxStep) return -maxStep;
         return delta;
     },
 
+    // Kept for backward compat — used by autoFireAtFish ray-check
     _rayHitsTargetFish(origin, dir, fish) {
         const fishPos = fish.group.position;
         const halfExt = fish.ellipsoidHalfExtents;
@@ -12554,8 +12545,9 @@ const TargetingService = {
         const now = performance.now();
         const dt = this._lastTick ? Math.min((now - this._lastTick) / 1000, 0.1) : 1 / 60;
         this._lastTick = now;
-        const muzzlePos = new THREE.Vector3();
-        cannonMuzzle.getWorldPosition(muzzlePos);
+        const tv = this._tempVecs;
+        cannonMuzzle.getWorldPosition(tv.muzzlePos);
+        const muzzlePos = tv.muzzlePos;
         const c = this.config, s = this.state;
         const maxStep = c.maxRotSpeed * dt;
 
@@ -12564,31 +12556,39 @@ const TargetingService = {
         const isFps = gameState.viewMode === 'fps';
         const refPos = isFps ? camera.position : muzzlePos;
 
+        // ---- PERFORMANCE: Only re-scan for targets every 100ms ----
+        const shouldRescan = (now - s.lastTargetScanMs) >= c.targetRefreshMs;
 
+        // ---- PHASE: IDLE — no target, scan for one ----
         if (s.phase === 'idle') {
-            const target = this._pick8xNewTarget(refPos, now);
-            if (target) {
-                s.lockedTarget = target;
-                s.phase = 'locking';
-                s.phaseStart = now;
-                s.startYaw = s.currentYaw;
-                s.startPitch = s.currentPitch;
-                s.lockStartMs = now;
-                s.shotsAtCurrent = 0;
+            if (shouldRescan) {
+                s.lastTargetScanMs = now;
+                const target = this._selectTarget(refPos);
+                if (target) {
+                    s.lockedTarget = target;
+                    s.phase = 'locking';
+                    s.phaseStart = now;
+                    s.startYaw = s.currentYaw;
+                    s.startPitch = s.currentPitch;
+                    s.lockStartMs = now;
+                    s.shotsAtCurrent = 0;
+                }
             }
             return { target: null, canFire: false };
         }
 
-        // Boss Preemption: If currently locked on a non-boss fish and a boss is
-        // active on screen, immediately switch to the boss target.
-        if (s.lockedTarget && !s.lockedTarget.isBoss) {
-            for (let _bi = 0; _bi < activeFish.length; _bi++) {
-                const _bf = activeFish[_bi];
-                if (!_bf.isActive || !_bf.isBoss) continue;
-                if (_bf.hp !== undefined && _bf.hp <= 0) continue;
-                if (!this._isInAutoFireCone(_bf.group.position, refPos)) continue;
-                // Found a valid boss — preempt current target
-                s.lockedTarget = _bf;
+        // ---- BOSS PREEMPTION: If locked on P2 and a P1 enters the Lock Cone ----
+        // Only check on scan ticks to save CPU
+        if (shouldRescan && s.lockedTarget && !this._isBossPriority(s.lockedTarget)) {
+            s.lastTargetScanMs = now;
+            for (let i = 0; i < activeFish.length; i++) {
+                const bf = activeFish[i];
+                if (!bf.isActive) continue;
+                if (bf.hp !== undefined && bf.hp <= 0) continue;
+                if (!this._isBossPriority(bf)) continue;
+                if (!this._isInLockCone(bf.group.position, refPos)) continue;
+                // Found a valid P1 boss — preempt current P2 target on next fire tick
+                s.lockedTarget = bf;
                 s.phase = 'transition';
                 s.phaseStart = now;
                 s.startYaw = s.currentYaw;
@@ -12599,9 +12599,10 @@ const TargetingService = {
             }
         }
 
+        // ---- LOCK VALIDATION: Dead / Despawned / Out of range → release ----
         if (this._shouldReleaseLock(s.lockedTarget, refPos)) {
-            if (s.lockedTarget && s.lockedTarget.isBoss) s.lastBossReleaseMs = now;
-            const next = this._pick8xNewTarget(refPos, now);
+            s.lastTargetScanMs = now;
+            const next = this._selectTarget(refPos);
             if (next) {
                 s.lockedTarget = next;
                 s.phase = 'transition';
@@ -12620,14 +12621,7 @@ const TargetingService = {
         const fish = s.lockedTarget;
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
-        if (!this._isInAutoFireCone(fish.group.position, refPos)) {
-            if (fish.isBoss) s.lastBossReleaseMs = now;
-            console.log(`[AutoFire] phase=${s.phase} | Drop lock: Clamp limit exceeded`);
-            this.reset();
-            this._initFromCannon();
-            return { target: null, canFire: false };
-        }
-
+        // ---- TURRET TRACKING: Quaternion.Slerp-based smooth rotation ----
         const aimPos = this._getFishCenter(fish);
         const trackOrigin = (gameState.autoShoot && isFps) ? refPos : muzzlePos;
         const dir = aimPos.clone().sub(trackOrigin).normalize();
@@ -12640,41 +12634,44 @@ const TargetingService = {
         if (s.phase === 'locking') {
             const t = Math.min(1, elapsed / c.initialLockMs);
             const ease = this._smoothstep(t);
-            let dYaw   = this._wrapDelta(clampedYaw   - s.startYaw)   * ease;
-            let dPitch = (clampedPitch - s.startPitch) * ease;
-            dYaw   = this._clampRotDelta(dYaw,   maxStep * 3);
-            dPitch = this._clampRotDelta(dPitch, maxStep * 3);
-            s.currentYaw   = s.startYaw   + dYaw;
-            s.currentPitch = s.startPitch  + dPitch;
+            // Use Quaternion.Slerp for smooth turret rotation
+            tv.currentQuat.setFromEuler(new THREE.Euler(-s.startPitch, s.startYaw, 0, 'YXZ'));
+            tv.targetQuat.setFromEuler(new THREE.Euler(-clampedPitch, clampedYaw, 0, 'YXZ'));
+            tv.currentQuat.slerp(tv.targetQuat, ease);
+            const resultEuler = new THREE.Euler().setFromQuaternion(tv.currentQuat, 'YXZ');
+            s.currentYaw = resultEuler.y;
+            s.currentPitch = -resultEuler.x;
             if (t >= 1) { s.phase = 'firing'; }
         } else if (s.phase === 'firing') {
-            const factor = c.lerpSmoothing;
-            let dYaw   = this._wrapDelta(clampedYaw - s.currentYaw)   * factor;
-            let dPitch = (clampedPitch - s.currentPitch) * factor;
-            dYaw   = this._clampRotDelta(dYaw,   maxStep);
-            dPitch = this._clampRotDelta(dPitch, maxStep);
-            s.currentYaw   += dYaw;
-            s.currentPitch += dPitch;
+            // Continuous Slerp tracking in firing phase
+            tv.currentQuat.setFromEuler(new THREE.Euler(-s.currentPitch, s.currentYaw, 0, 'YXZ'));
+            tv.targetQuat.setFromEuler(new THREE.Euler(-clampedPitch, clampedYaw, 0, 'YXZ'));
+            tv.currentQuat.slerp(tv.targetQuat, c.slerpFactor);
+            const resultEuler = new THREE.Euler().setFromQuaternion(tv.currentQuat, 'YXZ');
+            s.currentYaw = resultEuler.y;
+            s.currentPitch = -resultEuler.x;
         } else if (s.phase === 'transition') {
             const t = Math.min(1, elapsed / c.transitionMs);
             const ease = this._smoothstep(t);
-            let dYaw   = this._wrapDelta(clampedYaw   - s.startYaw)   * ease;
-            let dPitch = (clampedPitch - s.startPitch) * ease;
-            dYaw   = this._clampRotDelta(dYaw,   maxStep * 3);
-            dPitch = this._clampRotDelta(dPitch, maxStep * 3);
-            s.currentYaw   = s.startYaw   + dYaw;
-            s.currentPitch = s.startPitch  + dPitch;
+            tv.currentQuat.setFromEuler(new THREE.Euler(-s.startPitch, s.startYaw, 0, 'YXZ'));
+            tv.targetQuat.setFromEuler(new THREE.Euler(-clampedPitch, clampedYaw, 0, 'YXZ'));
+            tv.currentQuat.slerp(tv.targetQuat, ease);
+            const resultEuler = new THREE.Euler().setFromQuaternion(tv.currentQuat, 'YXZ');
+            s.currentYaw = resultEuler.y;
+            s.currentPitch = -resultEuler.x;
             if (t >= 1) { s.phase = 'firing'; }
         }
 
+        // Apply turret rotation
         if (cannonGroup) cannonGroup.rotation.y = s.currentYaw;
         if (cannonPitchGroup) cannonPitchGroup.rotation.x = -s.currentPitch;
 
+        // ---- FIRE GATE: Check alignment before allowing fire ----
         if (s.lockedTarget) {
-            const fwd = this._getCannonForward(new THREE.Vector3());
-            const toFishXZ = new THREE.Vector3(fish.group.position.x - muzzlePos.x, 0, fish.group.position.z - muzzlePos.z).normalize();
-            const fwdXZ = new THREE.Vector3(fwd.x, 0, fwd.z).normalize();
-            const dot2D = fwdXZ.dot(toFishXZ);
+            this._getCannonForward(tv.cannonFwd);
+            tv.toFishXZ.set(fish.group.position.x - muzzlePos.x, 0, fish.group.position.z - muzzlePos.z).normalize();
+            tv.fwdXZ.set(tv.cannonFwd.x, 0, tv.cannonFwd.z).normalize();
+            const dot2D = tv.fwdXZ.dot(tv.toFishXZ);
             const angleDeg = Math.acos(Math.min(1, Math.max(-1, dot2D))) * (180 / Math.PI);
             const isReady = angleDeg <= c.autoFireAlignGate;
             const lockDuration = now - s.lockStartMs;
@@ -12683,12 +12680,15 @@ const TargetingService = {
                 if (s.phase !== 'firing') s.phase = 'firing';
                 canFire = true;
             }
-            if (!canFire) {
-                console.log(`[AutoFire] phase=${s.phase} angle=${angleDeg.toFixed(1)}° locked=${(lockDuration/1000).toFixed(1)}s | Align: ${angleDeg.toFixed(1)}° > gate ${c.autoFireAlignGate}°`);
-            }
         }
 
         return { target: fish, canFire };
+    },
+
+    // ---- Backward-compatible findNearest (used by legacy callers) ----
+    findNearest(muzzlePos) {
+        const target = this._selectTarget(muzzlePos);
+        return { primary: target, fallback: null };
     },
 };
 
