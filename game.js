@@ -7430,7 +7430,7 @@ function showKillSkull(spreadIndex) {
 
 let _rewardPopupYOffset = 0;
 let _rewardPopupResetTimer = null;
-let _rewardPopupStyle = 'arcade_jump';
+let _rewardPopupStyle = 'neon_abyss_suction';
 
 function onScoreConfirmed(fishForm, rewardAmount) {
     const rewardInt = Math.round(rewardAmount);
@@ -7444,13 +7444,138 @@ function showRewardFloat(amount) {
     if (!amount || amount <= 0) return;
     const intAmount = Math.round(amount);
     if (intAmount <= 0) return;
-    if (_rewardPopupStyle === 'gold_spring') {
+    if (_rewardPopupStyle === 'neon_abyss_suction') {
+        _showNeonAbyssSuction(intAmount);
+    } else if (_rewardPopupStyle === 'gold_spring') {
         _showGoldSpring(intAmount);
     } else if (_rewardPopupStyle === 'arcade_jump') {
         _showArcadeJump(intAmount);
     } else if (_rewardPopupStyle === 'neon_pulse') {
         _showNeonPulse(intAmount);
     }
+}
+
+// ==================== NEON ABYSS SUCTION REWARD POPUP ====================
+// Minimalist frosted glass card with amber gold border + suction/inhale animation
+// Numbers spawn above Balance HUD and get "inhaled" downward into balance icon
+function _showNeonAbyssSuction(intAmount) {
+    const bd = document.getElementById('balance-display');
+    if (!bd) return;
+    const rect = bd.getBoundingClientRect();
+    
+    // Get Balance HUD font size for 75-80% scaling
+    const balanceVal = document.getElementById('balance-value');
+    const balanceFontSize = balanceVal ? parseFloat(window.getComputedStyle(balanceVal).fontSize) : 24;
+    const rewardFontSize = Math.round(balanceFontSize * 0.77); // 77% of balance font
+    
+    const yOff = _rewardPopupYOffset * 32;
+    _rewardPopupYOffset++;
+    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
+    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
+    
+    // Randomized spawn offset near Balance HUD (bottom-left area)
+    const randOffX = (Math.random() - 0.5) * 40;
+    const randOffY = Math.random() * 15;
+    const spawnX = rect.left + rect.width / 2 + randOffX;
+    const spawnY = rect.top - 50 - yOff - randOffY;
+    
+    // Target: center of balance display (suction destination)
+    const targetX = rect.left + rect.width / 2;
+    const targetY = rect.top + rect.height / 2;
+    
+    // Create frosted glass container
+    const popup = document.createElement('div');
+    popup.style.cssText = [
+        'position:fixed',
+        'left:' + spawnX + 'px',
+        'top:' + spawnY + 'px',
+        'transform:translate(-50%,-50%) scale(0.3)',
+        'pointer-events:none',
+        'z-index:99999',
+        'white-space:nowrap',
+        'padding:6px 14px',
+        // Frosted glass background (low opacity, blurred)
+        'background:rgba(10,18,36,0.45)',
+        'backdrop-filter:blur(8px)',
+        '-webkit-backdrop-filter:blur(8px)',
+        // Thin amber gold frame with soft glow
+        'border:1.5px solid rgba(255,180,50,0.55)',
+        'border-radius:8px',
+        'box-shadow:0 0 12px rgba(255,180,50,0.2),0 0 4px rgba(0,200,255,0.15),inset 0 0 8px rgba(255,180,50,0.05)',
+        // Typography matching Balance HUD font
+        'font-family:"Orbitron",monospace',
+        'font-size:' + rewardFontSize + 'px',
+        'font-weight:700',
+        'color:#ffd740',
+        'text-shadow:0 0 8px rgba(255,215,0,0.6),0 0 16px rgba(255,180,50,0.3)',
+        'opacity:0'
+    ].join(';');
+    popup.textContent = '+' + intAmount.toLocaleString();
+    document.body.appendChild(popup);
+    
+    const startT = performance.now();
+    const totalDuration = 1200;
+    // Bezier-like suction phases:
+    // Phase 1 (0-25%): Pop-in with bounce at spawn position
+    // Phase 2 (25-70%): Hover/float with gentle drift
+    // Phase 3 (70-100%): Accelerating suction inhale toward Balance HUD
+    
+    function animSuction(t) {
+        const elapsed = t - startT;
+        const p = Math.min(elapsed / totalDuration, 1);
+        
+        let currentX, currentY, currentScale, currentOpacity;
+        
+        if (p < 0.25) {
+            // Phase 1: Pop-in bounce
+            const pp = p / 0.25;
+            const bounceEase = pp < 0.6 ? (pp / 0.6) * 1.15 : 1.15 - (pp - 0.6) / 0.4 * 0.15;
+            currentScale = bounceEase;
+            currentOpacity = Math.min(pp * 3, 1);
+            currentX = spawnX;
+            currentY = spawnY - pp * 5; // Slight upward drift
+        } else if (p < 0.70) {
+            // Phase 2: Gentle hover
+            const pp = (p - 0.25) / 0.45;
+            currentScale = 1.0;
+            currentOpacity = 1.0;
+            currentX = spawnX + Math.sin(pp * Math.PI * 2) * 3;
+            currentY = spawnY - 5 - pp * 8;
+        } else {
+            // Phase 3: Suction inhale toward Balance HUD
+            const pp = (p - 0.70) / 0.30;
+            // Cubic ease-in for acceleration feel
+            const suctionEase = pp * pp * pp;
+            currentX = spawnX + (targetX - spawnX) * suctionEase;
+            currentY = (spawnY - 13) + (targetY - (spawnY - 13)) * suctionEase;
+            // Scale shrinks as it gets sucked in
+            currentScale = 1.0 - suctionEase * 0.7;
+            // Opacity fades in last 40% of suction phase
+            currentOpacity = pp < 0.6 ? 1.0 : Math.max(0, 1.0 - (pp - 0.6) / 0.4);
+        }
+        
+        popup.style.left = currentX + 'px';
+        popup.style.top = currentY + 'px';
+        popup.style.transform = 'translate(-50%,-50%) scale(' + currentScale + ')';
+        popup.style.opacity = String(currentOpacity);
+        
+        // Intensify border glow during suction phase
+        if (p > 0.70) {
+            const suctionIntensity = (p - 0.70) / 0.30;
+            const glowSize = 12 + suctionIntensity * 20;
+            popup.style.boxShadow = '0 0 ' + glowSize + 'px rgba(255,180,50,' + (0.2 + suctionIntensity * 0.5) + '),0 0 ' + (glowSize * 0.5) + 'px rgba(0,200,255,' + (0.15 + suctionIntensity * 0.3) + ')';
+            popup.style.borderColor = 'rgba(255,180,50,' + (0.55 + suctionIntensity * 0.45) + ')';
+        }
+        
+        if (p < 1) {
+            requestAnimationFrame(animSuction);
+        } else {
+            popup.remove();
+            // Trigger balance flash on suction completion
+            _triggerAirflowGain();
+        }
+    }
+    requestAnimationFrame(animSuction);
 }
 
 function _showGoldSpring(intAmount) {
@@ -20491,9 +20616,13 @@ function createBossCrosshair(bossFish) {
             color: 0x00eeff,
             transparent: true,
             opacity: 0.15,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            depthTest: false,
+            depthWrite: false
         });
+        glowMat.userData = { baseOpacity: 0.15 };
         const glowSeg = new THREE.Mesh(glowGeo, glowMat);
+        glowSeg.renderOrder = 999;
         outerRingGroup.add(glowSeg);
         // Core line (thinner, brighter)
         const coreGeo = new THREE.RingGeometry(outerR - 2, outerR + 2, 32, 1, startAngle, endAngle - startAngle);
@@ -20501,9 +20630,13 @@ function createBossCrosshair(bossFish) {
             color: 0x44eeff,
             transparent: true,
             opacity: 0.7,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            depthTest: false,
+            depthWrite: false
         });
+        coreMat.userData = { baseOpacity: 0.7 };
         const coreSeg = new THREE.Mesh(coreGeo, coreMat);
+        coreSeg.renderOrder = 999;
         outerRingGroup.add(coreSeg);
     }
     crosshairGroup.add(outerRingGroup);
@@ -20523,9 +20656,13 @@ function createBossCrosshair(bossFish) {
             color: 0xffbb33,
             transparent: true,
             opacity: 0.12,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            depthTest: false,
+            depthWrite: false
         });
+        glowMat.userData = { baseOpacity: 0.12 };
         const glowSeg = new THREE.Mesh(glowGeo, glowMat);
+        glowSeg.renderOrder = 999;
         innerRingGroup.add(glowSeg);
         // Core line
         const coreGeo = new THREE.RingGeometry(innerR - 1.5, innerR + 1.5, 32, 1, startAngle, endAngle - startAngle);
@@ -20533,16 +20670,20 @@ function createBossCrosshair(bossFish) {
             color: 0xffcc55,
             transparent: true,
             opacity: 0.75,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            depthTest: false,
+            depthWrite: false
         });
+        coreMat.userData = { baseOpacity: 0.75 };
         const coreSeg = new THREE.Mesh(coreGeo, coreMat);
+        coreSeg.renderOrder = 999;
         innerRingGroup.add(coreSeg);
     }
     crosshairGroup.add(innerRingGroup);
     
     // === ENERGY BRIDGE CONNECTORS (6 faint lines between inner and outer) ===
     const bridgeGroup = new THREE.Group();
-    const bridgeMaterial = new THREE.LineBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.08 });
+    const bridgeMaterial = new THREE.LineBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.08, depthTest: false, depthWrite: false });
     for (let i = 0; i < 6; i++) {
         const angle = (i / 6) * Math.PI * 2;
         const points = [
@@ -20560,6 +20701,8 @@ function createBossCrosshair(bossFish) {
     crosshairGroup.userData.outerRingGroup = outerRingGroup;
     crosshairGroup.userData.innerRingGroup = innerRingGroup;
     
+    // Ensure the entire crosshair group renders above fish models
+    crosshairGroup.renderOrder = 999;
     scene.add(crosshairGroup);
     // Fix 1: Store in Map instead of singleton
     bossCrosshairMap.set(bossFish, crosshairGroup);
@@ -20567,7 +20710,9 @@ function createBossCrosshair(bossFish) {
 
 function updateBossCrosshair() {
     // Fix 1: Iterate all crosshairs in the Map
-    for (const [fish, crosshair] of bossCrosshairMap) {
+    // Snapshot entries to avoid Map mutation during iteration (transferBossHint adds/removes)
+    const entries = Array.from(bossCrosshairMap.entries());
+    for (const [fish, crosshair] of entries) {
         if (!crosshair || !crosshair.userData.targetFish) continue;
         
         const targetFish = crosshair.userData.targetFish;
@@ -20665,7 +20810,9 @@ function addBossGlowEffect(bossFish, glowColor) {
 
 function updateBossGlowEffect(deltaTime) {
     // Fix 1: Iterate all glow effects in the Map
-    for (const [fish, glowEffect] of bossGlowEffectMap) {
+    // Snapshot to avoid mutation during iteration
+    const glowEntries = Array.from(bossGlowEffectMap.entries());
+    for (const [fish, glowEffect] of glowEntries) {
         if (!glowEffect) continue;
         // Remove glow for dead fish
         if (!fish.isActive) {
