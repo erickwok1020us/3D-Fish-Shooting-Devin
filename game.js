@@ -4594,6 +4594,48 @@ function getNearbyFishAtPosition(pos) {
     return nearby;
 }
 
+// ==================== HIERARCHICAL COLLISION AVOIDANCE ====================
+// Size-based priority yielding: larger fish ignore smaller fish in steering.
+// Only the fish that shouldYieldTo(self, other) === true applies avoidance force.
+// The bigger fish continues its AI path undisturbed — zero avoidance force.
+//
+// Rules:
+//   1. Schooling Exemption: Same-tier fish never hard-avoid each other (boids separation handles spacing)
+//   2. Size Hierarchy: Smaller yields to bigger (based on config.size)
+//   3. Same Size / Different Species: Both yield to prevent blockages
+
+// Get size rank for a fish (higher = bigger = higher priority)
+// Uses config.size directly — no need for a lookup table since every fish has config.size
+function getFishSizeRank(fish) {
+    return (fish.config && fish.config.size) || 20;
+}
+
+// Evaluate if 'self' needs to steer away from 'other'
+// Returns true if self should apply avoidance force; false means self ignores other completely
+function shouldYieldTo(self, other) {
+    // Rule 1: Schooling Exemption (CRITICAL to prevent flocking jitter)
+    // If both fish belong to the same tier (same species school), they never yield
+    // to each other via hard avoidance. Internal spacing is handled softly by Boids separation.
+    if (self.tier === other.tier) {
+        return false;
+    }
+
+    const selfRank = getFishSizeRank(self);
+    const otherRank = getFishSizeRank(other);
+
+    // Rule 2: Size Hierarchy (Smaller yields to Bigger)
+    if (selfRank < otherRank) {
+        return true;   // I am smaller, I yield.
+    }
+    if (selfRank > otherRank) {
+        return false;  // I am bigger, I don't care.
+    }
+
+    // Rule 3: Same Size / Different Species
+    // Both should yield to prevent deadlocks/blockages
+    return true;
+}
+
 // ==================== COMBO BONUS SYSTEM ====================
 const COMBO_CONFIG = {
     // Combo tiers and their bonus percentages
@@ -15317,6 +15359,10 @@ class Fish {
             const distSq = dx * dx + dy * dy + dz * dz;
             
             if (distSq < sepDistSq && distSq > 0) {
+                // HIERARCHICAL COLLISION AVOIDANCE: For cross-species boids separation,
+                // only apply if we should yield. Same-tier (same school) always uses soft
+                // boids separation to maintain flock spacing without hard avoidance.
+                if (!sameTier && !shouldYieldTo(this, other)) continue;
                 const invDist = 1 / Math.sqrt(distSq);
                 const w = sameTier ? 1.0 : 0.6;
                 sepX += dx * invDist * w;
@@ -15410,6 +15456,11 @@ class Fish {
             const other = nearbyFish[i];
             if (other === this || !other.isActive) continue;
 
+            // HIERARCHICAL COLLISION AVOIDANCE: Only apply push force if we should yield.
+            // If shouldYieldTo returns false, this fish ignores 'other' entirely — zero force.
+            // This prevents large fish from jittering when surrounded by small fish.
+            if (!shouldYieldTo(this, other)) continue;
+
             const otherHE = other.ellipsoidHalfExtents;
             const otherPos = other.group.position;
 
@@ -15499,6 +15550,10 @@ class Fish {
         for (let i = 0; i < nearbyFish.length; i++) {
             const other = nearbyFish[i];
             if (other === this || !other.isActive) continue;
+
+            // HIERARCHICAL COLLISION AVOIDANCE: Only dodge if we should yield to this fish.
+            // Big fish don't dodge small fish — they swim straight through.
+            if (!shouldYieldTo(this, other)) continue;
             
             const otherPos = other.group.position;
             const otherSize = other.config.size || 20;
