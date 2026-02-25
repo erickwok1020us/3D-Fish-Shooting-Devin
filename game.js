@@ -1452,7 +1452,7 @@ const gameState = {
     autoShoot: false,
     mouseX: window.innerWidth / 2,
     mouseY: window.innerHeight / 2,
-    viewMode: 'fps',
+    viewMode: 'third-person',
     // Camera rotation state - horizontal (yaw) and vertical (pitch)
     cameraYaw: 0,
     cameraPitch: 0,
@@ -10133,7 +10133,11 @@ function initGameScene() {
         gameState.isLoading = false;
         lastTime = performance.now();
         
-        initFPSMode();
+        updateCameraRotation();
+        if (cannonGroup) {
+            cannonGroup.visible = true;
+            cannonGroup.scale.set(1.5, 1.5, 1.5);
+        }
         
         applyRtpLabels();
         
@@ -19101,6 +19105,13 @@ function setupEventListeners() {
             return;
         }
         
+        // THIRD-PERSON MODE: Crosshair follows mouse, cannon aims at mouse
+        const crosshair = document.getElementById('crosshair');
+        if (crosshair) {
+            crosshair.style.left = e.clientX + 'px';
+            crosshair.style.top = e.clientY + 'px';
+        }
+        aimCannonThrottled(e.clientX, e.clientY);
     });
     
     // FPS mode: Reset mouse tracking when mouse leaves the container
@@ -19242,7 +19253,8 @@ function setupEventListeners() {
     document.getElementById('center-view-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         centerCameraView();
-        updateFPSCamera();
+        if (gameState.viewMode === 'fps') updateFPSCamera();
+        else updateCameraRotation();
         // FIX: Blur button after click to prevent Space key from re-activating it
         e.currentTarget.blur();
     });
@@ -19308,7 +19320,8 @@ function setupEventListeners() {
             return;
         } else if (e.key === 'c' || e.key === 'C') {
             centerCameraView();
-            updateFPSCamera();
+            if (gameState.viewMode === 'fps') updateFPSCamera();
+            else updateCameraRotation();
             highlightButton('#center-view-btn');
             return;
         } else if (e.key === 't' || e.key === 'T') {
