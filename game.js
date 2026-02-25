@@ -7312,9 +7312,29 @@ function showKillSkull(spreadIndex) {
     requestAnimationFrame(animSkull);
 }
 
-let _rewardPopupYOffset = 0;
-let _rewardPopupResetTimer = null;
-let _rewardPopupStyle = 'arcade_jump';
+let _rewardStackEntries = [];
+const _REWARD_STACK_MAX = 5;
+const _REWARD_ENTRY_DURATION = 2200;
+
+function _getOrCreateRewardStack() {
+    let container = document.getElementById('reward-popup-stack');
+    if (container) return container;
+    container = document.createElement('div');
+    container.id = 'reward-popup-stack';
+    const uiScale = getComputedStyle(document.documentElement).getPropertyValue('--ui-scale').trim() || '1';
+    container.style.cssText = 'position:fixed;pointer-events:none;z-index:99998;display:flex;flex-direction:column-reverse;align-items:flex-start;gap:4px;transform:scale(' + uiScale + ');transform-origin:bottom left;';
+    document.body.appendChild(container);
+    return container;
+}
+
+function _positionRewardStack() {
+    const bd = document.getElementById('balance-display');
+    const container = document.getElementById('reward-popup-stack');
+    if (!bd || !container) return;
+    const rect = bd.getBoundingClientRect();
+    container.style.left = (rect.left + 8) + 'px';
+    container.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+}
 
 function onScoreConfirmed(fishForm, rewardAmount) {
     const rewardInt = Math.round(rewardAmount);
@@ -7328,140 +7348,85 @@ function showRewardFloat(amount) {
     if (!amount || amount <= 0) return;
     const intAmount = Math.round(amount);
     if (intAmount <= 0) return;
-    if (_rewardPopupStyle === 'gold_spring') {
-        _showGoldSpring(intAmount);
-    } else if (_rewardPopupStyle === 'arcade_jump') {
-        _showArcadeJump(intAmount);
-    } else if (_rewardPopupStyle === 'neon_pulse') {
-        _showNeonPulse(intAmount);
-    }
+    _showNeonAbyssReward(intAmount);
 }
 
-function _showGoldSpring(intAmount) {
-    const bd = document.getElementById('balance-display');
-    if (!bd) return;
-    const rect = bd.getBoundingClientRect();
-    const popup = document.createElement('div');
-    popup.textContent = '+' + intAmount.toLocaleString();
-    const yOff = _rewardPopupYOffset * 35;
-    _rewardPopupYOffset++;
-    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
-    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 10 - yOff}px;font-family:'Orbitron',monospace;font-size:26px;font-weight:800;color:#ffd740;-webkit-text-stroke:2.5px rgba(0,0,0,0.7);text-shadow:0 0 14px rgba(255,215,0,0.8),0 2px 4px rgba(0,0,0,0.6);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
-    document.body.appendChild(popup);
-    const startT = performance.now();
-    function animGold(t) {
-        const elapsed = t - startT;
-        const p = Math.min(elapsed / 1400, 1);
-        let scaleVal, yMove, shakeX = 0;
-        if (p < 0.12) {
-            scaleVal = (p / 0.12) * 1.5;
-            yMove = 0;
-        } else if (p < 0.25) {
-            const sp = (p - 0.12) / 0.13;
-            scaleVal = 1.5 - sp * 0.5;
-            yMove = -sp * 10;
-            shakeX = (Math.random() - 0.5) * 4;
-        } else if (p < 0.45) {
-            const sp = (p - 0.25) / 0.2;
-            scaleVal = 1.0;
-            yMove = -10 - sp * 30;
-            shakeX = (Math.random() - 0.5) * 2 * (1 - sp);
-        } else {
-            scaleVal = 1.0;
-            yMove = -40 - (p - 0.45) * 20;
-        }
-        const opacity = p < 0.4 ? 1 : Math.max(0, 1 - ((p - 0.4) / 0.6));
-        popup.style.transform = `translate(${shakeX}px, ${yMove}px) scale(${scaleVal})`;
-        popup.style.opacity = String(opacity);
-        if (p < 1) requestAnimationFrame(animGold); else popup.remove();
+function _showNeonAbyssReward(intAmount) {
+    const stack = _getOrCreateRewardStack();
+    _positionRewardStack();
+
+    if (_rewardStackEntries.length >= _REWARD_STACK_MAX) {
+        const oldest = _rewardStackEntries.shift();
+        if (oldest && oldest.parentNode) oldest.remove();
     }
-    requestAnimationFrame(animGold);
+
+    const entry = document.createElement('div');
+    entry.style.cssText = [
+        'display:inline-flex',
+        'align-items:center',
+        'gap:6px',
+        'padding:5px 14px 5px 10px',
+        'background:linear-gradient(135deg, rgba(12,28,52,0.45) 0%, rgba(8,18,36,0.55) 100%)',
+        'backdrop-filter:blur(14px)',
+        '-webkit-backdrop-filter:blur(14px)',
+        'border:1px solid rgba(210,160,60,0.35)',
+        'border-radius:8px',
+        'font-family:"Orbitron",monospace',
+        'font-size:20px',
+        'font-weight:700',
+        'color:#f0c850',
+        'letter-spacing:2px',
+        'white-space:nowrap',
+        'text-shadow:0 0 8px rgba(240,200,80,0.5),0 0 18px rgba(210,160,60,0.25)',
+        'box-shadow:0 0 12px rgba(210,160,60,0.12),0 4px 16px rgba(0,20,50,0.2),inset 0 1px 0 rgba(210,180,80,0.1)',
+        'opacity:0',
+        'transform:translateX(-12px) scale(0.92)',
+        'transition:opacity 0.3s ease-out,transform 0.3s ease-out',
+        'overflow:hidden',
+        'position:relative',
+    ].join(';') + ';';
+
+    const airflow = document.createElement('div');
+    airflow.style.cssText = 'position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(240,200,80,0.6) 30%,rgba(255,220,100,0.9) 50%,rgba(240,200,80,0.6) 70%,transparent);background-size:200% 100%;animation:rewardAirflow 1.5s linear infinite;pointer-events:none;';
+
+    const halo = document.createElement('div');
+    halo.style.cssText = 'position:absolute;inset:-2px;border-radius:10px;background:radial-gradient(ellipse at center,rgba(240,200,80,0.08) 0%,transparent 70%);pointer-events:none;animation:rewardHaloPulse 2s ease-in-out infinite;';
+
+    const textEl = document.createElement('span');
+    textEl.textContent = '+' + intAmount.toLocaleString();
+
+    entry.appendChild(halo);
+    entry.appendChild(airflow);
+    entry.appendChild(textEl);
+    stack.appendChild(entry);
+    _rewardStackEntries.push(entry);
+
+    if (!document.getElementById('reward-popup-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'reward-popup-keyframes';
+        style.textContent = '@keyframes rewardAirflow{0%{background-position:100% 0}100%{background-position:-100% 0}}@keyframes rewardHaloPulse{0%,100%{opacity:0.6}50%{opacity:1}}@keyframes rewardDrift{0%{transform:translateY(0) translateX(0)}25%{transform:translateY(-1px) translateX(0.5px)}50%{transform:translateY(0.5px) translateX(-0.5px)}75%{transform:translateY(-0.5px) translateX(0.3px)}100%{transform:translateY(0) translateX(0)}}';
+        document.head.appendChild(style);
+    }
+
+    requestAnimationFrame(function() {
+        entry.style.opacity = '1';
+        entry.style.transform = 'translateX(0) scale(1)';
+        entry.style.animation = 'rewardDrift 3s ease-in-out infinite';
+    });
+
+    setTimeout(function() {
+        entry.style.animation = 'none';
+        entry.style.opacity = '0';
+        entry.style.transform = 'translateX(8px) scale(0.95)';
+        setTimeout(function() {
+            const idx = _rewardStackEntries.indexOf(entry);
+            if (idx !== -1) _rewardStackEntries.splice(idx, 1);
+            if (entry.parentNode) entry.remove();
+        }, 350);
+    }, _REWARD_ENTRY_DURATION);
 }
 
-function _showArcadeJump(intAmount) {
-    const bd = document.getElementById('balance-display');
-    if (!bd) return;
-    const rect = bd.getBoundingClientRect();
-    const popup = document.createElement('div');
-    popup.textContent = '+' + intAmount.toLocaleString();
-    const yOff = _rewardPopupYOffset * 30;
-    _rewardPopupYOffset++;
-    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
-    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 5 - yOff}px;font-family:'Orbitron',monospace;font-size:28px;font-weight:800;color:#ffd740;-webkit-text-stroke:2.5px rgba(0,0,0,0.7);text-shadow:0 0 14px rgba(255,215,0,0.8),0 3px 6px rgba(0,0,0,0.7);pointer-events:none;z-index:99999;white-space:nowrap;transform-origin:center bottom;`;
-    document.body.appendChild(popup);
-    const startT = performance.now();
-    const duration = 1400;
-    const peakHeight = 140 + yOff * 0.6;
-    const driftX = (Math.random() - 0.5) * 40;
-    function animJump(t) {
-        const p = Math.min((t - startT) / duration, 1);
-        const yParabola = -4 * peakHeight * p * (p - 1);
-        const xDrift = driftX * p;
-        const opacity = p < 0.8 ? 1 : Math.max(0, 1 - ((p - 0.8) / 0.2));
-        const scaleIn = p < 0.12 ? 0.5 + (p / 0.12) * 0.7 : 1.2; // 強烈彈出
-        const apexBouncePhase = Math.max(0, (0.5 - Math.abs(p - 0.5)) / 0.5); // 於頂點微彈
-        const apexBounce = 1 + 0.05 * Math.sin(apexBouncePhase * Math.PI);
-        const landPhase = Math.max(0, (p - 0.92) / 0.08);
-        const landBounce = landPhase > 0 ? 1 - Math.sin(landPhase * Math.PI) * 0.12 * (1 - landPhase) : 1; // 落地彈跳
-        const scale = scaleIn * apexBounce * landBounce;
-        const yBounce = landPhase > 0 ? Math.sin(landPhase * Math.PI) * 16 * (1 - landPhase) : 0;
-        popup.style.transform = `translate(${xDrift}px, ${-(yParabola - yBounce)}px) scale(${scale})`;
-        popup.style.opacity = String(opacity);
-        if (p < 1) requestAnimationFrame(animJump); else popup.remove();
-    }
-    requestAnimationFrame(animJump);
-}
-
-function _showNeonPulse(intAmount) {
-    const bd = document.getElementById('balance-display');
-    if (!bd) return;
-    const rect = bd.getBoundingClientRect();
-    const popup = document.createElement('div');
-    popup.textContent = '+' + intAmount.toLocaleString();
-    const yOff = _rewardPopupYOffset * 35;
-    _rewardPopupYOffset++;
-    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
-    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 600);
-    popup.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 12 - yOff}px;font-family:'Orbitron',monospace;font-size:26px;font-weight:800;color:#39ff14;-webkit-text-stroke:2px rgba(0,0,0,0.5);text-shadow:0 0 10px #39ff14,0 0 20px #39ff14,0 0 40px rgba(57,255,20,0.4);pointer-events:none;z-index:99999;white-space:nowrap;`;
-    document.body.appendChild(popup);
-    const startT = performance.now();
-    const duration = 1600;
-    _animateBalanceCountUp(intAmount);
-    function animNeon(t) {
-        const elapsed = t - startT;
-        const p = Math.min(elapsed / duration, 1);
-        const pulseFreq = Math.sin(elapsed * 0.015) * 0.15;
-        const scale = 1 + pulseFreq * (1 - p);
-        const glow = p < 0.5 ? 1 : 1 - (p - 0.5) / 0.5;
-        const opacity = p < 0.6 ? 1 : Math.max(0, 1 - ((p - 0.6) / 0.4));
-        popup.style.transform = `translateY(${-p * 30}px) scale(${scale})`;
-        popup.style.opacity = String(opacity);
-        popup.style.textShadow = `0 0 ${10 + glow * 15}px #39ff14,0 0 ${20 + glow * 25}px #39ff14,0 0 ${40 + glow * 30}px rgba(57,255,20,${0.4 * glow})`;
-        if (p < 1) requestAnimationFrame(animNeon); else popup.remove();
-    }
-    requestAnimationFrame(animNeon);
-}
-
-function _animateBalanceCountUp(addAmount) {
-    const balanceEl = document.getElementById('balance-value');
-    if (!balanceEl) return;
-    const startVal = parseInt(balanceEl.textContent.replace(/,/g, '')) || 0;
-    const endVal = startVal + addAmount;
-    const startT = performance.now();
-    const dur = 400;
-    function tick(t) {
-        const p = Math.min((t - startT) / dur, 1);
-        const ease = 1 - Math.pow(1 - p, 2);
-        const current = Math.round(startVal + (endVal - startVal) * ease);
-        balanceEl.textContent = String(current);
-        if (p < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-}
-
-// Temp vectors for muzzle flash barrel direction calculation(avoid per-shot allocations)
+// Temp vectorsfor muzzle flash barrel direction calculation(avoid per-shot allocations)
 const muzzleFlashTemp = {
     barrelForward: new THREE.Vector3(),
     worldQuat: new THREE.Quaternion(),
