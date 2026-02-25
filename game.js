@@ -25,15 +25,13 @@ const PANORAMA_CONFIG = {
     fogColor: 0x0a4d6c,
     fogNear: 600,
     fogFar: 3500,
-    // Sky-sphere settings
-    skySphere: {
-        radius: 4000,           // Large sphere to encompass entire scene
-        segments: 128,          // Increased sphere detail for 8K quality
-        tiltX: -15 * (Math.PI / 180),  // Tilt panorama down so seafloor appears at bottom (-15°)
-        // Dynamic animation settings
-        rotationSpeedY: 0.0005,  // Very slow Y-axis rotation (rad/frame) for subtle movement
-        bobAmplitude: 0.003,     // Subtle X-axis bobbing amplitude
-        bobSpeed: 0.0003         // Bobbing speed
+    bgDrift: {
+        speedX: 0.000008,
+        speedY: 0.000005,
+        bobAmpX: 0.003,
+        bobAmpY: 0.002,
+        bobFreqX: 0.00015,
+        bobFreqY: 0.00012
     },
     // 8K HD texture quality settings
     textureQuality: {
@@ -53,7 +51,11 @@ const PANORAMA_CONFIG = {
 };
 
 let panoramaTexture = null;
-let panoramaSkySphere = null;  // Sky-sphere mesh for panorama
+let panoramaSkySphere = null;
+let bgBaseOffsetX = 0;
+let bgBaseOffsetY = 0;
+let bgDriftX = 0;
+let bgDriftY = 0;
 let underwaterParticleSystem = null;
 let underwaterParticles = [];
 
@@ -207,6 +209,8 @@ function applyAspectFillUV(texture) {
         texture.repeat.set(1, imageAspect / viewAspect);
         texture.offset.set(0, (1 - imageAspect / viewAspect) / 2);
     }
+    bgBaseOffsetX = texture.offset.x;
+    bgBaseOffsetY = texture.offset.y;
     texture.needsUpdate = true;
 }
 
@@ -228,10 +232,12 @@ function loadPanoramaBackground() {
         texture.generateMipmaps = true;
         texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
 
         applyAspectFillUV(texture);
+        bgBaseOffsetX = texture.offset.x;
+        bgBaseOffsetY = texture.offset.y;
 
         texture.needsUpdate = true;
         panoramaTexture = texture;
@@ -299,9 +305,18 @@ function loadPanoramaBackground() {
     );
 }
 
-// Update sky-sphere animation (called from animate loop)
-// Adds subtle dynamic movement: slow Y rotation + gentle X bobbing
 function updatePanoramaAnimation(deltaTime) {
+    if (!panoramaTexture) return;
+    const cfg = PANORAMA_CONFIG.bgDrift;
+    const t = performance.now();
+    bgDriftX += cfg.speedX * deltaTime * 60;
+    bgDriftY += cfg.speedY * deltaTime * 60;
+    const bobX = Math.sin(t * cfg.bobFreqX) * cfg.bobAmpX;
+    const bobY = Math.cos(t * cfg.bobFreqY) * cfg.bobAmpY;
+    panoramaTexture.offset.set(
+        bgBaseOffsetX + bgDriftX + bobX,
+        bgBaseOffsetY + bgDriftY + bobY
+    );
 }
 
 // Create floating underwater particles for dynamic atmosphere
