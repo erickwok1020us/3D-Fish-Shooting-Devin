@@ -25,11 +25,15 @@ const PANORAMA_CONFIG = {
     fogColor: 0x0a4d6c,
     fogNear: 600,
     fogFar: 3500,
-    bgDrift: {
-        ampX: 0.005,
-        ampY: 0.003,
-        freqX: 0.00012,
-        freqY: 0.00009
+    // Sky-sphere settings
+    skySphere: {
+        radius: 4000,           // Large sphere to encompass entire scene
+        segments: 128,          // Increased sphere detail for 8K quality
+        tiltX: -15 * (Math.PI / 180),  // Tilt panorama down so seafloor appears at bottom (-15°)
+        // Dynamic animation settings
+        rotationSpeedY: 0.0005,  // Very slow Y-axis rotation (rad/frame) for subtle movement
+        bobAmplitude: 0.003,     // Subtle X-axis bobbing amplitude
+        bobSpeed: 0.0003         // Bobbing speed
     },
     // 8K HD texture quality settings
     textureQuality: {
@@ -49,7 +53,7 @@ const PANORAMA_CONFIG = {
 };
 
 let panoramaTexture = null;
-let panoramaSkySphere = null;
+let panoramaSkySphere = null;  // Sky-sphere mesh for panorama
 let underwaterParticleSystem = null;
 let underwaterParticles = [];
 
@@ -189,61 +193,172 @@ document.addEventListener('DOMContentLoaded', function() {
 // Load and create sky-sphere panorama background
 // Uses inverted sphere mesh for full control over positioning and animation
 // 8K HD Quality: Applies anisotropic filtering and mipmaps for maximum sharpness
-function applyAspectFillUV() {}
-
 function loadPanoramaBackground() {
     if (!PANORAMA_CONFIG.enabled) return;
-
-    const container = document.getElementById('game-container');
-    if (!container) return;
-
-    const cacheBust = '?v=' + Date.now();
-    const imageUrl = PANORAMA_CONFIG.imageUrl + cacheBust;
-    console.log('[BG] Loading CSS background from:', imageUrl);
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function() {
-        console.log('[BG] === TEXTURE DIAGNOSTIC ===');
-        console.log('[BG] Image loaded:', img.naturalWidth + 'x' + img.naturalHeight);
-        console.log('[BG] Method: CSS background-image (camera-independent)');
-        console.log('[BG] === END DIAGNOSTIC ===');
-
-        container.style.backgroundImage = 'url(' + imageUrl + ')';
-        container.style.backgroundSize = 'cover';
-        container.style.backgroundPosition = 'center center';
-        container.style.backgroundRepeat = 'no-repeat';
-        panoramaTexture = { _cssMode: true };
-    };
-    img.onerror = function() {
-        console.warn('[BG] Failed to load background from R2');
-        if (PANORAMA_CONFIG.fallbackUrl) {
-            container.style.backgroundImage = 'url(' + PANORAMA_CONFIG.fallbackUrl + ')';
-            container.style.backgroundSize = 'cover';
-            container.style.backgroundPosition = 'center center';
-            container.style.backgroundRepeat = 'no-repeat';
-            panoramaTexture = { _cssMode: true };
+    
+    const loader = new THREE.TextureLoader();
+    // Enable cross-origin for R2 bucket images
+    loader.setCrossOrigin('anonymous');
+    
+    // Helper function to create sky-sphere with loaded texture
+    function createSkySphereWithTexture(texture, imageUrl) {
+        // Apply 8K HD quality settings
+        texture.colorSpace = THREE.SRGBColorSpace;
+        
+        // Apply texture quality settings for maximum sharpness
+        const qualityConfig = PANORAMA_CONFIG.textureQuality;
+        if (qualityConfig) {
+            // Anisotropic filtering - clamp to GPU maximum
+            if (renderer && renderer.capabilities) {
+                const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+                texture.anisotropy = Math.min(qualityConfig.anisotropy || 16, maxAnisotropy);
+                console.log('[PANORAMA] Anisotropic filtering:', texture.anisotropy, '(GPU max:', maxAnisotropy + ')');
+            }
+            
+            // Mipmaps for better quality at distance
+            texture.generateMipmaps = qualityConfig.generateMipmaps !== false;
+            
+            // Texture filtering
+            texture.minFilter = THREE.LinearMipmapLinearFilter;  // Trilinear filtering
+            texture.magFilter = THREE.LinearFilter;
         }
-    };
-    img.src = imageUrl;
-
-    scene.background = null;
-    scene.fog = new THREE.Fog(
-        PANORAMA_CONFIG.fogColor,
-        PANORAMA_CONFIG.fogNear,
-        PANORAMA_CONFIG.fogFar
+        
+        // Force texture update
+        texture.needsUpdate = true;
+        
+        panoramaTexture = texture;
+        
+        // FIX: Set scene.background as RELIABLE FALLBACK using EquirectangularReflectionMapping
+        // This ensures the panorama is ALWAYS visible even if sky-sphere fails to render
+        const bgTexture = texture.clone();
+        bgTexture.mapping = THREE.EquirectangularReflectionMapping;
+        bgTexture.needsUpdate = true;
+        scene.background = bgTexture;
+        console.log('[PANORAMA] Set scene.background with EquirectangularReflectionMapping as fallback');
+        
+        // Create sky-sphere geometry - FIX: Use BackSide instead of scale(-1,1,1) for better compatibility
+        // Some GPU drivers have issues with negative scale + FrontSide face culling
+        const config = PANORAMA_CONFIG.skySphere;
+        const geometry = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
+        // Don't use geometry.scale(-1, 1, 1) - use BackSide instead for cross-device compatibility
+        
+        // FIX: Create material with robust settings for cross-device compatibility
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            fog: false,
+            depthWrite: false,
+            depthTest: false,      // FIX: Disable depth test for background mesh
+            side: THREE.BackSide   // FIX: Use BackSide instead of scale(-1,1,1) + FrontSide
+        });
+        
+        // Create sky-sphere mesh
+        panoramaSkySphere = new THREE.Mesh(geometry, material);
+        panoramaSkySphere.name = 'panoramaSkySphere';
+        panoramaSkySphere.frustumCulled = false;  // FIX: Prevent frustum culling issues
+        
+        // Apply initial tilt to position seafloor at bottom of view
+        panoramaSkySphere.rotation.x = config.tiltX;
+        
+        // Render order: -1000 ensures it renders first (behind everything)
+        panoramaSkySphere.renderOrder = -1000;
+        
+        scene.add(panoramaSkySphere);
+        
+        // DIAGNOSTIC: Comprehensive logging to identify texture quality issues
+        if (texture.image) {
+            const imgWidth = texture.image.width;
+            const imgHeight = texture.image.height;
+            console.log('[PANORAMA] === TEXTURE DIAGNOSTIC ===');
+            console.log('[PANORAMA] Image loaded:', imgWidth + 'x' + imgHeight, 'from', imageUrl);
+            
+            // Check GPU texture size limit
+            if (renderer && renderer.capabilities) {
+                const maxTexSize = renderer.capabilities.maxTextureSize;
+                console.log('[PANORAMA] GPU maxTextureSize:', maxTexSize);
+                if (imgWidth > maxTexSize || imgHeight > maxTexSize) {
+                    console.warn('[PANORAMA] WARNING: Image exceeds GPU limit! Will be downscaled to', 
+                        Math.min(imgWidth, maxTexSize) + 'x' + Math.min(imgHeight, maxTexSize));
+                }
+            }
+            
+            // Check renderer pixel ratio
+            if (renderer) {
+                console.log('[PANORAMA] Renderer pixelRatio:', renderer.getPixelRatio());
+                console.log('[PANORAMA] Canvas size:', renderer.domElement.width + 'x' + renderer.domElement.height);
+            }
+            
+            // Check graphics quality setting
+            console.log('[PANORAMA] Graphics quality:', performanceState.graphicsQuality);
+            console.log('[PANORAMA] === END DIAGNOSTIC ===');
+        }
+        console.log('[PANORAMA] Sky-sphere created with tilt:', config.tiltX * (180/Math.PI), 'degrees, segments:', config.segments);
+        
+        // Update fog to match panorama colors
+        scene.fog = new THREE.Fog(
+            PANORAMA_CONFIG.fogColor,
+            PANORAMA_CONFIG.fogNear,
+            PANORAMA_CONFIG.fogFar
+        );
+        
+        // FIX: Keep scene.background as fallback - don't set to null
+        // The sky-sphere renders on top, but scene.background provides a safety net
+        // for devices where the sky-sphere might not render correctly
+    }
+    
+    // Load primary 8K image from R2 (with cache-bust to ensure fresh load)
+    const cacheBust = '?v=' + Date.now();
+    const imageUrlWithCacheBust = PANORAMA_CONFIG.imageUrl + cacheBust;
+    console.log('[PANORAMA] Loading from:', imageUrlWithCacheBust);
+    
+    loader.load(
+        imageUrlWithCacheBust,
+        (texture) => {
+            createSkySphereWithTexture(texture, PANORAMA_CONFIG.imageUrl);
+        },
+        undefined,
+        (error) => {
+            console.warn('[PANORAMA] Failed to load 8K panorama from R2:', error.message || error);
+            
+            // Try fallback URL if available
+            if (PANORAMA_CONFIG.fallbackUrl) {
+                console.log('[PANORAMA] Trying fallback image:', PANORAMA_CONFIG.fallbackUrl);
+                loader.load(
+                    PANORAMA_CONFIG.fallbackUrl,
+                    (texture) => {
+                        createSkySphereWithTexture(texture, PANORAMA_CONFIG.fallbackUrl);
+                    },
+                    undefined,
+                    (fallbackError) => {
+                        console.warn('[PANORAMA] Fallback also failed, using solid color:', fallbackError);
+                        scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+                    }
+                );
+            } else {
+                scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+            }
+        }
     );
 }
 
-function updatePanoramaAnimation() {
-    if (!panoramaTexture || !panoramaTexture._cssMode) return;
-    const container = document.getElementById('game-container');
-    if (!container) return;
-    const cfg = PANORAMA_CONFIG.bgDrift;
-    const t = performance.now();
-    const dx = Math.sin(t * cfg.freqX) * cfg.ampX * 100;
-    const dy = Math.sin(t * cfg.freqY + 1.57) * cfg.ampY * 100;
-    container.style.backgroundPosition = 'calc(50% + ' + dx.toFixed(2) + 'px) calc(50% + ' + dy.toFixed(2) + 'px)';
+// Update sky-sphere animation (called from animate loop)
+// Adds subtle dynamic movement: slow Y rotation + gentle X bobbing
+function updatePanoramaAnimation(deltaTime) {
+    if (!panoramaSkySphere) return;
+    
+    const config = PANORAMA_CONFIG.skySphere;
+    const time = performance.now();
+    
+    // Slow Y-axis rotation for subtle movement
+    panoramaSkySphere.rotation.y += config.rotationSpeedY * deltaTime * 60;
+    
+    // Gentle X-axis bobbing (simulates underwater current)
+    const bobOffset = Math.sin(time * config.bobSpeed) * config.bobAmplitude;
+    panoramaSkySphere.rotation.x = config.tiltX + bobOffset;
+    
+    // Keep sky-sphere centered on camera position (so it always surrounds the viewer)
+    if (camera) {
+        panoramaSkySphere.position.copy(camera.position);
+    }
 }
 
 // Create floating underwater particles for dynamic atmosphere
@@ -975,7 +1090,7 @@ const WEAPON_CONFIG = {
         fireScreenShake: { strength: 6, duration: 200 },
 
         glbCannon: '8x 武器模組',
-        glbCannonNonPlayer: '8x 武器模組(非玩家).glb',
+        glbCannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
         glbBullet: '8x 子彈模組',
         glbHitEffect: '8x 擊中特效',
         scale: 1.0, bulletScale: 0.9, hitEffectScale: 0.6,
@@ -10003,7 +10118,8 @@ function initGameScene() {
     
     // Create scene
     scene = new THREE.Scene();
-    scene.background = null;
+    // Set initial background color (will be replaced by panorama background if enabled)
+    scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
     scene.fog = new THREE.Fog(PANORAMA_CONFIG.fogColor, PANORAMA_CONFIG.fogNear, PANORAMA_CONFIG.fogFar);
     
     // Load panorama background (async, replaces solid color when loaded)
@@ -10023,7 +10139,7 @@ function initGameScene() {
     
     // Create renderer with quality-based settings
     const antialias = quality !== 'low';  // Disable antialiasing for low quality
-    renderer = new THREE.WebGLRenderer({ antialias: antialias, alpha: true });
+    renderer = new THREE.WebGLRenderer({ antialias: antialias });
     renderer.setSize(window.innerWidth, window.innerHeight);
     // Apply quality-based pixel ratio
     const baseRatio = window.devicePixelRatio || 1;
@@ -12082,7 +12198,6 @@ const TargetingService = {
         shotsAtCurrent: 0,
         lockStartMs: 0,
         lastBossReleaseMs: 0,
-        _bossInterruptCounter: 0,
     },
 
     reset(){
@@ -12093,7 +12208,6 @@ const TargetingService = {
         s.initialized = false;
         s.shotsAtCurrent = 0;
         s.lockStartMs = 0;
-        s._bossInterruptCounter = 0;
     },
 
     _isTargetValid(fish, refPos) {
@@ -12241,17 +12355,6 @@ const TargetingService = {
         return false;
     },
 
-    _scanBossInCone(refPos, now) {
-        const c = this.config, s = this.state;
-        if (now - s.lastBossReleaseMs <= c.bossCooldownMs) return null;
-        for (const fish of activeFish) {
-            if (!fish.isActive || !fish.isBoss) continue;
-            if (fish.hp !== undefined && fish.hp <= 0) continue;
-            if (this._isInAutoFireCone(fish.group.position, refPos)) return fish;
-        }
-        return null;
-    },
-
     _pick8xNewTarget(refPos, now) {
         const c = this.config, s = this.state;
         for (const fish of activeFish) {
@@ -12359,27 +12462,8 @@ const TargetingService = {
             }
         }
 
-        let fish = s.lockedTarget;
+        const fish = s.lockedTarget;
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
-
-        if (fish && !fish.isBoss && (s.phase === 'locking' || s.phase === 'firing' || s.phase === 'transition')) {
-            s._bossInterruptCounter = (s._bossInterruptCounter || 0) + 1;
-            if (s._bossInterruptCounter >= 10) {
-                s._bossInterruptCounter = 0;
-                const boss = this._scanBossInCone(refPos, now);
-                if (boss) {
-                    console.log('[AutoFire] Boss interrupt! Dropping normal fish for Boss');
-                    s.lockedTarget = boss;
-                    s.phase = 'transition';
-                    s.phaseStart = now;
-                    s.startYaw = s.currentYaw;
-                    s.startPitch = s.currentPitch;
-                    s.lockStartMs = now;
-                    s.shotsAtCurrent = 0;
-                    fish = boss;
-                }
-            }
-        }
 
         if (!this._isInAutoFireCone(fish.group.position, refPos)) {
             if (fish.isBoss) s.lastBossReleaseMs = now;
@@ -16308,14 +16392,13 @@ const RTP_WEAPON_COST_FP = {
     '8x': 8000
 };
 
-const RTP_PITY_K = 1200000;
 const RTP_TIER_CONFIG = {
-    1: { rewardManualFp: 4500, rewardAutoFp: 4408, n1Fp: 5000, pityCompFp: RTP_PITY_K },
-    2: { rewardManualFp: 11200, rewardAutoFp: 10970, n1Fp: 12000, pityCompFp: RTP_PITY_K },
-    3: { rewardManualFp: 12270, rewardAutoFp: 12020, n1Fp: 13000, pityCompFp: RTP_PITY_K },
-    4: { rewardManualFp: 33600, rewardAutoFp: 32910, n1Fp: 34000, pityCompFp: RTP_PITY_K },
-    5: { rewardManualFp: 50400, rewardAutoFp: 49370, n1Fp: 51000, pityCompFp: RTP_PITY_K },
-    6: { rewardManualFp: 95000, rewardAutoFp: 93061, n1Fp: 100000, pityCompFp: RTP_PITY_K }
+    1: { rewardManualFp: 7840, rewardAutoFp: 7680, n1Fp: 8000, pityCompFp: 367000 },
+    2: { rewardManualFp: 11200, rewardAutoFp: 10970, n1Fp: 12000, pityCompFp: 344000 },
+    3: { rewardManualFp: 17920, rewardAutoFp: 17550, n1Fp: 18000, pityCompFp: 332000 },
+    4: { rewardManualFp: 33600, rewardAutoFp: 32910, n1Fp: 34000, pityCompFp: 326400 },
+    5: { rewardManualFp: 50400, rewardAutoFp: 49370, n1Fp: 51000, pityCompFp: 322600 },
+    6: { rewardManualFp: 134400, rewardAutoFp: 131660, n1Fp: 135000, pityCompFp: 316000 }
 };
 
 const FISH_SPECIES_TO_RTP_TIER = {
@@ -18182,7 +18265,7 @@ function spawnTracerBeamVFX(muzzlePos, beamEnd, color, weaponKey) {
 
 // ==================== 8X LASER WEAPON ====================
 // Pure crosshair-based hitscan laser - instant ray along crosshair direction
-// PIERCING LASER: penetrates up to 6 targets along the ray, each triggers hitEffect
+// Now NON-PIERCING: hits only the first target (closest fish along the ray)
 const laserTempVectors = {
     rayEnd: new THREE.Vector3(),
     fishToRay: new THREE.Vector3(),
@@ -18257,7 +18340,6 @@ function fireLaserBeam(origin, direction, weaponKey) {
             hit.fish.flashHit();
             showCrosshairRingFlash();
             createHitParticles(hit.hitPoint, weapon.color, 12);
-            spawnGLBHitEffect(weaponKey, hit.hitPoint, laserDirection, hit.fish);
             playWeaponHitSound(weaponKey);
             if (i < results.length) {
                 const result = results[i];
@@ -18270,7 +18352,6 @@ function fireLaserBeam(origin, direction, weaponKey) {
         for (const hit of pierceTargets) {
             hit.fish.takeDamage(damage, weaponKey);
             createHitParticles(hit.hitPoint, weapon.color, 12);
-            spawnGLBHitEffect(weaponKey, hit.hitPoint, laserDirection, hit.fish);
             playWeaponHitSound(weaponKey);
         }
     }
