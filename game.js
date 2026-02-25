@@ -1599,6 +1599,7 @@ const gameState = {
     activeBoss: null,  // Currently active boss fish
     bossCountdown: 0,  // Countdown timer for boss event
     bossActive: false,  // Whether a boss event is currently active
+    bossSpawnRetryPending: false,  // Fix 2: Tracks if a spawn retry is pending
     isInGameScene: false,  // Whether player is in active game (not lobby/menu)
     // Combo System (Issue #4 - Weapon System Improvements)
     comboCount: 0,           // Current consecutive kills
@@ -15744,9 +15745,12 @@ class Fish {
             }
         });
 
-        if (isBoss && bossGlowEffect && bossGlowEffect.material) {
-            bossGlowEffect._savedOpacity = bossGlowEffect.material.opacity;
-            bossGlowEffect.material.opacity = 0.1;
+        if (isBoss) {
+            const _glowEff = bossGlowEffectMap.get(selfRef);
+            if (_glowEff && _glowEff.material) {
+                _glowEff._savedOpacity = _glowEff.material.opacity;
+                _glowEff.material.opacity = 0.1;
+            }
         }
 
         function _impactJuiceFade(t) {
@@ -15821,8 +15825,11 @@ class Fish {
                     m._origEmissive = undefined;
                 }
             });
-            if (isBoss && bossGlowEffect && bossGlowEffect.material && bossGlowEffect._savedOpacity !== undefined) {
-                bossGlowEffect.material.opacity = bossGlowEffect._savedOpacity;
+            if (isBoss) {
+                const _glowEff = bossGlowEffectMap.get(selfRef);
+                if (_glowEff && _glowEff.material && _glowEff._savedOpacity !== undefined) {
+                    _glowEff.material.opacity = _glowEff._savedOpacity;
+                }
             }
         }
 
@@ -20218,8 +20225,11 @@ function animateCausticLights() {
 
 // ==================== BOSS FISH EVENT SYSTEM (Issue #12) ====================
 let bossUIContainer = null;
-let bossCrosshair = null;
-let bossGlowEffect = null;
+// Fix 1: Multi-Boss Support — converted from singletons to Maps
+// Each boss fish gets its own crosshair and glow effect keyed by the fish object
+const bossCrosshairMap = new Map();  // Map<fish, THREE.Group>
+const bossGlowEffectMap = new Map(); // Map<fish, THREE.Mesh>
+let bossSwarmFishList = [];  // Fix 3: Track all swarm fish for hint transfer
 let bossWaitingUI = null;  // Issue #15: Separate UI for waiting period countdown (60s → 16s)
 
 function createBossUI() {
@@ -20461,164 +20471,170 @@ function hideBossUI() {
 }
 
 function createBossCrosshair(bossFish) {
-    // Create SCI-FI 3D crosshair that follows the boss fish
+    // Option A: Dual-Layer Halo — high-speed dual-layer rotating ring
+    // Amber inner ring + Cyan outer ring + airflow particles + energy bridges
     const crosshairGroup = new THREE.Group();
     const baseSize = bossFish.config.size;
     
-    // === OUTER HEXAGONAL RING (sci-fi style) ===
-    const outerRadius = baseSize * 1.8;
-    const outerRingGeometry = new THREE.RingGeometry(outerRadius - 4, outerRadius, 6);
-    const outerRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0x00ffff,  // Cyan for sci-fi look
-        transparent: true,
-        opacity: 0.7,
-        side: THREE.DoubleSide
-    });
-    const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
-    crosshairGroup.add(outerRing);
+    // === OUTER RING (CYAN / NEON BLUE) — 12 segments, clockwise ===
+    const outerR = baseSize * 1.8;
+    const outerSegments = 12;
+    const outerGap = 0.08;
     
-    // === MIDDLE CIRCULAR RING with glow ===
-    const middleRadius = baseSize * 1.2;
-    const middleRingGeometry = new THREE.RingGeometry(middleRadius - 3, middleRadius, 32);
-    const middleRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff3366,  // Magenta-red
-        transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide
-    });
-    const middleRing = new THREE.Mesh(middleRingGeometry, middleRingMaterial);
-    crosshairGroup.add(middleRing);
-    
-    // === INNER TARGETING RING ===
-    const innerRadius = baseSize * 0.6;
-    const innerRingGeometry = new THREE.RingGeometry(innerRadius - 2, innerRadius, 32);
-    const innerRingMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffff00,  // Yellow center
-        transparent: true,
-        opacity: 0.9,
-        side: THREE.DoubleSide
-    });
-    const innerRing = new THREE.Mesh(innerRingGeometry, innerRingMaterial);
-    crosshairGroup.add(innerRing);
-    
-    // === SCI-FI TARGETING LINES (dashed style) ===
-    const lineLength = baseSize * 2.2;
-    const gapStart = baseSize * 0.3;
-    const gapEnd = baseSize * 0.8;
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
-    
-    // Create 4 targeting lines with gaps in center
-    const lineAngles = [0, Math.PI/2, Math.PI, Math.PI * 1.5];
-    lineAngles.forEach(angle => {
-        // Outer segment
-        const outerPoints = [
-            new THREE.Vector3(Math.cos(angle) * gapEnd, Math.sin(angle) * gapEnd, 0),
-            new THREE.Vector3(Math.cos(angle) * lineLength, Math.sin(angle) * lineLength, 0)
-        ];
-        const outerGeometry = new THREE.BufferGeometry().setFromPoints(outerPoints);
-        const outerLine = new THREE.Line(outerGeometry, lineMaterial);
-        crosshairGroup.add(outerLine);
-        
-        // Inner segment (small tick marks)
-        const innerPoints = [
-            new THREE.Vector3(Math.cos(angle) * gapStart * 0.5, Math.sin(angle) * gapStart * 0.5, 0),
-            new THREE.Vector3(Math.cos(angle) * gapStart, Math.sin(angle) * gapStart, 0)
-        ];
-        const innerGeometry = new THREE.BufferGeometry().setFromPoints(innerPoints);
-        const innerLine = new THREE.Line(innerGeometry, new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2 }));
-        crosshairGroup.add(innerLine);
-    });
-    
-    // === DIAGONAL CORNER BRACKETS (sci-fi HUD style) ===
-    const bracketSize = baseSize * 1.5;
-    const bracketMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 });
-    
-    // 8 corner brackets at 45-degree angles
-    const bracketAngles = [Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4];
-    bracketAngles.forEach(angle => {
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        const bracketPoints = [
-            new THREE.Vector3(cos * bracketSize * 0.7, sin * bracketSize * 0.7, 0),
-            new THREE.Vector3(cos * bracketSize, sin * bracketSize, 0),
-            new THREE.Vector3(cos * bracketSize * 0.85 - sin * 0.15 * bracketSize, sin * bracketSize * 0.85 + cos * 0.15 * bracketSize, 0)
-        ];
-        const bracketGeometry = new THREE.BufferGeometry().setFromPoints(bracketPoints);
-        const bracket = new THREE.Line(bracketGeometry, bracketMaterial);
-        crosshairGroup.add(bracket);
-    });
-    
-    // === ROTATING TRIANGULAR MARKERS ===
-    const markerRadius = baseSize * 1.4;
-    const markerMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff3366,
-        transparent: true,
-        opacity: 0.9,
-        side: THREE.DoubleSide
-    });
-    
-    for (let i = 0; i < 3; i++) {
-        const angle = (i / 3) * Math.PI * 2;
-        const triangleShape = new THREE.Shape();
-        const triSize = baseSize * 0.15;
-        triangleShape.moveTo(0, triSize);
-        triangleShape.lineTo(-triSize * 0.6, -triSize * 0.5);
-        triangleShape.lineTo(triSize * 0.6, -triSize * 0.5);
-        triangleShape.closePath();
-        
-        const triangleGeometry = new THREE.ShapeGeometry(triangleShape);
-        const triangle = new THREE.Mesh(triangleGeometry, markerMaterial);
-        triangle.position.set(Math.cos(angle) * markerRadius, Math.sin(angle) * markerRadius, 0);
-        triangle.rotation.z = angle - Math.PI / 2;
-        crosshairGroup.add(triangle);
+    const outerRingGroup = new THREE.Group();
+    for (let i = 0; i < outerSegments; i++) {
+        const startAngle = (i / outerSegments) * Math.PI * 2 + outerGap;
+        const endAngle = ((i + 1) / outerSegments) * Math.PI * 2 - outerGap;
+        // Glow layer (wider, more transparent)
+        const glowGeo = new THREE.RingGeometry(outerR - 6, outerR + 6, 32, 1, startAngle, endAngle - startAngle);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: 0x00eeff,
+            transparent: true,
+            opacity: 0.15,
+            side: THREE.DoubleSide
+        });
+        const glowSeg = new THREE.Mesh(glowGeo, glowMat);
+        outerRingGroup.add(glowSeg);
+        // Core line (thinner, brighter)
+        const coreGeo = new THREE.RingGeometry(outerR - 2, outerR + 2, 32, 1, startAngle, endAngle - startAngle);
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: 0x44eeff,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide
+        });
+        const coreSeg = new THREE.Mesh(coreGeo, coreMat);
+        outerRingGroup.add(coreSeg);
     }
+    crosshairGroup.add(outerRingGroup);
+    
+    // === INNER RING (AMBER GOLD) — 8 segments, counter-clockwise ===
+    const innerR = baseSize * 1.2;
+    const innerSegments = 8;
+    const innerGap = 0.12;
+    
+    const innerRingGroup = new THREE.Group();
+    for (let i = 0; i < innerSegments; i++) {
+        const startAngle = (i / innerSegments) * Math.PI * 2 + innerGap;
+        const endAngle = ((i + 1) / innerSegments) * Math.PI * 2 - innerGap;
+        // Glow layer
+        const glowGeo = new THREE.RingGeometry(innerR - 5, innerR + 5, 32, 1, startAngle, endAngle - startAngle);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: 0xffbb33,
+            transparent: true,
+            opacity: 0.12,
+            side: THREE.DoubleSide
+        });
+        const glowSeg = new THREE.Mesh(glowGeo, glowMat);
+        innerRingGroup.add(glowSeg);
+        // Core line
+        const coreGeo = new THREE.RingGeometry(innerR - 1.5, innerR + 1.5, 32, 1, startAngle, endAngle - startAngle);
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: 0xffcc55,
+            transparent: true,
+            opacity: 0.75,
+            side: THREE.DoubleSide
+        });
+        const coreSeg = new THREE.Mesh(coreGeo, coreMat);
+        innerRingGroup.add(coreSeg);
+    }
+    crosshairGroup.add(innerRingGroup);
+    
+    // === ENERGY BRIDGE CONNECTORS (6 faint lines between inner and outer) ===
+    const bridgeGroup = new THREE.Group();
+    const bridgeMaterial = new THREE.LineBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.08 });
+    for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const points = [
+            new THREE.Vector3(Math.cos(angle) * innerR, Math.sin(angle) * innerR, 0),
+            new THREE.Vector3(Math.cos(angle + 0.03) * outerR, Math.sin(angle + 0.03) * outerR, 0)
+        ];
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geo, bridgeMaterial);
+        bridgeGroup.add(line);
+    }
+    crosshairGroup.add(bridgeGroup);
     
     crosshairGroup.userData.targetFish = bossFish;
     crosshairGroup.userData.rotationSpeed = 1;
+    crosshairGroup.userData.outerRingGroup = outerRingGroup;
+    crosshairGroup.userData.innerRingGroup = innerRingGroup;
     
     scene.add(crosshairGroup);
-    bossCrosshair = crosshairGroup;
+    // Fix 1: Store in Map instead of singleton
+    bossCrosshairMap.set(bossFish, crosshairGroup);
 }
 
 function updateBossCrosshair() {
-    if (!bossCrosshair || !bossCrosshair.userData.targetFish) return;
-    
-    const targetFish = bossCrosshair.userData.targetFish;
-    if (!targetFish.isActive) {
-        removeBossCrosshair();
-        return;
+    // Fix 1: Iterate all crosshairs in the Map
+    for (const [fish, crosshair] of bossCrosshairMap) {
+        if (!crosshair || !crosshair.userData.targetFish) continue;
+        
+        const targetFish = crosshair.userData.targetFish;
+        if (!targetFish.isActive) {
+            // Fix 3: For swarm bosses, try to transfer hint to nearest active fish
+            if (bossSwarmFishList.length > 0) {
+                const nextFish = findNearestActiveSwarmFish(targetFish);
+                if (nextFish) {
+                    transferBossHint(fish, nextFish);
+                    continue;
+                }
+            }
+            removeBossCrosshairForFish(fish);
+            continue;
+        }
+        
+        // Follow the boss fish
+        crosshair.position.copy(targetFish.group.position);
+        
+        // Face the camera
+        crosshair.lookAt(camera.position);
+        
+        // Option A Animation: Dual-Layer Halo rotating rings
+        const outerRingGroup = crosshair.userData.outerRingGroup;
+        const innerRingGroup = crosshair.userData.innerRingGroup;
+        
+        // Outer ring — clockwise rotation
+        if (outerRingGroup) outerRingGroup.rotation.z += 0.012;
+        // Inner ring — counter-clockwise rotation (faster)
+        if (innerRingGroup) innerRingGroup.rotation.z -= 0.018;
+        
+        // Pulse effect on opacity for energy feel
+        const pulse = Math.sin(Date.now() * 0.004) * 0.15 + 0.85;
+        crosshair.traverse(child => {
+            if (child.isMesh && child.material && child.material.transparent) {
+                child.material.opacity = child.material.userData
+                    ? child.material.userData.baseOpacity * pulse
+                    : child.material.opacity;
+            }
+        });
     }
-    
-    // Follow the boss fish
-    bossCrosshair.position.copy(targetFish.group.position);
-    
-    // Face the camera
-    bossCrosshair.lookAt(camera.position);
-    
-    // SCI-FI ANIMATION: Multiple rotating elements
-    // children[0] = outer hexagonal ring (slow clockwise)
-    // children[1] = middle ring (counter-clockwise)
-    // children[2] = inner ring (fast clockwise)
-    if (bossCrosshair.children[0]) bossCrosshair.children[0].rotation.z += 0.008;
-    if (bossCrosshair.children[1]) bossCrosshair.children[1].rotation.z -= 0.015;
-    if (bossCrosshair.children[2]) bossCrosshair.children[2].rotation.z += 0.025;
-    
-    // Pulse effect on opacity for sci-fi feel
-    const pulse = Math.sin(Date.now() * 0.005) * 0.15 + 0.85;
-    if (bossCrosshair.children[0] && bossCrosshair.children[0].material) {
-        bossCrosshair.children[0].material.opacity = 0.7 * pulse;
+}
+
+function removeBossCrosshairForFish(fish) {
+    const crosshair = bossCrosshairMap.get(fish);
+    if (crosshair) {
+        scene.remove(crosshair);
+        crosshair.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+        });
+        bossCrosshairMap.delete(fish);
     }
 }
 
 function removeBossCrosshair() {
-    if (bossCrosshair) {
-        scene.remove(bossCrosshair);
-        bossCrosshair.traverse(child => {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) child.material.dispose();
-        });
-        bossCrosshair = null;
+    // Fix 1: Remove ALL crosshairs from the Map
+    for (const [fish, crosshair] of bossCrosshairMap) {
+        if (crosshair) {
+            scene.remove(crosshair);
+            crosshair.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+        }
     }
+    bossCrosshairMap.clear();
 }
 
 function addBossGlowEffect(bossFish, glowColor) {
@@ -20635,7 +20651,8 @@ function addBossGlowEffect(bossFish, glowColor) {
     glow.userData.glowColor = glowColor;
     
     bossFish.group.add(glow);
-    bossGlowEffect = glow;
+    // Fix 1: Store in Map instead of singleton
+    bossGlowEffectMap.set(bossFish, glow);
     
     // Also make the fish body emissive
     bossFish.group.traverse(child => {
@@ -20647,23 +20664,88 @@ function addBossGlowEffect(bossFish, glowColor) {
 }
 
 function updateBossGlowEffect(deltaTime) {
-    if (!bossGlowEffect) return;
-    
-    bossGlowEffect.userData.pulseTime += deltaTime * 3;
-    const pulse = 0.3 + Math.sin(bossGlowEffect.userData.pulseTime) * 0.2;
-    bossGlowEffect.material.opacity = pulse;
-    
-    const scale = 1 + Math.sin(bossGlowEffect.userData.pulseTime * 0.5) * 0.1;
-    bossGlowEffect.scale.setScalar(scale);
+    // Fix 1: Iterate all glow effects in the Map
+    for (const [fish, glowEffect] of bossGlowEffectMap) {
+        if (!glowEffect) continue;
+        // Remove glow for dead fish
+        if (!fish.isActive) {
+            removeBossGlowEffectForFish(fish);
+            continue;
+        }
+        glowEffect.userData.pulseTime += deltaTime * 3;
+        const pulse = 0.3 + Math.sin(glowEffect.userData.pulseTime) * 0.2;
+        glowEffect.material.opacity = pulse;
+        
+        const scale = 1 + Math.sin(glowEffect.userData.pulseTime * 0.5) * 0.1;
+        glowEffect.scale.setScalar(scale);
+    }
+}
+
+function removeBossGlowEffectForFish(fish) {
+    const glowEffect = bossGlowEffectMap.get(fish);
+    if (glowEffect && glowEffect.parent) {
+        glowEffect.parent.remove(glowEffect);
+        glowEffect.geometry.dispose();
+        glowEffect.material.dispose();
+        bossGlowEffectMap.delete(fish);
+    }
 }
 
 function removeBossGlowEffect() {
-    if (bossGlowEffect && bossGlowEffect.parent) {
-        bossGlowEffect.parent.remove(bossGlowEffect);
-        bossGlowEffect.geometry.dispose();
-        bossGlowEffect.material.dispose();
-        bossGlowEffect = null;
+    // Fix 1: Remove ALL glow effects from the Map
+    for (const [fish, glowEffect] of bossGlowEffectMap) {
+        if (glowEffect && glowEffect.parent) {
+            glowEffect.parent.remove(glowEffect);
+            glowEffect.geometry.dispose();
+            glowEffect.material.dispose();
+        }
     }
+    bossGlowEffectMap.clear();
+}
+
+// Fix 3: Find the nearest active fish in the swarm to transfer hint to
+function findNearestActiveSwarmFish(deadFish) {
+    let nearest = null;
+    let nearestDist = Infinity;
+    const deadPos = deadFish.group.position;
+    
+    for (const fish of bossSwarmFishList) {
+        if (fish === deadFish || !fish.isActive || !fish.isBoss) continue;
+        const dist = deadPos.distanceTo(fish.group.position);
+        if (dist < nearestDist) {
+            nearestDist = dist;
+            nearest = fish;
+        }
+    }
+    return nearest;
+}
+
+// Fix 3: Transfer boss hint/crosshair from dead fish to next active fish
+function transferBossHint(deadFish, newFish) {
+    // Get glow color from the dead fish's glow effect
+    const oldGlow = bossGlowEffectMap.get(deadFish);
+    const glowColor = oldGlow ? oldGlow.userData.glowColor : 0x88ffff;
+    
+    // Remove old effects for the dead fish
+    removeBossCrosshairForFish(deadFish);
+    removeBossGlowEffectForFish(deadFish);
+    
+    // Only create new effects if the new fish doesn't already have them
+    if (!bossCrosshairMap.has(newFish)) {
+        createBossCrosshair(newFish);
+    }
+    if (!bossGlowEffectMap.has(newFish)) {
+        addBossGlowEffect(newFish, glowColor);
+    }
+    
+    // Update the active boss reference
+    if (gameState.activeBoss === deadFish) {
+        gameState.activeBoss = newFish;
+    }
+    
+    // Remove dead fish from swarm list
+    const idx = bossSwarmFishList.indexOf(deadFish);
+    if (idx !== -1) bossSwarmFishList.splice(idx, 1);
 }
 
 function spawnBossFish() {
@@ -20736,8 +20818,13 @@ function spawnBossFish() {
         
         if (swarmFish.length > 0) {
             spawnedBoss = swarmFish[0];
-            createBossCrosshair(swarmFish[0]);
-            addBossGlowEffect(swarmFish[0], bossType.glowColor);
+            // Fix 1: Create crosshair + glow for EVERY fish in the swarm
+            for (const sFish of swarmFish) {
+                createBossCrosshair(sFish);
+                addBossGlowEffect(sFish, bossType.glowColor);
+            }
+            // Fix 3: Track swarm fish for hint transfer
+            bossSwarmFishList = swarmFish.slice();
         }
     } else {
         const fish = freeFish.pop();
@@ -20753,13 +20840,23 @@ function spawnBossFish() {
             spawnedBoss = fish;
             createBossCrosshair(fish);
             addBossGlowEffect(fish, bossType.glowColor);
+            bossSwarmFishList = [];  // Not a swarm boss
         }
     }
     
     if (!spawnedBoss) {
-        console.warn('[BOSS] Spawn failed — no fish available even after recycle attempt.');
+        // Fix 2: Spawn Resilience — do NOT reset timer, schedule a retry instead
+        console.warn('[BOSS] Spawn failed — pool exhausted. Will retry in 2 seconds without resetting timer.');
+        gameState.bossSpawnRetryPending = true;
+        setTimeout(() => {
+            if (gameState.bossSpawnRetryPending && !gameState.bossActive) {
+                gameState.bossSpawnRetryPending = false;
+                spawnBossFish();
+            }
+        }, 2000);
         return;
     }
+    gameState.bossSpawnRetryPending = false;
     
     gameState.activeBoss = spawnedBoss;
     showBossAlert(bossType);
@@ -20814,10 +20911,14 @@ function updateBossEvent(deltaTime) {
             setMusicState('normal');
         }
         
-        if (gameState.bossSpawnTimer <= 0) {
+        if (gameState.bossSpawnTimer <= 0 && !gameState.bossSpawnRetryPending) {
             hideBossWaitingUI();  // Hide waiting timer when boss spawns
             spawnBossFish();
-            gameState.bossSpawnTimer = 45;  // Next boss in exactly 45 seconds
+            // Fix 2: Only reset timer if spawn was NOT a retry failure
+            // (bossSpawnRetryPending is set inside spawnBossFish on failure)
+            if (!gameState.bossSpawnRetryPending) {
+                gameState.bossSpawnTimer = 45;  // Next boss in exactly 45 seconds
+            }
         }
     } else {
         // Update boss countdown
@@ -20847,6 +20948,7 @@ function updateBossEvent(deltaTime) {
 function endBossEvent() {
     gameState.bossActive = false;
     gameState.activeBoss = null;
+    bossSwarmFishList = [];  // Clear swarm tracking
     hideBossUI();
     
     stopBossMusicMP3();
