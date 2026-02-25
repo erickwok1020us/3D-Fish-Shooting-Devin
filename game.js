@@ -998,7 +998,7 @@ const WEAPON_CONFIG = {
         soundVolume: 1.0,
         fireScreenShake: { strength: 0, duration: 0 },
 
-        glbCannon: '1x 武器模組',
+        glbCannon: '1x 武器模組.glb',
         glbCannonNonPlayer: '1x 武器模組(非玩家).glb',
         glbBullet: '1x 子彈模組',
         glbHitEffect: '1x 擊中特效',
@@ -1029,7 +1029,7 @@ const WEAPON_CONFIG = {
         soundVolume: 1.0,
         fireScreenShake: { strength: 0, duration: 0 },
 
-        glbCannon: '3x 武器模組',
+        glbCannon: '3x 武器模組.glb',
         glbCannonNonPlayer: '3x 武器模組(非玩家).glb',
         glbBullet: '1x 子彈模組',
         glbHitEffect: '3x 擊中特效',
@@ -1059,7 +1059,7 @@ const WEAPON_CONFIG = {
         soundVolume: 1.0,
         fireScreenShake: { strength: 0, duration: 0 },
 
-        glbCannon: '5x 武器模組',
+        glbCannon: '5x 武器模組.glb',
         glbCannonNonPlayer: '5x 武器模組(非玩家).glb',
         glbBullet: '5x 子彈模組',
         glbHitEffect: '5x 擊中特效',
@@ -1089,7 +1089,7 @@ const WEAPON_CONFIG = {
         soundVolume: 0.5,
         fireScreenShake: { strength: 6, duration: 200 },
 
-        glbCannon: '8x 武器模組',
+        glbCannon: '8x 武器模組.glb',
         glbCannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
         glbBullet: '8x 子彈模組',
         glbHitEffect: '8x 擊中特效',
