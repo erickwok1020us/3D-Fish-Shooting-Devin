@@ -50,8 +50,6 @@ const PANORAMA_CONFIG = {
 
 let panoramaTexture = null;
 let panoramaSkySphere = null;
-let bgBaseOffsetX = 0;
-let bgBaseOffsetY = 0;
 let underwaterParticleSystem = null;
 let underwaterParticles = [];
 
@@ -191,124 +189,61 @@ document.addEventListener('DOMContentLoaded', function() {
 // Load and create sky-sphere panorama background
 // Uses inverted sphere mesh for full control over positioning and animation
 // 8K HD Quality: Applies anisotropic filtering and mipmaps for maximum sharpness
-function applyAspectFillUV(texture) {
-    if (!texture || !texture.image) return;
-    const imgW = texture.image.width;
-    const imgH = texture.image.height;
-    const imageAspect = imgW / imgH;
-    const viewAspect = window.innerWidth / window.innerHeight;
-
-    if (imageAspect > viewAspect) {
-        texture.repeat.set(viewAspect / imageAspect, 1);
-        texture.offset.set((1 - viewAspect / imageAspect) / 2, 0);
-    } else {
-        texture.repeat.set(1, imageAspect / viewAspect);
-        texture.offset.set(0, (1 - imageAspect / viewAspect) / 2);
-    }
-    bgBaseOffsetX = texture.offset.x;
-    bgBaseOffsetY = texture.offset.y;
-    texture.needsUpdate = true;
-}
+function applyAspectFillUV() {}
 
 function loadPanoramaBackground() {
     if (!PANORAMA_CONFIG.enabled) return;
 
-    const loader = new THREE.TextureLoader();
-    loader.setCrossOrigin('anonymous');
-
-    function setupBackgroundTexture(texture, imageUrl) {
-        texture.colorSpace = THREE.SRGBColorSpace;
-
-        const qualityConfig = PANORAMA_CONFIG.textureQuality;
-        if (qualityConfig && renderer && renderer.capabilities) {
-            const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
-            texture.anisotropy = Math.min(qualityConfig.anisotropy || 16, maxAnisotropy);
-            console.log('[BG] Anisotropic filtering:', texture.anisotropy, '(GPU max:', maxAnisotropy + ')');
-        }
-        texture.generateMipmaps = true;
-        texture.minFilter = THREE.LinearMipmapLinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
-
-        applyAspectFillUV(texture);
-        bgBaseOffsetX = texture.offset.x;
-        bgBaseOffsetY = texture.offset.y;
-
-        texture.needsUpdate = true;
-        panoramaTexture = texture;
-        scene.background = texture;
-
-        if (texture.image) {
-            const imgW = texture.image.width;
-            const imgH = texture.image.height;
-            console.log('[BG] === TEXTURE DIAGNOSTIC ===');
-            console.log('[BG] Image loaded:', imgW + 'x' + imgH, 'from', imageUrl);
-            console.log('[BG] Aspect Fill: repeat=', texture.repeat.x.toFixed(3), texture.repeat.y.toFixed(3),
-                        'offset=', texture.offset.x.toFixed(3), texture.offset.y.toFixed(3));
-            if (renderer && renderer.capabilities) {
-                const maxTexSize = renderer.capabilities.maxTextureSize;
-                console.log('[BG] GPU maxTextureSize:', maxTexSize);
-                if (imgW > maxTexSize || imgH > maxTexSize) {
-                    console.warn('[BG] WARNING: Image exceeds GPU limit! Will be downscaled to',
-                        Math.min(imgW, maxTexSize) + 'x' + Math.min(imgH, maxTexSize));
-                }
-            }
-            if (renderer) {
-                console.log('[BG] Renderer pixelRatio:', renderer.getPixelRatio());
-                console.log('[BG] Canvas size:', renderer.domElement.width + 'x' + renderer.domElement.height);
-            }
-            console.log('[BG] Graphics quality:', performanceState.graphicsQuality);
-            console.log('[BG] === END DIAGNOSTIC ===');
-        }
-
-        scene.fog = new THREE.Fog(
-            PANORAMA_CONFIG.fogColor,
-            PANORAMA_CONFIG.fogNear,
-            PANORAMA_CONFIG.fogFar
-        );
-    }
+    const container = document.getElementById('game-container');
+    if (!container) return;
 
     const cacheBust = '?v=' + Date.now();
-    const imageUrlWithCacheBust = PANORAMA_CONFIG.imageUrl + cacheBust;
-    console.log('[BG] Loading from:', imageUrlWithCacheBust);
+    const imageUrl = PANORAMA_CONFIG.imageUrl + cacheBust;
+    console.log('[BG] Loading CSS background from:', imageUrl);
 
-    loader.load(
-        imageUrlWithCacheBust,
-        (texture) => {
-            setupBackgroundTexture(texture, PANORAMA_CONFIG.imageUrl);
-        },
-        undefined,
-        (error) => {
-            console.warn('[BG] Failed to load background from R2:', error.message || error);
-            if (PANORAMA_CONFIG.fallbackUrl) {
-                console.log('[BG] Trying fallback image:', PANORAMA_CONFIG.fallbackUrl);
-                loader.load(
-                    PANORAMA_CONFIG.fallbackUrl,
-                    (texture) => {
-                        setupBackgroundTexture(texture, PANORAMA_CONFIG.fallbackUrl);
-                    },
-                    undefined,
-                    (fallbackError) => {
-                        console.warn('[BG] Fallback also failed, using solid color:', fallbackError);
-                        scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
-                    }
-                );
-            } else {
-                scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
-            }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function() {
+        console.log('[BG] === TEXTURE DIAGNOSTIC ===');
+        console.log('[BG] Image loaded:', img.naturalWidth + 'x' + img.naturalHeight);
+        console.log('[BG] Method: CSS background-image (camera-independent)');
+        console.log('[BG] === END DIAGNOSTIC ===');
+
+        container.style.backgroundImage = 'url(' + imageUrl + ')';
+        container.style.backgroundSize = 'cover';
+        container.style.backgroundPosition = 'center center';
+        container.style.backgroundRepeat = 'no-repeat';
+        panoramaTexture = { _cssMode: true };
+    };
+    img.onerror = function() {
+        console.warn('[BG] Failed to load background from R2');
+        if (PANORAMA_CONFIG.fallbackUrl) {
+            container.style.backgroundImage = 'url(' + PANORAMA_CONFIG.fallbackUrl + ')';
+            container.style.backgroundSize = 'cover';
+            container.style.backgroundPosition = 'center center';
+            container.style.backgroundRepeat = 'no-repeat';
+            panoramaTexture = { _cssMode: true };
         }
+    };
+    img.src = imageUrl;
+
+    scene.background = null;
+    scene.fog = new THREE.Fog(
+        PANORAMA_CONFIG.fogColor,
+        PANORAMA_CONFIG.fogNear,
+        PANORAMA_CONFIG.fogFar
     );
 }
 
 function updatePanoramaAnimation() {
-    if (!panoramaTexture) return;
+    if (!panoramaTexture || !panoramaTexture._cssMode) return;
+    const container = document.getElementById('game-container');
+    if (!container) return;
     const cfg = PANORAMA_CONFIG.bgDrift;
     const t = performance.now();
-    panoramaTexture.offset.set(
-        bgBaseOffsetX + Math.sin(t * cfg.freqX) * cfg.ampX,
-        bgBaseOffsetY + Math.sin(t * cfg.freqY + 1.57) * cfg.ampY
-    );
+    const dx = Math.sin(t * cfg.freqX) * cfg.ampX * 100;
+    const dy = Math.sin(t * cfg.freqY + 1.57) * cfg.ampY * 100;
+    container.style.backgroundPosition = 'calc(50% + ' + dx.toFixed(2) + 'px) calc(50% + ' + dy.toFixed(2) + 'px)';
 }
 
 // Create floating underwater particles for dynamic atmosphere
@@ -10068,8 +10003,7 @@ function initGameScene() {
     
     // Create scene
     scene = new THREE.Scene();
-    // Set initial background color (will be replaced by panorama background if enabled)
-    scene.background = new THREE.Color(PANORAMA_CONFIG.fogColor);
+    scene.background = null;
     scene.fog = new THREE.Fog(PANORAMA_CONFIG.fogColor, PANORAMA_CONFIG.fogNear, PANORAMA_CONFIG.fogFar);
     
     // Load panorama background (async, replaces solid color when loaded)
@@ -10089,7 +10023,7 @@ function initGameScene() {
     
     // Create renderer with quality-based settings
     const antialias = quality !== 'low';  // Disable antialiasing for low quality
-    renderer = new THREE.WebGLRenderer({ antialias: antialias });
+    renderer = new THREE.WebGLRenderer({ antialias: antialias, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     // Apply quality-based pixel ratio
     const baseRatio = window.devicePixelRatio || 1;
@@ -19264,7 +19198,6 @@ function setupEventListeners() {
         if (_effectComposer) _effectComposer.setSize(window.innerWidth, window.innerHeight);
         if (_bloomPass) _bloomPass.setSize(window.innerWidth, window.innerHeight);
         updateSpreadCrosshairPositions();
-        if (panoramaTexture) applyAspectFillUV(panoramaTexture);
     });
     
     // Prevent context menu
