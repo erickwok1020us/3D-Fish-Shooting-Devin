@@ -12357,8 +12357,10 @@ function aimCannon(targetX, targetY) {
 const TargetingService = {
     config: {
         // Geometric lock constraints
-        LOCK_FOV_DEGREES: 60,                                    // Lock cone half-angle (Vector3.Dot check)
+        LOCK_FOV_DEGREES: 60,                                    // Lock cone half-angle for ACQUISITION (Vector3.Dot check)
+        DROP_FOV_DEGREES: 90,                                    // Drop cone half-angle — wider hysteresis buffer for release
         LOCK_MAX_DISTANCE: 2500.0,                               // Max lock distance in world units (game scale)
+        DROP_DISTANCE_FACTOR: 1.2,                               // Drop distance = LOCK_MAX_DISTANCE * 1.2 (20% buffer)
         // Cannon rotation limits (kept from original for physical turret clamping)
         yawLimit:   46.75 * (Math.PI / 180),
         pitchMax:   42.5  * (Math.PI / 180),
@@ -12428,7 +12430,19 @@ const TargetingService = {
         return !!(fish.isBoss || fish.hasBossHint || bossCrosshairMap.has(fish));
     },
 
-    // ---- Lock Constraint: FOV + Distance check using Vector3.Dot ----
+    // ---- Static Base Cannon Forward ----
+    // Returns the DEFAULT forward direction of the player's weapon slot (screen center),
+    // NOT the currently animating barrel's forward. This prevents the race condition where
+    // Slerp lag causes the moving barrel to "lose" the fish from the FOV cone.
+    _getStaticBaseForward(out) {
+        // Static base forward = straight ahead from cannon base (yaw=0, pitch=0)
+        // This is the fixed default direction of the player's weapon slot
+        out.set(0, 0, 1).normalize();
+        return out;
+    },
+
+    // ---- Lock Constraint: FOV + Distance check for ACQUISITION (strict 60°) ----
+    // Uses STATIC base cannon forward to avoid Slerp race condition
     _isInLockCone(fishPos, refPos) {
         const c = this.config;
         const tv = this._tempVecs;
@@ -12440,14 +12454,15 @@ const TargetingService = {
         if (distSq > maxDistSq) return false;
         const dist = Math.sqrt(distSq);
         if (dist < 1) return true;
-        // Also enforce turret yaw/pitch limits
+        // Enforce turret yaw/pitch limits with margin
         const yaw = Math.atan2(dx / dist, dz / dist);
         const pitch = Math.asin(dy / dist);
         const margin = 3 * (Math.PI / 180);
         if (Math.abs(yaw) > (c.yawLimit - margin)) return false;
         if (pitch > (c.pitchMax - margin) || pitch < (c.pitchMin + margin)) return false;
-        // FOV check: angle between cannon forward and fish direction
-        this._getCannonForward(tv.cannonFwd);
+        // FOV check: angle between STATIC base forward and fish direction
+        // Static forward prevents Slerp lag from causing false cone exits
+        this._getStaticBaseForward(tv.cannonFwd);
         tv.toFish.set(dx / dist, dy / dist, dz / dist);
         const dot = tv.cannonFwd.dot(tv.toFish);
         const halfFovRad = c.LOCK_FOV_DEGREES * (Math.PI / 180);
@@ -12455,29 +12470,43 @@ const TargetingService = {
         return dot >= cosHalfFov;
     },
 
-    // ---- Lock Constraint: Broader check for maintaining existing lock ----
-    // Uses turret limits only (no FOV cone), so fish doesn't flicker at edges
-    _isInTurretRange(fishPos, refPos) {
+    // ---- Drop Constraint: Wider hysteresis cone for RELEASE (90° + 1.2x distance) ----
+    // Once locked, fish must go WAY out of bounds before we drop.
+    // Uses STATIC base forward + wider FOV + 20% distance buffer.
+    _isInDropBounds(fishPos, refPos) {
         const c = this.config;
+        const tv = this._tempVecs;
         const dx = fishPos.x - refPos.x;
         const dy = fishPos.y - refPos.y;
         const dz = fishPos.z - refPos.z;
         const distSq = dx * dx + dy * dy + dz * dz;
-        const maxDistSq = c.LOCK_MAX_DISTANCE * c.LOCK_MAX_DISTANCE;
-        if (distSq > maxDistSq) return false;
+        // Drop distance = LOCK_MAX_DISTANCE * 1.2 (20% buffer)
+        const dropMaxDist = c.LOCK_MAX_DISTANCE * c.DROP_DISTANCE_FACTOR;
+        const dropMaxDistSq = dropMaxDist * dropMaxDist;
+        if (distSq > dropMaxDistSq) return false;
         const dist = Math.sqrt(distSq);
         if (dist < 1) return true;
+        // Turret limits (no margin — wider tolerance for drop)
         const yaw = Math.atan2(dx / dist, dz / dist);
         const pitch = Math.asin(dy / dist);
-        return Math.abs(yaw) <= c.yawLimit && pitch >= c.pitchMin && pitch <= c.pitchMax;
+        if (Math.abs(yaw) > c.yawLimit) return false;
+        if (pitch > c.pitchMax || pitch < c.pitchMin) return false;
+        // Drop FOV check: wider 90° cone (vs 60° for acquisition)
+        this._getStaticBaseForward(tv.cannonFwd);
+        tv.toFish.set(dx / dist, dy / dist, dz / dist);
+        const dot = tv.cannonFwd.dot(tv.toFish);
+        const halfDropFovRad = c.DROP_FOV_DEGREES * (Math.PI / 180);
+        const cosHalfDropFov = Math.cos(halfDropFovRad);
+        return dot >= cosHalfDropFov;
     },
 
     // ---- Should release lock on current target? ----
+    // Uses the WIDER drop bounds (90° + 1.2x distance), not the strict lock cone.
     _shouldReleaseLock(fish, refPos) {
         if (!fish) return true;
         if (!fish.isActive) return true;                         // Despawned
         if (fish.hp !== undefined && fish.hp <= 0) return true;  // Dead (server kill)
-        if (!this._isInTurretRange(fish.group.position, refPos)) return true;  // Left turret range
+        if (!this._isInDropBounds(fish.group.position, refPos)) return true;  // Left wide drop bounds
         return false;
     },
 
@@ -12614,49 +12643,85 @@ const TargetingService = {
                     s.startPitch = s.currentPitch;
                     s.lockStartMs = now;
                     s.shotsAtCurrent = 0;
+                    console.log(`[AutoFire] LOCK acquired: ${target.rtpFishId || 'unknown'} phase=locking`);
                 }
             }
             return { target: null, canFire: false };
         }
 
-        // ---- BOSS PREEMPTION: If locked on P2 and a P1 enters the Lock Cone ----
-        // Only check on scan ticks to save CPU
-        if (shouldRescan && s.lockedTarget && !this._isBossPriority(s.lockedTarget)) {
+        // ==================== 100ms STATE MACHINE TICK (Short-Circuit) ====================
+        // Strict execution order per spec:
+        //   1. Boss Preemption (Layer 1)
+        //   2. Sticky Lock Validation (Short-circuit: if lock valid, DO NOT re-evaluate)
+        //   3. Layer 2 Selection (only runs if NO target is locked)
+        if (shouldRescan) {
             s.lastTargetScanMs = now;
-            for (let i = 0; i < activeFish.length; i++) {
-                const bf = activeFish[i];
-                if (!bf.isActive) continue;
-                if (bf.hp !== undefined && bf.hp <= 0) continue;
-                if (!this._isBossPriority(bf)) continue;
-                if (!this._isInLockCone(bf.group.position, refPos)) continue;
-                // Found a valid P1 boss — preempt current P2 target on next fire tick
-                s.lockedTarget = bf;
-                s.phase = 'transition';
-                s.phaseStart = now;
-                s.startYaw = s.currentYaw;
-                s.startPitch = s.currentPitch;
-                s.lockStartMs = now;
-                s.shotsAtCurrent = 0;
-                break;
-            }
-        }
 
-        // ---- LOCK VALIDATION: Dead / Despawned / Out of range → release ----
-        if (this._shouldReleaseLock(s.lockedTarget, refPos)) {
-            s.lastTargetScanMs = now;
-            const next = this._selectTarget(refPos);
-            if (next) {
-                s.lockedTarget = next;
-                s.phase = 'transition';
-                s.phaseStart = now;
-                s.startYaw = s.currentYaw;
-                s.startPitch = s.currentPitch;
-                s.lockStartMs = now;
-                s.shotsAtCurrent = 0;
-            } else {
-                this.reset();
-                this._initFromCannon();
-                return { target: null, canFire: false };
+            // ---- LAYER 1: Boss Preemption Check ----
+            // If locked on P2 and a P1 enters the Lock Cone, switch to Boss immediately
+            if (s.lockedTarget && !this._isBossPriority(s.lockedTarget)) {
+                for (let i = 0; i < activeFish.length; i++) {
+                    const bf = activeFish[i];
+                    if (!bf.isActive) continue;
+                    if (bf.hp !== undefined && bf.hp <= 0) continue;
+                    if (!this._isBossPriority(bf)) continue;
+                    if (!this._isInLockCone(bf.group.position, refPos)) continue;
+                    // Found a valid P1 boss — preempt current P2 target
+                    console.log(`[AutoFire] BOSS PREEMPT: ${s.lockedTarget.rtpFishId || '?'} → ${bf.rtpFishId || '?'}`);
+                    s.lockedTarget = bf;
+                    s.phase = 'transition';
+                    s.phaseStart = now;
+                    s.startYaw = s.currentYaw;
+                    s.startPitch = s.currentPitch;
+                    s.lockStartMs = now;
+                    s.shotsAtCurrent = 0;
+                    break;
+                }
+            }
+
+            // ---- LAYER 2: Sticky Lock Validation (Short-circuit) ----
+            if (s.lockedTarget) {
+                if (this._shouldReleaseLock(s.lockedTarget, refPos)) {
+                    // Target is dead/despawned/out of drop bounds → release and find new
+                    const reason = !s.lockedTarget.isActive ? 'despawned' :
+                                   (s.lockedTarget.hp !== undefined && s.lockedTarget.hp <= 0) ? 'dead' : 'out-of-bounds';
+                    console.log(`[AutoFire] DROP lock: ${s.lockedTarget.rtpFishId || '?'} reason=${reason}`);
+                    const next = this._selectTarget(refPos);
+                    if (next) {
+                        s.lockedTarget = next;
+                        s.phase = 'transition';
+                        s.phaseStart = now;
+                        s.startYaw = s.currentYaw;
+                        s.startPitch = s.currentPitch;
+                        s.lockStartMs = now;
+                        s.shotsAtCurrent = 0;
+                        console.log(`[AutoFire] LOCK transition: → ${next.rtpFishId || 'unknown'}`);
+                    } else {
+                        this.reset();
+                        this._initFromCannon();
+                        return { target: null, canFire: false };
+                    }
+                }
+                // CRITICAL SHORT-CIRCUIT: Lock is still valid → DO NOT re-evaluate Layer 2.
+                // This is the sticky lock behavior: we keep the current target.
+            }
+
+            // ---- LAYER 3: No target locked → find nearest ----
+            // (This only runs if lockedTarget is null after the above checks)
+            if (!s.lockedTarget) {
+                const target = this._selectTarget(refPos);
+                if (target) {
+                    s.lockedTarget = target;
+                    s.phase = 'locking';
+                    s.phaseStart = now;
+                    s.startYaw = s.currentYaw;
+                    s.startPitch = s.currentPitch;
+                    s.lockStartMs = now;
+                    s.shotsAtCurrent = 0;
+                    console.log(`[AutoFire] LOCK acquired (L3): ${target.rtpFishId || 'unknown'}`);
+                } else {
+                    return { target: null, canFire: false };
+                }
             }
         }
 
