@@ -5211,6 +5211,16 @@ const BOSS_FISH_TYPES = [
         speedMultiplier: 2.5,  // EXTREMELY FAST
         glowColor: 0xaa44ff,
         description: 'Blazing fast marlin!'
+    },
+    {
+        name: 'IRON HAMMERHEAD',
+        baseSpecies: 'hammerheadShark',
+        sizeMultiplier: 1.7,
+        hpMultiplier: 3,
+        rewardMultiplier: 3,
+        speedMultiplier: 1.1,
+        glowColor: 0x44ffaa,
+        description: 'Armored pack hunter!'
     }
 ];
 
@@ -5222,8 +5232,8 @@ const BOSS_FISH_TYPES = [
 const BOSS_ONLY_SPECIES = BOSS_FISH_TYPES
     .filter(boss => boss.baseSpecies !== 'sardine')  // Keep sardine for normal gameplay
     .map(boss => boss.baseSpecies)
-    .concat(['killerWhale']);  // Orca is boss-only even though it's not in BOSS_FISH_TYPES base list
-// Result: ['blueWhale', 'greatWhiteShark', 'mantaRay', 'marlin', 'killerWhale'] - sardine now spawns normally
+    .concat(['killerWhale', 'hammerheadShark']);  // Orca + Hammerhead are boss-only even though not always in BOSS_FISH_TYPES base list
+// Result: ['blueWhale', 'greatWhiteShark', 'mantaRay', 'marlin', 'killerWhale', 'hammerheadShark'] - sardine now spawns normally
 
 // RTP FIX: List of ability fish that should NOT spawn during normal gameplay
 // These fish have special abilities (bomb, lightning, bonus, shield) that can trigger
@@ -12567,6 +12577,26 @@ const TargetingService = {
                 s.shotsAtCurrent = 0;
             }
             return { target: null, canFire: false };
+        }
+
+        // Boss Preemption: If currently locked on a non-boss fish and a boss is
+        // active on screen, immediately switch to the boss target.
+        if (s.lockedTarget && !s.lockedTarget.isBoss) {
+            for (let _bi = 0; _bi < activeFish.length; _bi++) {
+                const _bf = activeFish[_bi];
+                if (!_bf.isActive || !_bf.isBoss) continue;
+                if (_bf.hp !== undefined && _bf.hp <= 0) continue;
+                if (!this._isInAutoFireCone(_bf.group.position, refPos)) continue;
+                // Found a valid boss — preempt current target
+                s.lockedTarget = _bf;
+                s.phase = 'transition';
+                s.phaseStart = now;
+                s.startYaw = s.currentYaw;
+                s.startPitch = s.currentPitch;
+                s.lockStartMs = now;
+                s.shotsAtCurrent = 0;
+                break;
+            }
         }
 
         if (this._shouldReleaseLock(s.lockedTarget, refPos)) {
