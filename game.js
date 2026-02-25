@@ -12086,6 +12086,7 @@ const TargetingService = {
         shotsAtCurrent: 0,
         lockStartMs: 0,
         lastBossReleaseMs: 0,
+        _bossInterruptCounter: 0,
     },
 
     reset(){
@@ -12096,6 +12097,7 @@ const TargetingService = {
         s.initialized = false;
         s.shotsAtCurrent = 0;
         s.lockStartMs = 0;
+        s._bossInterruptCounter = 0;
     },
 
     _isTargetValid(fish, refPos) {
@@ -12243,6 +12245,17 @@ const TargetingService = {
         return false;
     },
 
+    _scanBossInCone(refPos, now) {
+        const c = this.config, s = this.state;
+        if (now - s.lastBossReleaseMs <= c.bossCooldownMs) return null;
+        for (const fish of activeFish) {
+            if (!fish.isActive || !fish.isBoss) continue;
+            if (fish.hp !== undefined && fish.hp <= 0) continue;
+            if (this._isInAutoFireCone(fish.group.position, refPos)) return fish;
+        }
+        return null;
+    },
+
     _pick8xNewTarget(refPos, now) {
         const c = this.config, s = this.state;
         for (const fish of activeFish) {
@@ -12350,8 +12363,27 @@ const TargetingService = {
             }
         }
 
-        const fish = s.lockedTarget;
+        let fish = s.lockedTarget;
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
+
+        if (fish && !fish.isBoss && (s.phase === 'locking' || s.phase === 'firing' || s.phase === 'transition')) {
+            s._bossInterruptCounter = (s._bossInterruptCounter || 0) + 1;
+            if (s._bossInterruptCounter >= 10) {
+                s._bossInterruptCounter = 0;
+                const boss = this._scanBossInCone(refPos, now);
+                if (boss) {
+                    console.log('[AutoFire] Boss interrupt! Dropping normal fish for Boss');
+                    s.lockedTarget = boss;
+                    s.phase = 'transition';
+                    s.phaseStart = now;
+                    s.startYaw = s.currentYaw;
+                    s.startPitch = s.currentPitch;
+                    s.lockStartMs = now;
+                    s.shotsAtCurrent = 0;
+                    fish = boss;
+                }
+            }
+        }
 
         if (!this._isInAutoFireCone(fish.group.position, refPos)) {
             if (fish.isBoss) s.lastBossReleaseMs = now;
