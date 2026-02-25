@@ -7456,8 +7456,8 @@ function showRewardFloat(amount) {
 }
 
 // ==================== NEON ABYSS SUCTION REWARD POPUP ====================
-// Minimalist frosted glass card with amber gold border + suction/inhale animation
-// Numbers spawn above Balance HUD and get "inhaled" downward into balance icon
+// RAW NUMBERS ONLY — no background, no border, no container, no hitbox
+// Neon-style text with Amber/Gold outer glow, inhaled into Balance HUD
 function _showNeonAbyssSuction(intAmount) {
     const bd = document.getElementById('balance-display');
     if (!bd) return;
@@ -7483,7 +7483,7 @@ function _showNeonAbyssSuction(intAmount) {
     const targetX = rect.left + rect.width / 2;
     const targetY = rect.top + rect.height / 2;
     
-    // Create frosted glass container
+    // RAW NUMBER — no box, no border, no background plate
     const popup = document.createElement('div');
     popup.style.cssText = [
         'position:fixed',
@@ -7493,21 +7493,19 @@ function _showNeonAbyssSuction(intAmount) {
         'pointer-events:none',
         'z-index:99999',
         'white-space:nowrap',
-        'padding:6px 14px',
-        // Frosted glass background (low opacity, blurred)
-        'background:rgba(10,18,36,0.45)',
-        'backdrop-filter:blur(8px)',
-        '-webkit-backdrop-filter:blur(8px)',
-        // Thin amber gold frame with soft glow
-        'border:1.5px solid rgba(255,180,50,0.55)',
-        'border-radius:8px',
-        'box-shadow:0 0 12px rgba(255,180,50,0.2),0 0 4px rgba(0,200,255,0.15),inset 0 0 8px rgba(255,180,50,0.05)',
-        // Typography matching Balance HUD font
+        // NO background, NO border, NO padding, NO backdrop-filter
+        'background:none',
+        'border:none',
+        'padding:0',
+        'margin:0',
+        // Neon-style font matching Balance HUD
         'font-family:"Orbitron",monospace',
         'font-size:' + rewardFontSize + 'px',
         'font-weight:700',
         'color:#ffd740',
-        'text-shadow:0 0 8px rgba(255,215,0,0.6),0 0 16px rgba(255,180,50,0.3)',
+        // Subtle Amber/Gold outer glow for readability (text-shadow only)
+        'text-shadow:0 0 6px rgba(255,215,0,0.7),0 0 12px rgba(255,180,50,0.5),0 0 24px rgba(255,160,30,0.25),0 1px 2px rgba(0,0,0,0.6)',
+        '-webkit-text-stroke:1px rgba(0,0,0,0.35)',
         'opacity:0'
     ].join(';');
     popup.textContent = '+' + intAmount.toLocaleString();
@@ -7515,7 +7513,7 @@ function _showNeonAbyssSuction(intAmount) {
     
     const startT = performance.now();
     const totalDuration = 1200;
-    // Bezier-like suction phases:
+    // Dynamic Airflow suction phases:
     // Phase 1 (0-25%): Pop-in with bounce at spawn position
     // Phase 2 (25-70%): Hover/float with gentle drift
     // Phase 3 (70-100%): Accelerating suction inhale toward Balance HUD
@@ -7559,12 +7557,13 @@ function _showNeonAbyssSuction(intAmount) {
         popup.style.transform = 'translate(-50%,-50%) scale(' + currentScale + ')';
         popup.style.opacity = String(currentOpacity);
         
-        // Intensify border glow during suction phase
+        // Intensify text glow during suction phase (no border/box-shadow on container)
         if (p > 0.70) {
-            const suctionIntensity = (p - 0.70) / 0.30;
-            const glowSize = 12 + suctionIntensity * 20;
-            popup.style.boxShadow = '0 0 ' + glowSize + 'px rgba(255,180,50,' + (0.2 + suctionIntensity * 0.5) + '),0 0 ' + (glowSize * 0.5) + 'px rgba(0,200,255,' + (0.15 + suctionIntensity * 0.3) + ')';
-            popup.style.borderColor = 'rgba(255,180,50,' + (0.55 + suctionIntensity * 0.45) + ')';
+            const si = (p - 0.70) / 0.30;
+            const g1 = 6 + si * 10;
+            const g2 = 12 + si * 16;
+            const g3 = 24 + si * 20;
+            popup.style.textShadow = '0 0 ' + g1 + 'px rgba(255,215,0,' + (0.7 + si * 0.3) + '),0 0 ' + g2 + 'px rgba(255,180,50,' + (0.5 + si * 0.4) + '),0 0 ' + g3 + 'px rgba(255,160,30,' + (0.25 + si * 0.35) + '),0 1px 2px rgba(0,0,0,0.6)';
         }
         
         if (p < 1) {
