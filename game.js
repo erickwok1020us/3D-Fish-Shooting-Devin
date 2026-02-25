@@ -3184,7 +3184,25 @@ const fpsCameraRecoilState = {
     maxPitchOffset: 0,  // Target pitch offset for kick phase
     kickStartTime: 0,
     kickDuration: 40,   // Fast kick up (40ms)
-    returnDuration: 150  // Slower return (150ms)
+    returnDuration: 150,  // Slower return (150ms)
+    // Positional micro-shake (Game Juice) — layered on top of final camera position
+    shakeActive: false,
+    shakeStartTime: 0,
+    shakeDuration: 50,    // 50ms burst
+    shakeAmplitude: 2.5,  // 2-3 units on X/Y axes
+    shakeOffsetX: 0,
+    shakeOffsetY: 0
+};
+
+// Boss FOV Kick state — triggered on Layer 1 Boss kill
+// Animates FOV: 68 → 62 → 68 over 0.4s for suction/impact feeling
+const bossFovKickState = {
+    active: false,
+    startTime: 0,
+    duration: 400,   // 0.4 seconds total
+    baseFov: 68,     // Resting FPS FOV
+    minFov: 62,      // Punch-in target
+    endFov: 68       // Return to resting
 };
 
 // Sci-fi base ring state for animation
@@ -12917,6 +12935,9 @@ function autoFireAtFish(targetFish) {
             fpsCameraRecoilState.kickStartTime = performance.now();
             fpsCameraRecoilState.kickDuration = 20;
             fpsCameraRecoilState.returnDuration = 50;
+            // Game Juice: positional micro-shake
+            fpsCameraRecoilState.shakeActive = true;
+            fpsCameraRecoilState.shakeStartTime = performance.now();
         } else if (cannonBarrel) {
             var correctYB = wCfgB.cannonYOffset !== undefined ? wCfgB.cannonYOffset : 20;
             barrelRecoilState.originalPosition.set(0, correctYB, 0);
@@ -12972,6 +12993,9 @@ function autoFireAtFish(targetFish) {
             fpsCameraRecoilState.kickStartTime = performance.now();
             fpsCameraRecoilState.kickDuration = 20;
             fpsCameraRecoilState.returnDuration = 60;
+            // Game Juice: positional micro-shake
+            fpsCameraRecoilState.shakeActive = true;
+            fpsCameraRecoilState.shakeStartTime = performance.now();
         } else {
             const correctY = wCfg.cannonYOffset !== undefined ? wCfg.cannonYOffset : 20;
             barrelRecoilState.originalPosition.set(0, correctY, 0);
@@ -17400,6 +17424,9 @@ function _fireBurstShot(weaponKey, shotIndex) {
         fpsCameraRecoilState.kickStartTime = performance.now();
         fpsCameraRecoilState.kickDuration = 25;
         fpsCameraRecoilState.returnDuration = 60;
+        // Game Juice: positional micro-shake
+        fpsCameraRecoilState.shakeActive = true;
+        fpsCameraRecoilState.shakeStartTime = performance.now();
     } else if (cannonBarrel) {
         barrelRecoilState.originalPosition.copy(cannonBarrel.position);
         barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
@@ -17444,6 +17471,9 @@ function _fireBurstShotAuto(weaponKey) {
         fpsCameraRecoilState.kickStartTime = performance.now();
         fpsCameraRecoilState.kickDuration = 20;
         fpsCameraRecoilState.returnDuration = 50;
+        // Game Juice: positional micro-shake
+        fpsCameraRecoilState.shakeActive = true;
+        fpsCameraRecoilState.shakeStartTime = performance.now();
     } else if (cannonBarrel) {
         var correctY = wCfg.cannonYOffset !== undefined ? wCfg.cannonYOffset : 20;
         barrelRecoilState.originalPosition.set(0, correctY, 0);
@@ -17641,6 +17671,9 @@ function fireBullet(targetX, targetY) {
             fpsCameraRecoilState.kickStartTime = performance.now();
             fpsCameraRecoilState.kickDuration = 25;
             fpsCameraRecoilState.returnDuration = 60;
+            // Game Juice: positional micro-shake
+            fpsCameraRecoilState.shakeActive = true;
+            fpsCameraRecoilState.shakeStartTime = performance.now();
         } else if (cannonBarrel) {
             barrelRecoilState.originalPosition.copy(cannonBarrel.position);
             barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
@@ -17694,6 +17727,9 @@ function fireBullet(targetX, targetY) {
         fpsCameraRecoilState.kickStartTime = performance.now();
         fpsCameraRecoilState.kickDuration = 30 + recoilStrength;
         fpsCameraRecoilState.returnDuration = 100 + recoilStrength * 4;
+        // Game Juice: positional micro-shake
+        fpsCameraRecoilState.shakeActive = true;
+        fpsCameraRecoilState.shakeStartTime = performance.now();
     } else if (cannonBarrel) {
         barrelRecoilState.originalPosition.copy(cannonBarrel.position);
         barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
@@ -17788,6 +17824,26 @@ function updateFPSCameraRecoil() {
             fpsCameraRecoilState.pitchOffset = 0;
             fpsCameraRecoilState.active = false;
             fpsCameraRecoilState.phase = 'idle';
+        }
+    }
+    
+    // Positional micro-shake update (Game Juice)
+    // Random X/Y offsets that decay over shakeDuration (50ms)
+    if (fpsCameraRecoilState.shakeActive) {
+        const shakeElapsed = now - fpsCameraRecoilState.shakeStartTime;
+        if (shakeElapsed >= fpsCameraRecoilState.shakeDuration) {
+            // Shake complete — zero out offsets
+            fpsCameraRecoilState.shakeActive = false;
+            fpsCameraRecoilState.shakeOffsetX = 0;
+            fpsCameraRecoilState.shakeOffsetY = 0;
+        } else {
+            // Decay envelope: amplitude * (1 - progress)
+            const shakeProgress = shakeElapsed / fpsCameraRecoilState.shakeDuration;
+            const envelope = 1 - shakeProgress;
+            const amp = fpsCameraRecoilState.shakeAmplitude * envelope;
+            // Random direction each frame for organic feel
+            fpsCameraRecoilState.shakeOffsetX = (Math.random() * 2 - 1) * amp;
+            fpsCameraRecoilState.shakeOffsetY = (Math.random() * 2 - 1) * amp;
         }
     }
 }
@@ -19880,7 +19936,7 @@ function initFPSMode() {
     // FIX: Reset FPS yaw/pitch to ensure camera faces forward on game start
     // This fixes the issue where camera was facing left on initial game entry
     // Initial pitch set to 15 degrees upward for optimal fish viewing (shows fish pool center)
-    const FPS_INITIAL_PITCH = 15 * (Math.PI / 180);  // 15 degrees upward
+    const FPS_INITIAL_PITCH = 0 * (Math.PI / 180);  // 0 degrees — level resting view (straight ahead at fish plane)
     gameState.fpsYaw = 0;  // Face forward (toward fish pool center)
     gameState.fpsPitch = FPS_INITIAL_PITCH;
     
@@ -19916,7 +19972,7 @@ function initFPSMode() {
     
     // Wider FOV in FPS mode
     if (camera) {
-        camera.fov = 75;
+        camera.fov = 68;  // Tight cinematic FOV — reduced from 75 to eliminate fisheye edge stretching
         camera.updateProjectionMatrix();
     }
     
@@ -19967,8 +20023,8 @@ const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5°
 
 // FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
 // These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
-const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
-const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
+const FPS_CAMERA_BACK_DIST_DEFAULT = 150;   // Distance behind muzzle — increased for "barrel-over" iron sight feel
+const FPS_CAMERA_UP_OFFSET_DEFAULT = 45;    // Camera ABOVE barrel — looking down along top of cannon (no more rat perspective)
 const FPS_CANNON_SIDE_OFFSET = 5;           // Near-center turret positioning
 
 // Update FPS camera position and rotation
@@ -20047,9 +20103,15 @@ function updateFPSCamera() {
     const cameraY = FIXED_MUZZLE_Y + cameraUpOffset;
     
     // Set camera position with FIXED Y + side offset for left/right hand
+    // Then layer on positional micro-shake (Game Juice) — does NOT affect aiming Slerp
+    let shakeX = 0, shakeY = 0;
+    if (fpsCameraRecoilState.shakeActive) {
+        shakeX = fpsCameraRecoilState.shakeOffsetX;
+        shakeY = fpsCameraRecoilState.shakeOffsetY;
+    }
     camera.position.set(
-        cannonBasePos.x + backOffset.x + sideOffsetX,
-        cameraY + backOffset.y,
+        cannonBasePos.x + backOffset.x + sideOffsetX + shakeX,
+        cameraY + backOffset.y + shakeY,
         cannonBasePos.z + backOffset.z + sideOffsetZ
     );
     
@@ -20080,6 +20142,47 @@ function updateFPSCamera() {
     
     // Re-enforce up vector after lookAt (belt and suspenders)
     camera.up.set(0, 1, 0);
+}
+
+// Boss FOV Kick update — called from animate loop
+// Animates FOV: 68 → 62 → 68 over 0.4s using sin-based ease for suction/impact feel
+function updateBossFovKick() {
+    if (!bossFovKickState.active) return;
+    if (gameState.viewMode !== 'fps') {
+        bossFovKickState.active = false;
+        return;
+    }
+    
+    const now = performance.now();
+    const elapsed = now - bossFovKickState.startTime;
+    
+    if (elapsed >= bossFovKickState.duration) {
+        // Animation complete — snap back to base FOV
+        bossFovKickState.active = false;
+        if (camera) {
+            camera.fov = bossFovKickState.endFov;
+            camera.updateProjectionMatrix();
+        }
+        return;
+    }
+    
+    // Progress 0→1 over duration
+    const progress = elapsed / bossFovKickState.duration;
+    // Sin curve: 0→1→0 maps to baseFov → minFov → baseFov (single punch)
+    const fovDelta = (bossFovKickState.baseFov - bossFovKickState.minFov) * Math.sin(progress * Math.PI);
+    const fov = bossFovKickState.baseFov - fovDelta;
+    
+    if (camera) {
+        camera.fov = fov;
+        camera.updateProjectionMatrix();
+    }
+}
+
+// Trigger Boss FOV Kick — call this when a Layer 1 Boss is killed
+function triggerBossFovKick() {
+    if (gameState.viewMode !== 'fps') return;
+    bossFovKickState.active = true;
+    bossFovKickState.startTime = performance.now();
 }
 
 // Smooth camera transition (called in animate loop)
@@ -20219,8 +20322,11 @@ function animate() {
     // PERFORMANCE: Update barrel recoil in animation loop (replaces setTimeout)
     updateBarrelRecoil();
     
-    // Update FPS camera recoil (visual pitch kick effect)
+    // Update FPS camera recoil (visual pitch kick effect + positional micro-shake)
     updateFPSCameraRecoil();
+    
+    // Update Boss FOV Kick animation (68→62→68 over 0.4s)
+    updateBossFovKick();
     
     // Update sci-fi base ring animation (rotation + pulse)
     updateSciFiBaseRing(currentTime / 1000);  // Convert to seconds
@@ -21242,6 +21348,8 @@ function updateBossEvent(deltaTime) {
         if (gameState.activeBoss && !gameState.activeBoss.isActive) {
             // Boss killed! Show victory message
             showBossKilledMessage();
+            // Game Juice: Boss FOV Kick (68→62→68 over 0.4s) for impact/suction feel
+            triggerBossFovKick();
             endBossEvent();
         }
         
