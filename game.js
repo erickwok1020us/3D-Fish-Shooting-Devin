@@ -19976,12 +19976,12 @@ const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5°
 // ===== FPS World-Space Camera Configuration (Config A: "The Tactical Reach") =====
 // Camera uses ABSOLUTE world coordinates — not relative to turret muzzle.
 // Turret is repositioned in world space for optimal screen composition.
-const FPS_WORLD_CAMERA_Y = 150;          // Camera absolute Y position
+const FPS_WORLD_CAMERA_Y = 120;          // Camera absolute Y position (lowered from 150 for turret visibility)
 const FPS_WORLD_CAMERA_Z = -800;         // Camera absolute Z position
-const FPS_WORLD_TURRET_Y = -28;          // Turret world Y (raised from CANNON_BASE_Y)
+const FPS_WORLD_TURRET_Y = -55;          // Turret world Y (lowered from -28 for rig descent)
 const FPS_WORLD_TURRET_Z = -680;         // Turret world Z (pulled closer to camera)
 const FPS_WORLD_TURRET_SCALE = 1.8;      // Turret model scale (beefy barrel)
-const FPS_WORLD_FOV = 65;                // FOV (cinematic telephoto compression)
+const FPS_WORLD_FOV = 70;                // FOV (balanced wide-angle with telephoto compression)
 const FPS_WORLD_PITCH = -5;              // Initial pitch in degrees (slight downward tilt)
 const FPS_WORLD_NEAR = 0.1;              // Near clipping plane (prevent turret clipping)
 
@@ -19990,7 +19990,7 @@ const FPS_RECOIL_SHAKE_MAX = 2.5;        // Max X/Y displacement in world units
 const FPS_RECOIL_SHAKE_DECAY = 50;       // Decay time in ms
 
 // Boss FOV kick constants
-const FPS_BOSS_FOV_KICK_AMOUNT = 6;      // FOV reduction on Boss kill (65 → 59)
+const FPS_BOSS_FOV_KICK_AMOUNT = 6;      // FOV reduction on Boss kill (70 → 64)
 const FPS_BOSS_FOV_KICK_DURATION = 400;  // Duration of FOV punch in ms
 
 // Recoil shake state (positional micro-shake, separate from pitch recoil)
