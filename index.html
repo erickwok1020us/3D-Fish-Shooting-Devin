@@ -435,9 +435,7 @@
             overflow: hidden;
         }
 
-        .kill-feed-entry.tier-low { border-left-color: #00aaff; }
-        .kill-feed-entry.tier-mid { border-left-color: #00e878; }
-        .kill-feed-entry.tier-high { border-left-color: #ffaa00; }
+        /* Tier colors are applied via direct inline styles from JS using FISH_FORM_TO_TIER mapping */
 
         .kill-feed-entry.latest {
             opacity: 1;
@@ -445,10 +443,7 @@
             box-shadow: 0 0 12px rgba(0, 200, 255, 0.12);
             animation: killFeedPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
-        .kill-feed-entry.latest.tier-high {
-            background: linear-gradient(135deg, rgba(40, 30, 0, 0.6), rgba(20, 15, 0, 0.5));
-            box-shadow: 0 0 12px rgba(255, 170, 0, 0.15);
-        }
+        /* Latest entry glow is set via inline style from JS */
 
         .kill-feed-entry .kf-fish-icon {
             width: 88px;
@@ -470,13 +465,7 @@
             pointer-events: none;
         }
 
-        .kill-feed-entry.latest .kf-fish-icon {
-            border-color: rgba(0, 200, 255, 0.4);
-        }
-        .kill-feed-entry.latest.tier-high .kf-fish-icon {
-            border-color: rgba(255, 170, 0, 0.4);
-            background: rgba(40, 25, 0, 0.5);
-        }
+        /* Icon border/glow is set via inline style from JS using tier color */
 
         .kill-feed-entry .kf-info {
             flex: 1;
@@ -503,9 +492,7 @@
             font-size: 10px;
             text-shadow: 0 0 4px rgba(168, 228, 255, 0.2);
         }
-        .kill-feed-entry.latest.tier-high .kf-name {
-            color: #ffd88a;
-        }
+        /* Latest entry name color is set via inline style from JS */
 
         .kill-feed-entry .kf-reward {
             font-size: 22px;
@@ -521,11 +508,7 @@
             text-shadow: 0 0 14px rgba(0, 255, 136, 0.5), 0 0 28px rgba(0, 255, 136, 0.15);
             -webkit-text-stroke: 0.3px rgba(0, 255, 136, 0.2);
         }
-        .kill-feed-entry.latest.tier-high .kf-reward {
-            color: #ffaa00;
-            font-weight: 900;
-            text-shadow: 0 0 14px rgba(255, 170, 0, 0.5), 0 0 28px rgba(255, 170, 0, 0.15);
-        }
+        /* Latest entry reward color/glow is set via inline style from JS */
 
         @keyframes killFeedPop {
             0% { opacity: 0; transform: scale(0.85) translateY(10px); }

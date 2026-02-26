@@ -19144,6 +19144,37 @@ function formatFishName(form) {
     return form.replace(/([A-Z])/g, ' $1').trim().toUpperCase();
 }
 
+// ==================== KILL LOG TIER COLOR MAPPING ====================
+// Maps fish forms to their tier for border color coding in Kill Log UI
+// Strict mapping per tier list reference image (image_5ef4fe.png)
+const FISH_FORM_TO_TIER = {
+    // Boss — Orange #FF8800
+    whale: 'boss', killerWhale: 'boss', shark: 'boss',
+    // Tier 1 — Purple #CC00FF
+    hammerhead: 't1', marlin: 't1', mantaRay: 't1',
+    // Tier 2 — Green #00FF66
+    tuna: 't2', dolphinfish: 't2',
+    // Tier 3 — Blue #00CCFF
+    pufferfish: 't3', seahorse: 't3', lionfish: 't3', tang: 't3',
+    // Tier 4 — Yellow #FFFF00
+    damselfish: 't4', clownfish: 't4', parrotfish: 't4', angelfish: 't4',
+    // Tier 5 — White #FFFFFF
+    anchovy: 't5', sardine: 't5', grouper: 't5'
+};
+const TIER_BORDER_COLORS = {
+    boss: '#FF8800',
+    t1:   '#CC00FF',
+    t2:   '#00FF66',
+    t3:   '#00CCFF',
+    t4:   '#FFFF00',
+    t5:   '#FFFFFF'
+};
+
+function getKillFeedTierColor(fishForm) {
+    const tier = FISH_FORM_TO_TIER[fishForm];
+    return TIER_BORDER_COLORS[tier] || '#FFFFFF';
+}
+
 function addKillFeedEntry(fishForm, rewardAmount) {
     const list = document.getElementById('kill-feed-list');
     if (!list) return;
@@ -19154,8 +19185,9 @@ function addKillFeedEntry(fishForm, rewardAmount) {
         imageUrl = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#ff0040" opacity="0.7"/><text x="16" y="22" text-anchor="middle" font-size="14" fill="#fff">?</text></svg>');
     }
     const name = formatFishName(fishForm);
+    const tierColor = getKillFeedTierColor(fishForm);
 
-    killFeedRecords.push({ imageUrl, name, reward: Math.round(rewardAmount) });
+    killFeedRecords.push({ imageUrl, name, reward: Math.round(rewardAmount), fishForm, tierColor });
 
     if (killFeedRecords.length > KILL_FEED_MAX) {
         killFeedRecords.shift();
@@ -19192,12 +19224,22 @@ function renderKillFeed() {
         const record = recordIdx >= 0 ? killFeedRecords[recordIdx] : null;
         const entry = document.createElement('div');
         if (record) {
-            const tier = getKillFeedTier(record.reward);
             const isLatest = recordIdx === killFeedRecords.length - 1;
-            entry.className = 'kill-feed-entry ' + tier + (isLatest ? ' latest' : '');
+            const tc = record.tierColor || '#FFFFFF';
+            // Use ONLY fish-tier class (no reward-based tier-high/mid/low)
+            entry.className = 'kill-feed-entry' + (isLatest ? ' latest' : '');
+            // Apply tier color to entry left border (inline style overrides any CSS)
+            entry.style.borderLeftColor = tc;
+            if (isLatest) {
+                entry.style.boxShadow = '0 0 12px ' + tc + '33';
+            }
 
             const iconEl = document.createElement('div');
             iconEl.className = 'kf-fish-icon';
+            // Apply tier color to icon border + glow (ALL inline, no CSS conflict possible)
+            iconEl.style.border = '2px solid ' + tc;
+            iconEl.style.boxShadow = '0 0 6px ' + tc + '66, inset 0 0 4px ' + tc + '33';
+            iconEl.style.borderRadius = '4px';
             if (record.imageUrl) {
                 const img = document.createElement('img');
                 img.src = record.imageUrl;
@@ -19214,10 +19256,20 @@ function renderKillFeed() {
             const nameEl = document.createElement('div');
             nameEl.className = 'kf-name';
             nameEl.textContent = record.name;
+            // Apply tier color to name text for latest entry
+            if (isLatest) {
+                nameEl.style.color = tc;
+                nameEl.style.textShadow = '0 0 4px ' + tc + '33';
+            }
 
             const rewardEl = document.createElement('div');
             rewardEl.className = 'kf-reward';
             rewardEl.textContent = '+' + record.reward;
+            // Apply tier color to reward text for latest entry
+            if (isLatest) {
+                rewardEl.style.color = tc;
+                rewardEl.style.textShadow = '0 0 14px ' + tc + '80, 0 0 28px ' + tc + '26';
+            }
 
             info.appendChild(nameEl);
             info.appendChild(rewardEl);
