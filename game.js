@@ -19975,19 +19975,19 @@ const FPS_CAMERA_BACK_DIST_DEFAULT = 120;
 const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;
 const FPS_CANNON_SIDE_OFFSET = 5;
 
-// ===== FPS ABSOLUTE WORLD-SPACE CONFIG (Variant 3.3 — Extreme Low-Profile) =====
+// ===== FPS ABSOLUTE WORLD-SPACE CONFIG (Variant F — Absolute Deepest) =====
 // Config A base: Y-gap=178, Z-gap=120, FOV=75, Pitch=-5°, Scale=1.8x
 // Camera and turret use fixed world coordinates — no muzzle-following
-const FPS_ELEV_CAMERA_Y = 0;        // Camera World Y (ground level)
+const FPS_ELEV_CAMERA_Y = -180;     // Camera World Y (sub-abyssal depth)
 const FPS_ELEV_CAMERA_Z = -800;     // Camera World Z
-const FPS_ELEV_TURRET_Y = -178;     // Turret World Y (CamY - 178)
+const FPS_ELEV_TURRET_Y = -358;     // Turret World Y (CamY - 178)
 const FPS_ELEV_TURRET_Z = -680;     // Turret World Z (CamZ + 120)
 const FPS_ELEV_SCALE = 1.8;         // Turret scale multiplier
 const FPS_ELEV_FOV = 75;            // Camera FOV
 const FPS_ELEV_PITCH = -5;          // Initial pitch in degrees
 
 // Update FPS camera position and rotation
-// ABSOLUTE WORLD-SPACE POSITIONING (Variant 3.3 — Extreme Low-Profile)
+// ABSOLUTE WORLD-SPACE POSITIONING (Variant F — Absolute Deepest)
 // Camera and turret use fixed world coordinates from FPS_ELEV_* constants
 // Turret is positioned every frame to prevent createCannon() or other systems from resetting it
 function updateFPSCamera() {
