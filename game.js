@@ -19144,6 +19144,37 @@ function formatFishName(form) {
     return form.replace(/([A-Z])/g, ' $1').trim().toUpperCase();
 }
 
+// ==================== KILL LOG TIER COLOR MAPPING ====================
+// Maps fish forms to their tier for border color coding in Kill Log UI
+// Tier colors match the Tier List legend: Boss=#FF8800, T1=#FF4444, T2=#44FF44, T3=#44DDFF, T4=#FFDD00, T5=#FFFFFF
+const FISH_FORM_TO_TIER = {
+    // Boss (T6) — Orange #FF8800
+    whale: 'boss', killerWhale: 'boss', shark: 'boss', hammerhead: 'boss', marlin: 'boss',
+    // Tier 1 — Red #FF4444
+    mantaRay: 't1', tuna: 't1', dolphinfish: 't1', grouper: 't1',
+    // Tier 2 — Green #44FF44
+    parrotfish: 't2', angelfish: 't2',
+    // Tier 3 — Cyan #44DDFF
+    lionfish: 't3', tang: 't3', pufferfish: 't3',
+    // Tier 4 — Yellow #FFDD00
+    clownfish: 't4', damselfish: 't4', seahorse: 't4',
+    // Tier 5 — White #FFFFFF
+    sardine: 't5', anchovy: 't5'
+};
+const TIER_BORDER_COLORS = {
+    boss: '#FF8800',
+    t1:   '#FF4444',
+    t2:   '#44FF44',
+    t3:   '#44DDFF',
+    t4:   '#FFDD00',
+    t5:   '#FFFFFF'
+};
+
+function getKillFeedTierColor(fishForm) {
+    const tier = FISH_FORM_TO_TIER[fishForm];
+    return TIER_BORDER_COLORS[tier] || '#FFFFFF';
+}
+
 function addKillFeedEntry(fishForm, rewardAmount) {
     const list = document.getElementById('kill-feed-list');
     if (!list) return;
@@ -19154,8 +19185,9 @@ function addKillFeedEntry(fishForm, rewardAmount) {
         imageUrl = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#ff0040" opacity="0.7"/><text x="16" y="22" text-anchor="middle" font-size="14" fill="#fff">?</text></svg>');
     }
     const name = formatFishName(fishForm);
+    const tierColor = getKillFeedTierColor(fishForm);
 
-    killFeedRecords.push({ imageUrl, name, reward: Math.round(rewardAmount) });
+    killFeedRecords.push({ imageUrl, name, reward: Math.round(rewardAmount), fishForm, tierColor });
 
     if (killFeedRecords.length > KILL_FEED_MAX) {
         killFeedRecords.shift();
@@ -19198,6 +19230,12 @@ function renderKillFeed() {
 
             const iconEl = document.createElement('div');
             iconEl.className = 'kf-fish-icon';
+            // Apply tier-based border color to fish icon thumbnail
+            if (record.tierColor) {
+                iconEl.style.border = '2px solid ' + record.tierColor;
+                iconEl.style.boxShadow = '0 0 6px ' + record.tierColor + '66, inset 0 0 4px ' + record.tierColor + '33';
+                iconEl.style.borderRadius = '4px';
+            }
             if (record.imageUrl) {
                 const img = document.createElement('img');
                 img.src = record.imageUrl;
@@ -19598,22 +19636,40 @@ function setupEventListeners() {
     container.addEventListener('contextmenu', (e) => e.preventDefault());
     
     // Right-click: scope zoom (hold) + camera drag
-    container.addEventListener('mousedown', (e) => {
-        if (e.button === 2) {  // Right mouse button
-            if (gameState.settingsOpen) return;
-            gameState.isRightDragging = true;
-            gameState.rightDragStartX = e.clientX;
-            gameState.rightDragStartY = e.clientY;
-            if (gameState.viewMode === 'fps') {
-                gameState.rightDragStartYaw = cannonGroup ? cannonGroup.rotation.y : 0;
-                gameState.rightDragStartPitch = cannonPitchGroup ? cannonPitchGroup.rotation.x : 0;
-            } else {
-                gameState.rightDragStartYaw = gameState.cameraYaw;
-                gameState.rightDragStartPitch = gameState.cameraPitch;
-            }
-            gameState.isScoping = true;
-            gameState.scopeTargetFov = 30;
-            showScopeOverlay();
+    // FIX: Use a shared handler so both container and document-level listeners work
+    // This fixes right-click zoom being broken when Pointer Lock is active
+    function handleRightMouseDown(e) {
+        if (e.button !== 2) return;
+        if (gameState.settingsOpen) return;
+        if (gameState.isScoping) return; // Already scoping, don't double-trigger
+        gameState.isRightDragging = true;
+        gameState.rightDragStartX = e.clientX;
+        gameState.rightDragStartY = e.clientY;
+        if (gameState.viewMode === 'fps') {
+            gameState.rightDragStartYaw = cannonGroup ? cannonGroup.rotation.y : 0;
+            gameState.rightDragStartPitch = cannonPitchGroup ? cannonPitchGroup.rotation.x : 0;
+        } else {
+            gameState.rightDragStartYaw = gameState.cameraYaw;
+            gameState.rightDragStartPitch = gameState.cameraPitch;
+        }
+        gameState.isScoping = true;
+        gameState.scopeTargetFov = 30;
+        showScopeOverlay();
+    }
+    function handleRightMouseUp(e) {
+        if (e.button !== 2) return;
+        gameState.isRightDragging = false;
+        gameState.isScoping = false;
+        // FIX: Use FPS_ELEV_FOV (75) for FPS mode instead of hardcoded 60
+        // This was causing the camera to get stuck at FOV 60 after zooming
+        gameState.scopeTargetFov = (gameState.viewMode === 'fps') ? FPS_ELEV_FOV : 60;
+        hideScopeOverlay();
+    }
+    container.addEventListener('mousedown', handleRightMouseDown);
+    // FIX: Also listen on document for right-click when Pointer Lock may redirect events
+    document.addEventListener('mousedown', (e) => {
+        if (e.button === 2 && document.pointerLockElement) {
+            handleRightMouseDown(e);
         }
     });
     
@@ -19623,12 +19679,11 @@ function setupEventListeners() {
         }
     });
     
-    window.addEventListener('mouseup', (e) => {
-        if (e.button === 2) {  // Right mouse button
-            gameState.isRightDragging = false;
-            gameState.isScoping = false;
-            gameState.scopeTargetFov = 60;
-            hideScopeOverlay();
+    window.addEventListener('mouseup', handleRightMouseUp);
+    // FIX: Also listen on document for mouseup when Pointer Lock is active
+    document.addEventListener('mouseup', (e) => {
+        if (e.button === 2 && gameState.isScoping) {
+            handleRightMouseUp(e);
         }
     });
     
