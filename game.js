@@ -12917,6 +12917,7 @@ function autoFireAtFish(targetFish) {
             fpsCameraRecoilState.kickStartTime = performance.now();
             fpsCameraRecoilState.kickDuration = 20;
             fpsCameraRecoilState.returnDuration = 50;
+            triggerFPSRecoilShake();
         } else if (cannonBarrel) {
             var correctYB = wCfgB.cannonYOffset !== undefined ? wCfgB.cannonYOffset : 20;
             barrelRecoilState.originalPosition.set(0, correctYB, 0);
@@ -12972,6 +12973,7 @@ function autoFireAtFish(targetFish) {
             fpsCameraRecoilState.kickStartTime = performance.now();
             fpsCameraRecoilState.kickDuration = 20;
             fpsCameraRecoilState.returnDuration = 60;
+            triggerFPSRecoilShake();
         } else {
             const correctY = wCfg.cannonYOffset !== undefined ? wCfg.cannonYOffset : 20;
             barrelRecoilState.originalPosition.set(0, correctY, 0);
@@ -17400,6 +17402,7 @@ function _fireBurstShot(weaponKey, shotIndex) {
         fpsCameraRecoilState.kickStartTime = performance.now();
         fpsCameraRecoilState.kickDuration = 25;
         fpsCameraRecoilState.returnDuration = 60;
+        triggerFPSRecoilShake();
     } else if (cannonBarrel) {
         barrelRecoilState.originalPosition.copy(cannonBarrel.position);
         barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
@@ -17444,6 +17447,7 @@ function _fireBurstShotAuto(weaponKey) {
         fpsCameraRecoilState.kickStartTime = performance.now();
         fpsCameraRecoilState.kickDuration = 20;
         fpsCameraRecoilState.returnDuration = 50;
+        triggerFPSRecoilShake();
     } else if (cannonBarrel) {
         var correctY = wCfg.cannonYOffset !== undefined ? wCfg.cannonYOffset : 20;
         barrelRecoilState.originalPosition.set(0, correctY, 0);
@@ -17641,6 +17645,7 @@ function fireBullet(targetX, targetY) {
             fpsCameraRecoilState.kickStartTime = performance.now();
             fpsCameraRecoilState.kickDuration = 25;
             fpsCameraRecoilState.returnDuration = 60;
+            triggerFPSRecoilShake();
         } else if (cannonBarrel) {
             barrelRecoilState.originalPosition.copy(cannonBarrel.position);
             barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
@@ -17694,6 +17699,7 @@ function fireBullet(targetX, targetY) {
         fpsCameraRecoilState.kickStartTime = performance.now();
         fpsCameraRecoilState.kickDuration = 30 + recoilStrength;
         fpsCameraRecoilState.returnDuration = 100 + recoilStrength * 4;
+        triggerFPSRecoilShake();
     } else if (cannonBarrel) {
         barrelRecoilState.originalPosition.copy(cannonBarrel.position);
         barrelRecoilState.recoilVector.copy(direction).normalize().multiplyScalar(-1);
@@ -19877,17 +19883,18 @@ function updateCameraRotation() {
 function initFPSMode() {
     const crosshair = document.getElementById('crosshair');
     
-    // FIX: Reset FPS yaw/pitch to ensure camera faces forward on game start
-    // This fixes the issue where camera was facing left on initial game entry
-    // Initial pitch set to 15 degrees upward for optimal fish viewing (shows fish pool center)
-    const FPS_INITIAL_PITCH = 15 * (Math.PI / 180);  // 15 degrees upward
+    // World-space FPS camera: set initial pitch to -5° (slight downward tilt)
+    const FPS_INITIAL_PITCH = FPS_WORLD_PITCH * (Math.PI / 180);
     gameState.fpsYaw = 0;  // Face forward (toward fish pool center)
     gameState.fpsPitch = FPS_INITIAL_PITCH;
     
-    // Set up cannon for FPS mode
+    // Set up cannon for FPS mode — reposition in world space
     if (cannonGroup) {
         cannonGroup.visible = true;
-        cannonGroup.scale.set(1.5, 1.5, 1.5);
+        // World-space turret repositioning: move turret closer to camera + scale up
+        cannonGroup.position.y = FPS_WORLD_TURRET_Y;
+        cannonGroup.position.z = FPS_WORLD_TURRET_Z;
+        cannonGroup.scale.set(FPS_WORLD_TURRET_SCALE, FPS_WORLD_TURRET_SCALE, FPS_WORLD_TURRET_SCALE);
         cannonGroup.children.forEach(child => {
             if (child.isLight) child.visible = false;
         });
@@ -19914,9 +19921,10 @@ function initFPSMode() {
     gameState.lastFPSMouseX = null;
     gameState.lastFPSMouseY = null;
     
-    // Wider FOV in FPS mode
+    // World-space FPS camera: FOV + near clipping plane
     if (camera) {
-        camera.fov = 75;
+        camera.fov = FPS_WORLD_FOV;
+        camera.near = FPS_WORLD_NEAR;
         camera.updateProjectionMatrix();
     }
     
@@ -19965,108 +19973,95 @@ const FPS_YAW_MAX = 90 * (Math.PI / 180);     // ±90° yaw (180° total horizon
 const FPS_PITCH_MIN = -47.5 * (Math.PI / 180);  // -47.5° (look down)
 const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5° vertical
 
-// FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
-// These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
-const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
-const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
-const FPS_CANNON_SIDE_OFFSET = 5;           // Near-center turret positioning
+// ===== FPS World-Space Camera Configuration (Config A: "The Tactical Reach") =====
+// Camera uses ABSOLUTE world coordinates — not relative to turret muzzle.
+// Turret is repositioned in world space for optimal screen composition.
+const FPS_WORLD_CAMERA_Y = 150;          // Camera absolute Y position
+const FPS_WORLD_CAMERA_Z = -800;         // Camera absolute Z position
+const FPS_WORLD_TURRET_Y = -28;          // Turret world Y (raised from CANNON_BASE_Y)
+const FPS_WORLD_TURRET_Z = -680;         // Turret world Z (pulled closer to camera)
+const FPS_WORLD_TURRET_SCALE = 1.8;      // Turret model scale (beefy barrel)
+const FPS_WORLD_FOV = 65;                // FOV (cinematic telephoto compression)
+const FPS_WORLD_PITCH = -5;              // Initial pitch in degrees (slight downward tilt)
+const FPS_WORLD_NEAR = 0.1;              // Near clipping plane (prevent turret clipping)
+
+// Recoil micro-shake constants (positional camera shake on fire)
+const FPS_RECOIL_SHAKE_MAX = 2.5;        // Max X/Y displacement in world units
+const FPS_RECOIL_SHAKE_DECAY = 50;       // Decay time in ms
+
+// Boss FOV kick constants
+const FPS_BOSS_FOV_KICK_AMOUNT = 6;      // FOV reduction on Boss kill (65 → 59)
+const FPS_BOSS_FOV_KICK_DURATION = 400;  // Duration of FOV punch in ms
+
+// Recoil shake state (positional micro-shake, separate from pitch recoil)
+const fpsRecoilShakeState = {
+    active: false,
+    startTime: 0,
+    offsetX: 0,
+    offsetY: 0
+};
+
+// Boss FOV kick state
+const fpsBossFovKickState = {
+    active: false,
+    startTime: 0,
+    baseFov: FPS_WORLD_FOV
+};
 
 // Update FPS camera position and rotation
-// Camera follows the cannon's muzzle - cannon rotation is the single source of truth
-// This ensures camera follows gun when aiming (aimCannon, aimCannonAtFish, auto-aim)
+// World-space absolute positioning: camera at fixed coordinates, looks along cannon yaw/pitch
+// Turret is repositioned in world space for optimal "heavy mount" composition
 function updateFPSCamera() {
     if (!camera || gameState.viewMode !== 'fps') return;
-    if (!cannonMuzzle || !cannonGroup || !cannonPitchGroup) return;
-    
-    // FPS Roll Fix v2: Use cannon's yaw/pitch directly instead of extracting from quaternion
-    // This completely avoids gimbal lock and roll issues when looking up/down
+    if (!cannonGroup || !cannonPitchGroup) return;
     
     // Get yaw and pitch directly from cannon rotation (single source of truth)
     const yaw = cannonGroup.rotation.y;
-    // Note: cannonPitchGroup.rotation.x is negative of the actual pitch angle
     let pitch = -cannonPitchGroup.rotation.x;
     
     // SAFETY NET: Always clamp pitch to FPS limits
-    // This catches any out-of-range values from 3RD PERSON mode or other sources
     const clampedPitch = Math.max(FPS_PITCH_MIN, Math.min(FPS_PITCH_MAX, pitch));
     if (pitch !== clampedPitch) {
         pitch = clampedPitch;
-        // Write back the clamped value to the cannon
         cannonPitchGroup.rotation.x = -clampedPitch;
         gameState.fpsPitch = clampedPitch;
     }
     
     // Calculate forward direction from yaw/pitch (spherical to cartesian)
-    // This is mathematically guaranteed to have no roll component
     const forward = new THREE.Vector3(
         Math.cos(pitch) * Math.sin(yaw),
         Math.sin(pitch),
         Math.cos(pitch) * Math.cos(yaw)
     );
     
-    // FIX v6: Use FIXED camera Y position based on constants to GUARANTEE no accumulation
-    // The camera height was accumulating because the muzzle world position calculation was
-    // getting corrupted during rapid weapon switching. This fix uses a FIXED Y position
-    // based on known constants, completely bypassing any scene hierarchy calculations.
-    //
-    // Key insight: The only way to guarantee no accumulation is to use FIXED values
-    // that don't depend on any scene hierarchy calculations.
-    //
-    // Known constants:
-    // - CANNON_BASE_Y = -337.5 (cannon base position)
-    // - cannonPitchGroup.position.y = 25 (pitch pivot height)
-    // - cannonMuzzle.position.y = 25 (muzzle height relative to pitch group)
-    // - Total muzzle Y = -337.5 + 35 + 25 = -277.5
+    // Absolute world-space camera positioning
+    // Camera Y/Z are fixed constants; no scene hierarchy dependency
+    let shakeX = 0, shakeY = 0;
+    if (fpsRecoilShakeState.active) {
+        const elapsed = performance.now() - fpsRecoilShakeState.startTime;
+        if (elapsed < FPS_RECOIL_SHAKE_DECAY) {
+            const decay = 1 - (elapsed / FPS_RECOIL_SHAKE_DECAY);
+            shakeX = fpsRecoilShakeState.offsetX * decay;
+            shakeY = fpsRecoilShakeState.offsetY * decay;
+        } else {
+            fpsRecoilShakeState.active = false;
+            fpsRecoilShakeState.offsetX = 0;
+            fpsRecoilShakeState.offsetY = 0;
+        }
+    }
     
-    const currentWeaponKey = weaponGLBState.currentWeaponKey || '1x';
-    const weaponConfig = WEAPON_GLB_CONFIG.weapons[currentWeaponKey];
-    
-    // Get cannon base position for X and Z (this is stable)
-    const cannonBasePos = new THREE.Vector3();
-    cannonGroup.getWorldPosition(cannonBasePos);
-    
-    // Use per-weapon camera offsets from WEAPON_GLB_CONFIG
-    const cameraBackDist = weaponConfig?.fpsCameraBackDist || FPS_CAMERA_BACK_DIST_DEFAULT;
-    const cameraUpOffset = weaponConfig?.fpsCameraUpOffset || FPS_CAMERA_UP_OFFSET_DEFAULT;
-    
-    // Calculate back offset in world space (only affects X and Z)
-    const backwardDir = forward.clone().negate();
-    const backOffset = backwardDir.multiplyScalar(cameraBackDist);
-    
-    // Calculate horizontal (right) vector for left/right hand offset
-    // Right vector = cross(forward, up) in the horizontal plane
-    const rightX = Math.sin(yaw - Math.PI / 2);
-    const rightZ = Math.cos(yaw - Math.PI / 2);
-    const sideOffsetX = rightX * FPS_CANNON_SIDE_OFFSET * -1;
-    const sideOffsetZ = rightZ * FPS_CANNON_SIDE_OFFSET * -1;
-    
-    // FIXED camera Y position based on constants - NEVER accumulates
-    // Base Y (-337.5) + pitch pivot (35) + actual muzzle Y offset (from weapon GLB config)
-    const muzzleYOffset = cannonMuzzle ? cannonMuzzle.position.y : 25;
-    const FIXED_MUZZLE_Y = -337.5 + 35 + muzzleYOffset;
-    const cameraY = FIXED_MUZZLE_Y + cameraUpOffset;
-    
-    // Set camera position with FIXED Y + side offset for left/right hand
     camera.position.set(
-        cannonBasePos.x + backOffset.x + sideOffsetX,
-        cameraY + backOffset.y,
-        cannonBasePos.z + backOffset.z + sideOffsetZ
+        shakeX,
+        FPS_WORLD_CAMERA_Y + shakeY,
+        FPS_WORLD_CAMERA_Z
     );
     
-    // Always keep camera upright in world space (locked to world Y axis)
-    // This MUST be set before lookAt() to prevent roll
+    // Always keep camera upright in world space
     camera.up.set(0, 1, 0);
     
-    // Look at a point in front of the camera along the forward direction
-    // IMPORTANT: Use the same pitch as cannon (no offset) to ensure "what you see is what you can shoot"
-    // The +0.1 offset was causing the camera to look ~5.7° higher than the cannon,
-    // making 80° pitch appear like ~86° visually (almost 90° top-down view)
-    
-    // Apply FPS camera recoil offset (visual feedback only, doesn't affect aiming)
-    // This creates a "kick up" effect when firing without moving the actual aim point
+    // Apply FPS camera recoil pitch offset (visual feedback only)
     let lookForward = forward.clone();
     if (fpsCameraRecoilState.active && fpsCameraRecoilState.pitchOffset !== 0) {
-        // Apply pitch offset to the look direction (kick up = positive pitch offset)
         const recoilPitch = pitch + fpsCameraRecoilState.pitchOffset;
         lookForward.set(
             Math.cos(recoilPitch) * Math.sin(yaw),
@@ -20075,11 +20070,44 @@ function updateFPSCamera() {
         );
     }
     
-    const lookTarget = camera.position.clone().add(lookForward.multiplyScalar(1000));
+    const lookTarget = camera.position.clone().add(lookForward.multiplyScalar(2000));
     camera.lookAt(lookTarget);
     
-    // Re-enforce up vector after lookAt (belt and suspenders)
+    // Re-enforce up vector after lookAt
     camera.up.set(0, 1, 0);
+    
+    // Boss FOV kick update
+    if (fpsBossFovKickState.active) {
+        const elapsed = performance.now() - fpsBossFovKickState.startTime;
+        if (elapsed < FPS_BOSS_FOV_KICK_DURATION) {
+            // Sin curve: FOV dips then returns
+            const progress = elapsed / FPS_BOSS_FOV_KICK_DURATION;
+            const fovDelta = -FPS_BOSS_FOV_KICK_AMOUNT * Math.sin(progress * Math.PI);
+            camera.fov = fpsBossFovKickState.baseFov + fovDelta;
+            camera.updateProjectionMatrix();
+        } else {
+            camera.fov = fpsBossFovKickState.baseFov;
+            camera.updateProjectionMatrix();
+            fpsBossFovKickState.active = false;
+        }
+    }
+}
+
+// Trigger recoil micro-shake (called from fire functions)
+function triggerFPSRecoilShake() {
+    if (gameState.viewMode !== 'fps') return;
+    fpsRecoilShakeState.active = true;
+    fpsRecoilShakeState.startTime = performance.now();
+    fpsRecoilShakeState.offsetX = (Math.random() - 0.5) * 2 * FPS_RECOIL_SHAKE_MAX;
+    fpsRecoilShakeState.offsetY = (Math.random() - 0.5) * 2 * FPS_RECOIL_SHAKE_MAX;
+}
+
+// Trigger Boss FOV kick (called when Boss fish is killed)
+function triggerBossFovKick() {
+    if (gameState.viewMode !== 'fps') return;
+    fpsBossFovKickState.active = true;
+    fpsBossFovKickState.startTime = performance.now();
+    fpsBossFovKickState.baseFov = FPS_WORLD_FOV;
 }
 
 // Smooth camera transition (called in animate loop)
@@ -21240,8 +21268,9 @@ function updateBossEvent(deltaTime) {
         
         // Check if boss was killed
         if (gameState.activeBoss && !gameState.activeBoss.isActive) {
-            // Boss killed! Show victory message
+            // Boss killed! Show victory message + FOV kick
             showBossKilledMessage();
+            triggerBossFovKick();
             endBossEvent();
         }
         
