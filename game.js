@@ -19879,15 +19879,18 @@ function initFPSMode() {
     
     // FIX: Reset FPS yaw/pitch to ensure camera faces forward on game start
     // This fixes the issue where camera was facing left on initial game entry
-    // Initial pitch set to 15 degrees upward for optimal fish viewing (shows fish pool center)
-    const FPS_INITIAL_PITCH = 15 * (Math.PI / 180);  // 15 degrees upward
+    // Initial pitch set to -5 degrees (slight downward tilt) for Variant 2 absolute world-space positioning
+    const FPS_INITIAL_PITCH = FPS_ELEV_PITCH * (Math.PI / 180);  // -5 degrees
     gameState.fpsYaw = 0;  // Face forward (toward fish pool center)
     gameState.fpsPitch = FPS_INITIAL_PITCH;
     
     // Set up cannon for FPS mode
     if (cannonGroup) {
         cannonGroup.visible = true;
-        cannonGroup.scale.set(1.5, 1.5, 1.5);
+        cannonGroup.scale.set(FPS_ELEV_SCALE, FPS_ELEV_SCALE, FPS_ELEV_SCALE);
+        // Absolute world-space turret positioning (Variant 2)
+        cannonGroup.position.y = FPS_ELEV_TURRET_Y;
+        cannonGroup.position.z = FPS_ELEV_TURRET_Z;
         cannonGroup.children.forEach(child => {
             if (child.isLight) child.visible = false;
         });
@@ -19914,9 +19917,11 @@ function initFPSMode() {
     gameState.lastFPSMouseX = null;
     gameState.lastFPSMouseY = null;
     
-    // Wider FOV in FPS mode
+    // Set FOV and near clip for FPS mode (Variant 2 absolute positioning)
     if (camera) {
-        camera.fov = 75;
+        camera.fov = FPS_ELEV_FOV;
+        camera.near = 0.1;  // Prevent near-plane clipping of turret
+        gameState.scopeTargetFov = FPS_ELEV_FOV;  // Sync scope system to prevent FOV reset
         camera.updateProjectionMatrix();
     }
     
@@ -19965,108 +19970,69 @@ const FPS_YAW_MAX = 90 * (Math.PI / 180);     // ±90° yaw (180° total horizon
 const FPS_PITCH_MIN = -47.5 * (Math.PI / 180);  // -47.5° (look down)
 const FPS_PITCH_MAX = 75 * (Math.PI / 180);   // +75° (look up) - total 122.5° vertical
 
-// FPS Camera positioning constants (CS:GO style - barrel visible at bottom)
-// These are DEFAULT values - per-weapon overrides are in WEAPON_GLB_CONFIG
-const FPS_CAMERA_BACK_DIST_DEFAULT = 120;   // Default distance behind muzzle (increased for GLB models)
-const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;   // Camera BELOW muzzle level so cannon is visible when looking straight ahead
-const FPS_CANNON_SIDE_OFFSET = 5;           // Near-center turret positioning
+// FPS Camera positioning constants (legacy muzzle-following — kept for reference)
+const FPS_CAMERA_BACK_DIST_DEFAULT = 120;
+const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;
+const FPS_CANNON_SIDE_OFFSET = 5;
+
+// ===== FPS ABSOLUTE WORLD-SPACE CONFIG (Variant E — The Mantle) =====
+// Config A base: Y-gap=178, Z-gap=120, FOV=75, Pitch=-5°, Scale=1.8x
+// Camera and turret use fixed world coordinates — no muzzle-following
+const FPS_ELEV_CAMERA_Y = -160;     // Camera World Y (sub-abyssal depth)
+const FPS_ELEV_CAMERA_Z = -800;     // Camera World Z
+const FPS_ELEV_TURRET_Y = -338;     // Turret World Y (CamY - 178)
+const FPS_ELEV_TURRET_Z = -680;     // Turret World Z (CamZ + 120)
+const FPS_ELEV_SCALE = 1.8;         // Turret scale multiplier
+const FPS_ELEV_FOV = 75;            // Camera FOV
+const FPS_ELEV_PITCH = -5;          // Initial pitch in degrees
 
 // Update FPS camera position and rotation
-// Camera follows the cannon's muzzle - cannon rotation is the single source of truth
-// This ensures camera follows gun when aiming (aimCannon, aimCannonAtFish, auto-aim)
+// ABSOLUTE WORLD-SPACE POSITIONING (Variant E — The Mantle)
+// Camera and turret use fixed world coordinates from FPS_ELEV_* constants
+// Turret is positioned every frame to prevent createCannon() or other systems from resetting it
 function updateFPSCamera() {
     if (!camera || gameState.viewMode !== 'fps') return;
-    if (!cannonMuzzle || !cannonGroup || !cannonPitchGroup) return;
+    if (!cannonGroup || !cannonPitchGroup) return;
     
-    // FPS Roll Fix v2: Use cannon's yaw/pitch directly instead of extracting from quaternion
-    // This completely avoids gimbal lock and roll issues when looking up/down
+    // === ABSOLUTE TURRET POSITIONING (every frame) ===
+    // Force turret to fixed world-space position regardless of scene hierarchy
+    cannonGroup.position.y = FPS_ELEV_TURRET_Y;
+    cannonGroup.position.z = FPS_ELEV_TURRET_Z;
+    cannonGroup.scale.set(FPS_ELEV_SCALE, FPS_ELEV_SCALE, FPS_ELEV_SCALE);
+    cannonGroup.visible = true;  // Ensure turret is never hidden
     
-    // Get yaw and pitch directly from cannon rotation (single source of truth)
+    // === FOV + near clip (every frame to prevent scope system override) ===
+    camera.fov = FPS_ELEV_FOV;
+    camera.near = 0.1;  // Prevent near-plane clipping of turret at close range
+    gameState.scopeTargetFov = FPS_ELEV_FOV;  // Sync scope system
+    camera.updateProjectionMatrix();
+    
+    // Get yaw and pitch from cannon rotation (single source of truth)
     const yaw = cannonGroup.rotation.y;
-    // Note: cannonPitchGroup.rotation.x is negative of the actual pitch angle
     let pitch = -cannonPitchGroup.rotation.x;
     
-    // SAFETY NET: Always clamp pitch to FPS limits
-    // This catches any out-of-range values from 3RD PERSON mode or other sources
+    // Clamp pitch to FPS limits
     const clampedPitch = Math.max(FPS_PITCH_MIN, Math.min(FPS_PITCH_MAX, pitch));
     if (pitch !== clampedPitch) {
         pitch = clampedPitch;
-        // Write back the clamped value to the cannon
         cannonPitchGroup.rotation.x = -clampedPitch;
         gameState.fpsPitch = clampedPitch;
     }
     
-    // Calculate forward direction from yaw/pitch (spherical to cartesian)
-    // This is mathematically guaranteed to have no roll component
+    // Forward direction from yaw/pitch (spherical to cartesian, no roll)
     const forward = new THREE.Vector3(
         Math.cos(pitch) * Math.sin(yaw),
         Math.sin(pitch),
         Math.cos(pitch) * Math.cos(yaw)
     );
     
-    // FIX v6: Use FIXED camera Y position based on constants to GUARANTEE no accumulation
-    // The camera height was accumulating because the muzzle world position calculation was
-    // getting corrupted during rapid weapon switching. This fix uses a FIXED Y position
-    // based on known constants, completely bypassing any scene hierarchy calculations.
-    //
-    // Key insight: The only way to guarantee no accumulation is to use FIXED values
-    // that don't depend on any scene hierarchy calculations.
-    //
-    // Known constants:
-    // - CANNON_BASE_Y = -337.5 (cannon base position)
-    // - cannonPitchGroup.position.y = 25 (pitch pivot height)
-    // - cannonMuzzle.position.y = 25 (muzzle height relative to pitch group)
-    // - Total muzzle Y = -337.5 + 35 + 25 = -277.5
-    
-    const currentWeaponKey = weaponGLBState.currentWeaponKey || '1x';
-    const weaponConfig = WEAPON_GLB_CONFIG.weapons[currentWeaponKey];
-    
-    // Get cannon base position for X and Z (this is stable)
-    const cannonBasePos = new THREE.Vector3();
-    cannonGroup.getWorldPosition(cannonBasePos);
-    
-    // Use per-weapon camera offsets from WEAPON_GLB_CONFIG
-    const cameraBackDist = weaponConfig?.fpsCameraBackDist || FPS_CAMERA_BACK_DIST_DEFAULT;
-    const cameraUpOffset = weaponConfig?.fpsCameraUpOffset || FPS_CAMERA_UP_OFFSET_DEFAULT;
-    
-    // Calculate back offset in world space (only affects X and Z)
-    const backwardDir = forward.clone().negate();
-    const backOffset = backwardDir.multiplyScalar(cameraBackDist);
-    
-    // Calculate horizontal (right) vector for left/right hand offset
-    // Right vector = cross(forward, up) in the horizontal plane
-    const rightX = Math.sin(yaw - Math.PI / 2);
-    const rightZ = Math.cos(yaw - Math.PI / 2);
-    const sideOffsetX = rightX * FPS_CANNON_SIDE_OFFSET * -1;
-    const sideOffsetZ = rightZ * FPS_CANNON_SIDE_OFFSET * -1;
-    
-    // FIXED camera Y position based on constants - NEVER accumulates
-    // Base Y (-337.5) + pitch pivot (35) + actual muzzle Y offset (from weapon GLB config)
-    const muzzleYOffset = cannonMuzzle ? cannonMuzzle.position.y : 25;
-    const FIXED_MUZZLE_Y = -337.5 + 35 + muzzleYOffset;
-    const cameraY = FIXED_MUZZLE_Y + cameraUpOffset;
-    
-    // Set camera position with FIXED Y + side offset for left/right hand
-    camera.position.set(
-        cannonBasePos.x + backOffset.x + sideOffsetX,
-        cameraY + backOffset.y,
-        cannonBasePos.z + backOffset.z + sideOffsetZ
-    );
-    
-    // Always keep camera upright in world space (locked to world Y axis)
-    // This MUST be set before lookAt() to prevent roll
+    // === ABSOLUTE CAMERA POSITIONING ===
+    camera.position.set(0, FPS_ELEV_CAMERA_Y, FPS_ELEV_CAMERA_Z);
     camera.up.set(0, 1, 0);
     
-    // Look at a point in front of the camera along the forward direction
-    // IMPORTANT: Use the same pitch as cannon (no offset) to ensure "what you see is what you can shoot"
-    // The +0.1 offset was causing the camera to look ~5.7° higher than the cannon,
-    // making 80° pitch appear like ~86° visually (almost 90° top-down view)
-    
     // Apply FPS camera recoil offset (visual feedback only, doesn't affect aiming)
-    // This creates a "kick up" effect when firing without moving the actual aim point
     let lookForward = forward.clone();
     if (fpsCameraRecoilState.active && fpsCameraRecoilState.pitchOffset !== 0) {
-        // Apply pitch offset to the look direction (kick up = positive pitch offset)
         const recoilPitch = pitch + fpsCameraRecoilState.pitchOffset;
         lookForward.set(
             Math.cos(recoilPitch) * Math.sin(yaw),
@@ -20077,8 +20043,6 @@ function updateFPSCamera() {
     
     const lookTarget = camera.position.clone().add(lookForward.multiplyScalar(1000));
     camera.lookAt(lookTarget);
-    
-    // Re-enforce up vector after lookAt (belt and suspenders)
     camera.up.set(0, 1, 0);
 }
 
