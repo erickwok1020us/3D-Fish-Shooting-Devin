@@ -5195,7 +5195,7 @@ const BOSS_FISH_TYPES = [
     // Boss tier: ONLY blue_whale, killer_whale, great_white_shark
     // T1 fish (mantaRay, marlin, hammerhead) are NOT bosses — they swim as T1 Elites
     {
-        name: 'GIANT WHALE',
+        name: 'BLUE WHALE',
         baseSpecies: 'blueWhale',
         sizeMultiplier: 2.0,
         hpMultiplier: 5,
@@ -5205,7 +5205,7 @@ const BOSS_FISH_TYPES = [
         description: 'Massive blue whale!'
     },
     {
-        name: 'ALPHA ORCA',
+        name: 'KILLER WHALE',
         baseSpecies: 'killerWhale',
         sizeMultiplier: 1.8,
         hpMultiplier: 4,
@@ -5215,7 +5215,7 @@ const BOSS_FISH_TYPES = [
         description: 'Deadly pack leader!'
     },
     {
-        name: 'MEGA SHARK',
+        name: 'GREAT WHITE SHARK',
         baseSpecies: 'greatWhiteShark',
         sizeMultiplier: 1.8,
         hpMultiplier: 4,
@@ -16667,6 +16667,12 @@ function updateDynamicFishSpawn(deltaTime) {
         for (let i = 0; i < toSpawn; i++) {
             const inactiveFish = freeFish.pop();
             if (!inactiveFish) break;
+            // BOSS FIX: Skip boss-only species in debug mode too
+            const species = inactiveFish.tier || inactiveFish.form;
+            if (BOSS_ONLY_SPECIES.includes(species) && !gameState.bossActive) {
+                freeFish.unshift(inactiveFish);
+                continue;
+            }
             const position = getRandomFishPositionIn3DSpace();
             inactiveFish.spawn(position);
             if (!activeFish.includes(inactiveFish)) {
@@ -16698,7 +16704,23 @@ function updateDynamicFishSpawn(deltaTime) {
     
     if (dynamicSpawnTimer <= 0) {
         // PERFORMANCE: Use free-list for O(1) fish retrieval instead of O(n) find()
-        const inactiveFish = freeFish.pop();
+        // BOSS FIX: Skip boss-only species — they must ONLY spawn via bossTimer
+        let inactiveFish = null;
+        let attempts = 0;
+        const maxAttempts = freeFish.length;
+        while (attempts < maxAttempts) {
+            const candidate = freeFish.pop();
+            if (!candidate) break;
+            const species = candidate.tier || candidate.form;
+            if (BOSS_ONLY_SPECIES.includes(species) && !gameState.bossActive) {
+                // Push boss-only fish back to front of freeFish (don't spawn it)
+                freeFish.unshift(candidate);
+                attempts++;
+                continue;
+            }
+            inactiveFish = candidate;
+            break;
+        }
         if (inactiveFish) {
             const position = getRandomFishPositionIn3DSpace();
             inactiveFish.spawn(position);
