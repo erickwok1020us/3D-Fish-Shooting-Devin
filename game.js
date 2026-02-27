@@ -16411,17 +16411,27 @@ class Fish {
             // Note: No "miss" sound or gray particles - every kill now has coin feedback
         }
         
-        // MEMORY LEAK FIX: Store respawn timer ID so it can be cancelled if fish is reused
-        // This prevents duplicate spawns when die() pushes to freeFish and the fish is
-        // reused by updateDynamicFishSpawn() before the respawn timer fires
-        // T1 Elite fish get 8-second respawn delay; normal fish get 2-5 seconds
+        // BOSS SPECIES: Do NOT schedule respawn timer for boss-only species.
+        // Boss fish (blueWhale, killerWhale, greatWhiteShark) must ONLY spawn via BossTimerManager.
+        // Without this guard, a killed boss's respawn timer could fire while a NEW boss is active
+        // (bossActive=true), bypassing the BOSS_ONLY_SPECIES check in respawn() and spawning
+        // a killer whale as a regular fish without boss hints.
         const fishSpeciesKey = this.tier || this.form;
-        const isT1Elite = T1_ELITE_SPECIES.includes(fishSpeciesKey);
-        const respawnDelay = isT1Elite ? T1_ELITE_RESPAWN_DELAY : (2000 + Math.random() * 3000);
-        this.respawnTimerId = setTimeout(() => {
-            this.respawnTimerId = null;
-            this.respawn();
-        }, respawnDelay);
+        if (BOSS_ONLY_SPECIES.includes(fishSpeciesKey)) {
+            console.log(`[BOSS] Boss species ${fishSpeciesKey} killed — NO respawn timer (boss-only via BossTimerManager)`);
+            // No respawn timer — fish stays in freeFish until next Boss Mode
+        } else {
+            // MEMORY LEAK FIX: Store respawn timer ID so it can be cancelled if fish is reused
+            // This prevents duplicate spawns when die() pushes to freeFish and the fish is
+            // reused by updateDynamicFishSpawn() before the respawn timer fires
+            // T1 Elite fish get 8-second respawn delay; normal fish get 2-5 seconds
+            const isT1Elite = T1_ELITE_SPECIES.includes(fishSpeciesKey);
+            const respawnDelay = isT1Elite ? T1_ELITE_RESPAWN_DELAY : (2000 + Math.random() * 3000);
+            this.respawnTimerId = setTimeout(() => {
+                this.respawnTimerId = null;
+                this.respawn();
+            }, respawnDelay);
+        }
     }
     
     // Phase 2: Trigger special ability when fish dies
@@ -21571,9 +21581,32 @@ function endBossEvent() {
     gameState.bossActive = false;
     gameState.activeBoss = null;
     bossSwarmFishList = [];  // Clear swarm tracking
+    
+    // CRITICAL FIX: Always force-reset bossSpawnTimer to 40 seconds.
+    // Without this, if the boss was spawned via retry path (bossSpawnRetryPending),
+    // bossSpawnTimer was never reset and remains ≤ 0. On next frame after endBossEvent,
+    // updateBossEvent would see !bossActive && bossSpawnTimer ≤ 0 → immediate re-spawn.
+    gameState.bossSpawnTimer = 40;
+    gameState.bossSpawnRetryPending = false;  // Clear stale retry
+    console.log('[BOSS] endBossEvent — bossSpawnTimer force-reset to 40s');
+    
     hideBossUI();
     
     stopBossMusicMP3();
+    
+    // BOSS LEAK FIX: Cancel respawn timers for ANY boss-species fish in freeFish.
+    // When a boss is killed, die() pushes it to freeFish and (before this fix) scheduled
+    // a respawn timer. endBossEvent's cleanup loop missed it because the killed boss has
+    // isActive=false. Cancel any lingering respawn timers to prevent ghost respawns.
+    for (let i = 0; i < freeFish.length; i++) {
+        const ff = freeFish[i];
+        const species = ff.tier || ff.form;
+        if (BOSS_ONLY_SPECIES.includes(species) && ff.respawnTimerId) {
+            clearTimeout(ff.respawnTimerId);
+            ff.respawnTimerId = null;
+            console.log(`[BOSS] Cancelled lingering respawn timer for boss species ${species} in freeFish`);
+        }
+    }
     
     for (let i = activeFish.length - 1; i >= 0; i--) {
         const fish = activeFish[i];
