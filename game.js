@@ -5648,7 +5648,8 @@ const vfxTempVectors = {
 const autoAimTempVectors = {
     muzzlePos: new THREE.Vector3(),
     direction: new THREE.Vector3(),
-    crosshairDir: new THREE.Vector3()
+    crosshairDir: new THREE.Vector3(),
+    leadPos: new THREE.Vector3()              // Kinematic target leading for fire direction
 };
 
 // Initialize shared materials (called once when scene is ready)
@@ -12300,15 +12301,32 @@ function aimCannon(targetX, targetY) {
 }
 
 // ==================== TARGETING SERVICE (Sticky Auto Aim / Target Lock) ====================
-// Replaces old "auto fire spam" with FOCUS FIRE behavior:
-//   - One target must be secured (killed or gone) before moving to the next.
-//   P1: Boss Lock — blueWhale, killerWhale, greatWhiteShark (immediate lock)
-//   P2: Proximity Lock — closest fish to Turret reference point (fallback)
-//   Sticky: NO re-targeting while lock is valid (except Boss override P2→P1).
+// UI label: "AUTO FIRE" — internal logic: Sticky Auto Aim / Target Lock with focus fire.
+//
+// STATE MACHINE:
+//   idle → locking → firing → (target dies/leaves) → transition → firing | idle
+//
+// TARGETING HIERARCHY:
+//   P1 (Boss Override): blue_whale, killer_whale, great_white_shark — instant lock.
+//       Tie-breaker: closest Boss to Turret origin (Y=-338, Z=-680).
+//   P2 (Proximity Lock): strictly closest fish to Turret origin. No tier preference.
+//
+// TARGET PERSISTENCE ("Sticky Rule"):
+//   Once locked (P1 or P2), the system MUST NOT retarget until:
+//     1. Target killed (hp <= 0 or despawned)
+//     2. Target leaves camera frustum / screen bounds (with hysteresis)
+//   ONLY EXCEPTION: P2 → P1 instant preemption when a Boss spawns on-screen.
+//
+// TURRET KINEMATICS:
+//   - Auto-rotation via Quaternion.Slerp (smooth tracking, configurable speed)
+//   - Kinematic Target Leading (Deflection Shooting):
+//       For projectile weapons (speed > 0): aim at interception point using
+//       target velocity + projectile travel time. One Newton iteration for accuracy.
+//       For hitscan weapons (laser, speed = 0): fire directly at target center.
+//   - Fire gate: cannon must be within 8° of target before firing (or 500ms force-fire).
+//
 // Turret reference point: World Y=-338, Z=-680
-// Visual tracking via Quaternion.Slerp on turret rotation.
 // Client only sends Fire(direction, weaponId, targetId) — zero RTP impact.
-// UI label remains "AUTO FIRE" — only internal naming uses autoAim/targetLock.
 
 const TargetingService = {
     config: {
@@ -12317,13 +12335,13 @@ const TargetingService = {
         DROP_DISTANCE_FACTOR: 1.2,                               // Drop distance = LOCK_MAX_DISTANCE * 1.2 (20% buffer)
         // Screen visibility gates (NDC)
         LOCK_SCREEN_MARGIN: 1.0,                                 // Must be within screen bounds to acquire lock
-        DROP_SCREEN_MARGIN: 1.2,                                 // Wider hysteresis buffer before dropping lock
+        DROP_SCREEN_MARGIN: 1.3,                                 // Wider hysteresis buffer before dropping lock (30% beyond frustum)
         // Cannon rotation limits (kept from original for physical turret clamping)
         yawLimit:   46.75 * (Math.PI / 180),
         pitchMax:   42.5  * (Math.PI / 180),
         pitchMin:  -29.75 * (Math.PI / 180),
         // Firing gates
-        autoAimAlignGate: 8,                                     // Degrees — cannon must be within this angle to fire
+        autoAimAlignGate: 2,                                     // Degrees — cannon must be within this angle to fire
         forceFireMs: 500,                                        // Force fire after this many ms locked
         // Turret tracking
         trackSpeed: 25,
@@ -12367,6 +12385,7 @@ const TargetingService = {
         targetQuat: new THREE.Quaternion(),
         currentQuat: new THREE.Quaternion(),
         ndc: new THREE.Vector3(),
+        leadPos: new THREE.Vector3(),           // Kinematic target leading result
     },
 
     reset() {
@@ -12439,38 +12458,28 @@ const TargetingService = {
         return true;
     },
 
-    // ---- Drop Constraint: Wider hysteresis bounds for RELEASE (1.2x screen + 1.2x distance) ----
-    // Once locked, fish must go WAY out of bounds before we drop.
-    // Uses wider NDC margin + 20% distance buffer.
+    // ---- Drop Constraint: STRICT STICKY — only check alive + on-screen (NDC) ----
+    // The ONLY reasons to drop a locked target are:
+    //   1. Fish died (hp <= 0) or despawned (!isActive)  — checked in _shouldReleaseLock
+    //   2. Fish left the screen (NDC) with generous 30% buffer
+    // Turret yaw/pitch limits and distance are intentionally NOT checked here.
+    // Rationale: a fish visible on screen should remain locked even if it's at the
+    // edge of the turret's physical rotation range. The hitscan ray fires from
+    // camera/muzzle (not the barrel tip), so turret angle is irrelevant for hits.
     _isInDropBounds(fishPos, refPos) {
         const c = this.config;
         const tv = this._tempVecs;
-        const dx = fishPos.x - refPos.x;
-        const dy = fishPos.y - refPos.y;
-        const dz = fishPos.z - refPos.z;
-        const distSq = dx * dx + dy * dy + dz * dz;
-        // Drop distance = LOCK_MAX_DISTANCE * 1.2 (20% buffer)
-        const dropMaxDist = c.LOCK_MAX_DISTANCE * c.DROP_DISTANCE_FACTOR;
-        const dropMaxDistSq = dropMaxDist * dropMaxDist;
-        if (distSq > dropMaxDistSq) return false;
-        const dist = Math.sqrt(distSq);
-        if (dist < 1) return true;
-        // Turret limits (no margin — wider tolerance for drop)
-        const yaw = Math.atan2(dx / dist, dz / dist);
-        const pitch = Math.asin(dy / dist);
-        if (Math.abs(yaw) > c.yawLimit) return false;
-        if (pitch > c.pitchMax || pitch < c.pitchMin) return false;
-        // Drop screen check: wider NDC margin (1.2 vs 1.0 for acquisition)
+        // Screen check only: project fish position to NDC and apply generous buffer
         tv.ndc.copy(fishPos).project(camera);
-        const m = c.DROP_SCREEN_MARGIN;
-        if (tv.ndc.z < -1 || tv.ndc.z > 1) return false;
+        const m = c.DROP_SCREEN_MARGIN;  // 1.3 = 30% beyond frustum edge
+        if (tv.ndc.z < -1 || tv.ndc.z > 1) return false;  // Behind camera or beyond far plane
         if (tv.ndc.x < -m || tv.ndc.x > m) return false;
         if (tv.ndc.y < -m || tv.ndc.y > m) return false;
         return true;
     },
 
     // ---- Should release lock on current target? ----
-    // Uses the WIDER drop bounds (90° + 1.2x distance), not the strict lock cone.
+    // STRICT STICKY: Only release if fish is dead, despawned, or fully off-screen (NDC + 30% buffer).
     _shouldReleaseLock(fish, refPos) {
         if (!fish) return true;
         if (!fish.isActive) return true;                         // Despawned
@@ -12550,6 +12559,58 @@ const TargetingService = {
         if (fish.ellipsoidHalfExtents) pos.y += fish.ellipsoidHalfExtents.y * 0.5;
         pos.y += 0.5;
         return pos;
+    },
+
+    // ---- Kinematic Target Leading (Deflection Shooting) ----
+    // Calculates the interception point where a projectile will meet the moving fish.
+    // For hitscan weapons (laser, speed=0), returns the fish's current center (no lead).
+    // For projectile weapons (speed>0), predicts where the fish will be when the bullet arrives.
+    // Uses one Newton iteration for accuracy.
+    _calcLeadPosition(fish, muzzlePos, outPos) {
+        const center = this._getFishCenter(fish);
+        const weaponKey = gameState.currentWeapon;
+        const weapon = CONFIG.weapons[weaponKey];
+        const projSpeed = weapon ? weapon.speed : 0;
+
+        // Hitscan (laser) or no speed defined → aim directly at fish center
+        if (!projSpeed || projSpeed <= 0 || weapon.type === 'laser') {
+            outPos.copy(center);
+            return outPos;
+        }
+
+        // Get fish velocity vector (world-space units/sec)
+        const vel = fish.velocity;
+        if (!vel || (vel.x === 0 && vel.y === 0 && vel.z === 0)) {
+            outPos.copy(center);
+            return outPos;
+        }
+
+        // First estimate: time = distance / projectileSpeed
+        const dx = center.x - muzzlePos.x;
+        const dy = center.y - muzzlePos.y;
+        const dz = center.z - muzzlePos.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        let t = dist / projSpeed;
+
+        // Newton iteration: refine using predicted position
+        const predX = center.x + vel.x * t;
+        const predY = center.y + vel.y * t;
+        const predZ = center.z + vel.z * t;
+        const dx2 = predX - muzzlePos.x;
+        const dy2 = predY - muzzlePos.y;
+        const dz2 = predZ - muzzlePos.z;
+        const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2 + dz2 * dz2);
+        t = dist2 / projSpeed;
+
+        // Clamp lead time to prevent absurd predictions (max 2 seconds ahead)
+        t = Math.min(t, 2.0);
+
+        outPos.set(
+            center.x + vel.x * t,
+            center.y + vel.y * t,
+            center.z + vel.z * t
+        );
+        return outPos;
     },
 
     _clampRotDelta(delta, maxStep) {
@@ -12755,6 +12816,8 @@ const TargetingService = {
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
         // ---- TURRET TRACKING: Quaternion.Slerp-based smooth rotation ----
+        // All current weapons use fireHitscanRay (instant ray) — aim directly at fish center.
+        // _calcLeadPosition is available for future projectile-physics weapons.
         const aimPos = this._getFishCenter(fish);
         const trackOrigin = (gameState.autoShoot && isFps) ? camera.position : muzzlePos;
         const dir = aimPos.clone().sub(trackOrigin).normalize();
@@ -12914,14 +12977,27 @@ function autoAimAtFish(targetFish) {
     
     let direction;
     if (gameState.autoShoot) {
+        // GUARANTEED HIT: Fire directly at the fish's current center.
+        // All current weapons use fireHitscanRay (instant ray), so no target leading is needed.
+        // The direction MUST originate from the same point fireHitscanRay uses as hitOrigin:
+        //   FPS mode  → camera.position  (fireHitscanRay overrides origin to camera)
+        //   3rd person → muzzlePos        (fireHitscanRay uses the passed origin)
+        // This eliminates parallax desync between visual aim and actual hit detection.
         direction = autoAimTempVectors.direction;
-        const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
-        const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
-        direction.set(
-            Math.sin(yaw) * Math.cos(pitch),
-            Math.sin(pitch),
-            Math.cos(yaw) * Math.cos(pitch)
-        ).normalize();
+        if (targetFish && targetFish.isActive) {
+            const fishCenter = TargetingService._getFishCenter(targetFish);
+            const hitOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
+            direction.copy(fishCenter).sub(hitOrigin).normalize();
+        } else {
+            // Fallback: fire in barrel's visual direction
+            const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
+            const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
+            direction.set(
+                Math.sin(yaw) * Math.cos(pitch),
+                Math.sin(pitch),
+                Math.cos(yaw) * Math.cos(pitch)
+            ).normalize();
+        }
     } else if (weapon.type === 'laser') {
         direction = getCrosshairRay();
         if (!direction) return false;
