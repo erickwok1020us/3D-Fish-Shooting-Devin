@@ -1293,7 +1293,7 @@ const CONFIG = {
         // SWIMMING: High-speed sprints, fastest fish in the ocean
         marlin: { 
             hp: 400, speedMin: 110, speedMax: 310, reward: 300, size: 80, 
-            color: 0x2266aa, secondaryColor: 0x44aaff, count: 2, 
+            color: 0x2266aa, secondaryColor: 0x44aaff, count: 1, 
             pattern: 'burstSprint', schoolSize: [1, 2], form: 'marlin',
             category: 'largePredator',
             boidsStrength: 0,   // Strictly solitary
@@ -1304,8 +1304,8 @@ const CONFIG = {
         // SWIMMING: S-shaped head sweeping motion for prey detection
         hammerheadShark: { 
             hp: 450, speedMin: 56, speedMax: 110, reward: 300, size: 85, 
-            color: 0x556677, secondaryColor: 0x889999, count: 3, 
-            pattern: 'sShape', schoolSize: [3, 8], form: 'hammerhead',
+            color: 0x556677, secondaryColor: 0x889999, count: 1, 
+            pattern: 'sShape', schoolSize: [1, 1], form: 'hammerhead',
             category: 'largePredator',
             boidsStrength: 1.5, // School by day (unique among sharks)
             maxTurnRate: 0.7    // Moderate turning - schooling shark
@@ -1437,8 +1437,8 @@ const CONFIG = {
         // SWIMMING: Slow, majestic wing flapping, gentle banking turns
         mantaRay: { 
             hp: 350, speedMin: 50, speedMax: 88, reward: 280, size: 90, 
-            color: 0x222233, secondaryColor: 0xeeeeee, count: 2, 
-            pattern: 'wingGlide', schoolSize: [1, 2], form: 'mantaRay',
+            color: 0x222233, secondaryColor: 0xeeeeee, count: 1, 
+            pattern: 'wingGlide', schoolSize: [1, 1], form: 'mantaRay',
             category: 'specialForm',
             boidsStrength: 0.3  // Mostly solitary, occasional pairs
         },
@@ -5192,10 +5192,12 @@ function triggerWeaponHitEffects(weaponKey, position) {
 
 // Boss Fish Configuration (Issue #12)
 const BOSS_FISH_TYPES = [
+    // Boss tier: ONLY blue_whale, killer_whale, great_white_shark
+    // T1 fish (mantaRay, marlin, hammerhead) are NOT bosses — they swim as T1 Elites
     {
         name: 'GIANT WHALE',
         baseSpecies: 'blueWhale',
-        sizeMultiplier: 2.0,  // GIANT sized
+        sizeMultiplier: 2.0,
         hpMultiplier: 5,
         rewardMultiplier: 5,
         speedMultiplier: 0.8,
@@ -5205,7 +5207,7 @@ const BOSS_FISH_TYPES = [
     {
         name: 'ALPHA ORCA',
         baseSpecies: 'killerWhale',
-        sizeMultiplier: 1.8,  // GIANT sized
+        sizeMultiplier: 1.8,
         hpMultiplier: 4,
         rewardMultiplier: 4,
         speedMultiplier: 1.3,
@@ -5215,67 +5217,22 @@ const BOSS_FISH_TYPES = [
     {
         name: 'MEGA SHARK',
         baseSpecies: 'greatWhiteShark',
-        sizeMultiplier: 1.8,  // GIANT sized
+        sizeMultiplier: 1.8,
         hpMultiplier: 4,
         rewardMultiplier: 4,
         speedMultiplier: 1.2,
         glowColor: 0xff4444,
         description: 'Deadly apex predator!'
-    },
-    {
-        name: 'GOLDEN MANTA',
-        baseSpecies: 'mantaRay',
-        sizeMultiplier: 2.2,  // GIANT sized
-        hpMultiplier: 4,
-        rewardMultiplier: 4,
-        speedMultiplier: 0.9,
-        glowColor: 0xffdd00,
-        description: 'Majestic golden ray!'
-    },
-    {
-        name: 'SARDINE SWARM',
-        baseSpecies: 'sardine',
-        sizeMultiplier: 1.0,  // Normal size but LARGE SCHOOL
-        hpMultiplier: 2,
-        rewardMultiplier: 3,
-        speedMultiplier: 1.5,
-        glowColor: 0x88ffff,
-        description: 'Massive sardine school!',
-        isSwarm: true,
-        swarmCount: 50
-    },
-    {
-        name: 'LIGHTNING MARLIN',
-        baseSpecies: 'marlin',
-        sizeMultiplier: 1.6,
-        hpMultiplier: 3,
-        rewardMultiplier: 3,
-        speedMultiplier: 2.5,  // EXTREMELY FAST
-        glowColor: 0xaa44ff,
-        description: 'Blazing fast marlin!'
-    },
-    {
-        name: 'IRON HAMMERHEAD',
-        baseSpecies: 'hammerheadShark',
-        sizeMultiplier: 1.7,
-        hpMultiplier: 3,
-        rewardMultiplier: 3,
-        speedMultiplier: 1.1,
-        glowColor: 0x44ffaa,
-        description: 'Armored pack hunter!'
     }
 ];
 
-// Issue #15: List of boss-only species that should NOT spawn during normal gameplay
-// BUG FIX: Removed 'sardine' from boss-only list so small schooling fish appear during normal gameplay
-// This fixes the "too few fish" bug - sardine has count:30 which was being excluded
-// FIX: Added 'killerWhale' to boss-only list - Orca should only appear during Boss Mode
-// This prevents confusion where Orca appears after Boss Mode ends (it was spawning as normal fish)
-const BOSS_ONLY_SPECIES = BOSS_FISH_TYPES
-    .filter(boss => boss.baseSpecies !== 'sardine')  // Keep sardine for normal gameplay
-    .map(boss => boss.baseSpecies)
-    .concat(['killerWhale', 'hammerheadShark']);  // Orca + Hammerhead are boss-only even though not always in BOSS_FISH_TYPES base list
-// Result: ['blueWhale', 'greatWhiteShark', 'mantaRay', 'marlin', 'killerWhale', 'hammerheadShark'] - sardine now spawns normally
+// Boss-only species: ONLY the 3 true Boss fish that spawn during Boss Mode
+// T1 Elites (hammerheadShark, marlin, mantaRay) are NOT boss-only — they swim as normal T1 fish
+const BOSS_ONLY_SPECIES = ['blueWhale', 'killerWhale', 'greatWhiteShark'];
+
+// T1 Elite species: max ONE of each in pool at any time, 8-second respawn delay after kill
+const T1_ELITE_SPECIES = ['hammerheadShark', 'marlin', 'mantaRay'];
+const T1_ELITE_RESPAWN_DELAY = 8000; // 8 seconds in milliseconds
 
 // RTP FIX: List of ability fish that should NOT spawn during normal gameplay
 // These fish have special abilities (bomb, lightning, bonus, shield) that can trigger
@@ -16301,10 +16258,14 @@ class Fish {
         // MEMORY LEAK FIX: Store respawn timer ID so it can be cancelled if fish is reused
         // This prevents duplicate spawns when die() pushes to freeFish and the fish is
         // reused by updateDynamicFishSpawn() before the respawn timer fires
+        // T1 Elite fish get 8-second respawn delay; normal fish get 2-5 seconds
+        const fishSpeciesKey = this.tier || this.form;
+        const isT1Elite = T1_ELITE_SPECIES.includes(fishSpeciesKey);
+        const respawnDelay = isT1Elite ? T1_ELITE_RESPAWN_DELAY : (2000 + Math.random() * 3000);
         this.respawnTimerId = setTimeout(() => {
             this.respawnTimerId = null;
             this.respawn();
-        }, 2000 + Math.random() * 3000);
+        }, respawnDelay);
     }
     
     // Phase 2: Trigger special ability when fish dies
@@ -16445,15 +16406,20 @@ class Fish {
         }
         
         // BUG FIX: Boss-only species should NOT respawn after Boss Mode ends
-        // When a Boss fish (mantaRay, killerWhale, etc.) dies during Boss Mode:
-        // 1. die() is called which schedules a respawn timer
-        // 2. Boss Mode ends, but the respawn timer is still pending
-        // 3. When timer fires, the Boss fish would respawn as a normal fish
-        // This check prevents Boss-only species from respawning outside Boss Mode
         const fishSpecies = this.tier || this.config?.species || this.form;
         if (BOSS_ONLY_SPECIES.includes(fishSpecies) && !gameState.bossActive) {
             console.log(`[FISH] Boss-only species ${fishSpecies} not respawning outside Boss Mode`);
             return;
+        }
+        
+        // T1 ELITE: Max ONE of each species active at any time
+        // If another instance is already swimming, skip this respawn
+        if (T1_ELITE_SPECIES.includes(fishSpecies)) {
+            const alreadyActive = activeFish.some(f => f.isActive && f !== this && (f.tier === fishSpecies || f.form === this.form));
+            if (alreadyActive) {
+                console.log(`[FISH] T1 Elite ${fishSpecies} already active — skipping duplicate respawn`);
+                return;
+            }
         }
         
         const position = getRandomFishPositionIn3DSpace();
@@ -16476,8 +16442,9 @@ function createFishPool() {
     particleGroup = new THREE.Group();
     scene.add(particleGroup);
     
-    // Issue #15: Create fish for each tier, EXCLUDING boss-only species and ability fish
-    // Boss fish (blueWhale, greatWhiteShark, mantaRay, marlin) only spawn during Boss Mode
+    // Create fish for each tier, EXCLUDING boss-only species and ability fish
+    // Boss fish (blueWhale, killerWhale, greatWhiteShark) only spawn during Boss Mode
+    // T1 Elites (hammerheadShark, marlin, mantaRay) now spawn as normal fish (count=1 each)
     // Ability fish (bombCrab, electricEel, goldFish, shieldTurtle) excluded for RTP compliance
     Object.entries(CONFIG.fishTiers).forEach(([tier, config]) => {
         // Skip boss-only species during normal gameplay
@@ -16553,23 +16520,48 @@ function spawnInitialFish() {
         return;
     }
     
-    // PERFORMANCE FIX: Only spawn up to maxCount fish initially
-    // Remaining fish go to freeFish pool for dynamic spawning
-    let spawnedCount = 0;
+    // SPECIES GUARANTEE: Spawn at least 1 of each species first, then fill remaining slots
+    // This prevents late-listed species (e.g. seahorse) from being pushed to freeFish
+    const spawnedSpecies = new Set();
+    const priorityFish = [];  // 1 of each species
+    const extraFish = [];     // remaining duplicates
+    
     fishPool.forEach(fish => {
+        const species = fish.tier || fish.form;
+        if (!spawnedSpecies.has(species)) {
+            spawnedSpecies.add(species);
+            priorityFish.push(fish);
+        } else {
+            extraFish.push(fish);
+        }
+    });
+    
+    // Spawn priority fish first (1 of each species guaranteed)
+    let spawnedCount = 0;
+    priorityFish.forEach(fish => {
         if (spawnedCount < FISH_SPAWN_CONFIG.maxCount) {
-            // Issue #1: Spawn fish in full 3D space around cannon (immersive 360°)
             const position = getRandomFishPositionIn3DSpace();
             fish.spawn(position);
             activeFish.push(fish);
             spawnedCount++;
         } else {
-            // Put remaining fish in free pool for later spawning
             freeFish.push(fish);
         }
     });
     
-    console.log(`[FISH] Initial spawn: ${spawnedCount} active, ${freeFish.length} in reserve (max: ${FISH_SPAWN_CONFIG.maxCount})`)
+    // Then spawn extras until maxCount
+    extraFish.forEach(fish => {
+        if (spawnedCount < FISH_SPAWN_CONFIG.maxCount) {
+            const position = getRandomFishPositionIn3DSpace();
+            fish.spawn(position);
+            activeFish.push(fish);
+            spawnedCount++;
+        } else {
+            freeFish.push(fish);
+        }
+    });
+    
+    console.log(`[FISH] Initial spawn: ${spawnedCount} active (${spawnedSpecies.size} species), ${freeFish.length} in reserve (max: ${FISH_SPAWN_CONFIG.maxCount})`)
 }
 
 // ==================== DYNAMIC FISH RESPAWN SYSTEM ====================
