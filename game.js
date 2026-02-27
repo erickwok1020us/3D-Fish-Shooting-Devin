@@ -21010,9 +21010,9 @@ function createBossCrosshair(bossFish) {
     
     // Ring configs: [radius multiplier, particle count, tilt axis, rotation speed, color, opacity]
     const RING_CONFIGS = [
-        { radiusMul: 1.6, count: 40, tiltX: 0,            tiltZ: 0,           speed: 0.8,  color: 0xFF8800, opacity: 0.25 },
-        { radiusMul: 1.9, count: 48, tiltX: Math.PI * 0.3, tiltZ: Math.PI * 0.15, speed: -0.6, color: 0xFFAA33, opacity: 0.18 },
-        { radiusMul: 2.2, count: 56, tiltX: Math.PI * 0.15, tiltZ: -Math.PI * 0.25, speed: 0.5,  color: 0xFF6600, opacity: 0.15 },
+        { radiusMul: 1.6, count: 60, tiltX: 0,            tiltZ: 0,           speed: 0.8,  color: 0xFF8800, opacity: 0.55, ptSize: 18 },
+        { radiusMul: 2.0, count: 72, tiltX: Math.PI * 0.3, tiltZ: Math.PI * 0.15, speed: -0.6, color: 0xFFAA33, opacity: 0.40, ptSize: 22 },
+        { radiusMul: 2.4, count: 84, tiltX: Math.PI * 0.15, tiltZ: -Math.PI * 0.25, speed: 0.5,  color: 0xFF6600, opacity: 0.30, ptSize: 26 },
     ];
     
     for (let r = 0; r < RING_CONFIGS.length; r++) {
@@ -21032,7 +21032,7 @@ function createBossCrosshair(bossFish) {
             positions[i * 3]     = Math.cos(angle) * (radius + jitter);
             positions[i * 3 + 1] = Math.sin(angle) * (radius + jitter);
             positions[i * 3 + 2] = (Math.random() - 0.5) * radius * 0.06; // slight depth scatter
-            sizes[i] = 2.5 + Math.random() * 3.0; // particle size variation
+            sizes[i] = cfg.ptSize * (0.7 + Math.random() * 0.6); // particle size variation
             alphas[i] = 0.5 + Math.random() * 0.5; // per-particle alpha variation
         }
         
@@ -21045,7 +21045,7 @@ function createBossCrosshair(bossFish) {
             color: cfg.color,
             transparent: true,
             opacity: cfg.opacity,
-            size: 3.5,
+            size: cfg.ptSize,
             sizeAttenuation: true,
             depthTest: false,
             depthWrite: false,
