@@ -19228,7 +19228,9 @@ const FISH_KILLLOG_IMAGES = {
     shark:       KILLLOG_IMG_BASE + 'Great%20White%20Shark_killlog.png',
     hammerhead:  KILLLOG_IMG_BASE + 'Hammerhead%20Shark_killlog.png',
     whale:       KILLLOG_IMG_BASE + 'Blue%20Whale_killlog.png',
+    blueWhale:   KILLLOG_IMG_BASE + 'Blue%20Whale_killlog.png',
     killerWhale: KILLLOG_IMG_BASE + 'Killer%20Whale_killlog.png',
+    greatWhiteShark: KILLLOG_IMG_BASE + 'Great%20White%20Shark_killlog.png',
     mantaRay:    KILLLOG_IMG_BASE + 'Manta%20ray_killlog.png',
     seahorse:    KILLLOG_IMG_BASE + 'Seahorse_killlog.png'
 };
@@ -19242,8 +19244,8 @@ function formatFishName(form) {
 // Maps fish forms to their tier for border color coding in Kill Log UI
 // Strict mapping per tier list reference image (image_5ef4fe.png)
 const FISH_FORM_TO_TIER = {
-    // Boss — Orange #FF8800
-    whale: 'boss', killerWhale: 'boss', shark: 'boss',
+    // Boss — Orange #FF8800 (all forms: short + full species names)
+    whale: 'boss', blueWhale: 'boss', killerWhale: 'boss', shark: 'boss', greatWhiteShark: 'boss',
     // Tier 1 — Purple #CC00FF
     hammerhead: 't1', marlin: 't1', mantaRay: 't1',
     // Tier 2 — Green #00FF66
@@ -21000,112 +21002,78 @@ function hideBossUI() {
 }
 
 function createBossCrosshair(bossFish) {
-    // Option A: Dual-Layer Halo — high-speed dual-layer rotating ring
-    // Amber inner ring + Cyan outer ring + airflow particles + energy bridges
+    // 3-Ring Particle Aura — Boss Orange (#FF8800) with soft glow
+    // 3 orbiting particle rings at different radii, tilts, and speeds
+    // Subtle "glowing dust / energy strand" look — hint, not spotlight
     const crosshairGroup = new THREE.Group();
     const baseSize = bossFish.config.size;
     
-    // === OUTER RING (CYAN / NEON BLUE) — 12 segments, clockwise ===
-    // HALO SCALE FIX: Increase multiplier from 1.8x to 3.0x so halo is not hidden inside large T6 boss models
-    const outerR = baseSize * 3.0;
-    const outerSegments = 12;
-    const outerGap = 0.08;
+    // Ring configs: [radius multiplier, particle count, tilt axis, rotation speed, color, opacity]
+    const RING_CONFIGS = [
+        { radiusMul: 1.6, count: 40, tiltX: 0,            tiltZ: 0,           speed: 0.8,  color: 0xFF8800, opacity: 0.25 },
+        { radiusMul: 1.9, count: 48, tiltX: Math.PI * 0.3, tiltZ: Math.PI * 0.15, speed: -0.6, color: 0xFFAA33, opacity: 0.18 },
+        { radiusMul: 2.2, count: 56, tiltX: Math.PI * 0.15, tiltZ: -Math.PI * 0.25, speed: 0.5,  color: 0xFF6600, opacity: 0.15 },
+    ];
     
-    const outerRingGroup = new THREE.Group();
-    for (let i = 0; i < outerSegments; i++) {
-        const startAngle = (i / outerSegments) * Math.PI * 2 + outerGap;
-        const endAngle = ((i + 1) / outerSegments) * Math.PI * 2 - outerGap;
-        // Glow layer (wider, more transparent)
-        const glowGeo = new THREE.RingGeometry(outerR - 6, outerR + 6, 32, 1, startAngle, endAngle - startAngle);
-        const glowMat = new THREE.MeshBasicMaterial({
-            color: 0x00eeff,
+    for (let r = 0; r < RING_CONFIGS.length; r++) {
+        const cfg = RING_CONFIGS[r];
+        const radius = baseSize * cfg.radiusMul;
+        const ringGroup = new THREE.Group();
+        
+        // Create particle points for this ring
+        const positions = new Float32Array(cfg.count * 3);
+        const sizes = new Float32Array(cfg.count);
+        const alphas = new Float32Array(cfg.count);
+        
+        for (let i = 0; i < cfg.count; i++) {
+            const angle = (i / cfg.count) * Math.PI * 2;
+            // Slight random offset for organic feel
+            const jitter = (Math.random() - 0.5) * radius * 0.08;
+            positions[i * 3]     = Math.cos(angle) * (radius + jitter);
+            positions[i * 3 + 1] = Math.sin(angle) * (radius + jitter);
+            positions[i * 3 + 2] = (Math.random() - 0.5) * radius * 0.06; // slight depth scatter
+            sizes[i] = 2.5 + Math.random() * 3.0; // particle size variation
+            alphas[i] = 0.5 + Math.random() * 0.5; // per-particle alpha variation
+        }
+        
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+        geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+        
+        const mat = new THREE.PointsMaterial({
+            color: cfg.color,
             transparent: true,
-            opacity: 0.15,
-            side: THREE.DoubleSide,
+            opacity: cfg.opacity,
+            size: 3.5,
+            sizeAttenuation: true,
             depthTest: false,
-            depthWrite: false
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
         });
-        glowMat.userData = { baseOpacity: 0.15 };
-        const glowSeg = new THREE.Mesh(glowGeo, glowMat);
-        glowSeg.renderOrder = 999;
-        outerRingGroup.add(glowSeg);
-        // Core line (thinner, brighter)
-        const coreGeo = new THREE.RingGeometry(outerR - 2, outerR + 2, 32, 1, startAngle, endAngle - startAngle);
-        const coreMat = new THREE.MeshBasicMaterial({
-            color: 0x44eeff,
-            transparent: true,
-            opacity: 0.7,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
-        });
-        coreMat.userData = { baseOpacity: 0.7 };
-        const coreSeg = new THREE.Mesh(coreGeo, coreMat);
-        coreSeg.renderOrder = 999;
-        outerRingGroup.add(coreSeg);
+        mat.userData = { baseOpacity: cfg.opacity };
+        
+        const points = new THREE.Points(geo, mat);
+        points.renderOrder = 999;
+        ringGroup.add(points);
+        
+        // Apply tilt to differentiate ring planes
+        ringGroup.rotation.x = cfg.tiltX;
+        ringGroup.rotation.z = cfg.tiltZ;
+        
+        // Store ring metadata for animation
+        ringGroup.userData = {
+            ringIndex: r,
+            rotationSpeed: cfg.speed,
+            baseOpacity: cfg.opacity,
+        };
+        
+        crosshairGroup.add(ringGroup);
     }
-    crosshairGroup.add(outerRingGroup);
-    
-    // === INNER RING (AMBER GOLD) — 8 segments, counter-clockwise ===
-    // HALO SCALE FIX: Increase multiplier from 1.2x to 2.0x so inner ring is visible outside large T6 boss models
-    const innerR = baseSize * 2.0;
-    const innerSegments = 8;
-    const innerGap = 0.12;
-    
-    const innerRingGroup = new THREE.Group();
-    for (let i = 0; i < innerSegments; i++) {
-        const startAngle = (i / innerSegments) * Math.PI * 2 + innerGap;
-        const endAngle = ((i + 1) / innerSegments) * Math.PI * 2 - innerGap;
-        // Glow layer
-        const glowGeo = new THREE.RingGeometry(innerR - 5, innerR + 5, 32, 1, startAngle, endAngle - startAngle);
-        const glowMat = new THREE.MeshBasicMaterial({
-            color: 0xffbb33,
-            transparent: true,
-            opacity: 0.12,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
-        });
-        glowMat.userData = { baseOpacity: 0.12 };
-        const glowSeg = new THREE.Mesh(glowGeo, glowMat);
-        glowSeg.renderOrder = 999;
-        innerRingGroup.add(glowSeg);
-        // Core line
-        const coreGeo = new THREE.RingGeometry(innerR - 1.5, innerR + 1.5, 32, 1, startAngle, endAngle - startAngle);
-        const coreMat = new THREE.MeshBasicMaterial({
-            color: 0xffcc55,
-            transparent: true,
-            opacity: 0.75,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
-        });
-        coreMat.userData = { baseOpacity: 0.75 };
-        const coreSeg = new THREE.Mesh(coreGeo, coreMat);
-        coreSeg.renderOrder = 999;
-        innerRingGroup.add(coreSeg);
-    }
-    crosshairGroup.add(innerRingGroup);
-    
-    // === ENERGY BRIDGE CONNECTORS (6 faint lines between inner and outer) ===
-    const bridgeGroup = new THREE.Group();
-    const bridgeMaterial = new THREE.LineBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.08, depthTest: false, depthWrite: false });
-    for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2;
-        const points = [
-            new THREE.Vector3(Math.cos(angle) * innerR, Math.sin(angle) * innerR, 0),
-            new THREE.Vector3(Math.cos(angle + 0.03) * outerR, Math.sin(angle + 0.03) * outerR, 0)
-        ];
-        const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geo, bridgeMaterial);
-        bridgeGroup.add(line);
-    }
-    crosshairGroup.add(bridgeGroup);
     
     crosshairGroup.userData.targetFish = bossFish;
     crosshairGroup.userData.rotationSpeed = 1;
-    crosshairGroup.userData.outerRingGroup = outerRingGroup;
-    crosshairGroup.userData.innerRingGroup = innerRingGroup;
+    crosshairGroup.userData.isParticleAura = true;
     
     // Ensure the entire crosshair group renders above fish models
     crosshairGroup.renderOrder = 999;
@@ -21141,19 +21109,20 @@ function updateBossCrosshair() {
         // Face the camera
         crosshair.lookAt(camera.position);
         
-        // Option A Animation: Dual-Layer Halo rotating rings
-        const outerRingGroup = crosshair.userData.outerRingGroup;
-        const innerRingGroup = crosshair.userData.innerRingGroup;
-        
-        // Outer ring — clockwise rotation
-        if (outerRingGroup) outerRingGroup.rotation.z += 0.012;
-        // Inner ring — counter-clockwise rotation (faster)
-        if (innerRingGroup) innerRingGroup.rotation.z -= 0.018;
+        // 3-Ring Particle Aura Animation: orbit each ring at its own speed
+        if (crosshair.userData.isParticleAura) {
+            for (let c = 0; c < crosshair.children.length; c++) {
+                const ringGroup = crosshair.children[c];
+                if (ringGroup.userData && ringGroup.userData.rotationSpeed !== undefined) {
+                    ringGroup.rotation.z += ringGroup.userData.rotationSpeed * 0.015;
+                }
+            }
+        }
         
         // Pulse effect on opacity for energy feel
-        const pulse = Math.sin(Date.now() * 0.004) * 0.15 + 0.85;
+        const pulse = Math.sin(Date.now() * 0.003) * 0.2 + 0.8;
         crosshair.traverse(child => {
-            if (child.isMesh && child.material && child.material.transparent) {
+            if (child.isPoints && child.material && child.material.transparent) {
                 child.material.opacity = child.material.userData
                     ? child.material.userData.baseOpacity * pulse
                     : child.material.opacity;
