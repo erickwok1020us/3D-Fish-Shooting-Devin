@@ -1620,7 +1620,7 @@ const gameState = {
 //   1. onBalanceUpdate (server SSOT): gameState.balance = Math.round(data.balance * BALANCE_SCALE)
 // INVARIANT: In single-player mode, gameState.balance may ONLY be modified by:
 //   1. fireBullet (cost deduction): gameState.balance -= weapon.cost * BALANCE_SCALE
-//   2. autoFireAtFish (cost deduction): gameState.balance -= weapon.cost * BALANCE_SCALE
+//   2. autoAimAtFish (cost deduction): gameState.balance -= weapon.cost * BALANCE_SCALE
 //   3. Fish.die() (payout): gameState.balance += rewardFp (integer, from RTP engine)
 // FORBIDDEN: coin-fly animations must NEVER modify balance (LEAK-1 fix)
 // FORBIDDEN: spawnCoinFlyToScore must NEVER add reward to balance
@@ -5644,8 +5644,8 @@ const vfxTempVectors = {
     targetPos: new THREE.Vector3()
 };
 
-// PERFORMANCE: Temp vectors for autoFireAtFish (avoid per-call allocations)
-const autoFireTempVectors = {
+// PERFORMANCE: Temp vectors for autoAimAtFish (avoid per-call allocations)
+const autoAimTempVectors = {
     muzzlePos: new THREE.Vector3(),
     direction: new THREE.Vector3(),
     crosshairDir: new THREE.Vector3()
@@ -10047,9 +10047,9 @@ let fpsCounter = 0;
 let fpsTime = 0;
 let autoShootTimer = 0;
 
-// ==================== AUTO-FIRE DEBUG HUD ====================
+// ==================== AUTO-AIM DEBUG HUD ====================
 window.DEBUG_COMET_MODE = false;
-window.DEBUG_AUTOFIRE_HUD = false;
+window.DEBUG_AUTOAIM_HUD = false;
 const _afDebug = {
     shotCount: 0,
     balanceAtStart: 0,
@@ -10062,7 +10062,7 @@ const _afDebug = {
     init() {
         if (this.el) return;
         const div = document.createElement('div');
-        div.id = 'autofire-debug';
+        div.id = 'autoaim-debug';
         div.style.cssText = 'position:fixed;bottom:8px;right:8px;background:rgba(0,0,0,0.75);color:#0ff;font-family:monospace;font-size:12px;padding:8px 12px;border-radius:6px;z-index:99999;pointer-events:none;display:none;line-height:1.6;white-space:pre;transform:scale(var(--ui-scale));transform-origin:bottom right;';
         document.body.appendChild(div);
         this.el = div;
@@ -10075,7 +10075,7 @@ const _afDebug = {
     recordShot() { this.shotCount++; },
     update(dt) {
         if (!this.el) this.init();
-        const show = window.DEBUG_AUTOFIRE_HUD && gameState.autoShoot && gameState.currentWeapon === '8x';
+        const show = window.DEBUG_AUTOAIM_HUD && gameState.autoShoot && gameState.currentWeapon === '8x';
         if (show && !this.active) { this.reset(); this.active = true; }
         if (!show) { this.active = false; this.el.style.display = 'none'; return; }
         this.el.style.display = 'block';
@@ -12299,31 +12299,31 @@ function aimCannon(targetX, targetY) {
     }
 }
 
-// ==================== TARGETING SERVICE ====================
-// ==================== SMART AUTO-FIRE TARGET SELECTOR ====================
-// Refactored targeting with strict binary priority rules:
-//   P1: Boss (isBoss || hasBossHint) within Lock Cone
-//   P2: Nearest lockable fish (ignore tier) within Lock Cone
-//   Tie-break: lower numeric fishId (rtpFishId)
-// Lock-on state machine: sticky lock until Dead/Invalidated/Despawned,
-// except Boss preemption (P2→P1 switch on next fire tick).
-// Target selection refreshes every 100ms (not every frame) for performance.
+// ==================== TARGETING SERVICE (Sticky Auto Aim / Target Lock) ====================
+// Replaces old "auto fire spam" with FOCUS FIRE behavior:
+//   - One target must be secured (killed or gone) before moving to the next.
+//   P1: Boss Lock — blueWhale, killerWhale, greatWhiteShark (immediate lock)
+//   P2: Proximity Lock — closest fish to Turret reference point (fallback)
+//   Sticky: NO re-targeting while lock is valid (except Boss override P2→P1).
+// Turret reference point: World Y=-338, Z=-680
 // Visual tracking via Quaternion.Slerp on turret rotation.
 // Client only sends Fire(direction, weaponId, targetId) — zero RTP impact.
+// UI label remains "AUTO FIRE" — only internal naming uses autoAim/targetLock.
 
 const TargetingService = {
     config: {
         // Geometric lock constraints
-        LOCK_FOV_DEGREES: 60,                                    // Lock cone half-angle for ACQUISITION (Vector3.Dot check)
-        DROP_FOV_DEGREES: 90,                                    // Drop cone half-angle — wider hysteresis buffer for release
         LOCK_MAX_DISTANCE: 2500.0,                               // Max lock distance in world units (game scale)
         DROP_DISTANCE_FACTOR: 1.2,                               // Drop distance = LOCK_MAX_DISTANCE * 1.2 (20% buffer)
+        // Screen visibility gates (NDC)
+        LOCK_SCREEN_MARGIN: 1.0,                                 // Must be within screen bounds to acquire lock
+        DROP_SCREEN_MARGIN: 1.2,                                 // Wider hysteresis buffer before dropping lock
         // Cannon rotation limits (kept from original for physical turret clamping)
         yawLimit:   46.75 * (Math.PI / 180),
         pitchMax:   42.5  * (Math.PI / 180),
         pitchMin:  -29.75 * (Math.PI / 180),
         // Firing gates
-        autoFireAlignGate: 8,                                    // Degrees — cannon must be within this angle to fire
+        autoAimAlignGate: 8,                                     // Degrees — cannon must be within this angle to fire
         forceFireMs: 500,                                        // Force fire after this many ms locked
         // Turret tracking
         trackSpeed: 25,
@@ -12352,6 +12352,11 @@ const TargetingService = {
         _cachedScanResult: null,  // Cached target from last scan
     },
 
+    // Turret reference point for distance calculations (world-space origin for proximity)
+    TURRET_REF_Y: -338,
+    TURRET_REF_Z: -680,
+    _turretRefPos: new THREE.Vector3(0, -338, -680),
+
     // Pre-allocated temp vectors to avoid per-tick GC pressure
     _tempVecs: {
         muzzlePos: new THREE.Vector3(),
@@ -12361,6 +12366,7 @@ const TargetingService = {
         toFishXZ: new THREE.Vector3(),
         targetQuat: new THREE.Quaternion(),
         currentQuat: new THREE.Quaternion(),
+        ndc: new THREE.Vector3(),
     },
 
     reset() {
@@ -12382,9 +12388,14 @@ const TargetingService = {
         return isNaN(n) ? Infinity : n;
     },
 
-    // ---- Helper: check if fish is a P1 target (Boss priority) ----
+    // ---- Helper: check if fish is a P1 target (Boss Lock priority) ----
+    // Boss fish are: blueWhale, killerWhale, greatWhiteShark
     _isBossPriority(fish) {
-        return !!(fish.isBoss || fish.hasBossHint || bossCrosshairMap.has(fish));
+        if (fish.isBoss) return true;
+        if (fish.hasBossHint || bossCrosshairMap.has(fish)) return true;
+        // Also check fish.form against BOSS_ONLY_SPECIES for robustness
+        if (fish.form && BOSS_ONLY_SPECIES.includes(fish.form)) return true;
+        return false;
     },
 
     // ---- Static Base Cannon Forward ----
@@ -12398,8 +12409,8 @@ const TargetingService = {
         return out;
     },
 
-    // ---- Lock Constraint: FOV + Distance check for ACQUISITION (strict 60°) ----
-    // Uses STATIC base cannon forward to avoid Slerp race condition
+    // ---- Lock Constraint: Screen + Distance check for ACQUISITION ----
+    // Fish must be on-screen (NDC) and within turret physical yaw/pitch limits.
     _isInLockCone(fishPos, refPos) {
         const c = this.config;
         const tv = this._tempVecs;
@@ -12411,25 +12422,26 @@ const TargetingService = {
         if (distSq > maxDistSq) return false;
         const dist = Math.sqrt(distSq);
         if (dist < 1) return true;
+
         // Enforce turret yaw/pitch limits with margin
         const yaw = Math.atan2(dx / dist, dz / dist);
         const pitch = Math.asin(dy / dist);
         const margin = 3 * (Math.PI / 180);
         if (Math.abs(yaw) > (c.yawLimit - margin)) return false;
         if (pitch > (c.pitchMax - margin) || pitch < (c.pitchMin + margin)) return false;
-        // FOV check: angle between STATIC base forward and fish direction
-        // Static forward prevents Slerp lag from causing false cone exits
-        this._getStaticBaseForward(tv.cannonFwd);
-        tv.toFish.set(dx / dist, dy / dist, dz / dist);
-        const dot = tv.cannonFwd.dot(tv.toFish);
-        const halfFovRad = c.LOCK_FOV_DEGREES * (Math.PI / 180);
-        const cosHalfFov = Math.cos(halfFovRad);
-        return dot >= cosHalfFov;
+
+        // On-screen check (clip space)
+        tv.ndc.copy(fishPos).project(camera);
+        const m = c.LOCK_SCREEN_MARGIN;
+        if (tv.ndc.z < -1 || tv.ndc.z > 1) return false;
+        if (tv.ndc.x < -m || tv.ndc.x > m) return false;
+        if (tv.ndc.y < -m || tv.ndc.y > m) return false;
+        return true;
     },
 
-    // ---- Drop Constraint: Wider hysteresis cone for RELEASE (90° + 1.2x distance) ----
+    // ---- Drop Constraint: Wider hysteresis bounds for RELEASE (1.2x screen + 1.2x distance) ----
     // Once locked, fish must go WAY out of bounds before we drop.
-    // Uses STATIC base forward + wider FOV + 20% distance buffer.
+    // Uses wider NDC margin + 20% distance buffer.
     _isInDropBounds(fishPos, refPos) {
         const c = this.config;
         const tv = this._tempVecs;
@@ -12448,13 +12460,13 @@ const TargetingService = {
         const pitch = Math.asin(dy / dist);
         if (Math.abs(yaw) > c.yawLimit) return false;
         if (pitch > c.pitchMax || pitch < c.pitchMin) return false;
-        // Drop FOV check: wider 90° cone (vs 60° for acquisition)
-        this._getStaticBaseForward(tv.cannonFwd);
-        tv.toFish.set(dx / dist, dy / dist, dz / dist);
-        const dot = tv.cannonFwd.dot(tv.toFish);
-        const halfDropFovRad = c.DROP_FOV_DEGREES * (Math.PI / 180);
-        const cosHalfDropFov = Math.cos(halfDropFovRad);
-        return dot >= cosHalfDropFov;
+        // Drop screen check: wider NDC margin (1.2 vs 1.0 for acquisition)
+        tv.ndc.copy(fishPos).project(camera);
+        const m = c.DROP_SCREEN_MARGIN;
+        if (tv.ndc.z < -1 || tv.ndc.z > 1) return false;
+        if (tv.ndc.x < -m || tv.ndc.x > m) return false;
+        if (tv.ndc.y < -m || tv.ndc.y > m) return false;
+        return true;
     },
 
     // ---- Should release lock on current target? ----
@@ -12467,8 +12479,8 @@ const TargetingService = {
         return false;
     },
 
-    // ---- Target selection: P1 Boss → P2 Nearest → tie-break by fishId ----
-    _selectTarget(refPos) {
+    // ---- Target Lock selection: P1 Boss Lock → P2 Proximity Lock → tie-break by fishId ----
+    _selectTargetLock(refPos) {
         let bestP1 = null, bestP1Dist = Infinity, bestP1Id = Infinity;
         let bestP2 = null, bestP2Dist = Infinity, bestP2Id = Infinity;
 
@@ -12582,16 +12594,56 @@ const TargetingService = {
         this._initFromCannon();
 
         const isFps = gameState.viewMode === 'fps';
-        const refPos = isFps ? camera.position : muzzlePos;
+        // Use turret reference point for distance calculations (consistent origin)
+        const refPos = this._turretRefPos;
 
         // ---- PERFORMANCE: Only re-scan for targets every 100ms ----
         const shouldRescan = (now - s.lastTargetScanMs) >= c.targetRefreshMs;
+
+        // ---- Boss Override (fast path, every tick) ----
+        // Avoids waiting for the 100ms rescan interval when a Boss enters the screen.
+        // Only applies when currently locked on a non-boss (P2).
+        if (s.lockedTarget && !this._isBossPriority(s.lockedTarget) && bossCrosshairMap && bossCrosshairMap.size > 0) {
+            let bestBoss = null;
+            let bestBossDist = Infinity;
+            let bestBossId = Infinity;
+
+            for (const [bf] of bossCrosshairMap) {
+                if (!bf || !bf.isActive) continue;
+                if (bf.hp !== undefined && bf.hp <= 0) continue;
+                if (!this._isBossPriority(bf)) continue;
+                if (!this._isInLockCone(bf.group.position, refPos)) continue;
+
+                const dx = bf.group.position.x - refPos.x;
+                const dy = bf.group.position.y - refPos.y;
+                const dz = bf.group.position.z - refPos.z;
+                const distSq = dx * dx + dy * dy + dz * dz;
+                const fishIdNum = this._fishIdNum(bf);
+
+                if (distSq < bestBossDist || (distSq === bestBossDist && fishIdNum < bestBossId)) {
+                    bestBoss = bf;
+                    bestBossDist = distSq;
+                    bestBossId = fishIdNum;
+                }
+            }
+
+            if (bestBoss) {
+                console.log(`[AutoAim] BOSS PREEMPT (fast): ${s.lockedTarget.rtpFishId || '?'} → ${bestBoss.rtpFishId || '?'}`);
+                s.lockedTarget = bestBoss;
+                s.phase = 'transition';
+                s.phaseStart = now;
+                s.startYaw = s.currentYaw;
+                s.startPitch = s.currentPitch;
+                s.lockStartMs = now;
+                s.shotsAtCurrent = 0;
+            }
+        }
 
         // ---- PHASE: IDLE — no target, scan for one ----
         if (s.phase === 'idle') {
             if (shouldRescan) {
                 s.lastTargetScanMs = now;
-                const target = this._selectTarget(refPos);
+                const target = this._selectTargetLock(refPos);
                 if (target) {
                     s.lockedTarget = target;
                     s.phase = 'locking';
@@ -12600,7 +12652,7 @@ const TargetingService = {
                     s.startPitch = s.currentPitch;
                     s.lockStartMs = now;
                     s.shotsAtCurrent = 0;
-                    console.log(`[AutoFire] LOCK acquired: ${target.rtpFishId || 'unknown'} phase=locking`);
+                    console.log(`[AutoAim] LOCK acquired: ${target.rtpFishId || 'unknown'} phase=locking`);
                 }
             }
             return { target: null, canFire: false };
@@ -12614,25 +12666,42 @@ const TargetingService = {
         if (shouldRescan) {
             s.lastTargetScanMs = now;
 
-            // ---- LAYER 1: Boss Preemption Check ----
-            // If locked on P2 and a P1 enters the Lock Cone, switch to Boss immediately
+            // ---- LAYER 1: Boss Override (Priority 1) ----
+            // If locked on P2 and ANY Boss is on-screen/targetable, immediately override to the closest Boss.
             if (s.lockedTarget && !this._isBossPriority(s.lockedTarget)) {
+                let bestBoss = null;
+                let bestBossDist = Infinity;
+                let bestBossId = Infinity;
+
                 for (let i = 0; i < activeFish.length; i++) {
                     const bf = activeFish[i];
                     if (!bf.isActive) continue;
                     if (bf.hp !== undefined && bf.hp <= 0) continue;
                     if (!this._isBossPriority(bf)) continue;
                     if (!this._isInLockCone(bf.group.position, refPos)) continue;
-                    // Found a valid P1 boss — preempt current P2 target
-                    console.log(`[AutoFire] BOSS PREEMPT: ${s.lockedTarget.rtpFishId || '?'} → ${bf.rtpFishId || '?'}`);
-                    s.lockedTarget = bf;
+
+                    const dx = bf.group.position.x - refPos.x;
+                    const dy = bf.group.position.y - refPos.y;
+                    const dz = bf.group.position.z - refPos.z;
+                    const distSq = dx * dx + dy * dy + dz * dz;
+                    const fishIdNum = this._fishIdNum(bf);
+
+                    if (distSq < bestBossDist || (distSq === bestBossDist && fishIdNum < bestBossId)) {
+                        bestBoss = bf;
+                        bestBossDist = distSq;
+                        bestBossId = fishIdNum;
+                    }
+                }
+
+                if (bestBoss) {
+                    console.log(`[AutoAim] BOSS PREEMPT: ${s.lockedTarget.rtpFishId || '?'} → ${bestBoss.rtpFishId || '?'}`);
+                    s.lockedTarget = bestBoss;
                     s.phase = 'transition';
                     s.phaseStart = now;
                     s.startYaw = s.currentYaw;
                     s.startPitch = s.currentPitch;
                     s.lockStartMs = now;
                     s.shotsAtCurrent = 0;
-                    break;
                 }
             }
 
@@ -12642,8 +12711,8 @@ const TargetingService = {
                     // Target is dead/despawned/out of drop bounds → release and find new
                     const reason = !s.lockedTarget.isActive ? 'despawned' :
                                    (s.lockedTarget.hp !== undefined && s.lockedTarget.hp <= 0) ? 'dead' : 'out-of-bounds';
-                    console.log(`[AutoFire] DROP lock: ${s.lockedTarget.rtpFishId || '?'} reason=${reason}`);
-                    const next = this._selectTarget(refPos);
+                    console.log(`[AutoAim] DROP lock: ${s.lockedTarget.rtpFishId || '?'} reason=${reason}`);
+                    const next = this._selectTargetLock(refPos);
                     if (next) {
                         s.lockedTarget = next;
                         s.phase = 'transition';
@@ -12652,7 +12721,7 @@ const TargetingService = {
                         s.startPitch = s.currentPitch;
                         s.lockStartMs = now;
                         s.shotsAtCurrent = 0;
-                        console.log(`[AutoFire] LOCK transition: → ${next.rtpFishId || 'unknown'}`);
+                        console.log(`[AutoAim] LOCK transition: → ${next.rtpFishId || 'unknown'}`);
                     } else {
                         this.reset();
                         this._initFromCannon();
@@ -12666,7 +12735,7 @@ const TargetingService = {
             // ---- LAYER 3: No target locked → find nearest ----
             // (This only runs if lockedTarget is null after the above checks)
             if (!s.lockedTarget) {
-                const target = this._selectTarget(refPos);
+                const target = this._selectTargetLock(refPos);
                 if (target) {
                     s.lockedTarget = target;
                     s.phase = 'locking';
@@ -12675,7 +12744,7 @@ const TargetingService = {
                     s.startPitch = s.currentPitch;
                     s.lockStartMs = now;
                     s.shotsAtCurrent = 0;
-                    console.log(`[AutoFire] LOCK acquired (L3): ${target.rtpFishId || 'unknown'}`);
+                    console.log(`[AutoAim] LOCK acquired (L3): ${target.rtpFishId || 'unknown'}`);
                 } else {
                     return { target: null, canFire: false };
                 }
@@ -12687,7 +12756,7 @@ const TargetingService = {
 
         // ---- TURRET TRACKING: Quaternion.Slerp-based smooth rotation ----
         const aimPos = this._getFishCenter(fish);
-        const trackOrigin = (gameState.autoShoot && isFps) ? refPos : muzzlePos;
+        const trackOrigin = (gameState.autoShoot && isFps) ? camera.position : muzzlePos;
         const dir = aimPos.clone().sub(trackOrigin).normalize();
         const clampedYaw   = Math.max(-c.yawLimit, Math.min(c.yawLimit, Math.atan2(dir.x, dir.z)));
         const clampedPitch = Math.max(c.pitchMin, Math.min(c.pitchMax, Math.asin(dir.y)));
@@ -12737,7 +12806,7 @@ const TargetingService = {
             tv.fwdXZ.set(tv.cannonFwd.x, 0, tv.cannonFwd.z).normalize();
             const dot2D = tv.fwdXZ.dot(tv.toFishXZ);
             const angleDeg = Math.acos(Math.min(1, Math.max(-1, dot2D))) * (180 / Math.PI);
-            const isReady = angleDeg <= c.autoFireAlignGate;
+            const isReady = angleDeg <= c.autoAimAlignGate;
             const lockDuration = now - s.lockStartMs;
             const forceFireOverride = lockDuration >= c.forceFireMs;
             if (isReady || forceFireOverride) {
@@ -12751,26 +12820,37 @@ const TargetingService = {
 
     // ---- Backward-compatible findNearest (used by legacy callers) ----
     findNearest(muzzlePos) {
-        const target = this._selectTarget(muzzlePos);
+        const target = this._selectTargetLock(muzzlePos);
         return { primary: target, fallback: null };
     },
 };
 
-// Backward-compatible aliases so callers keep working
-const AUTOFIRE_YAW_LIMIT  = TargetingService.config.yawLimit;
-const AUTOFIRE_PITCH_MAX  = TargetingService.config.pitchMax;
-const AUTOFIRE_PITCH_MIN  = TargetingService.config.pitchMin;
-const AUTOFIRE_TRACK_SPEED = TargetingService.config.trackSpeed;
-const autoFireState = TargetingService.state;
+// Auto Aim / Target Lock aliases (internal naming)
+const AUTOAIM_YAW_LIMIT   = TargetingService.config.yawLimit;
+const AUTOAIM_PITCH_MAX   = TargetingService.config.pitchMax;
+const AUTOAIM_PITCH_MIN   = TargetingService.config.pitchMin;
+const AUTOAIM_TRACK_SPEED = TargetingService.config.trackSpeed;
+const targetLockState = TargetingService.state;
 
-function resetAutoFireState() { TargetingService.reset(); }
+function resetAutoAimState() { TargetingService.reset(); }
 function findNearestFish(muzzlePos) { return TargetingService.findNearest(muzzlePos).primary; }
-function autoFireTick() { if (!gameState.weaponSelected) return; return TargetingService.tick(); }
+function autoAimTick() { if (!gameState.weaponSelected) return; return TargetingService.tick(); }
+function autoFireAtFish(targetFish) { return autoAimAtFish(targetFish); }
+
+// Backward-compatible aliases so existing callers keep working
+const AUTOFIRE_YAW_LIMIT  = AUTOAIM_YAW_LIMIT;
+const AUTOFIRE_PITCH_MAX  = AUTOAIM_PITCH_MAX;
+const AUTOFIRE_PITCH_MIN  = AUTOAIM_PITCH_MIN;
+const AUTOFIRE_TRACK_SPEED = AUTOAIM_TRACK_SPEED;
+const autoFireState = targetLockState;
+
+function resetAutoFireState() { resetAutoAimState(); }
+function autoFireTick() { return autoAimTick(); }
 
 function getCrosshairRay() {
     const cx = window.innerWidth / 2;
     const cy = window.innerHeight / 2;
-    return getAimDirectionFromMouse(cx, cy, autoFireTempVectors.crosshairDir);
+    return getAimDirectionFromMouse(cx, cy, autoAimTempVectors.crosshairDir);
 }
 
 function aimCannonAtFish(fish) {
@@ -12810,7 +12890,7 @@ function aimCannonAtFish(fish) {
 // PERFORMANCE: Uses pre-allocated temp vectors to avoid per-call allocations
 // FIX: Bullets now fire in the direction the cannon is VISUALLY pointing,
 // not directly at the target fish. This ensures visual consistency.
-function autoFireAtFish(targetFish) {
+function autoAimAtFish(targetFish) {
     const weaponKey = gameState.currentWeapon;
     const weapon = CONFIG.weapons[weaponKey];
     
@@ -12829,12 +12909,12 @@ function autoFireAtFish(targetFish) {
     gameState.lastWeaponKey = weaponKey;
     
     // PERFORMANCE: Reuse pre-allocated temp vector instead of new Vector3()
-    const muzzlePos = autoFireTempVectors.muzzlePos;
+    const muzzlePos = autoAimTempVectors.muzzlePos;
     cannonMuzzle.getWorldPosition(muzzlePos);
     
     let direction;
     if (gameState.autoShoot) {
-        direction = autoFireTempVectors.direction;
+        direction = autoAimTempVectors.direction;
         const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
         const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
         direction.set(
@@ -12846,7 +12926,7 @@ function autoFireAtFish(targetFish) {
         direction = getCrosshairRay();
         if (!direction) return false;
     } else {
-        direction = autoFireTempVectors.direction;
+        direction = autoAimTempVectors.direction;
         const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
         const pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
         direction.set(
@@ -17406,9 +17486,9 @@ function _fireBurstShot(weaponKey, shotIndex) {
 
 function _fireBurstShotAuto(weaponKey) {
     var weapon = CONFIG.weapons[weaponKey];
-    cannonMuzzle.getWorldPosition(autoFireTempVectors.muzzlePos);
-    var muzzlePos = autoFireTempVectors.muzzlePos;
-    var direction = autoFireTempVectors.direction;
+    cannonMuzzle.getWorldPosition(autoAimTempVectors.muzzlePos);
+    var muzzlePos = autoAimTempVectors.muzzlePos;
+    var direction = autoAimTempVectors.direction;
     var yaw = cannonGroup ? cannonGroup.rotation.y : 0;
     var pitch = cannonPitchGroup ? -cannonPitchGroup.rotation.x : 0;
     direction.set(
@@ -19910,9 +19990,9 @@ function setupEventListeners() {
 function toggleAutoShoot() {
     gameState.autoShoot = !gameState.autoShoot;
     if (!gameState.autoShoot) {
-        resetAutoFireState();
+        resetAutoAimState();
     } else {
-        resetAutoFireState();
+        resetAutoAimState();
     }
     const btn = document.getElementById('auto-shoot-btn');
     if (btn) {
@@ -20413,7 +20493,7 @@ function animate() {
     
     _afDebug.update(deltaTime);
     if (gameState.autoShoot) {
-        const result = autoFireTick();
+        const result = autoAimTick();
         if (result.target) {
             if (gameState.viewMode === 'fps') {
                 updateFPSCamera();
@@ -20424,7 +20504,7 @@ function animate() {
             const weapon = CONFIG.weapons[gameState.currentWeapon];
             const interval = 1 / weapon.shotsPerSecond;
             if (result.target && result.canFire) {
-                if (autoFireAtFish(result.target)) {
+                if (autoAimAtFish(result.target)) {
                     TargetingService.state.shotsAtCurrent++;
                     _afDebug.recordShot();
                 }
