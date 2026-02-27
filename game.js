@@ -12357,6 +12357,7 @@ const TargetingService = {
 
     state: {
         lockedTarget: null,
+        lockedTargetId: null,    // Explicit rtpFishId — THE source of truth for lock persistence
         phase: 'idle',           // idle | locking | firing | transition
         phaseStart: 0,
         currentYaw: 0,
@@ -12391,6 +12392,7 @@ const TargetingService = {
     reset() {
         const s = this.state;
         s.lockedTarget = null;
+        s.lockedTargetId = null;
         s.phase = 'idle';
         s.phaseStart = 0;
         s.initialized = false;
@@ -12398,6 +12400,49 @@ const TargetingService = {
         s.lockStartMs = 0;
         s.lastTargetScanMs = 0;
         s._cachedScanResult = null;
+    },
+
+    // ---- Resolve fish object by stored rtpFishId ----
+    // Scans activeFish for the fish with the matching ID.
+    // Returns null if the fish is no longer in the active pool (died/despawned).
+    _findFishById(id) {
+        if (!id) return null;
+        for (let i = 0; i < activeFish.length; i++) {
+            if (activeFish[i].rtpFishId === id) return activeFish[i];
+        }
+        return null;
+    },
+
+    // ---- isTargetValid: The ONLY gate for dropping a lock ----
+    // Returns false ONLY if:
+    //   1. Fish object is null / not found in activeFish
+    //   2. Fish is dead (hp <= 0) or inactive (!isActive)
+    //   3. Fish is strictly off-screen (NDC + 30% margin)
+    // Distance / turret yaw-pitch are intentionally NOT checked.
+    _isTargetValid(fish, refPos) {
+        if (!fish) return false;
+        if (!fish.isActive) return false;
+        if (fish.hp !== undefined && fish.hp <= 0) return false;
+        // Screen bounds check: NDC projection with generous 30% buffer
+        const tv = this._tempVecs;
+        tv.ndc.copy(fish.group.position).project(camera);
+        const m = this.config.DROP_SCREEN_MARGIN;  // 1.3 = 30% beyond frustum
+        if (tv.ndc.z < -1 || tv.ndc.z > 1) return false;
+        if (tv.ndc.x < -m || tv.ndc.x > m) return false;
+        if (tv.ndc.y < -m || tv.ndc.y > m) return false;
+        return true;
+    },
+
+    // ---- _setLock: centralized lock setter — always updates both object ref AND id ----
+    _setLock(fish, reason) {
+        const s = this.state;
+        const oldId = s.lockedTargetId || 'none';
+        const newId = fish ? (fish.rtpFishId || '?') : 'none';
+        s.lockedTarget = fish;
+        s.lockedTargetId = fish ? fish.rtpFishId : null;
+        if (fish) {
+            console.log(`[AutoAim] SWITCH target: ${oldId} → ${newId}  reason=${reason}`);
+        }
     },
 
     // ---- Helper: extract numeric ID from rtpFishId string (e.g. 'f123' → 123) ----
@@ -12480,12 +12525,9 @@ const TargetingService = {
 
     // ---- Should release lock on current target? ----
     // STRICT STICKY: Only release if fish is dead, despawned, or fully off-screen (NDC + 30% buffer).
+    // IMPORTANT: This now delegates to _isTargetValid for consistency.
     _shouldReleaseLock(fish, refPos) {
-        if (!fish) return true;
-        if (!fish.isActive) return true;                         // Despawned
-        if (fish.hp !== undefined && fish.hp <= 0) return true;  // Dead (server kill)
-        if (!this._isInDropBounds(fish.group.position, refPos)) return true;  // Left wide drop bounds
-        return false;
+        return !this._isTargetValid(fish, refPos);
     },
 
     // ---- Target Lock selection: P1 Boss Lock → P2 Proximity Lock → tie-break by fishId ----
@@ -12658,157 +12700,109 @@ const TargetingService = {
         // Use turret reference point for distance calculations (consistent origin)
         const refPos = this._turretRefPos;
 
-        // ---- PERFORMANCE: Only re-scan for targets every 100ms ----
-        const shouldRescan = (now - s.lastTargetScanMs) >= c.targetRefreshMs;
+        // ==================== STATE-FIRST TARGETING ====================
+        // RULE: If lockedTargetId is set and the target is valid, we NEVER
+        //        call _selectTargetLock(). The ONLY exception is Boss Override (P2→P1).
+        //
+        // Execution order (every tick):
+        //   Step 0: Resolve lockedTargetId → fish object (ID-based, not reference-based)
+        //   Step 1: If target valid → skip ALL scanning → go to turret tracking
+        //   Step 2: Boss Override (only if locked on non-boss and a boss appears)
+        //   Step 3: If target invalid / null → scan for new target
 
-        // ---- Boss Override (fast path, every tick) ----
-        // Avoids waiting for the 100ms rescan interval when a Boss enters the screen.
-        // Only applies when currently locked on a non-boss (P2).
-        if (s.lockedTarget && !this._isBossPriority(s.lockedTarget) && bossCrosshairMap && bossCrosshairMap.size > 0) {
-            let bestBoss = null;
-            let bestBossDist = Infinity;
-            let bestBossId = Infinity;
-
-            for (const [bf] of bossCrosshairMap) {
-                if (!bf || !bf.isActive) continue;
-                if (bf.hp !== undefined && bf.hp <= 0) continue;
-                if (!this._isBossPriority(bf)) continue;
-                if (!this._isInLockCone(bf.group.position, refPos)) continue;
-
-                const dx = bf.group.position.x - refPos.x;
-                const dy = bf.group.position.y - refPos.y;
-                const dz = bf.group.position.z - refPos.z;
-                const distSq = dx * dx + dy * dy + dz * dz;
-                const fishIdNum = this._fishIdNum(bf);
-
-                if (distSq < bestBossDist || (distSq === bestBossDist && fishIdNum < bestBossId)) {
-                    bestBoss = bf;
-                    bestBossDist = distSq;
-                    bestBossId = fishIdNum;
-                }
-            }
-
-            if (bestBoss) {
-                console.log(`[AutoAim] BOSS PREEMPT (fast): ${s.lockedTarget.rtpFishId || '?'} → ${bestBoss.rtpFishId || '?'}`);
-                s.lockedTarget = bestBoss;
-                s.phase = 'transition';
-                s.phaseStart = now;
-                s.startYaw = s.currentYaw;
-                s.startPitch = s.currentPitch;
-                s.lockStartMs = now;
-                s.shotsAtCurrent = 0;
+        // ---- STEP 0: Resolve locked target by ID ----
+        // This ensures we always work with the correct fish object even if references shift.
+        if (s.lockedTargetId) {
+            const resolved = this._findFishById(s.lockedTargetId);
+            if (resolved) {
+                s.lockedTarget = resolved;  // Refresh object reference from ID
+            } else {
+                // Fish is no longer in activeFish (died/despawned and removed from array)
+                console.log(`[AutoAim] DROP lock: ${s.lockedTargetId} reason=not-in-activeFish`);
+                s.lockedTarget = null;
+                s.lockedTargetId = null;
             }
         }
 
-        // ---- PHASE: IDLE — no target, scan for one ----
-        if (s.phase === 'idle') {
-            if (shouldRescan) {
-                s.lastTargetScanMs = now;
-                const target = this._selectTargetLock(refPos);
-                if (target) {
-                    s.lockedTarget = target;
-                    s.phase = 'locking';
-                    s.phaseStart = now;
-                    s.startYaw = s.currentYaw;
-                    s.startPitch = s.currentPitch;
-                    s.lockStartMs = now;
-                    s.shotsAtCurrent = 0;
-                    console.log(`[AutoAim] LOCK acquired: ${target.rtpFishId || 'unknown'} phase=locking`);
-                }
-            }
-            return { target: null, canFire: false };
-        }
+        // ---- STEP 1: STATE-FIRST validation (every tick, not just every 100ms) ----
+        // If we have a locked target, validate it. If valid, SHORT-CIRCUIT — no scanning.
+        if (s.lockedTarget && s.lockedTargetId) {
+            if (this._isTargetValid(s.lockedTarget, refPos)) {
+                // ===> LOCK IS VALID. DO NOT call _selectTargetLock(). <===
+                // The ONLY exception below is Boss Override (Step 2).
 
-        // ==================== 100ms STATE MACHINE TICK (Short-Circuit) ====================
-        // Strict execution order per spec:
-        //   1. Boss Preemption (Layer 1)
-        //   2. Sticky Lock Validation (Short-circuit: if lock valid, DO NOT re-evaluate)
-        //   3. Layer 2 Selection (only runs if NO target is locked)
-        if (shouldRescan) {
-            s.lastTargetScanMs = now;
+                // ---- STEP 2: Boss Override (P2 → P1 only) ----
+                // If currently locked on a non-boss and a boss enters the screen,
+                // preempt to the boss. This is the ONLY reason to break a valid lock.
+                if (!this._isBossPriority(s.lockedTarget) && bossCrosshairMap && bossCrosshairMap.size > 0) {
+                    let bestBoss = null;
+                    let bestBossDist = Infinity;
+                    let bestBossId = Infinity;
 
-            // ---- LAYER 1: Boss Override (Priority 1) ----
-            // If locked on P2 and ANY Boss is on-screen/targetable, immediately override to the closest Boss.
-            if (s.lockedTarget && !this._isBossPriority(s.lockedTarget)) {
-                let bestBoss = null;
-                let bestBossDist = Infinity;
-                let bestBossId = Infinity;
+                    for (const [bf] of bossCrosshairMap) {
+                        if (!bf || !bf.isActive) continue;
+                        if (bf.hp !== undefined && bf.hp <= 0) continue;
+                        if (!this._isBossPriority(bf)) continue;
+                        if (!this._isInLockCone(bf.group.position, refPos)) continue;
 
-                for (let i = 0; i < activeFish.length; i++) {
-                    const bf = activeFish[i];
-                    if (!bf.isActive) continue;
-                    if (bf.hp !== undefined && bf.hp <= 0) continue;
-                    if (!this._isBossPriority(bf)) continue;
-                    if (!this._isInLockCone(bf.group.position, refPos)) continue;
+                        const dx = bf.group.position.x - refPos.x;
+                        const dy = bf.group.position.y - refPos.y;
+                        const dz = bf.group.position.z - refPos.z;
+                        const distSq = dx * dx + dy * dy + dz * dz;
+                        const fishIdNum = this._fishIdNum(bf);
 
-                    const dx = bf.group.position.x - refPos.x;
-                    const dy = bf.group.position.y - refPos.y;
-                    const dz = bf.group.position.z - refPos.z;
-                    const distSq = dx * dx + dy * dy + dz * dz;
-                    const fishIdNum = this._fishIdNum(bf);
-
-                    if (distSq < bestBossDist || (distSq === bestBossDist && fishIdNum < bestBossId)) {
-                        bestBoss = bf;
-                        bestBossDist = distSq;
-                        bestBossId = fishIdNum;
+                        if (distSq < bestBossDist || (distSq === bestBossDist && fishIdNum < bestBossId)) {
+                            bestBoss = bf;
+                            bestBossDist = distSq;
+                            bestBossId = fishIdNum;
+                        }
                     }
-                }
 
-                if (bestBoss) {
-                    console.log(`[AutoAim] BOSS PREEMPT: ${s.lockedTarget.rtpFishId || '?'} → ${bestBoss.rtpFishId || '?'}`);
-                    s.lockedTarget = bestBoss;
-                    s.phase = 'transition';
-                    s.phaseStart = now;
-                    s.startYaw = s.currentYaw;
-                    s.startPitch = s.currentPitch;
-                    s.lockStartMs = now;
-                    s.shotsAtCurrent = 0;
-                }
-            }
-
-            // ---- LAYER 2: Sticky Lock Validation (Short-circuit) ----
-            if (s.lockedTarget) {
-                if (this._shouldReleaseLock(s.lockedTarget, refPos)) {
-                    // Target is dead/despawned/out of drop bounds → release and find new
-                    const reason = !s.lockedTarget.isActive ? 'despawned' :
-                                   (s.lockedTarget.hp !== undefined && s.lockedTarget.hp <= 0) ? 'dead' : 'out-of-bounds';
-                    console.log(`[AutoAim] DROP lock: ${s.lockedTarget.rtpFishId || '?'} reason=${reason}`);
-                    const next = this._selectTargetLock(refPos);
-                    if (next) {
-                        s.lockedTarget = next;
+                    if (bestBoss) {
+                        this._setLock(bestBoss, 'BOSS_PREEMPT');
                         s.phase = 'transition';
                         s.phaseStart = now;
                         s.startYaw = s.currentYaw;
                         s.startPitch = s.currentPitch;
                         s.lockStartMs = now;
                         s.shotsAtCurrent = 0;
-                        console.log(`[AutoAim] LOCK transition: → ${next.rtpFishId || 'unknown'}`);
-                    } else {
-                        this.reset();
-                        this._initFromCannon();
-                        return { target: null, canFire: false };
                     }
                 }
-                // CRITICAL SHORT-CIRCUIT: Lock is still valid → DO NOT re-evaluate Layer 2.
-                // This is the sticky lock behavior: we keep the current target.
-            }
 
-            // ---- LAYER 3: No target locked → find nearest ----
-            // (This only runs if lockedTarget is null after the above checks)
-            if (!s.lockedTarget) {
+                // Target is valid (possibly boss-preempted above) — skip to turret tracking below.
+            } else {
+                // Target is INVALID (dead / despawned / off-screen).
+                // Diagnose why:
+                const fish = s.lockedTarget;
+                const reason = !fish ? 'null' :
+                               !fish.isActive ? 'dead/inactive' :
+                               (fish.hp !== undefined && fish.hp <= 0) ? 'hp<=0' : 'off-screen';
+                console.log(`[AutoAim] DROP lock: ${s.lockedTargetId} reason=${reason}`);
+                s.lockedTarget = null;
+                s.lockedTargetId = null;
+            }
+        }
+
+        // ---- STEP 3: No valid lock → scan for new target (throttled to 100ms) ----
+        if (!s.lockedTargetId) {
+            const shouldRescan = (now - s.lastTargetScanMs) >= c.targetRefreshMs;
+            if (shouldRescan) {
+                s.lastTargetScanMs = now;
                 const target = this._selectTargetLock(refPos);
                 if (target) {
-                    s.lockedTarget = target;
-                    s.phase = 'locking';
+                    this._setLock(target, s.phase === 'idle' ? 'initial-acquire' : 'reacquire-after-drop');
+                    s.phase = (s.phase === 'idle') ? 'locking' : 'transition';
                     s.phaseStart = now;
                     s.startYaw = s.currentYaw;
                     s.startPitch = s.currentPitch;
                     s.lockStartMs = now;
                     s.shotsAtCurrent = 0;
-                    console.log(`[AutoAim] LOCK acquired (L3): ${target.rtpFishId || 'unknown'}`);
-                } else {
-                    return { target: null, canFire: false };
                 }
+            }
+            // If still no target, return idle
+            if (!s.lockedTargetId) {
+                if (s.phase !== 'idle') { s.phase = 'idle'; }
+                return { target: null, canFire: false };
             }
         }
 
