@@ -19228,7 +19228,9 @@ const FISH_KILLLOG_IMAGES = {
     shark:       KILLLOG_IMG_BASE + 'Great%20White%20Shark_killlog.png',
     hammerhead:  KILLLOG_IMG_BASE + 'Hammerhead%20Shark_killlog.png',
     whale:       KILLLOG_IMG_BASE + 'Blue%20Whale_killlog.png',
+    blueWhale:   KILLLOG_IMG_BASE + 'Blue%20Whale_killlog.png',
     killerWhale: KILLLOG_IMG_BASE + 'Killer%20Whale_killlog.png',
+    greatWhiteShark: KILLLOG_IMG_BASE + 'Great%20White%20Shark_killlog.png',
     mantaRay:    KILLLOG_IMG_BASE + 'Manta%20ray_killlog.png',
     seahorse:    KILLLOG_IMG_BASE + 'Seahorse_killlog.png'
 };
@@ -19242,8 +19244,8 @@ function formatFishName(form) {
 // Maps fish forms to their tier for border color coding in Kill Log UI
 // Strict mapping per tier list reference image (image_5ef4fe.png)
 const FISH_FORM_TO_TIER = {
-    // Boss — Orange #FF8800
-    whale: 'boss', killerWhale: 'boss', shark: 'boss',
+    // Boss — Orange #FF8800 (all forms: short + full species names)
+    whale: 'boss', blueWhale: 'boss', killerWhale: 'boss', shark: 'boss', greatWhiteShark: 'boss',
     // Tier 1 — Purple #CC00FF
     hammerhead: 't1', marlin: 't1', mantaRay: 't1',
     // Tier 2 — Green #00FF66
@@ -21000,117 +21002,99 @@ function hideBossUI() {
 }
 
 function createBossCrosshair(bossFish) {
-    // Option A: Dual-Layer Halo — high-speed dual-layer rotating ring
-    // Amber inner ring + Cyan outer ring + airflow particles + energy bridges
+    // === Style B: Energy Vortex / Halo ===
+    // Organic energy rings (Amber Gold + Cyan dual-layer)
+    // Smooth continuous elliptical orbits wrapping the fish in 3D space
+    // Particle orbital + airflow streaks + soft pulsating halo
     const crosshairGroup = new THREE.Group();
     const baseSize = bossFish.config.size;
-    
-    // === OUTER RING (CYAN / NEON BLUE) — 12 segments, clockwise ===
-    // HALO SCALE FIX: Increase multiplier from 1.8x to 3.0x so halo is not hidden inside large T6 boss models
-    const outerR = baseSize * 3.0;
-    const outerSegments = 12;
-    const outerGap = 0.08;
-    
-    const outerRingGroup = new THREE.Group();
-    for (let i = 0; i < outerSegments; i++) {
-        const startAngle = (i / outerSegments) * Math.PI * 2 + outerGap;
-        const endAngle = ((i + 1) / outerSegments) * Math.PI * 2 - outerGap;
-        // Glow layer (wider, more transparent)
-        const glowGeo = new THREE.RingGeometry(outerR - 6, outerR + 6, 32, 1, startAngle, endAngle - startAngle);
-        const glowMat = new THREE.MeshBasicMaterial({
-            color: 0x00eeff,
-            transparent: true,
-            opacity: 0.15,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
-        });
-        glowMat.userData = { baseOpacity: 0.15 };
-        const glowSeg = new THREE.Mesh(glowGeo, glowMat);
-        glowSeg.renderOrder = 999;
-        outerRingGroup.add(glowSeg);
-        // Core line (thinner, brighter)
-        const coreGeo = new THREE.RingGeometry(outerR - 2, outerR + 2, 32, 1, startAngle, endAngle - startAngle);
+
+    // --- Ring definitions: smooth continuous torus rings ---
+    // Ring 1 (Outer): Cyan #00FFFF — large orbit, tilted ~30° on X axis
+    // Ring 2 (Inner): Amber Gold #FFB000 — slightly smaller, tilted ~-20° on X + 40° on Y
+    const VORTEX_RINGS = [
+        { id: 'cyan',  radius: baseSize * 0.95, tube: 1.2, color: 0x00FFFF, glowColor: 0x00aacc, opacity: 0.75, glowOpacity: 0.12, tiltX: 0.52, tiltY: 0.15,  speed: 0.008 },
+        { id: 'amber', radius: baseSize * 0.80, tube: 1.0, color: 0xFFB000, glowColor: 0xcc8800, opacity: 0.70, glowOpacity: 0.10, tiltX: -0.35, tiltY: 0.70, speed: -0.012 },
+    ];
+
+    const ringGroups = [];
+
+    for (let r = 0; r < VORTEX_RINGS.length; r++) {
+        const def = VORTEX_RINGS[r];
+        const ringGroup = new THREE.Group();
+
+        // Core ring — thin bright torus
+        const coreGeo = new THREE.TorusGeometry(def.radius, def.tube, 8, 128);
         const coreMat = new THREE.MeshBasicMaterial({
-            color: 0x44eeff,
+            color: def.color,
             transparent: true,
-            opacity: 0.7,
+            opacity: def.opacity,
             side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
+            depthTest: true,
+            depthWrite: false,
         });
-        coreMat.userData = { baseOpacity: 0.7 };
-        const coreSeg = new THREE.Mesh(coreGeo, coreMat);
-        coreSeg.renderOrder = 999;
-        outerRingGroup.add(coreSeg);
-    }
-    crosshairGroup.add(outerRingGroup);
-    
-    // === INNER RING (AMBER GOLD) — 8 segments, counter-clockwise ===
-    // HALO SCALE FIX: Increase multiplier from 1.2x to 2.0x so inner ring is visible outside large T6 boss models
-    const innerR = baseSize * 2.0;
-    const innerSegments = 8;
-    const innerGap = 0.12;
-    
-    const innerRingGroup = new THREE.Group();
-    for (let i = 0; i < innerSegments; i++) {
-        const startAngle = (i / innerSegments) * Math.PI * 2 + innerGap;
-        const endAngle = ((i + 1) / innerSegments) * Math.PI * 2 - innerGap;
-        // Glow layer
-        const glowGeo = new THREE.RingGeometry(innerR - 5, innerR + 5, 32, 1, startAngle, endAngle - startAngle);
+        coreMat.userData = { baseOpacity: def.opacity };
+        const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+        ringGroup.add(coreMesh);
+
+        // Glow halo — wider, softer torus behind the core
+        const glowGeo = new THREE.TorusGeometry(def.radius, def.tube * 5, 8, 128);
         const glowMat = new THREE.MeshBasicMaterial({
-            color: 0xffbb33,
+            color: def.glowColor,
             transparent: true,
-            opacity: 0.12,
+            opacity: def.glowOpacity,
             side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
+            depthTest: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
         });
-        glowMat.userData = { baseOpacity: 0.12 };
-        const glowSeg = new THREE.Mesh(glowGeo, glowMat);
-        glowSeg.renderOrder = 999;
-        innerRingGroup.add(glowSeg);
-        // Core line
-        const coreGeo = new THREE.RingGeometry(innerR - 1.5, innerR + 1.5, 32, 1, startAngle, endAngle - startAngle);
-        const coreMat = new THREE.MeshBasicMaterial({
-            color: 0xffcc55,
+        glowMat.userData = { baseOpacity: def.glowOpacity };
+        const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+        ringGroup.add(glowMesh);
+
+        // Orbital particles — small dots along the ring path
+        const ptCount = 24;
+        const ptPositions = new Float32Array(ptCount * 3);
+        for (let p = 0; p < ptCount; p++) {
+            const angle = (p / ptCount) * Math.PI * 2;
+            ptPositions[p * 3]     = Math.cos(angle) * def.radius;
+            ptPositions[p * 3 + 1] = Math.sin(angle) * def.radius;
+            ptPositions[p * 3 + 2] = (Math.random() - 0.5) * def.tube * 2;
+        }
+        const ptGeo = new THREE.BufferGeometry();
+        ptGeo.setAttribute('position', new THREE.BufferAttribute(ptPositions, 3));
+        const ptMat = new THREE.PointsMaterial({
+            color: def.color,
             transparent: true,
-            opacity: 0.75,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
+            opacity: def.opacity * 0.8,
+            size: 3,
+            sizeAttenuation: true,
+            depthTest: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
         });
-        coreMat.userData = { baseOpacity: 0.75 };
-        const coreSeg = new THREE.Mesh(coreGeo, coreMat);
-        coreSeg.renderOrder = 999;
-        innerRingGroup.add(coreSeg);
+        ptMat.userData = { baseOpacity: def.opacity * 0.8 };
+        const ptMesh = new THREE.Points(ptGeo, ptMat);
+        ringGroup.add(ptMesh);
+
+        // Apply tilt for 3D gyroscopic wrapping
+        ringGroup.rotation.x = def.tiltX;
+        ringGroup.rotation.y = def.tiltY;
+
+        ringGroup.userData = {
+            ringId: def.id,
+            rotationSpeed: def.speed,
+        };
+
+        ringGroups.push(ringGroup);
+        crosshairGroup.add(ringGroup);
     }
-    crosshairGroup.add(innerRingGroup);
-    
-    // === ENERGY BRIDGE CONNECTORS (6 faint lines between inner and outer) ===
-    const bridgeGroup = new THREE.Group();
-    const bridgeMaterial = new THREE.LineBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.08, depthTest: false, depthWrite: false });
-    for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2;
-        const points = [
-            new THREE.Vector3(Math.cos(angle) * innerR, Math.sin(angle) * innerR, 0),
-            new THREE.Vector3(Math.cos(angle + 0.03) * outerR, Math.sin(angle + 0.03) * outerR, 0)
-        ];
-        const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geo, bridgeMaterial);
-        bridgeGroup.add(line);
-    }
-    crosshairGroup.add(bridgeGroup);
-    
+
     crosshairGroup.userData.targetFish = bossFish;
     crosshairGroup.userData.rotationSpeed = 1;
-    crosshairGroup.userData.outerRingGroup = outerRingGroup;
-    crosshairGroup.userData.innerRingGroup = innerRingGroup;
-    
-    // Ensure the entire crosshair group renders above fish models
-    crosshairGroup.renderOrder = 999;
+    crosshairGroup.userData.ringGroups = ringGroups;
+
     scene.add(crosshairGroup);
-    // Fix 1: Store in Map instead of singleton
     bossCrosshairMap.set(bossFish, crosshairGroup);
 }
 
@@ -21135,28 +21119,26 @@ function updateBossCrosshair() {
             continue;
         }
         
-        // Follow the boss fish
+        // Follow the boss fish position
         crosshair.position.copy(targetFish.group.position);
         
-        // Face the camera
-        crosshair.lookAt(camera.position);
+        // === Style B: Energy Vortex Animation ===
+        const ringGroups = crosshair.userData.ringGroups;
+        const now = Date.now();
         
-        // Option A Animation: Dual-Layer Halo rotating rings
-        const outerRingGroup = crosshair.userData.outerRingGroup;
-        const innerRingGroup = crosshair.userData.innerRingGroup;
+        if (ringGroups) {
+            for (let i = 0; i < ringGroups.length; i++) {
+                const rg = ringGroups[i];
+                // Smooth orbital rotation around local Z axis
+                rg.rotation.z += rg.userData.rotationSpeed;
+            }
+        }
         
-        // Outer ring — clockwise rotation
-        if (outerRingGroup) outerRingGroup.rotation.z += 0.012;
-        // Inner ring — counter-clockwise rotation (faster)
-        if (innerRingGroup) innerRingGroup.rotation.z -= 0.018;
-        
-        // Pulse effect on opacity for energy feel
-        const pulse = Math.sin(Date.now() * 0.004) * 0.15 + 0.85;
+        // Soft pulsating halo — gentle opacity breathe
+        const pulse = Math.sin(now * 0.003) * 0.12 + 0.88;
         crosshair.traverse(child => {
-            if (child.isMesh && child.material && child.material.transparent) {
-                child.material.opacity = child.material.userData
-                    ? child.material.userData.baseOpacity * pulse
-                    : child.material.opacity;
+            if ((child.isMesh || child.isPoints) && child.material && child.material.userData && child.material.userData.baseOpacity !== undefined) {
+                child.material.opacity = child.material.userData.baseOpacity * pulse;
             }
         });
     }
