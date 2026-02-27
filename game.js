@@ -5644,7 +5644,7 @@ const vfxTempVectors = {
     targetPos: new THREE.Vector3()
 };
 
-// PERFORMANCE: Temp vectors for autoAimFireAtFish (avoid per-call allocations)
+// PERFORMANCE: Temp vectors for autoAimAtFish (avoid per-call allocations)
 const autoAimTempVectors = {
     muzzlePos: new THREE.Vector3(),
     direction: new THREE.Vector3(),
@@ -12313,8 +12313,6 @@ function aimCannon(targetX, targetY) {
 const TargetingService = {
     config: {
         // Geometric lock constraints
-        LOCK_FOV_DEGREES: 60,                                    // Lock cone half-angle for ACQUISITION (Vector3.Dot check)
-        DROP_FOV_DEGREES: 90,                                    // Drop cone half-angle — wider hysteresis buffer for release
         LOCK_MAX_DISTANCE: 2500.0,                               // Max lock distance in world units (game scale)
         DROP_DISTANCE_FACTOR: 1.2,                               // Drop distance = LOCK_MAX_DISTANCE * 1.2 (20% buffer)
         // Screen visibility gates (NDC)
