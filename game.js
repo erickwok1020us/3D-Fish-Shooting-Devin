@@ -12341,7 +12341,7 @@ const TargetingService = {
         pitchMax:   42.5  * (Math.PI / 180),
         pitchMin:  -29.75 * (Math.PI / 180),
         // Firing gates
-        autoAimAlignGate: 8,                                     // Degrees — cannon must be within this angle to fire
+        autoAimAlignGate: 2,                                     // Degrees — cannon must be within this angle to fire
         forceFireMs: 500,                                        // Force fire after this many ms locked
         // Turret tracking
         trackSpeed: 25,
@@ -12826,9 +12826,9 @@ const TargetingService = {
         if (!fish) { this.reset(); return { target: null, canFire: false }; }
 
         // ---- TURRET TRACKING: Quaternion.Slerp-based smooth rotation ----
-        // Kinematic Target Leading: aim at the interception point, not the fish's current position.
-        // For hitscan weapons this returns the fish center; for projectile weapons it leads the target.
-        const aimPos = this._calcLeadPosition(fish, muzzlePos, this._tempVecs.leadPos);
+        // All current weapons use fireHitscanRay (instant ray) — aim directly at fish center.
+        // _calcLeadPosition is available for future projectile-physics weapons.
+        const aimPos = this._getFishCenter(fish);
         const trackOrigin = (gameState.autoShoot && isFps) ? camera.position : muzzlePos;
         const dir = aimPos.clone().sub(trackOrigin).normalize();
         const clampedYaw   = Math.max(-c.yawLimit, Math.min(c.yawLimit, Math.atan2(dir.x, dir.z)));
@@ -12987,13 +12987,17 @@ function autoAimAtFish(targetFish) {
     
     let direction;
     if (gameState.autoShoot) {
-        // Kinematic Target Leading: fire toward the interception point, not barrel direction.
-        // For hitscan weapons this equals the fish center; for projectile weapons it leads the target.
-        // This guarantees hits on moving targets regardless of Slerp barrel lag.
+        // GUARANTEED HIT: Fire directly at the fish's current center.
+        // All current weapons use fireHitscanRay (instant ray), so no target leading is needed.
+        // The direction MUST originate from the same point fireHitscanRay uses as hitOrigin:
+        //   FPS mode  → camera.position  (fireHitscanRay overrides origin to camera)
+        //   3rd person → muzzlePos        (fireHitscanRay uses the passed origin)
+        // This eliminates parallax desync between visual aim and actual hit detection.
         direction = autoAimTempVectors.direction;
         if (targetFish && targetFish.isActive) {
-            const leadPos = TargetingService._calcLeadPosition(targetFish, muzzlePos, autoAimTempVectors.leadPos);
-            direction.copy(leadPos).sub(muzzlePos).normalize();
+            const fishCenter = TargetingService._getFishCenter(targetFish);
+            const hitOrigin = (gameState.viewMode === 'fps') ? camera.position : muzzlePos;
+            direction.copy(fishCenter).sub(hitOrigin).normalize();
         } else {
             // Fallback: fire in barrel's visual direction
             const yaw = cannonGroup ? cannonGroup.rotation.y : 0;
