@@ -21031,10 +21031,11 @@ function createBossCrosshair(bossFish) {
     // Ring 1 (Outer): Neon Orange — slow orbit pulse with trailing particles
     // Ring 2 (Middle): Cyber Yellow — counter-rotate 2× speed, flicker offset
     // Ring 3 (Inner): Electric White/Cyan — dense shimmer, high-freq vibration
+    // ptSize scaled for world-space visibility (camera ~800+ units away, sizeAttenuation=true)
     const RING_CONFIGS = [
-        { id: 'outer',  radiusMul: 1.6,  count: 50, tiltX: 0,              tiltZ: 0,              speed: 0.4,  color: 0xFFAC1C, opacity: 0.45, ptSize: 14 },
-        { id: 'middle', radiusMul: 1.2,  count: 64, tiltX: Math.PI * 0.25, tiltZ: Math.PI * 0.1,  speed: -0.8, color: 0xCCFF00, opacity: 0.35, ptSize: 10 },
-        { id: 'inner',  radiusMul: 0.9,  count: 90, tiltX: Math.PI * 0.15, tiltZ: -Math.PI * 0.2, speed: 0.3,  color: 0xE0FFFF, opacity: 0.50, ptSize: 7  },
+        { id: 'outer',  radiusMul: 1.6,  count: 50, tiltX: 0,              tiltZ: 0,              speed: 0.4,  color: 0xFFAC1C, opacity: 0.55, ptSize: 60 },
+        { id: 'middle', radiusMul: 1.2,  count: 64, tiltX: Math.PI * 0.25, tiltZ: Math.PI * 0.1,  speed: -0.8, color: 0xCCFF00, opacity: 0.45, ptSize: 45 },
+        { id: 'inner',  radiusMul: 0.9,  count: 90, tiltX: Math.PI * 0.15, tiltZ: -Math.PI * 0.2, speed: 0.3,  color: 0xE0FFFF, opacity: 0.60, ptSize: 30 },
     ];
 
     for (let r = 0; r < RING_CONFIGS.length; r++) {
