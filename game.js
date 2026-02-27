@@ -12335,7 +12335,7 @@ const TargetingService = {
         DROP_DISTANCE_FACTOR: 1.2,                               // Drop distance = LOCK_MAX_DISTANCE * 1.2 (20% buffer)
         // Screen visibility gates (NDC)
         LOCK_SCREEN_MARGIN: 1.0,                                 // Must be within screen bounds to acquire lock
-        DROP_SCREEN_MARGIN: 1.2,                                 // Wider hysteresis buffer before dropping lock
+        DROP_SCREEN_MARGIN: 1.3,                                 // Wider hysteresis buffer before dropping lock (30% beyond frustum)
         // Cannon rotation limits (kept from original for physical turret clamping)
         yawLimit:   46.75 * (Math.PI / 180),
         pitchMax:   42.5  * (Math.PI / 180),
@@ -12458,38 +12458,28 @@ const TargetingService = {
         return true;
     },
 
-    // ---- Drop Constraint: Wider hysteresis bounds for RELEASE (1.2x screen + 1.2x distance) ----
-    // Once locked, fish must go WAY out of bounds before we drop.
-    // Uses wider NDC margin + 20% distance buffer.
+    // ---- Drop Constraint: STRICT STICKY — only check alive + on-screen (NDC) ----
+    // The ONLY reasons to drop a locked target are:
+    //   1. Fish died (hp <= 0) or despawned (!isActive)  — checked in _shouldReleaseLock
+    //   2. Fish left the screen (NDC) with generous 30% buffer
+    // Turret yaw/pitch limits and distance are intentionally NOT checked here.
+    // Rationale: a fish visible on screen should remain locked even if it's at the
+    // edge of the turret's physical rotation range. The hitscan ray fires from
+    // camera/muzzle (not the barrel tip), so turret angle is irrelevant for hits.
     _isInDropBounds(fishPos, refPos) {
         const c = this.config;
         const tv = this._tempVecs;
-        const dx = fishPos.x - refPos.x;
-        const dy = fishPos.y - refPos.y;
-        const dz = fishPos.z - refPos.z;
-        const distSq = dx * dx + dy * dy + dz * dz;
-        // Drop distance = LOCK_MAX_DISTANCE * 1.2 (20% buffer)
-        const dropMaxDist = c.LOCK_MAX_DISTANCE * c.DROP_DISTANCE_FACTOR;
-        const dropMaxDistSq = dropMaxDist * dropMaxDist;
-        if (distSq > dropMaxDistSq) return false;
-        const dist = Math.sqrt(distSq);
-        if (dist < 1) return true;
-        // Turret limits (no margin — wider tolerance for drop)
-        const yaw = Math.atan2(dx / dist, dz / dist);
-        const pitch = Math.asin(dy / dist);
-        if (Math.abs(yaw) > c.yawLimit) return false;
-        if (pitch > c.pitchMax || pitch < c.pitchMin) return false;
-        // Drop screen check: wider NDC margin (1.2 vs 1.0 for acquisition)
+        // Screen check only: project fish position to NDC and apply generous buffer
         tv.ndc.copy(fishPos).project(camera);
-        const m = c.DROP_SCREEN_MARGIN;
-        if (tv.ndc.z < -1 || tv.ndc.z > 1) return false;
+        const m = c.DROP_SCREEN_MARGIN;  // 1.3 = 30% beyond frustum edge
+        if (tv.ndc.z < -1 || tv.ndc.z > 1) return false;  // Behind camera or beyond far plane
         if (tv.ndc.x < -m || tv.ndc.x > m) return false;
         if (tv.ndc.y < -m || tv.ndc.y > m) return false;
         return true;
     },
 
     // ---- Should release lock on current target? ----
-    // Uses the WIDER drop bounds (90° + 1.2x distance), not the strict lock cone.
+    // STRICT STICKY: Only release if fish is dead, despawned, or fully off-screen (NDC + 30% buffer).
     _shouldReleaseLock(fish, refPos) {
         if (!fish) return true;
         if (!fish.isActive) return true;                         // Despawned
