@@ -19586,11 +19586,9 @@ function createScopeOverlay() {
     // Bottom HUD: updated MAG for FOV 30
     el.innerHTML += `<div style="position:absolute;bottom:calc(50% - ${ringSize/2 - 30}px);left:50%;transform:translateX(-50%);${hudFont}color:${amberColor};text-shadow:${amberGlow};">DEPTH 127m ── MAG 2.5x ── PRESSURE 13.2 ATM</div>`;
     
-    // Left HUD
-    el.innerHTML += `<div style="position:absolute;top:50%;left:calc(50% - ${ringSize/2 - 15}px);transform:translateY(-50%) rotate(-90deg);${hudFont}color:${amberColor};text-shadow:${amberGlow};font-size:10px;">N ── 045° ── NE</div>`;
+    // Left HUD — compass markings REMOVED (user request: keep only top Dynamic Target HUD + bottom depth/pressure)
     
-    // Right HUD
-    el.innerHTML += `<div style="position:absolute;top:50%;right:calc(50% - ${ringSize/2 - 15}px);transform:translateY(-50%) rotate(90deg);${hudFont}color:${amberColor};text-shadow:${amberGlow};font-size:10px;">RNG 42m ── LOCK</div>`;
+    // Right HUD — range markings REMOVED (user request: keep only top Dynamic Target HUD + bottom depth/pressure)
     
     // Center crosshair — small amber cross
     const chSize = 12;
@@ -20258,11 +20256,11 @@ function updateFPSCamera() {
     cannonGroup.scale.set(FPS_ELEV_SCALE, FPS_ELEV_SCALE, FPS_ELEV_SCALE);
     cannonGroup.visible = true;  // Ensure turret is never hidden
     
-    // === FOV + near clip (every frame to prevent scope system override) ===
-    camera.fov = FPS_ELEV_FOV;
+    // === Near clip (every frame) ===
     camera.near = 0.1;  // Prevent near-plane clipping of turret at close range
-    gameState.scopeTargetFov = FPS_ELEV_FOV;  // Sync scope system
-    camera.updateProjectionMatrix();
+    // NOTE: Do NOT reset camera.fov or scopeTargetFov here — the scope zoom
+    // system (RMB hold) interpolates FOV from 75→30 in the animate loop.
+    // Resetting FOV here every frame was killing the zoom effect.
     
     // Get yaw and pitch from cannon rotation (single source of truth)
     const yaw = cannonGroup.rotation.y;
