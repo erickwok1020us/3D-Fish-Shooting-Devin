@@ -1595,7 +1595,7 @@ const gameState = {
     autoPanDirection: 1,  // 1 = right, -1 = left
     autoPanInterval: 5.0,  // Pan every 5 seconds
     // Boss Fish Event System (Issue #12)
-    bossSpawnTimer: 45,  // Boss spawns every 45 seconds exactly
+    bossSpawnTimer: 40,  // Boss spawns every 40 seconds (high-speed encounter loop)
     activeBoss: null,  // Currently active boss fish
     bossCountdown: 0,  // Countdown timer for boss event
     bossActive: false,  // Whether a boss event is currently active
@@ -10467,7 +10467,7 @@ window.startSinglePlayerGame = function() {
     // gameState.isInGameScene will be set to true in loadMap3D() onComplete callback
     
     // Reset boss event timers for fresh game start
-    gameState.bossSpawnTimer = 60;
+    gameState.bossSpawnTimer = 40;
     gameState.bossActive = false;
     gameState.bossCountdown = 0;
     gameState.activeBoss = null;
@@ -10496,7 +10496,7 @@ window.startMultiplayerGame = function(manager) {
     // gameState.isInGameScene will be set to true in loadMap3D() onComplete callback
     
     // Reset boss event timers for fresh game start
-    gameState.bossSpawnTimer = 60;
+    gameState.bossSpawnTimer = 40;
     gameState.bossActive = false;
     gameState.bossCountdown = 0;
     gameState.activeBoss = null;
@@ -20729,7 +20729,7 @@ let bossSwarmFishList = [];  // Fix 3: Track all swarm fish for hint transfer
 let bossWaitingUI = null;  // Issue #15: Separate UI for waiting period countdown (60s → 16s)
 
 function createBossUI() {
-    // Issue #15: Create boss event UI container - positioned at TOP CENTER
+    // Neon Abyss Boss UI — top center header with neon glow, Boss Orange (#FF8800)
     bossUIContainer = document.createElement('div');
     bossUIContainer.id = 'boss-ui';
     bossUIContainer.style.cssText = `
@@ -20742,70 +20742,66 @@ function createBossUI() {
         pointer-events: none;
         z-index: 1000;
         display: none;
-        background: linear-gradient(180deg, rgba(255, 0, 0, 0.3), rgba(100, 0, 0, 0.2));
-        border: 3px solid #ff4444;
-        border-radius: 15px;
-        padding: 15px 40px;
-        box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
-        min-width: 300px;
+        background: linear-gradient(180deg, rgba(255, 136, 0, 0.25), rgba(80, 40, 0, 0.2));
+        border: 2px solid rgba(255, 136, 0, 0.6);
+        border-radius: 12px;
+        padding: 14px 50px;
+        box-shadow: 0 0 40px rgba(255, 136, 0, 0.4), inset 0 0 20px rgba(255, 136, 0, 0.05);
+        min-width: 340px;
         max-width: 90vw;
         white-space: nowrap;
+        font-family: 'Orbitron', 'Rajdhani', monospace;
     `;
     
-    // Issue #15: Boss Mode countdown with "BOSS MODE! Xs remaining" format
-    const countdown = document.createElement('div');
-    countdown.id = 'boss-countdown';
-    countdown.style.cssText = `
-        font-size: 32px;
-        font-weight: bold;
-        color: #ffffff;
-        text-shadow: 0 0 15px #ff4444, 0 0 30px #ff0000, 2px 2px 4px #000;
-    `;
-    bossUIContainer.appendChild(countdown);
-    
-    // Boss description (smaller, below countdown)
-    const descText = document.createElement('div');
-    descText.id = 'boss-desc';
-    descText.style.cssText = `
-        font-size: 16px;
-        color: #ffdd00;
-        text-shadow: 0 0 10px #ffaa00, 2px 2px 4px #000;
-        margin-top: 8px;
-    `;
-    bossUIContainer.appendChild(descText);
-    
-    // Hidden alert text (used for victory/escape messages)
+    // Line 1: Boss name + "APPEARED!" (or WARNING! during alert phase)
     const alertText = document.createElement('div');
     alertText.id = 'boss-alert';
     alertText.style.cssText = `
-        font-size: 28px;
-        font-weight: bold;
-        color: #ff4444;
-        text-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000, 2px 2px 4px #000;
-        display: none;
+        font-size: 30px;
+        font-weight: 900;
+        color: #FF8800;
+        text-transform: uppercase;
+        letter-spacing: 4px;
+        text-shadow: 0 0 20px rgba(255, 136, 0, 0.8), 0 0 40px rgba(255, 136, 0, 0.4), 0 0 60px rgba(255, 80, 0, 0.2);
     `;
     bossUIContainer.appendChild(alertText);
     
+    // Line 2: Countdown "[SS]S REMAINING"
+    const countdown = document.createElement('div');
+    countdown.id = 'boss-countdown';
+    countdown.style.cssText = `
+        font-size: 22px;
+        font-weight: 700;
+        color: #FF8800;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        margin-top: 6px;
+        text-shadow: 0 0 15px rgba(255, 136, 0, 0.6), 0 0 30px rgba(255, 100, 0, 0.3);
+    `;
+    bossUIContainer.appendChild(countdown);
+    
     document.body.appendChild(bossUIContainer);
     
-    // Add CSS animation
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes bossAlert {
-            0% { transform: scale(1); }
-            100% { transform: scale(1.1); }
-        }
-        @keyframes bossPulse {
-            0% { opacity: 0.3; transform: scale(1); }
-            50% { opacity: 0.8; transform: scale(1.2); }
-            100% { opacity: 0.3; transform: scale(1); }
-        }
-        @keyframes crosshairSpin {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-    `;
-    document.head.appendChild(style);
+    // Add CSS animations for Neon Abyss style
+    if (!document.getElementById('boss-neon-abyss-style')) {
+        const style = document.createElement('style');
+        style.id = 'boss-neon-abyss-style';
+        style.textContent = `
+            @keyframes bossWarningPulse {
+                0%, 100% { opacity: 1; text-shadow: 0 0 20px rgba(255,136,0,0.8), 0 0 40px rgba(255,136,0,0.4); }
+                50% { opacity: 0.7; text-shadow: 0 0 40px rgba(255,136,0,1), 0 0 80px rgba(255,80,0,0.6); }
+            }
+            @keyframes bossNeonGlow {
+                0%, 100% { box-shadow: 0 0 40px rgba(255,136,0,0.4), inset 0 0 20px rgba(255,136,0,0.05); }
+                50% { box-shadow: 0 0 60px rgba(255,136,0,0.6), inset 0 0 30px rgba(255,136,0,0.08); }
+            }
+            @keyframes crosshairSpin {
+                0% { transform: translate(-50%, -50%) rotate(0deg); }
+                100% { transform: translate(-50%, -50%) rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
 }
 
 // Issue #15: Create separate UI for waiting period countdown (60s → 16s)
@@ -20918,23 +20914,31 @@ function hideBossWaitingUI() {
 function showBossAlert(bossType) {
     if (!bossUIContainer) createBossUI();
     
-    // Issue #15: Show "BOSS MODE! 17s remaining" format at top center
-    // Extended from 15s to 17s to give 1x weapon users more time (14s needed for continuous fire)
-    document.getElementById('boss-countdown').textContent = `BOSS MODE! 17s remaining`;
-    document.getElementById('boss-desc').textContent = `${bossType.name} - ${bossType.description}`;
-    
-    // Show alert text briefly for initial announcement
     const alertEl = document.getElementById('boss-alert');
-    alertEl.textContent = `BOSS FISH APPEARED!`;
-    alertEl.style.display = 'block';
-    setTimeout(() => {
-        alertEl.style.display = 'none';
-    }, 2000);
+    const countdownEl = document.getElementById('boss-countdown');
+    
+    // Stage 1: "WARNING!" for exactly 1.0 second — bold, centered, pulsing neon
+    alertEl.textContent = 'WARNING!';
+    alertEl.style.animation = 'bossWarningPulse 0.3s ease-in-out infinite';
+    alertEl.style.fontSize = '38px';
+    countdownEl.textContent = '';
+    countdownEl.style.display = 'none';
     
     bossUIContainer.style.display = 'block';
+    bossUIContainer.style.animation = 'bossNeonGlow 1s ease-in-out infinite';
     
     // Play boss alert sound
     playSound('bossAlert');
+    
+    // Stage 2: After 1.0s — fade to "[BOSS NAME] APPEARED!" + countdown
+    setTimeout(() => {
+        alertEl.style.animation = 'none';
+        alertEl.style.fontSize = '30px';
+        // Use boss type name in ALL CAPS
+        alertEl.textContent = `${bossType.name} APPEARED!`;
+        countdownEl.style.display = 'block';
+        countdownEl.textContent = '19S REMAINING';
+    }, 1000);
 }
 
 function updateBossCountdownUI(timeLeft) {
@@ -20943,17 +20947,20 @@ function updateBossCountdownUI(timeLeft) {
     if (!bossUIContainer) return;
     const countdownEl = document.getElementById('boss-countdown');
     if (countdownEl) {
-        // Issue #15: Show "BOSS MODE! Xs remaining" format
-        const seconds = Math.ceil(timeLeft);
-        countdownEl.textContent = `BOSS MODE! ${seconds}s remaining`;
+        // Neon Abyss style: "[SS]S REMAINING" — real-time countdown from 19s to 0s
+        const seconds = Math.max(0, Math.ceil(timeLeft) - 1); // Display 19→0 (boss has 20s total, first 1s is WARNING!)
+        countdownEl.textContent = `${seconds}S REMAINING`;
         
-        // Change color as time runs out
+        // Color urgency — stays Boss Orange but intensifies glow when low
         if (timeLeft <= 5) {
-            countdownEl.style.color = '#ff0000';
+            countdownEl.style.color = '#FF4400';
+            countdownEl.style.textShadow = '0 0 20px rgba(255, 68, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4)';
         } else if (timeLeft <= 10) {
-            countdownEl.style.color = '#ffaa00';
+            countdownEl.style.color = '#FF6600';
+            countdownEl.style.textShadow = '0 0 18px rgba(255, 102, 0, 0.7), 0 0 35px rgba(255, 68, 0, 0.3)';
         } else {
-            countdownEl.style.color = '#ffffff';
+            countdownEl.style.color = '#FF8800';
+            countdownEl.style.textShadow = '0 0 15px rgba(255, 136, 0, 0.6), 0 0 30px rgba(255, 100, 0, 0.3)';
         }
     }
 }
@@ -20961,6 +20968,10 @@ function updateBossCountdownUI(timeLeft) {
 function hideBossUI() {
     if (bossUIContainer) {
         bossUIContainer.style.display = 'none';
+        bossUIContainer.style.animation = 'none';
+        // Reset border/box-shadow to default Neon Abyss orange (for next boss event)
+        bossUIContainer.style.borderColor = 'rgba(255, 136, 0, 0.6)';
+        bossUIContainer.style.boxShadow = '0 0 40px rgba(255, 136, 0, 0.4), inset 0 0 20px rgba(255, 136, 0, 0.05)';
     }
     removeBossCrosshair();
     removeBossGlowEffect();
@@ -21391,7 +21402,7 @@ function spawnBossFish() {
     
     gameState.activeBoss = spawnedBoss;
     showBossAlert(bossType);
-    gameState.bossCountdown = 17;
+    gameState.bossCountdown = 20;
     gameState.bossActive = true;
     startBossMusicMP3();
 }
@@ -21404,7 +21415,7 @@ function updateBossEvent(deltaTime) {
             gameState.bossActive = false;
             gameState.activeBoss = null;
             gameState.bossCountdown = 0;
-            gameState.bossSpawnTimer = 45;
+            gameState.bossSpawnTimer = 40;
             hideBossUI();
             hideBossWaitingUI();
         }
@@ -21435,10 +21446,10 @@ function updateBossEvent(deltaTime) {
         // Issue #15: Update waiting timer UI (shows 60s → 16s countdown)
         updateBossWaitingTimerUI(gameState.bossSpawnTimer);
         
-        // Issue #16: Update music state based on boss approach
-        if (gameState.bossSpawnTimer <= 30 && gameState.bossSpawnTimer > 15) {
+        // Issue #16: Update music state based on boss approach (40s timer)
+        if (gameState.bossSpawnTimer <= 20 && gameState.bossSpawnTimer > 10) {
             setMusicState('approach');
-        } else if (gameState.bossSpawnTimer > 30) {
+        } else if (gameState.bossSpawnTimer > 20) {
             setMusicState('normal');
         }
         
@@ -21448,7 +21459,7 @@ function updateBossEvent(deltaTime) {
             // Fix 2: Only reset timer if spawn was NOT a retry failure
             // (bossSpawnRetryPending is set inside spawnBossFish on failure)
             if (!gameState.bossSpawnRetryPending) {
-                gameState.bossSpawnTimer = 45;  // Next boss in exactly 45 seconds
+                gameState.bossSpawnTimer = 40;  // Next boss in exactly 40 seconds
             }
         }
     } else {
@@ -21522,10 +21533,17 @@ function endBossEvent() {
 function showBossKilledMessage() {
     if (!bossUIContainer) return;
     
-    document.getElementById('boss-alert').textContent = 'BOSS DEFEATED!';
-    document.getElementById('boss-alert').style.color = '#44ff44';
-    document.getElementById('boss-desc').textContent = 'Bonus rewards earned!';
-    document.getElementById('boss-countdown').textContent = '';
+    const alertEl = document.getElementById('boss-alert');
+    const countdownEl = document.getElementById('boss-countdown');
+    alertEl.textContent = 'BOSS DEFEATED!';
+    alertEl.style.color = '#44FF44';
+    alertEl.style.textShadow = '0 0 20px rgba(68, 255, 68, 0.8), 0 0 40px rgba(68, 255, 68, 0.4)';
+    countdownEl.textContent = 'BONUS REWARDS EARNED!';
+    countdownEl.style.color = '#44FF44';
+    countdownEl.style.display = 'block';
+    bossUIContainer.style.animation = 'none';
+    bossUIContainer.style.borderColor = 'rgba(68, 255, 68, 0.6)';
+    bossUIContainer.style.boxShadow = '0 0 40px rgba(68, 255, 68, 0.4)';
     
     // Play Boss Dead sound effect from R2
     playBossDeadSound();
@@ -21539,10 +21557,15 @@ function showBossKilledMessage() {
 function showBossEscapedMessage() {
     if (!bossUIContainer) return;
     
-    document.getElementById('boss-alert').textContent = 'BOSS ESCAPED!';
-    document.getElementById('boss-alert').style.color = '#ff8844';
-    document.getElementById('boss-desc').textContent = 'Better luck next time...';
-    document.getElementById('boss-countdown').textContent = '';
+    const alertEl = document.getElementById('boss-alert');
+    const countdownEl = document.getElementById('boss-countdown');
+    alertEl.textContent = 'BOSS ESCAPED!';
+    alertEl.style.color = '#FF8800';
+    alertEl.style.textShadow = '0 0 20px rgba(255, 136, 0, 0.8), 0 0 40px rgba(255, 136, 0, 0.4)';
+    countdownEl.textContent = 'BETTER LUCK NEXT TIME...';
+    countdownEl.style.color = '#FF8800';
+    countdownEl.style.display = 'block';
+    bossUIContainer.style.animation = 'none';
     
     // Hide after 2 seconds
     setTimeout(() => {
@@ -22120,7 +22143,7 @@ window.cleanupMultiplayerGame = function() {
     gameState.bossActive = false;
     gameState.activeBoss = null;
     gameState.bossCountdown = 0;
-    gameState.bossSpawnTimer = 60;
+    gameState.bossSpawnTimer = 40;
     hideBossUI();
     hideBossWaitingUI();
     
