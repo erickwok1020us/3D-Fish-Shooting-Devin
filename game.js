@@ -1608,7 +1608,7 @@ const gameState = {
     lastComboBonus: 0,       // Last applied combo bonus percentage
     fpsCannonSide: 'right',  // FPS weapon hand side (fixed right)
     isScoping: false,        // Right-click scope zoom active
-    scopeTargetFov: 60,      // Target FOV for scope zoom (60=normal FPS, 30=zoomed)
+    scopeTargetFov: 75,      // Target FOV for scope zoom (75=normal FPS, 30=zoomed)
     weaponSelected: false,   // Plan B: true after player picks initial weapon
     burstShotsRemaining: 0,
     burstTimer: 0,
@@ -19359,51 +19359,183 @@ function applyRtpLabels() {
     });
 }
 
-// ==================== SCOPE OVERLAY ====================
+// ==================== SCOPE OVERLAY (Style B: Deep Sea Explorer) ====================
 let scopeOverlayEl = null;
-const ZOOM_FRAME_SIZES = { S: 300, M: 220, L: 140 };
-let zoomFrameInset = ZOOM_FRAME_SIZES.S;
 
-function createScopeOverlay() {
-    if (scopeOverlayEl) { scopeOverlayEl.remove(); scopeOverlayEl = null; }
+// ==================== DYNAMIC TARGET HUD (Screen-Space Projection) ====================
+let _scopeTargetHudEl = null;
+
+// Tier label mapping for the HUD display
+const SCOPE_TIER_LABELS = {
+    boss: 'Boss',
+    t1: 'T1',
+    t2: 'T2',
+    t3: 'T3',
+    t4: 'T4',
+    t5: 'T5'
+};
+
+function createScopeTargetHUD() {
+    if (_scopeTargetHudEl) return _scopeTargetHudEl;
+    const ringSize = Math.min(window.innerWidth, window.innerHeight) * 0.72;
+    const topOffset = Math.round(window.innerHeight / 2 - ringSize / 2 + 30);
     const el = document.createElement('div');
-    el.id = 'scope-overlay';
-    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.15s ease-in;';
-    const vInset = zoomFrameInset;
-    const hInset = Math.round(zoomFrameInset * 1.35);
-    const cornerLen = 32;
-    const thick = 3;
-    const color = 'rgba(255,179,71,0.85)';
-    const glow = '0 0 6px rgba(255,179,71,0.5)';
-    const line = `position:absolute;background:${color};box-shadow:${glow};border-radius:1.5px;`;
-    const cWrap = 'position:absolute;width:100%;height:100%;transform:scale(var(--ui-scale,1));';
+    el.id = 'scope-target-hud';
+    // Positioned at top of scope ring — replaces static "DEEP SEA EXPLORER" header
+    el.style.cssText = `position:fixed;top:${topOffset}px;left:50%;transform:translateX(-50%);pointer-events:none;z-index:1001;text-align:center;white-space:nowrap;`;
     el.innerHTML = `
-        <div style="${cWrap}top:0;left:0;transform-origin:top left;">
-            <div style="${line}top:${vInset}px;left:${hInset}px;width:${cornerLen}px;height:${thick}px;"></div>
-            <div style="${line}top:${vInset}px;left:${hInset}px;width:${thick}px;height:${cornerLen}px;"></div>
-        </div>
-        <div style="${cWrap}top:0;right:0;transform-origin:top right;">
-            <div style="${line}top:${vInset}px;right:${hInset}px;width:${cornerLen}px;height:${thick}px;"></div>
-            <div style="${line}top:${vInset}px;right:${hInset}px;width:${thick}px;height:${cornerLen}px;"></div>
-        </div>
-        <div style="${cWrap}bottom:0;left:0;transform-origin:bottom left;">
-            <div style="${line}bottom:${vInset}px;left:${hInset}px;width:${cornerLen}px;height:${thick}px;"></div>
-            <div style="${line}bottom:${vInset}px;left:${hInset}px;width:${thick}px;height:${cornerLen}px;"></div>
-        </div>
-        <div style="${cWrap}bottom:0;right:0;transform-origin:bottom right;">
-            <div style="${line}bottom:${vInset}px;right:${hInset}px;width:${cornerLen}px;height:${thick}px;"></div>
-            <div style="${line}bottom:${vInset}px;right:${hInset}px;width:${thick}px;height:${cornerLen}px;"></div>
-        </div>
+        <div id="scope-target-label" style="font:700 13px 'Rajdhani',monospace;letter-spacing:3px;text-transform:uppercase;text-shadow:0 0 10px currentColor;color:rgba(255,176,0,0.5);">SCANNING...</div>
     `;
     document.body.appendChild(el);
-    scopeOverlayEl = el;
+    _scopeTargetHudEl = el;
     return el;
 }
 
-function setZoomFrameSize(size) {
-    if (ZOOM_FRAME_SIZES[size]) zoomFrameInset = ZOOM_FRAME_SIZES[size];
-    else if (typeof size === 'number') zoomFrameInset = size;
+function updateScopeTargetHUD() {
+    if (!gameState.isScoping || !camera) return;
+    
+    // Screen-space projection approach: project each fish's world position to NDC
+    // and find the closest fish to screen center (0,0 in NDC = crosshair)
+    const _projVec = new THREE.Vector3();
+    let closestFish = null;
+    let closestDist = Infinity;
+    // Threshold in NDC space — how close to crosshair center a fish must be
+    // Adjusted for bounding radius: larger fish (Boss) get bigger threshold
+    const BASE_THRESHOLD = 0.08;
+    
+    for (let i = 0; i < activeFish.length; i++) {
+        const fish = activeFish[i];
+        if (!fish || !fish.isActive || !fish.group) continue;
+        
+        // Get fish world position
+        fish.group.getWorldPosition(_projVec);
+        
+        // Project to NDC (-1 to +1 range)
+        _projVec.project(camera);
+        
+        // Only consider fish in front of camera (z < 1 in NDC)
+        if (_projVec.z > 1 || _projVec.z < 0) continue;
+        
+        // Distance from screen center in NDC
+        const ndcDist = Math.sqrt(_projVec.x * _projVec.x + _projVec.y * _projVec.y);
+        
+        // Scale threshold by fish bounding radius (larger fish = easier to target)
+        const radius = fish.boundingRadius || 30;
+        const sizeBonus = Math.min(radius / 60, 2.0); // Boss fish get up to 2x threshold
+        const threshold = BASE_THRESHOLD * (1 + sizeBonus);
+        
+        if (ndcDist < threshold && ndcDist < closestDist) {
+            closestDist = ndcDist;
+            closestFish = fish;
+        }
+    }
+    
+    const hud = createScopeTargetHUD();
+    const labelEl = document.getElementById('scope-target-label');
+    if (!labelEl) return;
+    
+    if (closestFish) {
+        const hitFish = closestFish;
+        const fishForm = hitFish.form || '';
+        const fishTierKey = FISH_FORM_TO_TIER[fishForm] || 't5';
+        const tierColor = TIER_BORDER_COLORS[fishTierKey] || '#FFFFFF';
+        const tierLabel = SCOPE_TIER_LABELS[fishTierKey] || 'T5';
+        
+        // Get display name — use species name from config or form
+        const displayName = (hitFish.name || fishForm).replace(/([A-Z])/g, ' $1').trim().toUpperCase();
+        
+        labelEl.textContent = `${displayName} \u2014 ${tierLabel}`;
+        labelEl.style.color = tierColor;
+        return;
+    }
+    
+    // No fish targeted — show subtle "SCANNING..." in amber
+    labelEl.textContent = 'SCANNING...';
+    labelEl.style.color = 'rgba(255,176,0,0.5)';
+}
+
+function hideScopeTargetHUD() {
+    if (_scopeTargetHudEl) {
+        _scopeTargetHudEl.remove();
+        _scopeTargetHudEl = null;
+    }
+}
+
+function createScopeOverlay() {
+    // Style B: Deep Sea Explorer — semi-transparent porthole, chromatic aberration, amber HUD
     if (scopeOverlayEl) { scopeOverlayEl.remove(); scopeOverlayEl = null; }
+    const el = document.createElement('div');
+    el.id = 'scope-overlay';
+    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;opacity:0;transition:opacity 0.2s ease-in;';
+    
+    // REDUCED OPACITY porthole mask — semi-transparent so corner UI remains readable
+    const porthole = document.createElement('div');
+    porthole.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.06) 38%, rgba(0,0,0,0.18) 45%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.50) 70%, rgba(0,0,0,0.60) 90%);';
+    el.appendChild(porthole);
+    
+    // Chromatic aberration at circle edges (subtle)
+    const chromR = document.createElement('div');
+    chromR.style.cssText = 'position:absolute;top:0;left:3px;width:100%;height:100%;background:radial-gradient(circle at center, transparent 32%, rgba(255,50,50,0.05) 42%, transparent 52%);mix-blend-mode:screen;';
+    el.appendChild(chromR);
+    
+    const chromB = document.createElement('div');
+    chromB.style.cssText = 'position:absolute;top:0;left:-3px;width:100%;height:100%;background:radial-gradient(circle at center, transparent 32%, rgba(50,100,255,0.05) 42%, transparent 52%);mix-blend-mode:screen;';
+    el.appendChild(chromB);
+    
+    // Porthole ring (circular border)
+    const ringSize = Math.min(window.innerWidth, window.innerHeight) * 0.72;
+    const ring = document.createElement('div');
+    ring.style.cssText = `position:absolute;top:50%;left:50%;width:${ringSize}px;height:${ringSize}px;transform:translate(-50%,-50%);border-radius:50%;border:3px solid rgba(255,176,0,0.35);box-shadow:0 0 20px rgba(255,176,0,0.12), inset 0 0 30px rgba(255,176,0,0.06);`;
+    el.appendChild(ring);
+    
+    // Inner ring detail
+    const innerSize = ringSize - 16;
+    const innerRing = document.createElement('div');
+    innerRing.style.cssText = `position:absolute;top:50%;left:50%;width:${innerSize}px;height:${innerSize}px;transform:translate(-50%,-50%);border-radius:50%;border:1px solid rgba(255,176,0,0.15);`;
+    el.appendChild(innerRing);
+    
+    // Amber HUD text
+    const amberColor = 'rgba(255,176,0,0.7)';
+    const amberGlow = '0 0 8px rgba(255,176,0,0.3)';
+    const hudFont = "font:600 12px 'Rajdhani',monospace;letter-spacing:2px;text-transform:uppercase;";
+    
+    // Top HUD — Dynamic Target Header (positioned via scope-target-hud element)
+    // The static "DEEP SEA EXPLORER" text is replaced by the dynamic target scan HUD
+    // which is managed by createScopeTargetHUD() and updateScopeTargetHUD()
+    
+    // Bottom HUD: updated MAG for FOV 30
+    el.innerHTML += `<div style="position:absolute;bottom:calc(50% - ${ringSize/2 - 30}px);left:50%;transform:translateX(-50%);${hudFont}color:${amberColor};text-shadow:${amberGlow};">DEPTH 127m ── MAG 2.5x ── PRESSURE 13.2 ATM</div>`;
+    
+    // Left HUD
+    el.innerHTML += `<div style="position:absolute;top:50%;left:calc(50% - ${ringSize/2 - 15}px);transform:translateY(-50%) rotate(-90deg);${hudFont}color:${amberColor};text-shadow:${amberGlow};font-size:10px;">N ── 045° ── NE</div>`;
+    
+    // Right HUD
+    el.innerHTML += `<div style="position:absolute;top:50%;right:calc(50% - ${ringSize/2 - 15}px);transform:translateY(-50%) rotate(90deg);${hudFont}color:${amberColor};text-shadow:${amberGlow};font-size:10px;">RNG 42m ── LOCK</div>`;
+    
+    // Center crosshair — small amber cross
+    const chSize = 12;
+    const chThick = 1.5;
+    el.innerHTML += `
+        <div style="position:absolute;top:50%;left:50%;width:${chSize*2}px;height:${chThick}px;background:${amberColor};box-shadow:${amberGlow};transform:translate(-50%,-50%);"></div>
+        <div style="position:absolute;top:50%;left:50%;width:${chThick}px;height:${chSize*2}px;background:${amberColor};box-shadow:${amberGlow};transform:translate(-50%,-50%);"></div>
+        <div style="position:absolute;top:50%;left:50%;width:6px;height:6px;border:1px solid ${amberColor};border-radius:50%;box-shadow:${amberGlow};transform:translate(-50%,-50%);"></div>
+    `;
+    
+    // Subtle ripple animation
+    const ripple = document.createElement('div');
+    ripple.style.cssText = `position:absolute;top:50%;left:50%;width:${ringSize * 0.9}px;height:${ringSize * 0.9}px;transform:translate(-50%,-50%);border-radius:50%;border:1px solid rgba(255,176,0,0.06);animation:scopeRipple 3s ease-in-out infinite;`;
+    el.appendChild(ripple);
+    
+    if (!document.getElementById('scope-ripple-style')) {
+        const style = document.createElement('style');
+        style.id = 'scope-ripple-style';
+        style.textContent = `@keyframes scopeRipple { 0%,100% { transform:translate(-50%,-50%) scale(0.95); opacity:0.3; } 50% { transform:translate(-50%,-50%) scale(1.02); opacity:0.08; } }`;
+        document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(el);
+    scopeOverlayEl = el;
+    return el;
 }
 
 function showScopeOverlay() {
@@ -19486,7 +19618,7 @@ function setupEventListeners() {
             // FPS free-look uses higher sensitivity for comfortable gameplay
             // Increased multiplier from 10.0 to 30.0 for better responsiveness
             const fpsLevel = Math.max(1, Math.min(10, gameState.fpsSensitivityLevel || 5));
-            const scopeSlowdown = gameState.isScoping ? 0.3 : 1.0;
+            const scopeSlowdown = gameState.isScoping ? 0.6 : 1.0;
             const rotationSensitivity = CONFIG.camera.rotationSensitivityFPSBase * (fpsLevel / 10) * 30.0 * 1.2 * scopeSlowdown;
             
             // Calculate new yaw (horizontal rotation)
@@ -19671,8 +19803,9 @@ function setupEventListeners() {
         if (e.button === 2) {  // Right mouse button
             gameState.isRightDragging = false;
             gameState.isScoping = false;
-            gameState.scopeTargetFov = 60;
+            gameState.scopeTargetFov = 75;
             hideScopeOverlay();
+            hideScopeTargetHUD();
         }
     });
     
@@ -20274,6 +20407,9 @@ function animate() {
         }
         camera.updateProjectionMatrix();
     }
+    
+    // Update Dynamic Target HUD (raycast from crosshair to detect fish while zoomed)
+    updateScopeTargetHUD();
     
     _afDebug.update(deltaTime);
     if (gameState.autoShoot) {
