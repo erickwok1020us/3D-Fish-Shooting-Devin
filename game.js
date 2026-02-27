@@ -21001,48 +21001,86 @@ function hideBossUI() {
     removeBossGlowEffect();
 }
 
+// --- Neon Abyss Boss Hint: round soft-sprite texture ---
+let _neonSpriteTexture = null;
+function _getNeonSpriteTexture() {
+    if (_neonSpriteTexture) return _neonSpriteTexture;
+    const sz = 64;
+    const c = document.createElement('canvas');
+    c.width = sz; c.height = sz;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
+    g.addColorStop(0,   'rgba(255,255,255,1)');
+    g.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.25)');
+    g.addColorStop(1,   'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, sz, sz);
+    _neonSpriteTexture = new THREE.CanvasTexture(c);
+    return _neonSpriteTexture;
+}
+
 function createBossCrosshair(bossFish) {
-    // 3-Ring Particle Aura — Boss Orange (#FF8800) with soft glow
-    // 3 orbiting particle rings at different radii, tilts, and speeds
-    // Subtle "glowing dust / energy strand" look — hint, not spotlight
+    // === Neon Abyss 3-Tier Particle Rings ===
+    // Tight energy aura hugging the Boss body
+    // Scale rule: old smallest ring (1.6×) → new OUTER (largest) ring
     const crosshairGroup = new THREE.Group();
     const baseSize = bossFish.config.size;
-    
-    // Ring configs: [radius multiplier, particle count, tilt axis, rotation speed, color, opacity]
+    const spriteMap = _getNeonSpriteTexture();
+
+    // Ring 1 (Outer): Neon Orange — slow orbit pulse with trailing particles
+    // Ring 2 (Middle): Cyber Yellow — counter-rotate 2× speed, flicker offset
+    // Ring 3 (Inner): Electric White/Cyan — dense shimmer, high-freq vibration
     const RING_CONFIGS = [
-        { radiusMul: 1.6, count: 60, tiltX: 0,            tiltZ: 0,           speed: 0.8,  color: 0xFF8800, opacity: 0.55, ptSize: 18 },
-        { radiusMul: 2.0, count: 72, tiltX: Math.PI * 0.3, tiltZ: Math.PI * 0.15, speed: -0.6, color: 0xFFAA33, opacity: 0.40, ptSize: 22 },
-        { radiusMul: 2.4, count: 84, tiltX: Math.PI * 0.15, tiltZ: -Math.PI * 0.25, speed: 0.5,  color: 0xFF6600, opacity: 0.30, ptSize: 26 },
+        { id: 'outer',  radiusMul: 1.6,  count: 50, tiltX: 0,              tiltZ: 0,              speed: 0.4,  color: 0xFFAC1C, opacity: 0.45, ptSize: 14 },
+        { id: 'middle', radiusMul: 1.2,  count: 64, tiltX: Math.PI * 0.25, tiltZ: Math.PI * 0.1,  speed: -0.8, color: 0xCCFF00, opacity: 0.35, ptSize: 10 },
+        { id: 'inner',  radiusMul: 0.9,  count: 90, tiltX: Math.PI * 0.15, tiltZ: -Math.PI * 0.2, speed: 0.3,  color: 0xE0FFFF, opacity: 0.50, ptSize: 7  },
     ];
-    
+
     for (let r = 0; r < RING_CONFIGS.length; r++) {
         const cfg = RING_CONFIGS[r];
         const radius = baseSize * cfg.radiusMul;
         const ringGroup = new THREE.Group();
-        
-        // Create particle points for this ring
-        const positions = new Float32Array(cfg.count * 3);
-        const sizes = new Float32Array(cfg.count);
-        const alphas = new Float32Array(cfg.count);
-        
+
+        // For outer ring, add trail particles (3 trail copies per main particle → 4× count)
+        const trailLen = cfg.id === 'outer' ? 3 : 0;
+        const totalPts = cfg.count * (1 + trailLen);
+        const positions = new Float32Array(totalPts * 3);
+        const basePositions = new Float32Array(totalPts * 3); // store original for animation
+
         for (let i = 0; i < cfg.count; i++) {
             const angle = (i / cfg.count) * Math.PI * 2;
-            // Slight random offset for organic feel
-            const jitter = (Math.random() - 0.5) * radius * 0.08;
-            positions[i * 3]     = Math.cos(angle) * (radius + jitter);
-            positions[i * 3 + 1] = Math.sin(angle) * (radius + jitter);
-            positions[i * 3 + 2] = (Math.random() - 0.5) * radius * 0.06; // slight depth scatter
-            sizes[i] = cfg.ptSize * (0.7 + Math.random() * 0.6); // particle size variation
-            alphas[i] = 0.5 + Math.random() * 0.5; // per-particle alpha variation
+            const jitter = (Math.random() - 0.5) * radius * 0.05;
+            const x = Math.cos(angle) * (radius + jitter);
+            const y = Math.sin(angle) * (radius + jitter);
+            const z = (Math.random() - 0.5) * radius * 0.04;
+            // Main particle
+            const idx = i * (1 + trailLen);
+            positions[idx * 3]     = x;
+            positions[idx * 3 + 1] = y;
+            positions[idx * 3 + 2] = z;
+            basePositions[idx * 3]     = x;
+            basePositions[idx * 3 + 1] = y;
+            basePositions[idx * 3 + 2] = z;
+            // Trail copies (slightly behind in the orbit)
+            for (let t = 1; t <= trailLen; t++) {
+                const trailAngle = angle - t * 0.04;
+                const ti = idx + t;
+                positions[ti * 3]     = Math.cos(trailAngle) * (radius + jitter) * (1 - t * 0.01);
+                positions[ti * 3 + 1] = Math.sin(trailAngle) * (radius + jitter) * (1 - t * 0.01);
+                positions[ti * 3 + 2] = z;
+                basePositions[ti * 3]     = positions[ti * 3];
+                basePositions[ti * 3 + 1] = positions[ti * 3 + 1];
+                basePositions[ti * 3 + 2] = z;
+            }
         }
-        
+
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-        geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
-        
+
         const mat = new THREE.PointsMaterial({
             color: cfg.color,
+            map: spriteMap,
             transparent: true,
             opacity: cfg.opacity,
             size: cfg.ptSize,
@@ -21052,33 +21090,35 @@ function createBossCrosshair(bossFish) {
             blending: THREE.AdditiveBlending,
         });
         mat.userData = { baseOpacity: cfg.opacity };
-        
+
         const points = new THREE.Points(geo, mat);
         points.renderOrder = 999;
+        // Store base positions for shimmer/flicker animation
+        points.userData.basePositions = basePositions;
+        points.userData.ringId = cfg.id;
+        points.userData.particleCount = totalPts;
         ringGroup.add(points);
-        
-        // Apply tilt to differentiate ring planes
+
+        // Apply tilt
         ringGroup.rotation.x = cfg.tiltX;
         ringGroup.rotation.z = cfg.tiltZ;
-        
-        // Store ring metadata for animation
+
         ringGroup.userData = {
             ringIndex: r,
+            ringId: cfg.id,
             rotationSpeed: cfg.speed,
             baseOpacity: cfg.opacity,
         };
-        
+
         crosshairGroup.add(ringGroup);
     }
-    
+
     crosshairGroup.userData.targetFish = bossFish;
     crosshairGroup.userData.rotationSpeed = 1;
     crosshairGroup.userData.isParticleAura = true;
-    
-    // Ensure the entire crosshair group renders above fish models
+
     crosshairGroup.renderOrder = 999;
     scene.add(crosshairGroup);
-    // Fix 1: Store in Map instead of singleton
     bossCrosshairMap.set(bossFish, crosshairGroup);
 }
 
@@ -21109,23 +21149,56 @@ function updateBossCrosshair() {
         // Face the camera
         crosshair.lookAt(camera.position);
         
-        // 3-Ring Particle Aura Animation: orbit each ring at its own speed
+        // === Neon Abyss 3-Tier Animation ===
         if (crosshair.userData.isParticleAura) {
+            const now = Date.now();
             for (let c = 0; c < crosshair.children.length; c++) {
                 const ringGroup = crosshair.children[c];
-                if (ringGroup.userData && ringGroup.userData.rotationSpeed !== undefined) {
-                    ringGroup.rotation.z += ringGroup.userData.rotationSpeed * 0.015;
+                if (!ringGroup.userData || ringGroup.userData.rotationSpeed === undefined) continue;
+
+                // Orbit rotation
+                ringGroup.rotation.z += ringGroup.userData.rotationSpeed * 0.015;
+
+                // Per-ring animation on child Points
+                const pts = ringGroup.children[0];
+                if (!pts || !pts.isPoints) continue;
+                const posAttr = pts.geometry.getAttribute('position');
+                const basePosArr = pts.userData.basePositions;
+                const ringId = pts.userData.ringId;
+
+                if (ringId === 'middle') {
+                    // Cyber Yellow flicker: random glitch offset every ~100ms
+                    const flickerSeed = Math.floor(now / 100);
+                    for (let p = 0; p < posAttr.count; p++) {
+                        const hash = (p * 7 + flickerSeed * 13) % 100;
+                        const glitch = hash < 20 ? (Math.sin(hash * 0.6) * 0.8) : 0;
+                        posAttr.setX(p, basePosArr[p * 3]     + glitch);
+                        posAttr.setY(p, basePosArr[p * 3 + 1] + glitch * 0.5);
+                    }
+                    posAttr.needsUpdate = true;
+                } else if (ringId === 'inner') {
+                    // Electric White shimmer: high-freq vibration
+                    const freq = now * 0.02;
+                    for (let p = 0; p < posAttr.count; p++) {
+                        const vib = Math.sin(freq + p * 1.7) * 0.3;
+                        posAttr.setX(p, basePosArr[p * 3]     + vib);
+                        posAttr.setY(p, basePosArr[p * 3 + 1] + Math.cos(freq + p * 2.3) * 0.2);
+                    }
+                    posAttr.needsUpdate = true;
                 }
+                // outer ring: trail particles are static relative to ring rotation — no extra anim needed
             }
         }
-        
-        // Pulse effect on opacity for energy feel
-        const pulse = Math.sin(Date.now() * 0.003) * 0.2 + 0.8;
+
+        // Pulse effect on opacity — slow breathe for outer, faster flicker for middle
+        const outerPulse = Math.sin(Date.now() * 0.002) * 0.15 + 0.85;
+        const midPulse   = Math.sin(Date.now() * 0.008) * 0.25 + 0.75;
+        const innerPulse = Math.sin(Date.now() * 0.015) * 0.1  + 0.9;
         crosshair.traverse(child => {
-            if (child.isPoints && child.material && child.material.transparent) {
-                child.material.opacity = child.material.userData
-                    ? child.material.userData.baseOpacity * pulse
-                    : child.material.opacity;
+            if (child.isPoints && child.material && child.material.transparent && child.material.userData) {
+                const rid = child.userData.ringId;
+                const p = rid === 'outer' ? outerPulse : rid === 'middle' ? midPulse : innerPulse;
+                child.material.opacity = child.material.userData.baseOpacity * p;
             }
         });
     }
