@@ -19576,6 +19576,7 @@ function initCoinValueSlider() {
     const thumb = document.getElementById('cv-thumb');
     const labels = document.querySelectorAll('.cv-label');
     const stopEls = document.querySelectorAll('.cv-stop');
+    const currentDisplay = document.getElementById('cv-current-display');
     if (!track || !thumb) return;
 
     function setCoinValue(index) {
@@ -19586,6 +19587,7 @@ function initCoinValueSlider() {
         if (fill) fill.style.width = pct + '%';
         labels.forEach(function(l, i) { l.classList.toggle('active', i === index); });
         stopEls.forEach(function(s, i) { s.classList.toggle('active', i <= index); });
+        if (currentDisplay) currentDisplay.textContent = val + 'x';
         updateDigiAmmoDisplay();
     }
 
