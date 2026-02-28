@@ -20781,13 +20781,13 @@ const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;
 const FPS_CANNON_SIDE_OFFSET = 5;
 
 // ===== FPS ABSOLUTE WORLD-SPACE CONFIG (Variant E — The Mantle) =====
-// Config A base: Y-gap=178, Z-gap=120, FOV=75, Pitch=-5°, Scale=2.5x
+// Config A base: Y-gap=178, Z-gap=120, FOV=75, Pitch=-5°, Scale=2.0x
 // Camera and turret use fixed world coordinates — no muzzle-following
 const FPS_ELEV_CAMERA_Y = -160;     // Camera World Y (sub-abyssal depth)
 const FPS_ELEV_CAMERA_Z = -800;     // Camera World Z
 const FPS_ELEV_TURRET_Y = -338;     // Turret World Y (CamY - 178)
 const FPS_ELEV_TURRET_Z = -680;     // Turret World Z (CamZ + 120)
-const FPS_ELEV_SCALE = 2.5;         // Turret scale multiplier (was 1.8, increased for larger barrel)
+const FPS_ELEV_SCALE = 2.0;         // Turret scale multiplier (reduced from 2.5 for better proportion)
 const FPS_ELEV_FOV = 75;            // Camera FOV
 const FPS_ELEV_PITCH = -5;          // Initial pitch in degrees
 
