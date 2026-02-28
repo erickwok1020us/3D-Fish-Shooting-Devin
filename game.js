@@ -21537,12 +21537,15 @@ function createBossCrosshair(bossFish) {
     const crosshairGroup = new THREE.Group();
     const baseSize = bossFish.config.size;
 
-    // --- Ring definitions: smooth continuous torus rings ---
-    // Ring 1 (Outer): Cyan #00FFFF — large orbit, tilted ~30° on X axis
-    // Ring 2 (Inner): Amber Gold #FFB000 — slightly smaller, tilted ~-20° on X + 40° on Y
+    // --- Atomic Structure / Gyroscopic Ring definitions ---
+    // 3 rings rotating on unique axes like electron orbits around a nucleus
+    // Ring 1 (Cyan):  X-axis rotation — horizontal equatorial orbit
+    // Ring 2 (Amber): Y-axis rotation — vertical polar orbit
+    // Ring 3 (White): Diagonal axis — tilted 45° orbital plane
     const VORTEX_RINGS = [
-        { id: 'cyan',  radius: baseSize * 0.95, tube: 1.2, color: 0x00FFFF, glowColor: 0x00aacc, opacity: 0.75, glowOpacity: 0.12, tiltX: 0.52, tiltY: 0.15,  speed: 0.008 },
-        { id: 'amber', radius: baseSize * 0.80, tube: 1.0, color: 0xFFB000, glowColor: 0xcc8800, opacity: 0.70, glowOpacity: 0.10, tiltX: -0.35, tiltY: 0.70, speed: -0.012 },
+        { id: 'cyan',  radius: baseSize * 0.95, tube: 1.2, color: 0x00FFFF, glowColor: 0x00aacc, opacity: 0.75, glowOpacity: 0.12, rotAxis: 'x', speed: 0.012 },
+        { id: 'amber', radius: baseSize * 0.85, tube: 1.0, color: 0xFFB000, glowColor: 0xcc8800, opacity: 0.70, glowOpacity: 0.10, rotAxis: 'y', speed: -0.016 },
+        { id: 'white', radius: baseSize * 0.75, tube: 0.9, color: 0xFFFFFF, glowColor: 0xaaaaaa, opacity: 0.60, glowOpacity: 0.08, rotAxis: 'diagonal', speed: 0.010 },
     ];
 
     const ringGroups = [];
@@ -21605,13 +21608,26 @@ function createBossCrosshair(bossFish) {
         const ptMesh = new THREE.Points(ptGeo, ptMat);
         ringGroup.add(ptMesh);
 
-        // Apply tilt for 3D gyroscopic wrapping
-        ringGroup.rotation.x = def.tiltX;
-        ringGroup.rotation.y = def.tiltY;
+        // Apply initial orientation for atomic orbital plane
+        // Each ring starts in XY plane, then we tilt to set its orbital axis
+        if (def.rotAxis === 'x') {
+            // Equatorial orbit — ring lies in XZ plane (rotate 90° on X to make it horizontal)
+            ringGroup.rotation.x = Math.PI / 2;
+        } else if (def.rotAxis === 'y') {
+            // Polar orbit — ring lies in YZ plane (rotate 90° on Y)
+            ringGroup.rotation.y = Math.PI / 2;
+        } else if (def.rotAxis === 'diagonal') {
+            // Diagonal orbit — tilted 45° on both X and Z for interlaced look
+            ringGroup.rotation.x = Math.PI / 4;
+            ringGroup.rotation.z = Math.PI / 4;
+        }
 
         ringGroup.userData = {
             ringId: def.id,
+            rotAxis: def.rotAxis,
             rotationSpeed: def.speed,
+            // Store a cumulative angle for smooth quaternion-based rotation
+            angle: 0,
         };
 
         ringGroups.push(ringGroup);
@@ -21650,15 +21666,39 @@ function updateBossCrosshair() {
         // Follow the boss fish position
         crosshair.position.copy(targetFish.group.position);
         
-        // === Style B: Energy Vortex Animation ===
+        // === Atomic Structure / Gyroscopic Rotation ===
+        // Each ring rotates around its own unique axis for interlaced energy sphere effect
         const ringGroups = crosshair.userData.ringGroups;
         const now = Date.now();
         
         if (ringGroups) {
             for (let i = 0; i < ringGroups.length; i++) {
                 const rg = ringGroups[i];
-                // Smooth orbital rotation around local Z axis
-                rg.rotation.z += rg.userData.rotationSpeed;
+                const axis = rg.userData.rotAxis;
+                const speed = rg.userData.rotationSpeed;
+                
+                // Accumulate angle for smooth continuous rotation
+                rg.userData.angle += speed;
+                const angle = rg.userData.angle;
+                
+                if (axis === 'x') {
+                    // Equatorial orbit: rotate around world X axis
+                    // Keep the base tilt (PI/2 on X) and add orbital rotation on Y
+                    rg.rotation.x = Math.PI / 2;
+                    rg.rotation.y = angle;
+                    rg.rotation.z = 0;
+                } else if (axis === 'y') {
+                    // Polar orbit: rotate around world Y axis
+                    // Keep base tilt (PI/2 on Y) and add orbital rotation on X
+                    rg.rotation.x = angle;
+                    rg.rotation.y = Math.PI / 2;
+                    rg.rotation.z = 0;
+                } else if (axis === 'diagonal') {
+                    // Diagonal orbit: tilted 45° plane, rotating around its local normal
+                    rg.rotation.x = Math.PI / 4;
+                    rg.rotation.y = angle * 0.7;
+                    rg.rotation.z = Math.PI / 4 + angle;
+                }
             }
         }
         
