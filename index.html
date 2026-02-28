@@ -598,7 +598,7 @@
         .weapon-btn {
             flex: 1;
             position: relative;
-            height: 80px;
+            height: 88px;
             background: linear-gradient(180deg, rgba(6, 22, 40, 0.93) 0%, rgba(2, 10, 22, 0.97) 100%);
             border: 1px solid rgba(50, 130, 180, 0.16);
             border-radius: 12px;
@@ -626,7 +626,7 @@
         }
         .weapon-btn .multiplier {
             font-family: 'Orbitron', monospace;
-            font-size: 15px;
+            font-size: 20px;
             font-weight: 700;
             color: #3a7088;
             line-height: 1;
@@ -648,25 +648,25 @@
             background: linear-gradient(180deg, rgba(6, 28, 48, 0.95) 0%, rgba(2, 12, 26, 0.97) 100%);
         }
         .weapon-btn.active {
-            border-color: rgba(60, 200, 255, 0.35);
-            box-shadow: inset 0 1px 0 rgba(100, 220, 255, 0.12), 0 0 16px rgba(0, 160, 240, 0.15), 0 3px 8px rgba(0, 0, 0, 0.2);
-            background: linear-gradient(180deg, rgba(6, 30, 50, 0.95) 0%, rgba(2, 14, 28, 0.98) 100%);
+            border-color: rgba(0, 220, 255, 0.5);
+            box-shadow: inset 0 1px 0 rgba(100, 220, 255, 0.2), 0 0 20px rgba(0, 200, 255, 0.25), 0 0 40px rgba(0, 180, 255, 0.1), 0 3px 8px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(180deg, rgba(0, 40, 70, 0.95) 0%, rgba(0, 20, 45, 0.98) 100%);
         }
         .weapon-btn.active .multiplier {
-            color: #00eeff;
-            text-shadow: 0 0 8px rgba(0, 220, 255, 0.4);
+            color: #00ffff;
+            text-shadow: 0 0 12px rgba(0, 255, 255, 0.6), 0 0 24px rgba(0, 220, 255, 0.2);
             -webkit-text-stroke: none;
         }
         .weapon-btn.active .weapon-icon {
             opacity: 1;
         }
         .weapon-btn.active .weapon-icon svg {
-            filter: drop-shadow(0 0 4px rgba(0, 220, 255, 0.5));
+            filter: drop-shadow(0 0 6px rgba(0, 255, 255, 0.7)) drop-shadow(0 0 12px rgba(0, 200, 255, 0.3));
         }
         .weapon-btn.active .keycap {
-            color: #38c0dd;
-            border-color: rgba(50, 150, 200, 0.28);
-            background: linear-gradient(180deg, rgba(8, 30, 50, 0.92) 0%, rgba(3, 15, 28, 0.96) 100%);
+            color: #00eeff;
+            border-color: rgba(0, 220, 255, 0.4);
+            background: linear-gradient(180deg, rgba(0, 30, 60, 0.92) 0%, rgba(0, 15, 35, 0.96) 100%);
             text-shadow: none;
         }
         .weapon-btn.active::after {
@@ -773,6 +773,76 @@
         @keyframes autoFirePulse {
             0%, 100% { text-shadow: 0 0 6px rgba(0, 255, 100, 0.4); }
             50% { text-shadow: 0 0 12px rgba(0, 255, 100, 0.7), 0 0 20px rgba(0, 255, 100, 0.3); }
+        }
+
+        /* COIN VALUE Slider */
+        .cv-header {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 8px; margin-top: 10px;
+        }
+        .cv-header .cv-dot {
+            width: 5px; height: 5px; background: #f0c040; box-shadow: 0 0 6px #f0c040;
+            border-radius: 1px; transform: rotate(45deg);
+        }
+        .cv-header .cv-title {
+            font-size: 11px; font-weight: 600; letter-spacing: 3px; color: #b89838;
+        }
+        .cv-header .cv-line {
+            flex: 1; height: 1px;
+            background: linear-gradient(90deg, rgba(240,192,64,0.3), transparent);
+        }
+        .cv-slider-wrap { margin-bottom: 4px; padding: 0 2px; }
+        .cv-slider-row {
+            display: flex; align-items: center; position: relative; height: 36px;
+        }
+        .cv-track {
+            position: relative; flex: 1; height: 6px;
+            background: rgba(80,60,20,0.25); border-radius: 3px;
+            border: 1px solid rgba(240,192,64,0.1); cursor: pointer;
+        }
+        .cv-track-fill {
+            position: absolute; left: 0; top: 0; bottom: 0;
+            background: linear-gradient(90deg, rgba(240,192,64,0.6), #f0c040);
+            border-radius: 3px; width: 0%;
+            transition: width 0.2s ease;
+            box-shadow: 0 0 8px rgba(240,192,64,0.3);
+        }
+        .cv-thumb {
+            position: absolute; top: 50%; left: 0%;
+            width: 20px; height: 20px;
+            background: linear-gradient(135deg, #f0c040, #d4a830);
+            border: 2px solid rgba(255,220,100,0.6); border-radius: 50%;
+            transform: translate(-50%, -50%); cursor: grab;
+            box-shadow: 0 0 12px rgba(240,192,64,0.4), 0 2px 6px rgba(0,0,0,0.3);
+            transition: left 0.2s ease, box-shadow 0.15s ease; z-index: 2;
+        }
+        .cv-thumb:hover, .cv-thumb.dragging {
+            box-shadow: 0 0 18px rgba(240,192,64,0.6), 0 2px 8px rgba(0,0,0,0.4);
+            transform: translate(-50%, -50%) scale(1.15);
+        }
+        .cv-stops {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; justify-content: space-between; align-items: center;
+            pointer-events: none; padding: 0;
+        }
+        .cv-stop {
+            width: 8px; height: 8px; background: rgba(80,60,20,0.5);
+            border: 1px solid rgba(240,192,64,0.15); border-radius: 50%;
+            transition: all 0.2s ease; z-index: 1;
+        }
+        .cv-stop.active {
+            background: #f0c040; border-color: rgba(255,220,100,0.6);
+            box-shadow: 0 0 6px rgba(240,192,64,0.5);
+        }
+        .cv-labels {
+            display: flex; justify-content: space-between; margin-top: 8px; padding: 0;
+        }
+        .cv-label {
+            font-family: 'Orbitron', monospace; font-size: 20px; font-weight: 700;
+            color: rgba(180,150,60,0.4); letter-spacing: 1px;
+            width: 36px; text-align: center; transition: all 0.2s ease; cursor: pointer;
+        }
+        .cv-label.active {
+            color: #f0c040; text-shadow: 0 0 6px rgba(240,192,64,0.4);
         }
         
         /* Auto-shoot Toggle, Center View, and View Mode - Bottom Right */
@@ -2052,6 +2122,31 @@
                         <div class="ammo-count" id="ammo-count-text"></div>
                     </div>
 
+                    <!-- COIN VALUE header -->
+                    <div class="cv-header"><div class="cv-dot"></div><div class="cv-title">COIN VALUE</div><div class="cv-line"></div></div>
+
+                    <!-- COIN VALUE Slider -->
+                    <div class="cv-slider-wrap">
+                        <div class="cv-slider-row">
+                            <div class="cv-track" id="cv-track">
+                                <div class="cv-track-fill" id="cv-track-fill"></div>
+                                <div class="cv-stops">
+                                    <div class="cv-stop active" data-cv="1"></div>
+                                    <div class="cv-stop" data-cv="3"></div>
+                                    <div class="cv-stop" data-cv="5"></div>
+                                    <div class="cv-stop" data-cv="10"></div>
+                                </div>
+                                <div class="cv-thumb" id="cv-thumb"></div>
+                            </div>
+                        </div>
+                        <div class="cv-labels" id="cv-labels">
+                            <div class="cv-label active" data-cv="1">1x</div>
+                            <div class="cv-label" data-cv="3">3x</div>
+                            <div class="cv-label" data-cv="5">5x</div>
+                            <div class="cv-label" data-cv="10">10x</div>
+                        </div>
+                    </div>
+
                     <div class="wp-auto">
                         <div class="auto-left"><div class="auto-label">AUTO FIRE</div><span class="auto-sep">:</span><span class="auto-kbd">A</span></div>
                         <div class="auto-pill" id="auto-pill">
@@ -2075,8 +2170,6 @@
                     <div class="tier-row" data-tier="1"><span class="tier-label">Tier 1</span><div class="tier-bar"></div></div>
                     <div class="tier-row" data-tier="2"><span class="tier-label">Tier 2</span><div class="tier-bar"></div></div>
                     <div class="tier-row" data-tier="3"><span class="tier-label">Tier 3</span><div class="tier-bar"></div></div>
-                    <div class="tier-row" data-tier="4"><span class="tier-label">Tier 4</span><div class="tier-bar"></div></div>
-                    <div class="tier-row" data-tier="5"><span class="tier-label">Tier 5</span><div class="tier-bar"></div></div>
                 </div>
             </div>
             
