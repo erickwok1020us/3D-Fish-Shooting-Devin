@@ -1033,8 +1033,8 @@ const WEAPON_CONFIG = {
         glbCannonNonPlayer: '3x 武器模組(非玩家).glb',
         glbBullet: '1x 子彈模組',
         glbHitEffect: '3x 擊中特效',
-        scale: 1.1, bulletScale: 0.6, hitEffectScale: 0.35,
-        muzzleOffset: new THREE.Vector3(0, 30, 60),
+        scale: 0.8, bulletScale: 0.6, hitEffectScale: 0.35,  // 0.8 × FPS_ELEV_SCALE(2.0) = 1.6 effective turret scale
+        muzzleOffset: new THREE.Vector3(0, 22, 44),  // Calibrated for scale 0.8 barrel tip (was 0,30,60 at scale 1.1)
         cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
         bulletRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
