@@ -1034,6 +1034,7 @@ const WEAPON_CONFIG = {
         glbBullet: '1x 子彈模組',
         glbHitEffect: '3x 擊中特效',
         scale: 1.1, bulletScale: 0.6, hitEffectScale: 0.35,
+        fpsScale: 1.6,  // 3x turret uses smaller FPS scale (1.6 instead of global 2.0)
         muzzleOffset: new THREE.Vector3(0, 30, 60),
         cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -20708,7 +20709,10 @@ function initFPSMode() {
     // Set up cannon for FPS mode
     if (cannonGroup) {
         cannonGroup.visible = true;
-        cannonGroup.scale.set(FPS_ELEV_SCALE, FPS_ELEV_SCALE, FPS_ELEV_SCALE);
+        // Per-weapon FPS scale override (e.g. 3x uses 1.6 instead of global 2.0)
+        const initWeaponCfg = WEAPON_CONFIG[gameState.currentWeapon || '1x'];
+        const initFpsScale = (initWeaponCfg && initWeaponCfg.fpsScale) ? initWeaponCfg.fpsScale : FPS_ELEV_SCALE;
+        cannonGroup.scale.set(initFpsScale, initFpsScale, initFpsScale);
         // Absolute world-space turret positioning (Variant 2)
         cannonGroup.position.y = FPS_ELEV_TURRET_Y;
         cannonGroup.position.z = FPS_ELEV_TURRET_Z;
@@ -20819,7 +20823,10 @@ function updateFPSCamera() {
     // Force turret to fixed world-space position regardless of scene hierarchy
     cannonGroup.position.y = FPS_ELEV_TURRET_Y;
     cannonGroup.position.z = FPS_ELEV_TURRET_Z;
-    cannonGroup.scale.set(FPS_ELEV_SCALE, FPS_ELEV_SCALE, FPS_ELEV_SCALE);
+    // Per-weapon FPS scale override (e.g. 3x uses 1.6 instead of global 2.0)
+    const weaponCfg = WEAPON_CONFIG[gameState.currentWeapon];
+    const fpsScale = (weaponCfg && weaponCfg.fpsScale) ? weaponCfg.fpsScale : FPS_ELEV_SCALE;
+    cannonGroup.scale.set(fpsScale, fpsScale, fpsScale);
     cannonGroup.visible = true;  // Ensure turret is never hidden
     
     // === Near clip (every frame) ===
