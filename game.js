@@ -19570,6 +19570,19 @@ function selectWeapon(weaponKey) {
 // ==================== COIN VALUE SLIDER ====================
 const COIN_VALUE_STOPS = [1, 3, 5, 10];
 
+const WEAPON_BASE_MULTIPLIERS = { '1x': 1, '3x': 3, '5x': 5, '8x': 8 };
+
+function updateWeaponButtonLabels(coinValue) {
+    var btns = document.querySelectorAll('.weapon-btn[data-weapon]');
+    btns.forEach(function(btn) {
+        var wk = btn.getAttribute('data-weapon');
+        var base = WEAPON_BASE_MULTIPLIERS[wk];
+        if (!base) return;
+        var multEl = btn.querySelector('.multiplier');
+        if (multEl) multEl.textContent = (base * coinValue);
+    });
+}
+
 function initCoinValueSlider() {
     const track = document.getElementById('cv-track');
     const fill = document.getElementById('cv-track-fill');
@@ -19588,6 +19601,7 @@ function initCoinValueSlider() {
         labels.forEach(function(l, i) { l.classList.toggle('active', i === index); });
         stopEls.forEach(function(s, i) { s.classList.toggle('active', i <= index); });
         if (currentDisplay) currentDisplay.textContent = val + 'x';
+        updateWeaponButtonLabels(val);
         updateDigiAmmoDisplay();
     }
 
