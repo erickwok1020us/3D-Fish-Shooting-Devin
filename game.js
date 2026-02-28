@@ -17377,7 +17377,7 @@ class ClientRTPPhase1 {
                 fState.sumCostFp += weaponCostFp * coinValue;
             }
 
-            const hardPityThreshold = Math.floor(config.n1Fp * coinValue / weaponMult);
+            const hardPityThreshold = Math.floor(config.n1Fp * coinValue);
             if (fState.sumCostFp >= hardPityThreshold) {
                 const killResult = this._executeKill(fState, pState, config, entry.fishId, 'hard_pity', isAuto, coinValue);
                 results.push(killResult);
@@ -19579,7 +19579,7 @@ function updateWeaponButtonLabels(coinValue) {
         var base = WEAPON_BASE_MULTIPLIERS[wk];
         if (!base) return;
         var multEl = btn.querySelector('.multiplier');
-        if (multEl) multEl.textContent = (base * coinValue);
+        if (multEl) multEl.textContent = (base * coinValue) + 'x';
     });
 }
 
