@@ -2793,6 +2793,89 @@ const coinGLBState = {
     loadPromise: null
 };
 
+// ==================== NEON ABYSS COIN SYSTEM ====================
+// Procedural "Energy Chip" coins — octagonal shape with neon glow + additive blending
+const NEON_COIN_CONFIG = {
+    size: 8,                        // Base size of energy chip
+    color: 0xFFD700,                // Neon Gold
+    emissive: 0xFFD700,             // Self-illumination
+    emissiveIntensity: 2.5,         // Strong glow for bloom
+    trailColor: 0xCCFF00,           // Cyber Yellow trail
+    trailLength: 4,                 // Number of trail segments
+    trailOpacity: 0.4,              // Trail starting opacity
+    spinSpeed: 3.0,                 // Rotation speed
+    pulseSpeed: 4.0,                // Glow pulse frequency
+    pulseAmplitude: 0.3             // Glow pulse range (±30%)
+};
+
+// Cached octagonal geometry for Neon Abyss coins
+let _neonCoinGeometry = null;
+function getNeonCoinGeometry() {
+    if (_neonCoinGeometry) return _neonCoinGeometry;
+    // Octagonal prism — 8 sides, thin depth for "energy chip" look
+    _neonCoinGeometry = new THREE.CylinderGeometry(
+        NEON_COIN_CONFIG.size,  // radiusTop
+        NEON_COIN_CONFIG.size,  // radiusBottom
+        NEON_COIN_CONFIG.size * 0.15,  // height (thin chip)
+        8,                      // radialSegments (octagonal)
+        1                       // heightSegments
+    );
+    return _neonCoinGeometry;
+}
+
+// Neon coin material pool to avoid creating new materials per coin
+const _neonCoinMaterialPool = [];
+const _NEON_COIN_POOL_MAX = 80;  // Boss(35) + T1 kills + buffer
+
+function getNeonCoinMaterial() {
+    if (_neonCoinMaterialPool.length > 0) {
+        const mat = _neonCoinMaterialPool.pop();
+        mat.opacity = 1.0;
+        mat.emissiveIntensity = NEON_COIN_CONFIG.emissiveIntensity;
+        return mat;
+    }
+    return new THREE.MeshStandardMaterial({
+        color: NEON_COIN_CONFIG.color,
+        emissive: NEON_COIN_CONFIG.emissive,
+        emissiveIntensity: NEON_COIN_CONFIG.emissiveIntensity,
+        metalness: 0.8,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+}
+
+function returnNeonCoinMaterial(mat) {
+    if (_neonCoinMaterialPool.length < _NEON_COIN_POOL_MAX) {
+        _neonCoinMaterialPool.push(mat);
+    } else {
+        mat.dispose();
+    }
+}
+
+// Create a single Neon Abyss energy chip mesh
+function createNeonCoinMesh() {
+    const geo = getNeonCoinGeometry();
+    const mat = getNeonCoinMaterial();
+    const mesh = new THREE.Mesh(geo, mat);
+    // Rotate so flat face is visible from front (chip lies flat, then rotated to face camera)
+    mesh.rotation.x = Math.PI / 2;
+    return mesh;
+}
+
+// Create a digital trail segment (small fading square)
+let _trailGeometry = null;
+function getTrailGeometry() {
+    if (_trailGeometry) return _trailGeometry;
+    _trailGeometry = new THREE.PlaneGeometry(
+        NEON_COIN_CONFIG.size * 0.5,
+        NEON_COIN_CONFIG.size * 0.5
+    );
+    return _trailGeometry;
+}
+
 // Load Coin GLB model
 async function loadCoinGLB() {
     if (coinGLBState.loaded || coinGLBState.loading) {
@@ -9410,36 +9493,37 @@ function initCoinCollectionSystem() {
 function spawnWaitingCoin(position, rewardPerCoin = 0) {
     if (!particleGroup) return;
     
-    const useCoinGLB = coinGLBState.loaded && coinGLBState.model;
-    if (!useCoinGLB) return;
-    
     if (coinCollectionSystem.waitingCoins.length === 0 && !coinCollectionSystem.isCollecting) {
         coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval;
     }
     
-    const coinModel = cloneCoinModel();
-    if (!coinModel) return;
+    // NEON ABYSS: Use procedural octagonal Energy Chip instead of Coin.glb
+    const coinMesh = createNeonCoinMesh();
     
-    const offsetX = (Math.random() - 0.5) * 60;
-    const offsetY = (Math.random() - 0.5) * 60;
-    const offsetZ = (Math.random() - 0.5) * 60;
+    // Spread coins in a burst pattern around death position
+    const spreadRadius = 80;
+    const offsetX = (Math.random() - 0.5) * spreadRadius;
+    const offsetY = (Math.random() - 0.5) * spreadRadius;
+    const offsetZ = (Math.random() - 0.5) * spreadRadius;
     
-    coinModel.position.set(
+    coinMesh.position.set(
         position.x + offsetX,
         position.y + offsetY,
         position.z + offsetZ
     );
-    coinModel.scale.setScalar(COIN_GLB_CONFIG.scale);
-    particleGroup.add(coinModel);
+    coinMesh.scale.setScalar(1.0);
+    particleGroup.add(coinMesh);
     
     coinCollectionSystem.waitingCoins.push({
-        mesh: coinModel,
+        mesh: coinMesh,
+        isNeonCoin: true,      // Flag for cleanup to use neon material pool
+        material: coinMesh.material, // Reference for glow pulse + cleanup
         spinAngle: Math.random() * Math.PI * 2,
-        spinSpeed: 1.5 + Math.random() * 1.0, // Gentle spin: 1.5-2.5 rad/s
+        spinSpeed: NEON_COIN_CONFIG.spinSpeed + Math.random() * 1.0,
         bobOffset: Math.random() * Math.PI * 2,
-        baseY: coinModel.position.y,
-        state: 'waiting', // 'waiting' or 'collecting'
-        reward: rewardPerCoin // Reward value for this coin (balance updates when coin reaches cannon)
+        baseY: coinMesh.position.y,
+        state: 'waiting',
+        reward: rewardPerCoin
     });
 }
 
@@ -9500,6 +9584,12 @@ function updateCoinCollectionSystem(dt) {
                 cameraDir.subVectors(camera.position, coin.mesh.position).normalize();
                 const yaw = Math.atan2(cameraDir.x, cameraDir.z);
                 coin.mesh.rotation.y = yaw + coin.spinAngle * 0.3; // Combine camera facing with gentle spin
+            }
+            
+            // NEON ABYSS: Glow pulse effect — emissive intensity oscillates
+            if (coin.isNeonCoin && coin.material) {
+                const pulse = 1.0 + Math.sin(time * NEON_COIN_CONFIG.pulseSpeed + coin.bobOffset) * NEON_COIN_CONFIG.pulseAmplitude;
+                coin.material.emissiveIntensity = NEON_COIN_CONFIG.emissiveIntensity * pulse;
             }
         }
     }
@@ -9583,6 +9673,9 @@ function triggerCoinCollection() {
             targetZ: targetPos.z,
             duration: (0.6 + Math.random() * 0.3) * 1000, // 0.6-0.9s flight time
             elapsedSinceStart: 0,
+            // NEON ABYSS: Digital trail segments spawned during flight
+            trailSegments: [],
+            trailSpawnTimer: 0,
             
             update(dt, elapsed) {
                 if (!this.started) {
@@ -9604,6 +9697,10 @@ function triggerCoinCollection() {
                 const mt2 = mt * mt;
                 const t2 = t * t;
                 
+                const prevX = this.coin.mesh.position.x;
+                const prevY = this.coin.mesh.position.y;
+                const prevZ = this.coin.mesh.position.z;
+                
                 this.coin.mesh.position.x = mt2 * this.startX + 2 * mt * t * this.midX + t2 * this.targetX;
                 this.coin.mesh.position.y = mt2 * this.startY + 2 * mt * t * this.midY + t2 * this.targetY;
                 this.coin.mesh.position.z = mt2 * this.startZ + 2 * mt * t * this.midZ + t2 * this.targetZ;
@@ -9613,10 +9710,54 @@ function triggerCoinCollection() {
                     this.coin.mesh.lookAt(camera.position);
                 }
                 
-                // Scale up slightly as it approaches
-                const baseScale = COIN_GLB_CONFIG.scale;
-                const scale = baseScale * (1 + t * 0.3);
+                // NEON ABYSS: Scale up slightly as it approaches (using neon coin base scale)
+                const scale = 1.0 + t * 0.3;
                 this.coin.mesh.scale.setScalar(scale);
+                
+                // NEON ABYSS: Glow intensifies during flight
+                if (this.coin.isNeonCoin && this.coin.material) {
+                    this.coin.material.emissiveIntensity = NEON_COIN_CONFIG.emissiveIntensity * (1.0 + t * 1.5);
+                }
+                
+                // NEON ABYSS: Spawn digital trail segments during flight
+                this.trailSpawnTimer += dt * 1000;
+                if (this.trailSpawnTimer > 30 && t < 0.95 && particleGroup) { // Every 30ms, stop near end
+                    this.trailSpawnTimer = 0;
+                    const trailGeo = getTrailGeometry();
+                    const trailMat = new THREE.MeshBasicMaterial({
+                        color: NEON_COIN_CONFIG.trailColor,
+                        transparent: true,
+                        opacity: NEON_COIN_CONFIG.trailOpacity,
+                        blending: THREE.AdditiveBlending,
+                        depthWrite: false
+                    });
+                    const trailMesh = new THREE.Mesh(trailGeo, trailMat);
+                    trailMesh.position.set(prevX, prevY, prevZ);
+                    if (camera) trailMesh.lookAt(camera.position);
+                    trailMesh.scale.setScalar(0.6 + Math.random() * 0.4);
+                    particleGroup.add(trailMesh);
+                    this.trailSegments.push({
+                        mesh: trailMesh,
+                        material: trailMat,
+                        life: 0,
+                        maxLife: 200 + Math.random() * 100 // 200-300ms lifetime
+                    });
+                }
+                
+                // Update existing trail segments (fade out + shrink)
+                for (let ti = this.trailSegments.length - 1; ti >= 0; ti--) {
+                    const seg = this.trailSegments[ti];
+                    seg.life += dt * 1000;
+                    const segT = seg.life / seg.maxLife;
+                    if (segT >= 1) {
+                        particleGroup.remove(seg.mesh);
+                        seg.material.dispose();
+                        this.trailSegments.splice(ti, 1);
+                    } else {
+                        seg.material.opacity = NEON_COIN_CONFIG.trailOpacity * (1 - segT);
+                        seg.mesh.scale.setScalar((0.6 + Math.random() * 0.1) * (1 - segT * 0.5));
+                    }
+                }
                 
                 if (t >= 1) {
                     // Coin reached cannon muzzle - update balance and notify sound system
@@ -9629,9 +9770,26 @@ function triggerCoinCollection() {
             },
             
             cleanup() {
+                // NEON ABYSS: Clean up all trail segments
+                if (this.trailSegments) {
+                    for (let ti = this.trailSegments.length - 1; ti >= 0; ti--) {
+                        const seg = this.trailSegments[ti];
+                        if (seg.mesh && particleGroup) particleGroup.remove(seg.mesh);
+                        if (seg.material) seg.material.dispose();
+                    }
+                    this.trailSegments.length = 0;
+                }
+                
                 if (this.coin && this.coin.mesh) {
                     particleGroup.remove(this.coin.mesh);
-                    returnCoinModelToPool(this.coin.mesh);
+                    
+                    // NEON ABYSS: Return material to pool instead of GLB model pool
+                    if (this.coin.isNeonCoin && this.coin.material) {
+                        returnNeonCoinMaterial(this.coin.material);
+                        // Geometry is shared/cached, don't dispose
+                    } else {
+                        returnCoinModelToPool(this.coin.mesh);
+                    }
                     
                     // Remove from waiting coins array
                     const idx = coinCollectionSystem.waitingCoins.indexOf(this.coin);
@@ -16756,7 +16914,8 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            const coinCount = fishSize === 'boss' ? 3 : fishSize === 'large' ? 2 : 1;
+            // TIERED COIN BURST: Spawn coins based on fish tier (Boss 30+, T1 10-15, T2 5-8, T3 2-3)
+            const coinCount = getTierCoinCount(this.form, this.isBoss);
             for (let ci = 0; ci < coinCount; ci++) {
                 spawnWaitingCoin(deathPosition, 0);
             }
@@ -16790,7 +16949,8 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            const coinCount = fishSize === 'boss' ? 3 : fishSize === 'large' ? 2 : 1;
+            // TIERED COIN BURST: Spawn coins based on fish tier (Boss 30+, T1 10-15, T2 5-8, T3 2-3)
+            const coinCount = getTierCoinCount(this.form, this.isBoss);
             for (let ci = 0; ci < coinCount; ci++) {
                 spawnWaitingCoin(deathPosition, 0);
             }
@@ -19857,6 +20017,22 @@ const TIER_BORDER_COLORS = {
     t2:   '#00FF66',
     t3:   '#00CCFF'
 };
+
+// ==================== TIERED COIN BURST CONFIG ====================
+// Coin burst counts based on fish tier (Neon Abyss currency feedback)
+const TIER_COIN_BURST = {
+    boss: { min: 30, max: 35 },   // Massive explosion of currency
+    t1:   { min: 10, max: 15 },   // Large burst
+    t2:   { min: 5,  max: 8 },    // Medium burst
+    t3:   { min: 2,  max: 3 }     // Small burst
+};
+
+function getTierCoinCount(fishForm, isBoss) {
+    if (isBoss) return TIER_COIN_BURST.boss.min + Math.floor(Math.random() * (TIER_COIN_BURST.boss.max - TIER_COIN_BURST.boss.min + 1));
+    const tier = FISH_FORM_TO_TIER[fishForm] || 't3';
+    const cfg = TIER_COIN_BURST[tier] || TIER_COIN_BURST.t3;
+    return cfg.min + Math.floor(Math.random() * (cfg.max - cfg.min + 1));
+}
 
 function getKillFeedTierColor(fishForm) {
     const tier = FISH_FORM_TO_TIER[fishForm];
