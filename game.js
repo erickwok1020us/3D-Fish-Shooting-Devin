@@ -5258,28 +5258,28 @@ const NEON_ABYSS_COLORS = {
 // Digital Ribbon trail config (Trajectory Option A)
 const DIGITAL_RIBBON_CONFIG = {
     glitchSegments: 4,          // Number of glitch trail fragments behind bullet
-    glitchOffsetMax: 3,         // Max random X/Y offset for glitch fragments (units)
-    glitchLifetime: 0.1,        // How long each glitch segment lasts (seconds)
+    glitchOffsetMax: 5,         // Max random X/Y offset for glitch fragments (units) — boosted
+    glitchLifetime: 0.15,       // How long each glitch segment lasts (seconds) — longer
     ghostCount: 4,              // Max ghosting frames
-    ghostSpawnInterval: 0.03,   // Spawn ghost every 30ms
-    ghostFadeSpeed: 0.6,        // Opacity decay per ghost (0.6 → each ghost dimmer)
+    ghostSpawnInterval: 0.04,   // Spawn ghost every 40ms (slightly less frequent for perf)
+    ghostFadeSpeed: 0.5,        // Opacity decay per ghost — slower fade for visibility
     flickerFreq: 15,            // CRT flicker frequency (Hz)
-    trailWidth: 2,              // Neon line width (world units)
+    trailWidth: 3,              // Neon line width (world units) — boosted
 };
 
 // Pixel Shatter hit config (Hit Effect Option A)
 const PIXEL_SHATTER_CONFIG = {
-    cubeCount: { '1x': 8, '3x': 10, '5x': 12, '8x': 12 },
-    cubeSize: 3,                // Neon pixel cube size (units)
-    cubeSpeed: { min: 200, max: 400 },  // Ejection speed range
-    cubeLifetime: 0.4,          // Seconds before fade out
-    cubeGravity: -150,          // Slight downward pull
+    cubeCount: { '1x': 10, '3x': 12, '5x': 14, '8x': 16 },
+    cubeSize: 5,                // Neon pixel cube size (units) — boosted for visibility
+    cubeSpeed: { min: 250, max: 500 },  // Ejection speed range
+    cubeLifetime: 0.6,          // Seconds before fade out — longer for visibility
+    cubeGravity: -120,          // Slight downward pull
     ringMaxRadius: 25,          // Shockwave ring max expansion (≤ Mid Splash)
-    ringExpandTime: 0.15,       // Ring expansion duration (seconds)
+    ringExpandTime: 0.2,        // Ring expansion duration (seconds)
     ringWidth: 1,               // Ring line thickness
     residualCount: 3,           // Slow-floating residual pixels
-    residualSize: 1.5,          // Residual pixel size
-    residualLifetime: 0.5,      // Seconds before residual fades
+    residualSize: 2.5,          // Residual pixel size — boosted
+    residualLifetime: 0.7,      // Seconds before residual fades — longer
 };
 
 // ==================== 3X WEAPON FIRE PARTICLE SYSTEM ====================
@@ -8230,44 +8230,23 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!config) return;
     
-    // Try to spawn GLB hit effect first
-    if (weaponGLBState.enabled && glbConfig) {
-        const glbSpawned = await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish);
-        if (glbSpawned) {
-            // GLB effect spawned, still add some procedural effects for extra visual impact
-            if (weaponKey === '5x' || weaponKey === '8x') {
-                triggerScreenShakeWithStrength(weaponKey === '8x' ? 3 : 1);
-            }
-            // 3X WEAPON: Fire particle burst DISABLED - using original 3x bullet GLB model
-            // if (weaponKey === '3x' && fireParticlePool.initialized) {
-            //     spawnFireHitBurst(hitPos);
-            // }
-            return;
-        }
-    }
+    // NEON ABYSS: Always spawn Pixel Shatter hit effects for all weapons
+    // These neon effects run alongside any GLB hit effects for maximum visual impact
+    spawnNeonPixelShatter(hitPos, weaponKey);
     
-    // NEON ABYSS: Pixel Shatter hit effects for all weapons
-    // Replaces old water/splash effects with neon pixel cube burst + shockwave ring
-    if (weaponKey === '1x') {
-        // Light pixel shatter (8 cubes, cyan neon)
-        spawnNeonPixelShatter(hitPos, weaponKey);
-        
-    } else if (weaponKey === '3x') {
-        // Medium pixel shatter (10 cubes, pink neon)
-        spawnNeonPixelShatter(hitPos, weaponKey);
-        
-    } else if (weaponKey === '5x') {
-        // Heavy pixel shatter (12 cubes, gold neon) + screen flash + shake
-        spawnNeonPixelShatter(hitPos, weaponKey);
+    // Extra effects for higher-tier weapons
+    if (weaponKey === '5x') {
         triggerScreenFlash(NEON_ABYSS_COLORS['5x'].glow, 100, 0.1);
         triggerScreenShakeWithStrength(1);
-        
     } else if (weaponKey === '8x') {
-        // Maximum pixel shatter (12 cubes, red neon) + screen flash + shake + knockback
-        spawnNeonPixelShatter(hitPos, weaponKey);
         triggerScreenShakeWithStrength(3);
         triggerScreenFlash(NEON_ABYSS_COLORS['8x'].glow, 100, 0.15);
         applyExplosionKnockback(hitPos, 200, 150);
+    }
+    
+    // Try to spawn GLB hit effect as well (visual overlay)
+    if (weaponGLBState.enabled && glbConfig) {
+        await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish);
     }
 }
 
@@ -8704,7 +8683,7 @@ function spawnDigitalRibbonGhost(position, weaponKey, ghostIndex) {
     const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
     
     // Ghost opacity: first ghost is brightest, subsequent ones dimmer
-    const baseOpacity = 0.6 - ghostIndex * 0.15; // 0.6, 0.45, 0.3, 0.15
+    const baseOpacity = 0.8 - ghostIndex * 0.15; // 0.8, 0.65, 0.5, 0.35
     if (baseOpacity <= 0) return;
     
     const ghostMaterial = new THREE.MeshBasicMaterial({
@@ -8716,7 +8695,7 @@ function spawnDigitalRibbonGhost(position, weaponKey, ghostIndex) {
     });
     
     const ghost = new THREE.Mesh(vfxGeometryCache.neonGhost, ghostMaterial);
-    ghost.scale.set(4, 4, 4); // slightly larger than bullet for glow effect
+    ghost.scale.set(8, 8, 8); // large glow sphere for visible ghost trail
     ghost.position.copy(position);
     scene.add(ghost);
     
@@ -8725,13 +8704,13 @@ function spawnDigitalRibbonGhost(position, weaponKey, ghostIndex) {
         mesh: ghost,
         material: ghostMaterial,
         baseOpacity: baseOpacity,
-        duration: 120, // 120ms fade
+        duration: 200, // 200ms fade — longer for visibility
         
         update(dt, elapsed) {
             const progress = Math.min(elapsed / this.duration, 1);
             this.material.opacity = this.baseOpacity * (1 - progress);
             // Slight shrink as it fades
-            const scale = 4 * (1 - progress * 0.5);
+            const scale = 8 * (1 - progress * 0.5);
             this.mesh.scale.set(scale, scale, scale);
             return progress < 1;
         },
@@ -8756,7 +8735,7 @@ function spawnDigitalRibbonGlitch(position, direction, weaponKey) {
         const offsetY = (Math.random() - 0.5) * cfg.glitchOffsetMax * 2;
         
         // Glitch segment: a short line behind the bullet
-        const segLength = 3 + Math.random() * 5;
+        const segLength = 8 + Math.random() * 12; // longer segments for visibility
         const segGeometry = new THREE.BufferGeometry();
         const startPos = position.clone();
         startPos.x += offsetX;
