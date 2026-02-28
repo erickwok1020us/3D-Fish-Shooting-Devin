@@ -20335,13 +20335,13 @@ const FPS_CAMERA_UP_OFFSET_DEFAULT = -30;
 const FPS_CANNON_SIDE_OFFSET = 5;
 
 // ===== FPS ABSOLUTE WORLD-SPACE CONFIG (Variant E — The Mantle) =====
-// Config A base: Y-gap=178, Z-gap=120, FOV=75, Pitch=-5°, Scale=1.8x
+// Config A base: Y-gap=178, Z-gap=120, FOV=75, Pitch=-5°, Scale=2.5x
 // Camera and turret use fixed world coordinates — no muzzle-following
 const FPS_ELEV_CAMERA_Y = -160;     // Camera World Y (sub-abyssal depth)
 const FPS_ELEV_CAMERA_Z = -800;     // Camera World Z
 const FPS_ELEV_TURRET_Y = -338;     // Turret World Y (CamY - 178)
 const FPS_ELEV_TURRET_Z = -680;     // Turret World Z (CamZ + 120)
-const FPS_ELEV_SCALE = 1.8;         // Turret scale multiplier
+const FPS_ELEV_SCALE = 2.5;         // Turret scale multiplier (was 1.8, increased for larger barrel)
 const FPS_ELEV_FOV = 75;            // Camera FOV
 const FPS_ELEV_PITCH = -5;          // Initial pitch in degrees
 
@@ -21976,6 +21976,19 @@ function initSettingsUI() {
 
 // Apply all saved settings on game load
 function applyAllSettings() {
+    // FIX: Sync Loading Screen quality selection into gameSettings
+    // The Loading Screen stores its choice in window._selectedLoadingQuality and
+    // localStorage('graphicsQuality'), but gameSettings loads from a separate
+    // 'fishShooterSettings' JSON blob which defaults to 'medium'.
+    // Without this sync, the in-game Settings dropdown always shows 'medium'.
+    const loadingQuality = window._selectedLoadingQuality
+        || performanceState.graphicsQuality;
+    if (loadingQuality && ['low', 'medium', 'high'].includes(loadingQuality)) {
+        gameSettings.graphicsQuality = loadingQuality;
+        // Also update the dropdown element immediately
+        const graphicsSelect = document.getElementById('graphics-quality');
+        if (graphicsSelect) graphicsSelect.value = loadingQuality;
+    }
     applyGraphicsQuality(gameSettings.graphicsQuality);
     applyShadowQuality(gameSettings.shadowQuality);
     applyMusicVolumePercent(gameSettings.musicVolume);
