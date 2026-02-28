@@ -8785,6 +8785,43 @@ function spawnDigitalRibbonGlitch(position, direction, weaponKey) {
     }
 }
 
+// ==================== NEON ABYSS: HITSCAN BEAM NEON TRACER ====================
+// Spawns Digital Ribbon ghost + glitch effects along a hitscan beam path
+// Used for 5x rocket and 8x laser which fire instant beams (no physical bullet)
+function spawnNeonBeamTracer(muzzlePos, beamEnd, weaponKey) {
+    if (!scene) return;
+    
+    const beamDir = new THREE.Vector3().subVectors(beamEnd, muzzlePos);
+    const beamLength = beamDir.length();
+    if (beamLength < 10) return;
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    
+    // Spawn ghost spheres at intervals along the beam (Digital Ribbon style)
+    const ghostSpacing = 80; // spacing between ghosts along beam
+    const numGhosts = Math.min(Math.floor(beamLength / ghostSpacing), 12);
+    
+    for (let i = 0; i < numGhosts; i++) {
+        const t = (i + 0.5) / numGhosts;
+        const pos = muzzlePos.clone().lerp(beamEnd, t);
+        // Slight random offset for glitch feel
+        pos.x += (Math.random() - 0.5) * 6;
+        pos.y += (Math.random() - 0.5) * 6;
+        
+        spawnDigitalRibbonGhost(pos, weaponKey, i % 4);
+    }
+    
+    // Spawn glitch segments along the beam
+    const glitchSpacing = 120;
+    const numGlitchPoints = Math.min(Math.floor(beamLength / glitchSpacing), 8);
+    
+    for (let i = 0; i < numGlitchPoints; i++) {
+        const t = (i + 0.5) / numGlitchPoints;
+        const pos = muzzlePos.clone().lerp(beamEnd, t);
+        spawnDigitalRibbonGlitch(pos, beamDir, weaponKey);
+    }
+}
+
 // Spawn mega explosion (three-stage for 8x weapon) - REFACTORED to use VFX manager
 // PERFORMANCE: Uses cached geometry with scaling instead of creating new geometry each time
 function spawnMegaExplosion(position) {
@@ -17841,6 +17878,9 @@ class Bullet {
                     // Screen shake for rocket impact
                     triggerScreenShakeWithStrength(6, 80);
                     
+                    // NEON ABYSS: Spawn Pixel Shatter at rocket impact point
+                    spawnNeonPixelShatter(bulletTempVectors.hitPos.clone(), this.weaponKey);
+                    
                 } else if (weapon.type === 'chain') {
                     // Chain lightning: hit first fish, then chain to nearby fish
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
@@ -19047,6 +19087,8 @@ function fireHitscanRay(origin, direction, weaponKey, spreadIndex) {
         if (weapon.type === 'rocket') {
             triggerExplosion(beamEnd.clone(), weaponKey);
             triggerScreenShakeWithStrength(6, 80);
+            // NEON ABYSS: Spawn Pixel Shatter at rocket impact point
+            spawnNeonPixelShatter(beamEnd.clone(), weaponKey);
         } else {
             closestHit.takeDamage(damage, weaponKey, spreadIndex);
             createHitParticles(beamEnd, weapon.color, 5);
@@ -19069,6 +19111,9 @@ function spawnTracerBeamVFX(muzzlePos, beamEnd, color, weaponKey) {
     const beamLength = beamDir.length();
     if (beamLength < 1) return;
     const beamMid = new THREE.Vector3().addVectors(muzzlePos, beamEnd).multiplyScalar(0.5);
+
+    // NEON ABYSS: Spawn Digital Ribbon ghost + glitch effects along the beam
+    spawnNeonBeamTracer(muzzlePos, beamEnd, weaponKey);
 
     const coreGeo = new THREE.CylinderGeometry(1.5, 1.5, beamLength, 6, 1);
     const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
@@ -19190,6 +19235,8 @@ function fireLaserBeam(origin, direction, weaponKey) {
             showCrosshairRingFlash();
             createHitParticles(hit.hitPoint, weapon.color, 12);
             playWeaponHitSound(weaponKey);
+            // NEON ABYSS: Spawn Pixel Shatter at each laser hit point
+            spawnNeonPixelShatter(hit.hitPoint, weaponKey);
             if (i < results.length) {
                 const result = results[i];
                 if (result && result.kill && hit.fish.isActive) {
@@ -19202,6 +19249,8 @@ function fireLaserBeam(origin, direction, weaponKey) {
             hit.fish.takeDamage(damage, weaponKey);
             createHitParticles(hit.hitPoint, weapon.color, 12);
             playWeaponHitSound(weaponKey);
+            // NEON ABYSS: Spawn Pixel Shatter at each laser hit point
+            spawnNeonPixelShatter(hit.hitPoint, weaponKey);
         }
     }
     
@@ -19212,6 +19261,9 @@ function fireLaserBeam(origin, direction, weaponKey) {
 
 // Hitscan laser VFX: visual beam from muzzle to hit point + muzzle flash + per-hit sparks
 function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
+    // NEON ABYSS: Spawn Digital Ribbon ghost + glitch effects along the laser beam
+    spawnNeonBeamTracer(muzzlePos, beamEnd, '8x');
+    
     const flashRadius = 30;
     
     const muzzleFlashGeometry = new THREE.SphereGeometry(flashRadius, 16, 16);
