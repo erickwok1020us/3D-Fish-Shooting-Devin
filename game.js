@@ -9396,6 +9396,7 @@ const coinCollectionSystem = {
     isCollecting: false,        // Whether collection animation is in progress
     initialized: false,
     pendingReward: 0,           // Total reward waiting to be collected (balance updates on coin arrival)
+    pendingRewards: [],         // SYNC FIX: Queue of {winFp, winDisplay, fishForm} to process when coins reach turret
     maxCollectionTime: 3000,    // Maximum 3 seconds to collect all coins
     coinsBeingCollected: 0      // Track how many coins are still flying to cannon
 };
@@ -9765,7 +9766,42 @@ function onCoinCollectionComplete() {
     coinCollectionSystem.isCollecting = false;
     coinCollectionSystem.coinsBeingCollected = 0;
     
-    // Reset timer - wait 8 seconds before next collection
+    // SYNC FIX: Process all pending rewards NOW that coins have physically reached the turret
+    // This creates the "money payout feels like coins hitting the turret" effect
+    if (coinCollectionSystem.pendingRewards.length > 0) {
+        let totalWinFp = 0;
+        let totalWinDisplay = 0;
+        const pendingRewards = coinCollectionSystem.pendingRewards;
+        
+        // Aggregate all pending balance updates
+        for (let i = 0; i < pendingRewards.length; i++) {
+            const pr = pendingRewards[i];
+            if (pr.winFp > 0) {
+                totalWinFp += pr.winFp;
+                totalWinDisplay += pr.winDisplay;
+            }
+        }
+        
+        // Apply aggregated balance update (single atomic update)
+        if (totalWinFp > 0) {
+            gameState.balance += totalWinFp;
+            gameState.score += Math.floor(totalWinDisplay);
+        }
+        
+        // Show individual reward popups + kill feed entries for each fish kill
+        for (let i = 0; i < pendingRewards.length; i++) {
+            const pr = pendingRewards[i];
+            const displayAmt = Math.round(pr.winDisplay);
+            if (displayAmt > 0) {
+                onScoreConfirmed(pr.fishForm, pr.winDisplay);
+            }
+        }
+        
+        // Clear the pending queue
+        coinCollectionSystem.pendingRewards.length = 0;
+    }
+    
+    // Reset timer - wait before next collection
     coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval;
 }
 
@@ -16724,7 +16760,13 @@ class Fish {
             for (let ci = 0; ci < coinCount; ci++) {
                 spawnWaitingCoin(deathPosition, 0);
             }
-            onScoreConfirmed(this.form, this.config.reward);
+            // SYNC FIX: Defer reward popup until coins reach turret (same as single-player)
+            // In multiplayer, balance comes from server, so winFp=0 here
+            coinCollectionSystem.pendingRewards.push({
+                winFp: 0,
+                winDisplay: this.config.reward,
+                fishForm: this.form
+            });
         } else {
             updateComboOnKill();
             
@@ -16753,14 +16795,20 @@ class Fish {
                 spawnWaitingCoin(deathPosition, 0);
             }
             
+            // SYNC FIX: Defer balance update + reward popup until coins physically reach the turret
+            // recordWin() is called immediately for RTP stats tracking (does not affect UI)
             if (winFp > 0) {
                 recordWin(winDisplay);
-                gameState.balance += winFp;
-                gameState.score += Math.floor(winDisplay);
             }
             
-            onScoreConfirmed(this.form, winDisplay);
-            // Note: No "miss" sound or gray particles - every kill now has coin feedback
+            // Queue the reward data — will be processed in onCoinCollectionComplete()
+            // when the coin fly animation finishes and coins "hit" the turret
+            coinCollectionSystem.pendingRewards.push({
+                winFp: winFp,
+                winDisplay: winDisplay,
+                fishForm: this.form
+            });
+            // Note: No immediate balance/popup — synced with coin arrival
         }
         
         // BOSS SPECIES: Do NOT schedule respawn timer for boss-only species.
