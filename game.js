@@ -5246,6 +5246,43 @@ const ABILITY_FISH_EXCLUDED = ['bombCrab', 'electricEel', 'goldFish', 'shieldTur
 // Auto-generated from WEAPON_CONFIG (single source of truth)
 const WEAPON_VFX_CONFIG = _buildLegacyVFXConfig();
 
+// ==================== NEON ABYSS VFX SYSTEM ====================
+// "Neon Abyss / Cyber" aesthetic — high-glow, digital particles, geometric shapes
+// STRICT SIZE CONSTRAINT: All effects ≤ Mid Splash footprint (~50 units diameter)
+const NEON_ABYSS_COLORS = {
+    '1x': { primary: 0x00ddff, secondary: 0x0088ff, glow: 0x44eeff },  // Cyan
+    '3x': { primary: 0xff44aa, secondary: 0xff0088, glow: 0xff88cc },  // Pink
+    '5x': { primary: 0xffdd00, secondary: 0xffaa00, glow: 0xffee44 },  // Gold
+    '8x': { primary: 0xff4444, secondary: 0xff0000, glow: 0xff8888 },  // Red
+};
+
+// Digital Ribbon trail config (Trajectory Option A)
+const DIGITAL_RIBBON_CONFIG = {
+    glitchSegments: 4,          // Number of glitch trail fragments behind bullet
+    glitchOffsetMax: 5,         // Max random X/Y offset for glitch fragments (units) — boosted
+    glitchLifetime: 0.15,       // How long each glitch segment lasts (seconds) — longer
+    ghostCount: 4,              // Max ghosting frames
+    ghostSpawnInterval: 0.04,   // Spawn ghost every 40ms (slightly less frequent for perf)
+    ghostFadeSpeed: 0.5,        // Opacity decay per ghost — slower fade for visibility
+    flickerFreq: 15,            // CRT flicker frequency (Hz)
+    trailWidth: 3,              // Neon line width (world units) — boosted
+};
+
+// Pixel Shatter hit config (Hit Effect Option A)
+const PIXEL_SHATTER_CONFIG = {
+    cubeCount: { '1x': 10, '3x': 12, '5x': 14, '8x': 16 },
+    cubeSize: 5,                // Neon pixel cube size (units) — boosted for visibility
+    cubeSpeed: { min: 250, max: 500 },  // Ejection speed range
+    cubeLifetime: 0.6,          // Seconds before fade out — longer for visibility
+    cubeGravity: -120,          // Slight downward pull
+    ringMaxRadius: 25,          // Shockwave ring max expansion (≤ Mid Splash)
+    ringExpandTime: 0.2,        // Ring expansion duration (seconds)
+    ringWidth: 1,               // Ring line thickness
+    residualCount: 3,           // Slow-floating residual pixels
+    residualSize: 2.5,          // Residual pixel size — boosted
+    residualLifetime: 0.7,      // Seconds before residual fades — longer
+};
+
 // ==================== 3X WEAPON FIRE PARTICLE SYSTEM ====================
 // Uses Unity-extracted textures for fire trail and hit effects
 const FIRE_PARTICLE_CONFIG = {
@@ -5697,7 +5734,11 @@ function initVfxGeometryCache() {
     vfxGeometryCache.megaCore = new THREE.SphereGeometry(1, 16, 16);        // Scale to 20 for mega core
     vfxGeometryCache.megaFireball = new THREE.SphereGeometry(1, 16, 16);    // Scale to 30 for mega fireball
     vfxGeometryCache.megaInner = new THREE.SphereGeometry(1, 12, 12);       // Scale to 20 for mega inner
-    console.log('[VFX] Geometry cache initialized with extended geometries');
+    // NEON ABYSS: Cached geometries for Pixel Shatter + Digital Ribbon VFX
+    vfxGeometryCache.neonCube = new THREE.BoxGeometry(1, 1, 1);            // Pixel shatter cubes
+    vfxGeometryCache.neonRing = new THREE.RingGeometry(0.9, 1.0, 32);     // Thin shockwave ring
+    vfxGeometryCache.neonGhost = new THREE.SphereGeometry(1, 6, 6);       // Ghost frame sphere
+    console.log('[VFX] Geometry cache initialized with extended geometries + Neon Abyss');
 }
 
 // Update all active VFX effects from main animate() loop
@@ -8190,60 +8231,23 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!config) return;
     
-    // Try to spawn GLB hit effect first
-    if (weaponGLBState.enabled && glbConfig) {
-        const glbSpawned = await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish);
-        if (glbSpawned) {
-            // GLB effect spawned, still add some procedural effects for extra visual impact
-            if (weaponKey === '5x' || weaponKey === '8x') {
-                triggerScreenShakeWithStrength(weaponKey === '8x' ? 3 : 1);
-            }
-            // 3X WEAPON: Fire particle burst DISABLED - using original 3x bullet GLB model
-            // if (weaponKey === '3x' && fireParticlePool.initialized) {
-            //     spawnFireHitBurst(hitPos);
-            // }
-            return;
-        }
+    // NEON ABYSS: Always spawn Pixel Shatter hit effects for all weapons
+    // These neon effects run alongside any GLB hit effects for maximum visual impact
+    spawnNeonPixelShatter(hitPos, weaponKey);
+    
+    // Extra effects for higher-tier weapons
+    if (weaponKey === '5x') {
+        triggerScreenFlash(NEON_ABYSS_COLORS['5x'].glow, 100, 0.1);
+        triggerScreenShakeWithStrength(1);
+    } else if (weaponKey === '8x') {
+        triggerScreenShakeWithStrength(3);
+        triggerScreenFlash(NEON_ABYSS_COLORS['8x'].glow, 100, 0.15);
+        applyExplosionKnockback(hitPos, 200, 150);
     }
     
-    // Fallback to procedural effects
-    if (weaponKey === '1x') {
-        // Small water splash (ring removed per user feedback)
-        spawnWaterSplash(hitPos, 10);
-        createHitParticles(hitPos, config.hitColor, 2);
-        
-    } else if (weaponKey === '3x') {
-        // Medium fire explosion - fire particle burst DISABLED (using original 3x bullet GLB model)
-        // FIX: Removed expanding ring (user feedback: remove all ring effects)
-        spawnWaterSplash(hitPos, 17);
-        for (let i = 0; i < 2; i++) {
-            const angle = (i / 2) * Math.PI * 2;
-            const endPos = hitPos.clone();
-            endPos.x += Math.cos(angle) * 20;
-            endPos.z += Math.sin(angle) * 20;
-            spawnLightningArc(hitPos, endPos, config.hitColor);
-        }
-        createHitParticles(hitPos, config.hitColor, 4);
-        
-    } else if (weaponKey === '5x') {
-        // FIX: Remove ring effects for 5x hit (keep water splash, shockwave, particles)
-        spawnWaterSplash(hitPos, 25);
-        triggerScreenFlash(config.hitColor, 100, 0.1);
-        spawnShockwave(hitPos, config.hitColor, 50);
-        createHitParticles(hitPos, config.hitColor, 6);
-        // Slight screen shake
-        triggerScreenShakeWithStrength(1);
-        
-    } else if (weaponKey === '8x') {
-        // THREE-STAGE EXPLOSION
-        spawnMegaExplosion(hitPos);
-        // Strong screen shake
-        triggerScreenShakeWithStrength(3);
-        // Full-screen white flash
-        triggerScreenFlash(0xffffff, 100, 0.15);
-        spawnWaterColumn(hitPos, 40);
-        // Knockback nearby fish
-        applyExplosionKnockback(hitPos, 200, 150);
+    // Try to spawn GLB hit effect as well (visual overlay)
+    if (weaponGLBState.enabled && glbConfig) {
+        await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish);
     }
 }
 
@@ -8428,6 +8432,357 @@ function spawnShockwave(position, color, radius) {
             this.material.dispose();
         }
     });
+}
+
+// ==================== NEON ABYSS: PIXEL SHATTER HIT EFFECT (Option A) ====================
+// Spawns glowing neon pixel cubes + thin shockwave ring + residual micro cubes
+// STRICT SIZE CONSTRAINT: max expansion radius 25 units (≤ Mid Splash footprint)
+
+function spawnNeonPixelShatter(position, weaponKey) {
+    if (!scene) return;
+    if (!vfxGeometryCache.neonCube) initVfxGeometryCache();
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    const cfg = PIXEL_SHATTER_CONFIG;
+    const cubeCount = cfg.cubeCount[weaponKey] || 8;
+    
+    // === Stage 1: Neon Pixel Cubes (8-12 glowing cubes burst outward) ===
+    for (let i = 0; i < cubeCount; i++) {
+        // Random brightness variation on the primary color
+        const brightnessShift = 0.7 + Math.random() * 0.6; // 0.7–1.3
+        const cubeColor = new THREE.Color(colors.primary);
+        cubeColor.multiplyScalar(brightnessShift);
+        
+        const cubeMaterial = new THREE.MeshBasicMaterial({
+            color: cubeColor,
+            transparent: true,
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        
+        const cube = new THREE.Mesh(vfxGeometryCache.neonCube, cubeMaterial);
+        const s = cfg.cubeSize;
+        cube.scale.set(s, s, s);
+        cube.position.copy(position);
+        
+        // Random rotation for visual variety
+        cube.rotation.set(
+            Math.random() * Math.PI * 2,
+            Math.random() * Math.PI * 2,
+            Math.random() * Math.PI * 2
+        );
+        
+        scene.add(cube);
+        
+        // Random outward velocity (200-400 units/s)
+        const speed = cfg.cubeSpeed.min + Math.random() * (cfg.cubeSpeed.max - cfg.cubeSpeed.min);
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI - Math.PI / 2;
+        const vx = Math.cos(theta) * Math.cos(phi) * speed;
+        const vy = Math.sin(phi) * speed * 0.5 + Math.random() * 100; // bias upward slightly
+        const vz = Math.sin(theta) * Math.cos(phi) * speed;
+        
+        addVfxEffect({
+            type: 'neonPixelCube',
+            mesh: cube,
+            material: cubeMaterial,
+            vx: vx, vy: vy, vz: vz,
+            gravity: cfg.cubeGravity,
+            duration: cfg.cubeLifetime * 1000, // convert to ms
+            spinSpeed: (Math.random() - 0.5) * 15, // random spin
+            
+            update(dt, elapsed) {
+                const progress = Math.min(elapsed / this.duration, 1);
+                
+                // Apply velocity + gravity
+                this.vy += this.gravity * dt;
+                this.mesh.position.x += this.vx * dt;
+                this.mesh.position.y += this.vy * dt;
+                this.mesh.position.z += this.vz * dt;
+                
+                // Spin the cube
+                this.mesh.rotation.x += this.spinSpeed * dt;
+                this.mesh.rotation.y += this.spinSpeed * dt * 0.7;
+                
+                // Fade out + shrink
+                this.material.opacity = 1.0 - progress;
+                const shrink = 1.0 - progress * 0.5;
+                const sc = cfg.cubeSize * shrink;
+                this.mesh.scale.set(sc, sc, sc);
+                
+                return progress < 1;
+            },
+            
+            cleanup() {
+                scene.remove(this.mesh);
+                this.material.dispose();
+            }
+        });
+    }
+    
+    // === Stage 2: Thin Neon Shockwave Ring (expands 5→25 units in 0.15s) ===
+    spawnNeonShockwaveRing(position, weaponKey);
+    
+    // === Stage 3: Residual Micro Cubes (2-3 slow-floating "data fragments") ===
+    for (let i = 0; i < cfg.residualCount; i++) {
+        const residualColor = new THREE.Color(colors.secondary);
+        residualColor.multiplyScalar(0.8 + Math.random() * 0.4);
+        
+        const resMaterial = new THREE.MeshBasicMaterial({
+            color: residualColor,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        
+        const resCube = new THREE.Mesh(vfxGeometryCache.neonCube, resMaterial);
+        const rs = cfg.residualSize;
+        resCube.scale.set(rs, rs, rs);
+        resCube.position.copy(position);
+        // Small random offset from center
+        resCube.position.x += (Math.random() - 0.5) * 8;
+        resCube.position.y += (Math.random() - 0.5) * 8;
+        resCube.position.z += (Math.random() - 0.5) * 8;
+        
+        scene.add(resCube);
+        
+        // Slow floating velocity
+        const floatVx = (Math.random() - 0.5) * 20;
+        const floatVy = 10 + Math.random() * 20; // gentle upward
+        const floatVz = (Math.random() - 0.5) * 20;
+        
+        addVfxEffect({
+            type: 'neonResidual',
+            mesh: resCube,
+            material: resMaterial,
+            vx: floatVx, vy: floatVy, vz: floatVz,
+            duration: cfg.residualLifetime * 1000,
+            flickerPhase: Math.random() * Math.PI * 2,
+            
+            update(dt, elapsed) {
+                const progress = Math.min(elapsed / this.duration, 1);
+                
+                // Slow float
+                this.mesh.position.x += this.vx * dt;
+                this.mesh.position.y += this.vy * dt;
+                this.mesh.position.z += this.vz * dt;
+                
+                // Gentle rotation
+                this.mesh.rotation.x += 2 * dt;
+                this.mesh.rotation.z += 1.5 * dt;
+                
+                // Flicker + fade
+                const flicker = 0.5 + 0.5 * Math.sin(elapsed * 0.02 + this.flickerPhase);
+                this.material.opacity = (1.0 - progress) * flicker * 0.8;
+                
+                return progress < 1;
+            },
+            
+            cleanup() {
+                scene.remove(this.mesh);
+                this.material.dispose();
+            }
+        });
+    }
+}
+
+// Neon Shockwave Ring — thin expanding circle with sawtooth edges
+// Expands from radius 5 → 25 units in 0.15s, 1px line thickness
+function spawnNeonShockwaveRing(position, weaponKey) {
+    if (!scene) return;
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    const cfg = PIXEL_SHATTER_CONFIG;
+    
+    // Create ring with sawtooth edge using custom geometry (points around a circle with jitter)
+    const segments = 48;
+    const ringPositions = new Float32Array(segments * 3);
+    const sawtoothJitter = []; // store per-vertex jitter for sawtooth effect
+    
+    for (let i = 0; i < segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        // Sawtooth: ±1 unit radius jitter every ~30° (every 4 segments at 48 total)
+        const jitter = (i % 4 < 2) ? (Math.random() * 1.0) : -(Math.random() * 1.0);
+        sawtoothJitter.push(jitter);
+        
+        const baseRadius = 5; // initial radius
+        const r = baseRadius + jitter;
+        ringPositions[i * 3] = position.x + Math.cos(angle) * r;
+        ringPositions[i * 3 + 1] = position.y;
+        ringPositions[i * 3 + 2] = position.z + Math.sin(angle) * r;
+    }
+    
+    const ringGeometry = new THREE.BufferGeometry();
+    ringGeometry.setAttribute('position', new THREE.BufferAttribute(ringPositions, 3));
+    
+    // Create line loop for thin ring effect
+    const ringMaterial = new THREE.LineBasicMaterial({
+        color: colors.glow,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        linewidth: cfg.ringWidth
+    });
+    
+    const ring = new THREE.LineLoop(ringGeometry, ringMaterial);
+    scene.add(ring);
+    
+    addVfxEffect({
+        type: 'neonShockwaveRing',
+        mesh: ring,
+        geometry: ringGeometry,
+        material: ringMaterial,
+        centerX: position.x,
+        centerY: position.y,
+        centerZ: position.z,
+        sawtoothJitter: sawtoothJitter,
+        segments: segments,
+        initialRadius: 5,
+        maxRadius: cfg.ringMaxRadius,
+        duration: cfg.ringExpandTime * 1000, // convert to ms
+        
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            
+            // Expand radius: 5 → 25 units
+            const currentRadius = this.initialRadius + (this.maxRadius - this.initialRadius) * progress;
+            
+            // Update vertex positions
+            const positions = this.geometry.attributes.position.array;
+            for (let i = 0; i < this.segments; i++) {
+                const angle = (i / this.segments) * Math.PI * 2;
+                const r = currentRadius + this.sawtoothJitter[i];
+                positions[i * 3] = this.centerX + Math.cos(angle) * r;
+                positions[i * 3 + 1] = this.centerY;
+                positions[i * 3 + 2] = this.centerZ + Math.sin(angle) * r;
+            }
+            this.geometry.attributes.position.needsUpdate = true;
+            
+            // Fade out: 1.0 → 0
+            this.material.opacity = 1.0 - progress;
+            
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.material.dispose();
+        }
+    });
+}
+
+// ==================== NEON ABYSS: DIGITAL RIBBON GHOST SPAWNER ====================
+// Spawns ghost frame VFX at bullet position (called from Bullet.update)
+function spawnDigitalRibbonGhost(position, weaponKey, ghostIndex) {
+    if (!scene) return;
+    if (!vfxGeometryCache.neonGhost) initVfxGeometryCache();
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    
+    // Ghost opacity: first ghost is brightest, subsequent ones dimmer
+    const baseOpacity = 0.8 - ghostIndex * 0.15; // 0.8, 0.65, 0.5, 0.35
+    if (baseOpacity <= 0) return;
+    
+    const ghostMaterial = new THREE.MeshBasicMaterial({
+        color: colors.glow,
+        transparent: true,
+        opacity: baseOpacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    
+    const ghost = new THREE.Mesh(vfxGeometryCache.neonGhost, ghostMaterial);
+    ghost.scale.set(8, 8, 8); // large glow sphere for visible ghost trail
+    ghost.position.copy(position);
+    scene.add(ghost);
+    
+    addVfxEffect({
+        type: 'digitalRibbonGhost',
+        mesh: ghost,
+        material: ghostMaterial,
+        baseOpacity: baseOpacity,
+        duration: 200, // 200ms fade — longer for visibility
+        
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            this.material.opacity = this.baseOpacity * (1 - progress);
+            // Slight shrink as it fades
+            const scale = 8 * (1 - progress * 0.5);
+            this.mesh.scale.set(scale, scale, scale);
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            this.material.dispose();
+        }
+    });
+}
+
+// Spawns glitch trail segments (short offset fragments behind bullet)
+function spawnDigitalRibbonGlitch(position, direction, weaponKey) {
+    if (!scene) return;
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    const cfg = DIGITAL_RIBBON_CONFIG;
+    
+    for (let i = 0; i < cfg.glitchSegments; i++) {
+        // Random X/Y offset from bullet path
+        const offsetX = (Math.random() - 0.5) * cfg.glitchOffsetMax * 2;
+        const offsetY = (Math.random() - 0.5) * cfg.glitchOffsetMax * 2;
+        
+        // Glitch segment: a short line behind the bullet
+        const segLength = 8 + Math.random() * 12; // longer segments for visibility
+        const segGeometry = new THREE.BufferGeometry();
+        const startPos = position.clone();
+        startPos.x += offsetX;
+        startPos.y += offsetY;
+        const endPos = startPos.clone();
+        // Extend backward along bullet direction
+        const backDir = direction.clone().normalize().multiplyScalar(-segLength);
+        endPos.add(backDir);
+        
+        const vertices = new Float32Array([
+            startPos.x, startPos.y, startPos.z,
+            endPos.x, endPos.y, endPos.z
+        ]);
+        segGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        
+        const segMaterial = new THREE.LineBasicMaterial({
+            color: Math.random() > 0.5 ? colors.primary : colors.secondary,
+            transparent: true,
+            opacity: 0.7 + Math.random() * 0.3,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        
+        const segment = new THREE.Line(segGeometry, segMaterial);
+        scene.add(segment);
+        
+        addVfxEffect({
+            type: 'digitalRibbonGlitch',
+            mesh: segment,
+            geometry: segGeometry,
+            material: segMaterial,
+            duration: cfg.glitchLifetime * 1000,
+            
+            update(dt, elapsed) {
+                const progress = Math.min(elapsed / this.duration, 1);
+                this.material.opacity = (0.7 + Math.random() * 0.3) * (1 - progress);
+                return progress < 1;
+            },
+            
+            cleanup() {
+                scene.remove(this.mesh);
+                this.geometry.dispose();
+                this.material.dispose();
+            }
+        });
+    }
 }
 
 // Spawn mega explosion (three-stage for 8x weapon) - REFACTORED to use VFX manager
@@ -17173,6 +17528,12 @@ class Bullet {
         
         this.spreadIndex = 0;
         
+        // NEON ABYSS: Digital Ribbon trail state
+        this._ghostTimer = 0;       // Accumulator for ghost spawn interval
+        this._ghostIndex = 0;       // Current ghost index (cycles 0-3)
+        this._glitchTimer = 0;      // Accumulator for glitch spawn interval
+        this._flickerTimer = 0;     // Accumulator for CRT flicker
+        
         this.createMesh();
     }
     
@@ -17332,10 +17693,18 @@ class Bullet {
         
         const isProjectile = (weapon.type === 'projectile' || weapon.type === 'spread' || weapon.type === 'burst' || weapon.type === 'rocket' || weapon.type === 'laser');
         if (isProjectile) {
-            const vfx = WEAPON_VFX_CONFIG[weaponKey];
-            this.glowTrailMat.color.setHex(vfx ? vfx.trailColor : 0xffffff);
-            this.glowTrailMat.opacity = 0.5;
+            // NEON ABYSS: Use neon trail color instead of legacy VFX color
+            const neonColors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+            this.glowTrailMat.color.setHex(neonColors.primary);
+            this.glowTrailMat.opacity = 0.9;
+            this.glowTrailMat.blending = THREE.AdditiveBlending;
             this.glowTrail.visible = true;
+            
+            // Reset Digital Ribbon state
+            this._ghostTimer = 0;
+            this._ghostIndex = 0;
+            this._glitchTimer = 0;
+            this._flickerTimer = 0;
         } else {
             this.glowTrail.visible = false;
         }
@@ -17360,16 +17729,32 @@ class Bullet {
         bulletTempVectors.velocityScaled.copy(this.velocity).multiplyScalar(deltaTime);
         this.group.position.add(bulletTempVectors.velocityScaled);
         
-        // 3X WEAPON FIRE TRAIL: DISABLED - Using original 3x bullet GLB model without fire particle effects
-        // The fire particle system using Dissolve/Distortion textures has been removed per user request
-        // if (this.weaponKey === '3x' && fireParticlePool.initialized) {
-        //     if (!this.lastFireParticleTime) this.lastFireParticleTime = 0;
-        //     this.lastFireParticleTime += deltaTime;
-        //     if (this.lastFireParticleTime >= FIRE_PARTICLE_CONFIG.trail.spawnRate) {
-        //         spawnFireTrailParticle(this.group.position, this.velocity);
-        //         this.lastFireParticleTime = 0;
-        //     }
-        // }
+        // NEON ABYSS: Digital Ribbon trail — ghost frames + glitch segments + CRT flicker
+        if (this.glowTrail.visible) {
+            const ribbonCfg = DIGITAL_RIBBON_CONFIG;
+            
+            // CRT Flicker: random opacity jumps at ~15Hz
+            this._flickerTimer += deltaTime;
+            if (this._flickerTimer >= 1.0 / ribbonCfg.flickerFreq) {
+                this._flickerTimer = 0;
+                this.glowTrailMat.opacity = 0.8 + Math.random() * 0.2; // 0.8–1.0
+            }
+            
+            // Ghost Frames: spawn semi-transparent copies every 30ms
+            this._ghostTimer += deltaTime;
+            if (this._ghostTimer >= ribbonCfg.ghostSpawnInterval) {
+                this._ghostTimer = 0;
+                spawnDigitalRibbonGhost(this.group.position, this.weaponKey, this._ghostIndex % ribbonCfg.ghostCount);
+                this._ghostIndex++;
+            }
+            
+            // Glitch Trail: spawn offset fragments every 80ms
+            this._glitchTimer += deltaTime;
+            if (this._glitchTimer >= 0.08) {
+                this._glitchTimer = 0;
+                spawnDigitalRibbonGlitch(this.group.position, this.velocity, this.weaponKey);
+            }
+        }
         
         // Check boundaries - very lenient to allow bullets to reach fish
         const { width, height, depth, floorY } = CONFIG.aquarium;
