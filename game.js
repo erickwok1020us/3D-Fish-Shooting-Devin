@@ -1034,6 +1034,7 @@ const WEAPON_CONFIG = {
         glbBullet: '1x 子彈模組',
         glbHitEffect: '3x 擊中特效',
         scale: 1.1, bulletScale: 0.6, hitEffectScale: 0.35,
+        fpsScale: 1.6,  // 3x turret uses 1.6 in FPS mode (others use global FPS_ELEV_SCALE=2.0)
         muzzleOffset: new THREE.Vector3(0, 30, 60),
         cannonYOffset: 25,
         cannonRotationFix: new THREE.Euler(0, Math.PI / 2, 0),
@@ -10299,7 +10300,11 @@ function playWeaponSwitchAnimation(weaponKey) {
     weaponSwitchAnimationId++;
     const currentAnimationId = weaponSwitchAnimationId;
     
-    const baseScale = 1.2;
+    // Per-weapon FPS scale: use fpsScale from config when in FPS mode, else default 1.2
+    const switchWeaponCfg = WEAPON_CONFIG[weaponKey];
+    const baseScale = (gameState.viewMode === 'fps' && switchWeaponCfg && switchWeaponCfg.fpsScale)
+        ? switchWeaponCfg.fpsScale
+        : (gameState.viewMode === 'fps' ? FPS_ELEV_SCALE : 1.2);
     
     // Cannon transformation animation (slight bounce)
     cannonGroup.scale.set(
@@ -11987,7 +11992,12 @@ function applyWeaponToCannon(weaponKey) {
         cannonMuzzle.position.set(0, 25, 55);
     }
     
-    cannonGroup.scale.set(1.2, 1.2, 1.2);
+    // Per-weapon FPS scale: use fpsScale from config when in FPS mode, else default 1.2
+    var applyWeaponCfg = WEAPON_CONFIG[weaponKey];
+    var applyScale = (gameState.viewMode === 'fps' && applyWeaponCfg && applyWeaponCfg.fpsScale)
+        ? applyWeaponCfg.fpsScale
+        : (gameState.viewMode === 'fps' ? FPS_ELEV_SCALE : 1.2);
+    cannonGroup.scale.set(applyScale, applyScale, applyScale);
     
     document.querySelectorAll('.weapon-btn').forEach(function(btn) {
         btn.classList.remove('active');
@@ -20756,7 +20766,10 @@ function initFPSMode() {
     // Set up cannon for FPS mode
     if (cannonGroup) {
         cannonGroup.visible = true;
-        cannonGroup.scale.set(FPS_ELEV_SCALE, FPS_ELEV_SCALE, FPS_ELEV_SCALE);
+        // Per-weapon FPS scale override (3x uses 1.6, others use global FPS_ELEV_SCALE=2.0)
+        var initWeaponCfg = WEAPON_CONFIG[gameState.currentWeapon || '1x'];
+        var initFpsScale = (initWeaponCfg && initWeaponCfg.fpsScale) ? initWeaponCfg.fpsScale : FPS_ELEV_SCALE;
+        cannonGroup.scale.set(initFpsScale, initFpsScale, initFpsScale);
         // Absolute world-space turret positioning (Variant 2)
         cannonGroup.position.y = FPS_ELEV_TURRET_Y;
         cannonGroup.position.z = FPS_ELEV_TURRET_Z;
@@ -20867,7 +20880,10 @@ function updateFPSCamera() {
     // Force turret to fixed world-space position regardless of scene hierarchy
     cannonGroup.position.y = FPS_ELEV_TURRET_Y;
     cannonGroup.position.z = FPS_ELEV_TURRET_Z;
-    cannonGroup.scale.set(FPS_ELEV_SCALE, FPS_ELEV_SCALE, FPS_ELEV_SCALE);
+    // Per-weapon FPS scale override (3x uses 1.6, others use global FPS_ELEV_SCALE=2.0)
+    var fpsWeaponCfg = WEAPON_CONFIG[gameState.currentWeapon];
+    var fpsScale = (fpsWeaponCfg && fpsWeaponCfg.fpsScale) ? fpsWeaponCfg.fpsScale : FPS_ELEV_SCALE;
+    cannonGroup.scale.set(fpsScale, fpsScale, fpsScale);
     cannonGroup.visible = true;  // Ensure turret is never hidden
     
     // === Near clip (every frame) ===
