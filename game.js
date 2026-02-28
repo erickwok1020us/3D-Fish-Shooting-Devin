@@ -1612,7 +1612,8 @@ const gameState = {
     weaponSelected: false,   // Plan B: true after player picks initial weapon
     burstShotsRemaining: 0,
     burstTimer: 0,
-    burstInProgress: false
+    burstInProgress: false,
+    coinValue: 1
 };
 
 // ==================== BALANCE AUDIT GUARD (T1 Regression) ====================
@@ -10451,6 +10452,7 @@ function onInitialWeaponSelected(weaponKey) {
     
     console.log('[PLAN-B] Initial weapon selected: ' + weaponKey + '. Cannon visible. Game ready.');
     showRmbZoomHint();
+    initCoinValueSlider();
 }
 
 // Start single player game - called from lobby
@@ -11624,6 +11626,7 @@ function createCannon() {
     applyWeaponToCannon('1x');
     cannonGroup.visible = true;
     gameState.weaponSelected = true;
+    initCoinValueSlider();
 }
 
 // PERFORMANCE FIX: Properly dispose Three.js objects including nested meshes in GLB models
@@ -12954,10 +12957,10 @@ function autoAimAtFish(targetFish) {
     if (gameState.cooldown > 0) return false;
     if (gameState.burstInProgress) return false;
     
-    if (gameState.balance < weapon.cost * BALANCE_SCALE) return false;
+    if (gameState.balance < weapon.cost * (gameState.coinValue || 1) * BALANCE_SCALE) return false;
     
     if (!multiplayerMode) {
-        gameState.balance -= weapon.cost * BALANCE_SCALE;
+        gameState.balance -= weapon.cost * (gameState.coinValue || 1) * BALANCE_SCALE;
         recordBet(weaponKey);
     }
     
@@ -16848,25 +16851,21 @@ const RTP_WEAPON_COST_FP = {
 };
 
 const RTP_TIER_CONFIG = {
-    1: { rewardManualFp: 7840, rewardAutoFp: 7680, n1Fp: 8000, pityCompFp: 367000 },
-    2: { rewardManualFp: 11200, rewardAutoFp: 10970, n1Fp: 12000, pityCompFp: 344000 },
-    3: { rewardManualFp: 17920, rewardAutoFp: 17550, n1Fp: 18000, pityCompFp: 332000 },
-    4: { rewardManualFp: 33600, rewardAutoFp: 32910, n1Fp: 34000, pityCompFp: 326400 },
-    5: { rewardManualFp: 50400, rewardAutoFp: 49370, n1Fp: 51000, pityCompFp: 322600 },
-    6: { rewardManualFp: 134400, rewardAutoFp: 131660, n1Fp: 135000, pityCompFp: 316000 }
+    'boss': { rewardManualFp: 39200, rewardAutoFp: 38420, n1Fp: 42000, pityCompFp: 1000000 },
+    't1':   { rewardManualFp: 15330, rewardAutoFp: 15020, n1Fp: 16000, pityCompFp: 1000000 },
+    't2':   { rewardManualFp: 9200,  rewardAutoFp: 9020,  n1Fp: 10000, pityCompFp: 1000000 },
+    't3':   { rewardManualFp: 7840,  rewardAutoFp: 7680,  n1Fp: 8000,  pityCompFp: 1000000 }
 };
 
 const FISH_SPECIES_TO_RTP_TIER = {
-    sardine: 1, anchovy: 1,
-    damselfish: 2, clownfish: 2, blueTang: 2,
-    lionfish: 3, angelfish: 3, pufferfish: 3, seahorse: 3, parrotfish: 3,
-    mahiMahi: 4, grouper: 4, yellowfinTuna: 4, mantaRay: 4,
-    marlin: 5, hammerheadShark: 5,
-    greatWhiteShark: 6, killerWhale: 6, blueWhale: 6
+    blueWhale: 'boss', killerWhale: 'boss', greatWhiteShark: 'boss',
+    hammerheadShark: 't1', mantaRay: 't1', marlin: 't1', grouper: 't1',
+    yellowfinTuna: 't2', mahiMahi: 't2', lionfish: 't2', parrotfish: 't2', pufferfish: 't2',
+    seahorse: 't3', blueTang: 't3', angelfish: 't3', damselfish: 't3', clownfish: 't3', anchovy: 't3', sardine: 't3'
 };
 
 function getFishRTPTier(species) {
-    return FISH_SPECIES_TO_RTP_TIER[species] || 1;
+    return FISH_SPECIES_TO_RTP_TIER[species] || 't3';
 }
 
 let rtpFishIdCounter = 0;
@@ -16944,8 +16943,9 @@ class ClientRTPPhase1 {
         return isAuto ? config.rewardAutoFp : config.rewardManualFp;
     }
 
-    _calcProbability(pState, config, isAuto) {
-        const rewardFp = this._getReward(config, isAuto);
+    _calcProbability(pState, config, isAuto, coinValue) {
+        const M = coinValue || 1;
+        const rewardFp = this._getReward(config, isAuto) * M;
         const budgetEffFp = Math.max(0, pState.budgetRemainingFp);
         const pBaseRawFp = Math.floor(budgetEffFp * RTP_P_SCALE / rewardFp);
         if (pBaseRawFp >= RTP_P_SCALE) {
@@ -16963,21 +16963,24 @@ class ClientRTPPhase1 {
 
         const pState = this._getOrCreatePlayerState(playerId);
         const weaponCostFp = RTP_WEAPON_COST_FP[weaponKey] || 1000;
+        const coinValue = gameState.coinValue || 1;
+        const weaponMult = weaponCostFp / RTP_MONEY_SCALE;
         const rtpWeaponFp = this._getRtp(weaponKey, isAuto);
 
-        const budgetTotalFp = Math.floor(weaponCostFp * rtpWeaponFp / RTP_SCALE);
+        const budgetTotalFp = Math.floor(weaponCostFp * coinValue * rtpWeaponFp / RTP_SCALE);
         pState.budgetRemainingFp += budgetTotalFp;
-        fState.sumCostFp += weaponCostFp;
+        fState.sumCostFp += weaponCostFp * coinValue;
 
-        if (fState.sumCostFp >= config.n1Fp) {
-            return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto);
+        const hardPityThreshold = Math.floor(config.n1Fp * coinValue / weaponMult);
+        if (fState.sumCostFp >= hardPityThreshold) {
+            return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto, coinValue);
         }
 
-        const pFp = this._calcProbability(pState, config, isAuto);
+        const pFp = this._calcProbability(pState, config, isAuto, coinValue);
 
         const rand = Math.floor(Math.random() * RTP_P_SCALE);
         if (rand < pFp) {
-            return this._executeKill(fState, pState, config, fishId, 'probability', isAuto);
+            return this._executeKill(fState, pState, config, fishId, 'probability', isAuto, coinValue);
         }
         return { kill: false, reason: 'roll_failed', pFp };
     }
@@ -16987,11 +16990,13 @@ class ClientRTPPhase1 {
 
         const maxTargets = weaponType === 'laser' ? RTP_LASER_MAX_TARGETS : RTP_ROCKET_MAX_TARGETS;
         const trimmedList = hitList.slice(0, maxTargets);
-        const M = trimmedList.length;
+        const hitCount = trimmedList.length;
 
         const weaponCostFp = RTP_WEAPON_COST_FP[weaponKey] || 1000;
+        const coinValue = gameState.coinValue || 1;
+        const weaponMult = weaponCostFp / RTP_MONEY_SCALE;
         const rtpWeaponFp = this._getRtp(weaponKey, isAuto);
-        const budgetTotalFp = Math.floor(weaponCostFp * rtpWeaponFp / RTP_SCALE);
+        const budgetTotalFp = Math.floor(weaponCostFp * coinValue * rtpWeaponFp / RTP_SCALE);
 
         const pState = this._getOrCreatePlayerState(playerId);
 
@@ -16999,7 +17004,7 @@ class ClientRTPPhase1 {
 
         const results = [];
         let energyCarry = false;
-        for (let i = 0; i < M; i++) {
+        for (let i = 0; i < hitCount; i++) {
             const entry = trimmedList[i];
             const config = RTP_TIER_CONFIG[entry.tier];
             if (!config) {
@@ -17014,22 +17019,23 @@ class ClientRTPPhase1 {
             }
 
             if (i === 0) {
-                fState.sumCostFp += weaponCostFp;
+                fState.sumCostFp += weaponCostFp * coinValue;
             }
 
-            if (fState.sumCostFp >= config.n1Fp) {
-                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'hard_pity', isAuto);
+            const hardPityThreshold = Math.floor(config.n1Fp * coinValue / weaponMult);
+            if (fState.sumCostFp >= hardPityThreshold) {
+                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'hard_pity', isAuto, coinValue);
                 results.push(killResult);
                 energyCarry = true;
                 continue;
             }
 
-            const rewardFp = this._getReward(config, isAuto);
+            const rewardFp = this._getReward(config, isAuto) * coinValue;
             const budgetEffFp = Math.max(0, pState.budgetRemainingFp);
             const pBaseRawFp = Math.floor(budgetEffFp * RTP_P_SCALE / rewardFp);
 
             if (pBaseRawFp >= RTP_P_SCALE) {
-                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'probability', isAuto);
+                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'probability', isAuto, coinValue);
                 results.push(killResult);
                 energyCarry = true;
                 continue;
@@ -17039,7 +17045,7 @@ class ClientRTPPhase1 {
 
             const randI = Math.floor(Math.random() * RTP_P_SCALE);
             if (randI < pIFp) {
-                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'probability', isAuto);
+                const killResult = this._executeKill(fState, pState, config, entry.fishId, 'probability', isAuto, coinValue);
                 results.push(killResult);
                 energyCarry = (pState.budgetRemainingFp > 0);
             } else {
@@ -17060,35 +17066,38 @@ class ClientRTPPhase1 {
 
         const pState = this._getOrCreatePlayerState(playerId);
         const pelletCostFp = 1000;
+        const coinValue = gameState.coinValue || 1;
         const rtpWeaponFp = this._getRtp('3x', isAuto);
 
-        const budgetTotalFp = Math.floor(pelletCostFp * rtpWeaponFp / RTP_SCALE);
+        const budgetTotalFp = Math.floor(pelletCostFp * coinValue * rtpWeaponFp / RTP_SCALE);
         pState.budgetRemainingFp += budgetTotalFp;
-        fState.sumCostFp += pelletCostFp;
+        fState.sumCostFp += pelletCostFp * coinValue;
 
-        if (fState.sumCostFp >= config.n1Fp) {
-            return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto);
+        const hardPityThreshold = Math.floor(config.n1Fp * coinValue / 3);
+        if (fState.sumCostFp >= hardPityThreshold) {
+            return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto, coinValue);
         }
 
-        const pFp = this._calcProbability(pState, config, isAuto);
+        const pFp = this._calcProbability(pState, config, isAuto, coinValue);
 
         const rand = Math.floor(Math.random() * RTP_P_SCALE);
         if (rand < pFp) {
-            return this._executeKill(fState, pState, config, fishId, 'probability', isAuto);
+            return this._executeKill(fState, pState, config, fishId, 'probability', isAuto, coinValue);
         }
         return { kill: false, reason: 'roll_failed', pFp };
     }
 
-    _executeKill(fState, pState, config, fishId, reason, isAuto) {
+    _executeKill(fState, pState, config, fishId, reason, isAuto, coinValue) {
+        const M = coinValue || 1;
         const killEventId = nextKillEventId();
         if (this.processedKillEvents.has(killEventId)) {
             return { kill: false, reason: 'duplicate_kill_event' };
         }
         this.processedKillEvents.add(killEventId);
 
-        const rewardFp = isAuto ? config.rewardAutoFp : config.rewardManualFp;
+        const rewardFp = (isAuto ? config.rewardAutoFp : config.rewardManualFp) * M;
         pState.budgetRemainingFp -= rewardFp;
-        pState.budgetRemainingFp = Math.max(-config.rewardManualFp, pState.budgetRemainingFp);
+        pState.budgetRemainingFp = Math.max(-(config.rewardManualFp * M), pState.budgetRemainingFp);
         fState.killed = true;
         return {
             fishId,
@@ -17114,7 +17123,7 @@ const RTP_SESSION_STATS = {
 
 function recordBet(weaponKey) {
     const weapon = CONFIG.weapons[weaponKey];
-    const betAmount = weapon.cost;
+    const betAmount = weapon.cost * (gameState.coinValue || 1);
     RTP_SESSION_STATS.totalBets += betAmount;
     RTP_SESSION_STATS.shotsFired++;
 }
@@ -17730,10 +17739,10 @@ function fireBullet(targetX, targetY) {
     
     // SINGLE PLAYER MODE: Original logic
     // Check balance
-    if (gameState.balance < weapon.cost * BALANCE_SCALE) return false;
+    if (gameState.balance < weapon.cost * (gameState.coinValue || 1) * BALANCE_SCALE) return false;
     
     // Deduct cost
-    gameState.balance -= weapon.cost * BALANCE_SCALE;
+    gameState.balance -= weapon.cost * (gameState.coinValue || 1) * BALANCE_SCALE;
     
     // Record bet for RTP tracking
     recordBet(weaponKey);
@@ -19173,6 +19182,66 @@ function selectWeapon(weaponKey) {
     playWeaponSwitchAnimation(weaponKey);
 }
 
+// ==================== COIN VALUE SLIDER ====================
+const COIN_VALUE_STOPS = [1, 3, 5, 10];
+
+function initCoinValueSlider() {
+    const track = document.getElementById('cv-track');
+    const fill = document.getElementById('cv-track-fill');
+    const thumb = document.getElementById('cv-thumb');
+    const labels = document.querySelectorAll('.cv-label');
+    const stopEls = document.querySelectorAll('.cv-stop');
+    if (!track || !thumb) return;
+
+    function setCoinValue(index) {
+        const val = COIN_VALUE_STOPS[index];
+        gameState.coinValue = val;
+        const pct = (index / (COIN_VALUE_STOPS.length - 1)) * 100;
+        thumb.style.left = pct + '%';
+        if (fill) fill.style.width = pct + '%';
+        labels.forEach(function(l, i) { l.classList.toggle('active', i === index); });
+        stopEls.forEach(function(s, i) { s.classList.toggle('active', i <= index); });
+        updateDigiAmmoDisplay();
+    }
+
+    labels.forEach(function(label, index) {
+        label.addEventListener('click', function(e) {
+            e.stopPropagation();
+            setCoinValue(index);
+        });
+    });
+
+    track.addEventListener('click', function(e) {
+        if (e.target.closest('.cv-thumb')) return;
+        var rect = track.getBoundingClientRect();
+        var pct = (e.clientX - rect.left) / rect.width;
+        var index = Math.round(pct * (COIN_VALUE_STOPS.length - 1));
+        setCoinValue(Math.max(0, Math.min(COIN_VALUE_STOPS.length - 1, index)));
+    });
+
+    var dragging = false;
+    thumb.addEventListener('mousedown', function(e) {
+        dragging = true;
+        thumb.classList.add('dragging');
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        var rect = track.getBoundingClientRect();
+        var pct = (e.clientX - rect.left) / rect.width;
+        var index = Math.round(pct * (COIN_VALUE_STOPS.length - 1));
+        setCoinValue(Math.max(0, Math.min(COIN_VALUE_STOPS.length - 1, index)));
+    });
+    document.addEventListener('mouseup', function() {
+        if (dragging) {
+            dragging = false;
+            thumb.classList.remove('dragging');
+        }
+    });
+
+    setCoinValue(0);
+}
+
 function createTechCircleSVG(size) {
     var s = size || 48;
     var c = s / 2, r = s * 14 / 48;
@@ -19324,26 +19393,20 @@ function formatFishName(form) {
 // Maps fish forms to their tier for border color coding in Kill Log UI
 // Strict mapping per tier list reference image (image_5ef4fe.png)
 const FISH_FORM_TO_TIER = {
-    // Boss — Orange #FF8800 (all forms: short + full species names)
+    // Boss — Orange #FF8800
     whale: 'boss', blueWhale: 'boss', killerWhale: 'boss', shark: 'boss', greatWhiteShark: 'boss',
     // Tier 1 — Purple #CC00FF
-    hammerhead: 't1', marlin: 't1', mantaRay: 't1',
+    hammerhead: 't1', marlin: 't1', mantaRay: 't1', grouper: 't1',
     // Tier 2 — Green #00FF66
-    tuna: 't2', dolphinfish: 't2',
+    tuna: 't2', dolphinfish: 't2', lionfish: 't2', parrotfish: 't2', pufferfish: 't2',
     // Tier 3 — Blue #00CCFF
-    pufferfish: 't3', seahorse: 't3', lionfish: 't3', tang: 't3',
-    // Tier 4 — Yellow #FFFF00
-    damselfish: 't4', clownfish: 't4', parrotfish: 't4', angelfish: 't4',
-    // Tier 5 — White #FFFFFF
-    anchovy: 't5', sardine: 't5', grouper: 't5'
+    seahorse: 't3', tang: 't3', angelfish: 't3', damselfish: 't3', clownfish: 't3', anchovy: 't3', sardine: 't3'
 };
 const TIER_BORDER_COLORS = {
     boss: '#FF8800',
     t1:   '#CC00FF',
     t2:   '#00FF66',
-    t3:   '#00CCFF',
-    t4:   '#FFFF00',
-    t5:   '#FFFFFF'
+    t3:   '#00CCFF'
 };
 
 function getKillFeedTierColor(fishForm) {
@@ -19469,7 +19532,7 @@ const AMMO_WEAPON_SLOTS = ['1x', '3x', '5x', '8x'];
 function updateDigiAmmoDisplay() {
     const weapon = CONFIG.weapons[gameState.currentWeapon];
     if (!weapon) return;
-    const ammo = Math.min(99999, Math.max(0, Math.floor(gameState.balance / (weapon.cost * BALANCE_SCALE))));
+    const ammo = Math.min(99999, Math.max(0, Math.floor(gameState.balance / (weapon.cost * (gameState.coinValue || 1) * BALANCE_SCALE))));
 
     // Legacy digi-ammo (kept hidden via CSS but still updated to avoid null refs)
     const currentIdx = AMMO_WEAPON_SLOTS.indexOf(gameState.currentWeapon);
@@ -19554,9 +19617,7 @@ const SCOPE_TIER_LABELS = {
     boss: 'Boss',
     t1: 'T1',
     t2: 'T2',
-    t3: 'T3',
-    t4: 'T4',
-    t5: 'T5'
+    t3: 'T3'
 };
 
 function createScopeTargetHUD() {
