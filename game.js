@@ -990,7 +990,7 @@ function updateCaustics(time) {
 // auto-generated from WEAPON_CONFIG for backward compatibility.
 const WEAPON_CONFIG = {
     '1x': {
-        multiplier: 1, cost: 1, damage: 100, shotsPerSecond: 2.5,
+        multiplier: 1, cost: 1, damage: 100, shotsPerSecond: 3.33,  // BUFFED: 300ms cooldown (was 400ms at 2.5 shots/s)
         type: 'projectile', speed: 4000,
         piercing: false, spreadAngle: 0, aoeRadius: 0, damageEdge: 0, laserWidth: 0,
         convergenceDistance: 1400,
@@ -1016,7 +1016,7 @@ const WEAPON_CONFIG = {
         cannonColor: 0xcccccc, cannonEmissive: 0x666666,
         muzzleColor: 0x88ddff, trailColor: 0xffffff,
         hitColor: 0x88ddff, ringColor: 0xffffff,
-        recoilStrength: 5, screenShakeOnHit: 0.5,
+        recoilStrength: 5.75, screenShakeOnHit: 0.5,  // BUFFED: +15% recoil (was 5)
         chargeTime: 0,
     },
     '3x': {
@@ -1047,7 +1047,7 @@ const WEAPON_CONFIG = {
         cannonColor: 0xff8888, cannonEmissive: 0xff6666,
         muzzleColor: 0xffaaaa, trailColor: 0xffbbbb,
         hitColor: 0xffaaaa, ringColor: 0xffaaaa,
-        recoilStrength: 4, screenShakeOnHit: 0.5,
+        recoilStrength: 4.4, screenShakeOnHit: 0.5,  // BUFFED: +10% recoil (was 4)
         chargeTime: 0,
     },
     '5x': {
@@ -1077,7 +1077,7 @@ const WEAPON_CONFIG = {
         cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
         muzzleColor: 0xffdd00, trailColor: 0xffcc00,
         hitColor: 0xffdd00, ringColor: 0xffdd00,
-        recoilStrength: 12, screenShakeOnHit: 1.5,
+        recoilStrength: 13.8, screenShakeOnHit: 1.5,  // BUFFED: +15% recoil (was 12)
         chargeTime: 0.2,
     },
     '8x': {
@@ -1087,7 +1087,7 @@ const WEAPON_CONFIG = {
         convergenceDistance: 1400,
 
         soundVolume: 0.5,
-        fireScreenShake: { strength: 6, duration: 200 },
+        fireScreenShake: { strength: 4, duration: 200 },  // NERFED: was 6, reduced to 4 per Malun
 
         glbCannon: '8x 武器模組',
         glbCannonNonPlayer: '8x 武器模組(非玩家).glb.glb',
@@ -5607,7 +5607,7 @@ const DIGITAL_RIBBON_CONFIG = {
 
 // Pixel Shatter hit config (Hit Effect Option A)
 const PIXEL_SHATTER_CONFIG = {
-    cubeCount: { '1x': 10, '3x': 12, '5x': 14, '8x': 16 },
+    cubeCount: { '1x': 10, '3x': 12, '5x': 30, '8x': 16 },  // 5x: 3x of 1x count (massive molecular shard cluster)
     cubeSize: 5,                // Neon pixel cube size (units) — boosted for visibility
     cubeSpeed: { min: 250, max: 500 },  // Ejection speed range
     cubeLifetime: 0.6,          // Seconds before fade out — longer for visibility
@@ -8510,8 +8510,9 @@ function spawnMuzzleFlash(weaponKey, muzzlePos, direction) {
     } else if (weaponKey === '8x') {
         spawnFireballMuzzleFlash(muzzlePos, direction);
         // FIX: Removed muzzle flash ring (user feedback: remove all ring effects)
+        // NERFED: Reduced muzzle particle count from 25 to 12 (50% reduction per Malun)
         triggerScreenShakeWithStrength(config.screenShake);
-        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 25);
+        spawnMuzzleParticles(muzzlePos, direction, config.muzzleColor, 12);
     }
 }
 
@@ -8882,7 +8883,8 @@ function spawnFireballMuzzleFlash(position, direction) {
     const material = fireballItem.material;
     
     fireball.position.copy(position);
-    fireball.scale.set(12, 12, 12);
+    // NERFED: 50% intensity reduction — fireball 12→6, core 7→3.5 (per Malun)
+    fireball.scale.set(6, 6, 6);
     fireball.visible = true;
     scene.add(fireball);
     
@@ -8891,7 +8893,7 @@ function spawnFireballMuzzleFlash(position, direction) {
     const coreMaterial = coreItem.material;
     
     core.position.copy(position);
-    core.scale.set(7, 7, 7);
+    core.scale.set(3.5, 3.5, 3.5);
     core.visible = true;
     scene.add(core);
     
@@ -8904,8 +8906,8 @@ function spawnFireballMuzzleFlash(position, direction) {
         coreItem: coreItem,          // Store pool reference
         material: material,
         coreMaterial: coreMaterial,
-        baseFireballScale: 12,
-        baseCoreScale: 7,
+        baseFireballScale: 6,   // NERFED: was 12 (50% reduction)
+        baseCoreScale: 3.5,    // NERFED: was 7 (50% reduction)
         currentScaleMultiplier: 1,
         currentOpacity: 0.25,
         scaleSpeed: 9, // was 0.15 per frame at 60fps = 9/s
