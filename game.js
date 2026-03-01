@@ -7822,7 +7822,7 @@ function showKillSkull(spreadIndex) {
 
 let _rewardPopupYOffset = 0;
 let _rewardPopupResetTimer = null;
-let _rewardPopupStyle = 'neon_abyss_suction';
+let _rewardPopupStyle = 'glitch_pop';
 
 function onScoreConfirmed(fishForm, rewardAmount) {
     const rewardInt = Math.round(rewardAmount);
@@ -7848,9 +7848,9 @@ function animateBalanceCollect() {
     balanceDisplay.style.transition = 'transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1)';
     balanceDisplay.style.transform = 'scale(1.15)';
     
-    // Add a brief glow effect
+    // Neon Abyss cyan/magenta absorption flash (replaces old gold glow)
     const origFilter = balanceDisplay.style.filter || '';
-    balanceDisplay.style.filter = 'drop-shadow(0 0 8px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 16px rgba(255, 180, 0, 0.4))';
+    balanceDisplay.style.filter = 'drop-shadow(0 0 10px rgba(0, 255, 255, 0.8)) drop-shadow(0 0 15px rgba(240, 0, 240, 0.5))';
     
     setTimeout(() => {
         balanceDisplay.style.transition = 'transform 0.15s ease-out, filter 0.3s ease-out';
@@ -7889,7 +7889,9 @@ function showRewardFloat(amount) {
     if (!amount || amount <= 0) return;
     const intAmount = Math.round(amount);
     if (intAmount <= 0) return;
-    if (_rewardPopupStyle === 'neon_abyss_suction') {
+    if (_rewardPopupStyle === 'glitch_pop') {
+        _showGlitchPop(intAmount);
+    } else if (_rewardPopupStyle === 'neon_abyss_suction') {
         _showNeonAbyssSuction(intAmount);
     } else if (_rewardPopupStyle === 'gold_spring') {
         _showGoldSpring(intAmount);
@@ -7898,6 +7900,286 @@ function showRewardFloat(amount) {
     } else if (_rewardPopupStyle === 'neon_pulse') {
         _showNeonPulse(intAmount);
     }
+}
+
+// ==================== GLITCH POP REWARD POPUP (Option A — Neon Abyss) ====================
+// Chromatic aberration + pixel fragments + glitch bars
+// Pop-in 0.3→1.15→1 (0.15s) → hold 0.5s → sink into balance (0.4s)
+function _showGlitchPop(intAmount) {
+    const bd = document.getElementById('balance-display');
+    if (!bd) return;
+    const rect = bd.getBoundingClientRect();
+
+    // Get Balance HUD font size for scaling
+    const balanceVal = document.getElementById('balance-value');
+    const balanceFontSize = balanceVal ? parseFloat(window.getComputedStyle(balanceVal).fontSize) : 24;
+    const rewardFontSize = Math.round(balanceFontSize * 0.85);
+
+    // Stacking offset for multi-kills
+    const yOff = _rewardPopupYOffset * 40;
+    _rewardPopupYOffset++;
+    if (_rewardPopupResetTimer) clearTimeout(_rewardPopupResetTimer);
+    _rewardPopupResetTimer = setTimeout(function() { _rewardPopupYOffset = 0; _rewardPopupResetTimer = null; }, 1200);
+
+    // Position ABOVE balance HUD, centered
+    const spawnX = rect.left + rect.width / 2;
+    const spawnY = rect.top - 20 - yOff;
+
+    // === CONTAINER ===
+    const container = document.createElement('div');
+    container.style.cssText = [
+        'position:fixed',
+        'left:' + spawnX + 'px',
+        'top:' + spawnY + 'px',
+        'transform:translate(-50%,-50%) scale(0.3)',
+        'pointer-events:none',
+        'z-index:99999',
+        'white-space:nowrap',
+        'background:none',
+        'border:none',
+        'padding:0',
+        'margin:0',
+        'opacity:0'
+    ].join(';');
+
+    // === MAIN TEXT (white base layer) ===
+    const mainText = document.createElement('span');
+    const displayText = '+' + intAmount.toLocaleString();
+    mainText.textContent = displayText;
+    mainText.style.cssText = [
+        'position:relative',
+        'display:inline-block',
+        'font-family:"Orbitron",monospace',
+        'font-size:' + rewardFontSize + 'px',
+        'font-weight:900',
+        'color:#fff',
+        'letter-spacing:3px',
+        'text-shadow:0 0 30px rgba(255,255,255,0.5),0 0 60px rgba(0,255,255,0.3)',
+        '-webkit-text-stroke:1px rgba(0,0,0,0.3)'
+    ].join(';');
+    container.appendChild(mainText);
+
+    // === CHROMATIC ABERRATION — Magenta layer (top half, shifted right+up) ===
+    const chromaR = document.createElement('span');
+    chromaR.textContent = displayText;
+    chromaR.style.cssText = [
+        'position:absolute',
+        'top:0',
+        'left:0',
+        'right:0',
+        'font-family:"Orbitron",monospace',
+        'font-size:' + rewardFontSize + 'px',
+        'font-weight:900',
+        'letter-spacing:3px',
+        'color:#f0f',
+        'clip-path:polygon(0 0,100% 0,100% 45%,0 45%)',
+        'transform:translate(4px,-3px)',
+        'opacity:0.7',
+        'pointer-events:none'
+    ].join(';');
+    mainText.appendChild(chromaR);
+
+    // === CHROMATIC ABERRATION — Cyan layer (bottom half, shifted left+down) ===
+    const chromaB = document.createElement('span');
+    chromaB.textContent = displayText;
+    chromaB.style.cssText = [
+        'position:absolute',
+        'top:0',
+        'left:0',
+        'right:0',
+        'font-family:"Orbitron",monospace',
+        'font-size:' + rewardFontSize + 'px',
+        'font-weight:900',
+        'letter-spacing:3px',
+        'color:#0ff',
+        'clip-path:polygon(0 55%,100% 55%,100% 100%,0 100%)',
+        'transform:translate(-4px,3px)',
+        'opacity:0.7',
+        'pointer-events:none'
+    ].join(';');
+    mainText.appendChild(chromaB);
+
+    // === PIXEL FRAGMENTS (12-15 particles in cyan/magenta/lime) ===
+    const fragmentColors = ['#0ff', '#f0f', '#0f0'];
+    const fragmentCount = 12 + Math.floor(Math.random() * 4); // 12-15
+    const fragments = [];
+    for (let i = 0; i < fragmentCount; i++) {
+        const frag = document.createElement('div');
+        const color = fragmentColors[i % 3];
+        const angle = (Math.PI * 2 * i) / fragmentCount + (Math.random() - 0.5) * 0.5;
+        const dist = 30 + Math.random() * 40; // 30-70px radial scatter
+        const fx = Math.cos(angle) * dist;
+        const fy = Math.sin(angle) * dist;
+        frag.style.cssText = [
+            'position:absolute',
+            'width:4px',
+            'height:4px',
+            'background:' + color,
+            'box-shadow:0 0 8px ' + color,
+            'left:50%',
+            'top:50%',
+            'transform:translate(-50%,-50%)',
+            'opacity:0',
+            'pointer-events:none'
+        ].join(';');
+        frag._targetX = fx;
+        frag._targetY = fy;
+        container.appendChild(frag);
+        fragments.push(frag);
+    }
+
+    // === GLITCH BARS (3-4 horizontal bars, cyan-to-magenta gradient) ===
+    const glitchBarCount = 3 + Math.floor(Math.random() * 2); // 3-4
+    const glitchBars = [];
+    for (let i = 0; i < glitchBarCount; i++) {
+        const bar = document.createElement('div');
+        const barWidth = 40 + Math.random() * 40; // 40-80px
+        const barLeft = -30 + Math.random() * 80; // random horizontal position
+        const barTop = 5 + Math.random() * 40; // random vertical position
+        bar.style.cssText = [
+            'position:absolute',
+            'left:' + barLeft + 'px',
+            'top:' + barTop + 'px',
+            'width:' + barWidth + 'px',
+            'height:2px',
+            'background:linear-gradient(90deg,transparent,#f0f,#0ff,transparent)',
+            'opacity:0',
+            'pointer-events:none'
+        ].join(';');
+        bar._flickerDelay = i * 40; // staggered flicker timing
+        mainText.appendChild(bar);
+        glitchBars.push(bar);
+    }
+
+    document.body.appendChild(container);
+
+    // === ANIMATION via requestAnimationFrame ===
+    const startT = performance.now();
+    // Total: 0.15s pop-in + 0.5s hold + 0.4s sink = 1.05s
+    const POP_IN = 150;   // 0.15s
+    const HOLD = 500;     // 0.5s
+    const SINK = 400;     // 0.4s
+    const totalDuration = POP_IN + HOLD + SINK;
+
+    // Sink target: center of balance display
+    const sinkTargetY = rect.top + rect.height / 2;
+
+    function animGlitchPop(t) {
+        const elapsed = t - startT;
+        const p = Math.min(elapsed / totalDuration, 1);
+
+        if (elapsed <= POP_IN) {
+            // === PHASE 1: Pop-in (0→0.15s) ===
+            // Scale: 0.3 → 1.15 → 1.0 with cubic-bezier overshoot
+            const pp = elapsed / POP_IN; // 0→1
+            let scale;
+            if (pp < 0.7) {
+                // Quick scale up: 0.3 → 1.15
+                scale = 0.3 + (pp / 0.7) * 0.85;
+            } else {
+                // Settle: 1.15 → 1.0
+                scale = 1.15 - ((pp - 0.7) / 0.3) * 0.15;
+            }
+            const opacity = Math.min(pp * 4, 1);
+            container.style.transform = 'translate(-50%,-50%) scale(' + scale.toFixed(3) + ')';
+            container.style.opacity = String(opacity);
+
+            // Fragments scatter outward during pop-in
+            for (let i = 0; i < fragments.length; i++) {
+                const f = fragments[i];
+                const fx = f._targetX * pp;
+                const fy = f._targetY * pp;
+                f.style.transform = 'translate(calc(-50% + ' + fx.toFixed(1) + 'px), calc(-50% + ' + fy.toFixed(1) + 'px))';
+                f.style.opacity = String(Math.min(pp * 3, 0.9));
+            }
+
+            // Glitch bars flash on with stagger
+            for (let i = 0; i < glitchBars.length; i++) {
+                const bar = glitchBars[i];
+                const barElapsed = elapsed - bar._flickerDelay;
+                if (barElapsed > 0) {
+                    bar.style.opacity = String(0.4 + Math.random() * 0.4);
+                }
+            }
+
+        } else if (elapsed <= POP_IN + HOLD) {
+            // === PHASE 2: Hold (0.15s→0.65s) ===
+            container.style.transform = 'translate(-50%,-50%) scale(1)';
+            container.style.opacity = '1';
+
+            // Fragments fully scattered, gently pulsing
+            const holdP = (elapsed - POP_IN) / HOLD;
+            for (let i = 0; i < fragments.length; i++) {
+                const f = fragments[i];
+                const pulse = 1 + Math.sin(holdP * Math.PI * 4 + i) * 0.15;
+                const fx = f._targetX * pulse;
+                const fy = f._targetY * pulse;
+                f.style.transform = 'translate(calc(-50% + ' + fx.toFixed(1) + 'px), calc(-50% + ' + fy.toFixed(1) + 'px))';
+                // Start fading fragments in last 40% of hold
+                if (holdP > 0.6) {
+                    const fadeP = (holdP - 0.6) / 0.4;
+                    f.style.opacity = String(Math.max(0, 0.9 - fadeP * 0.9));
+                }
+            }
+
+            // Glitch bars flicker randomly
+            for (let i = 0; i < glitchBars.length; i++) {
+                const bar = glitchBars[i];
+                // Random flicker: toggle opacity
+                if (Math.random() < 0.15) {
+                    bar.style.opacity = String(0.3 + Math.random() * 0.5);
+                    bar.style.left = (-30 + Math.random() * 80) + 'px';
+                }
+                // Fade glitch bars in last 30% of hold
+                if (holdP > 0.7) {
+                    const fadeP = (holdP - 0.7) / 0.3;
+                    bar.style.opacity = String(Math.max(0, 0.6 * (1 - fadeP)));
+                }
+            }
+
+            // Chromatic aberration subtle shift during hold
+            const chromaShift = Math.sin(holdP * Math.PI * 6) * 2;
+            chromaR.style.transform = 'translate(' + (4 + chromaShift).toFixed(1) + 'px,' + (-3 + chromaShift * 0.5).toFixed(1) + 'px)';
+            chromaB.style.transform = 'translate(' + (-4 - chromaShift).toFixed(1) + 'px,' + (3 - chromaShift * 0.5).toFixed(1) + 'px)';
+
+        } else {
+            // === PHASE 3: Sink into balance (0.65s→1.05s) ===
+            const sinkP = (elapsed - POP_IN - HOLD) / SINK; // 0→1
+            // ease-in curve
+            const easeIn = sinkP * sinkP;
+
+            const scale = 1.0 - easeIn * 0.7; // 1.0 → 0.3
+            const blur = easeIn * 4; // 0 → 4px
+            const opacity = 1.0 - easeIn; // 1.0 → 0
+            const translateY = easeIn * 50; // 0 → 50px downward
+
+            container.style.transform = 'translate(-50%, calc(-50% + ' + translateY.toFixed(1) + 'px)) scale(' + scale.toFixed(3) + ')';
+            container.style.filter = 'blur(' + blur.toFixed(1) + 'px)';
+            container.style.opacity = String(Math.max(0, opacity));
+
+            // Hide fragments and glitch bars during sink
+            for (let i = 0; i < fragments.length; i++) {
+                fragments[i].style.opacity = '0';
+            }
+            for (let i = 0; i < glitchBars.length; i++) {
+                glitchBars[i].style.opacity = '0';
+            }
+
+            // Intensify chromatic split during sink
+            const splitIntensity = 4 + easeIn * 8;
+            chromaR.style.transform = 'translate(' + splitIntensity.toFixed(1) + 'px,-3px)';
+            chromaR.style.opacity = String(Math.max(0, 0.7 - easeIn * 0.7));
+            chromaB.style.transform = 'translate(-' + splitIntensity.toFixed(1) + 'px,3px)';
+            chromaB.style.opacity = String(Math.max(0, 0.7 - easeIn * 0.7));
+        }
+
+        if (p < 1) {
+            requestAnimationFrame(animGlitchPop);
+        } else {
+            container.remove();
+        }
+    }
+    requestAnimationFrame(animGlitchPop);
 }
 
 // ==================== NEON ABYSS SUCTION REWARD POPUP ====================
@@ -10308,7 +10590,7 @@ function spawnCoinBurst(position, count) {
 const coinCollectionSystem = {
     waitingCoins: [],           // Coins waiting to be collected
     collectionTimer: 0,         // Time until next collection
-    collectionInterval: 0,      // DELAYED GRATIFICATION: No batch wait — loot flies immediately after spawn (T=0.2s delay is in die())
+    collectionInterval: 3000,   // GLITCH POP: 3s hang time at fish location (T=0.1s spawn + 3.0s hang + 0.5s fly = T=3.6s popup)
     isCollecting: false,        // Whether collection animation is in progress
     initialized: false,
     pendingReward: 0,           // Total reward waiting to be collected (balance updates on coin arrival)
@@ -10498,7 +10780,7 @@ function triggerCoinCollection() {
             targetX: targetPos.x,
             targetY: targetPos.y,
             targetZ: targetPos.z,
-            duration: 1000, // DELAYED GRATIFICATION: Fixed 1-second parabolic curve (T=0.2s spawn + 1.0s flight = T=1.2s balance update)
+            duration: 500, // GLITCH POP: 0.5s flight (T=0.1s spawn + 3.0s hang + 0.5s flight = T=3.6s popup)
             elapsedSinceStart: 0,
             
             update(dt, elapsed) {
@@ -17692,12 +17974,12 @@ class Fish {
             // DELAYED GRATIFICATION Phase 1 (T=0): Immediate Kill Log
             addKillFeedEntry(this.form, Math.round(this.config.reward));
             
-            // DELAYED GRATIFICATION Phase 2 (T=0.2s): Delayed loot spawn + fly to cannon
+            // GLITCH POP Phase 2 (T=0.1s): Delayed loot spawn + 3s hang + 0.5s fly to cannon
             const lootTierMP = getLootTier(this.form, this.isBoss);
             const deathPosMP = deathPosition.clone();
             setTimeout(() => {
                 spawnWaitingCoin(deathPosMP, 0, lootTierMP);
-            }, 200);
+            }, 100);
             // SYNC FIX: Defer reward popup until coins reach turret (same as single-player)
             // In multiplayer, balance comes from server, so winFp=0 here
             coinCollectionSystem.pendingRewards.push({
@@ -17733,12 +18015,12 @@ class Fish {
             const killLogReward = winDisplay > 0 ? winDisplay : Math.round(this.config.reward);
             addKillFeedEntry(this.form, killLogReward);
             
-            // DELAYED GRATIFICATION Phase 2 (T=0.2s): Delayed loot spawn + fly to cannon
+            // GLITCH POP Phase 2 (T=0.1s): Delayed loot spawn + 3s hang + 0.5s fly to cannon
             const lootTierSP = getLootTier(this.form, this.isBoss);
             const deathPosSP = deathPosition.clone();
             setTimeout(() => {
                 spawnWaitingCoin(deathPosSP, 0, lootTierSP);
-            }, 200);
+            }, 100);
             
             // SYNC FIX: Defer balance update + reward popup until coins physically reach the turret
             // recordWin() is called immediately for RTP stats tracking (does not affect UI)
