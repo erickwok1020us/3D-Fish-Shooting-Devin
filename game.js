@@ -20500,13 +20500,10 @@ function createRmbZoomHint() {
     if (rmbHintEl) return rmbHintEl;
     const el = document.createElement('div');
     el.id = 'rmb-zoom-hint';
-    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%) scale(var(--ui-scale));transform-origin:bottom center;margin-left:390px;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.3s ease;z-index:10001;pointer-events:none;';
-    const mouseSvg = `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" stroke="rgba(0,255,200,0.6)" stroke-width="1.5" fill="none"/>
-        <line x1="14" y1="1.5" x2="14" y2="18" stroke="rgba(0,255,200,0.6)" stroke-width="1"/>
-        <rect x="14.5" y="3" width="10.5" height="14" rx="4" fill="rgba(0,255,200,0.35)" stroke="rgba(0,255,200,0.7)" stroke-width="1"/>
-    </svg>`;
-    el.innerHTML = `${mouseSvg}<span style="font:600 12px 'Rajdhani',sans-serif;color:rgba(0,255,200,0.6);letter-spacing:1px;text-transform:uppercase;white-space:nowrap;">RMB: Zoom</span>`;
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%) scale(var(--ui-scale));transform-origin:bottom center;margin-left:390px;display:inline-flex;align-items:center;gap:10px;opacity:0;transition:opacity 0.3s ease;z-index:10001;pointer-events:none;';
+    const circleSvg = `<div style="width:36px;height:36px;border-radius:50%;border:1.5px solid rgba(77,232,224,0.35);background:rgba(0,20,40,0.6);display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(77,232,224,0.15),inset 0 0 8px rgba(77,232,224,0.08);backdrop-filter:blur(4px);flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4de8e0" stroke-width="1.5"><rect x="6" y="2" width="12" height="20" rx="6"/><line x1="12" y1="7" x2="12" y2="11"/></svg></div>`;
+    const textGroup = `<div style="display:flex;flex-direction:column;"><span style="font:500 10px 'Orbitron',sans-serif;color:#fff;background:rgba(77,232,224,0.15);border:1px solid rgba(77,232,224,0.25);border-radius:4px;padding:1px 6px;letter-spacing:1px;display:inline-block;margin-bottom:3px;width:fit-content;white-space:nowrap;">RIGHT CLICK</span><span style="font:500 12px 'Orbitron',sans-serif;color:#4de8e0;letter-spacing:2px;text-transform:uppercase;">Zoom</span></div>`;
+    el.innerHTML = circleSvg + textGroup;
     document.body.appendChild(el);
     rmbHintEl = el;
     return el;
