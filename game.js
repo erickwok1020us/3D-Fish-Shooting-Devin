@@ -18187,7 +18187,8 @@ class ClientRTPPhase1 {
         fState.sumCostFp += weaponCostFp * coinValue;
 
         const hardPityThreshold = Math.floor(config.n1Fp * coinValue / weaponMult);
-        if (fState.sumCostFp >= hardPityThreshold) {
+        // FIX C: Budget-Locked Hard Pity — only trigger if budget is non-negative
+        if (fState.sumCostFp >= hardPityThreshold && pState.budgetRemainingFp >= 0) {
             return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto, coinValue);
         }
 
@@ -18238,7 +18239,8 @@ class ClientRTPPhase1 {
             }
 
             const hardPityThreshold = Math.floor(config.n1Fp * coinValue);
-            if (fState.sumCostFp >= hardPityThreshold) {
+            // FIX C: Budget-Locked Hard Pity — only trigger if budget is non-negative
+            if (fState.sumCostFp >= hardPityThreshold && pState.budgetRemainingFp >= 0) {
                 const killResult = this._executeKill(fState, pState, config, entry.fishId, 'hard_pity', isAuto, coinValue);
                 results.push(killResult);
                 energyCarry = true;
@@ -18288,8 +18290,11 @@ class ClientRTPPhase1 {
         pState.budgetRemainingFp += budgetTotalFp;
         fState.sumCostFp += pelletCostFp * coinValue;
 
-        const hardPityThreshold = Math.floor(config.n1Fp * coinValue / 3);
-        if (fState.sumCostFp >= hardPityThreshold) {
+        // FIX A: 3x Scatter uses same N1 threshold as 1x (pellets share state, each cost=1)
+        // Previously divided by 3, causing T3 fish to die in 1 shot (RTP 224%)
+        const hardPityThreshold = Math.floor(config.n1Fp * coinValue);
+        // FIX C: Budget-Locked Hard Pity — only trigger if budget is non-negative
+        if (fState.sumCostFp >= hardPityThreshold && pState.budgetRemainingFp >= 0) {
             return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto, coinValue);
         }
 
@@ -18311,8 +18316,9 @@ class ClientRTPPhase1 {
         this.processedKillEvents.add(killEventId);
 
         const rewardFp = (isAuto ? config.rewardAutoFp : config.rewardManualFp) * M;
+        // FIX B: Enable Debt Memory — allow budget to go deeply negative
+        // Previously clamped to -(rewardManualFp * M), erasing debt and preventing profit recovery
         pState.budgetRemainingFp -= rewardFp;
-        pState.budgetRemainingFp = Math.max(-(config.rewardManualFp * M), pState.budgetRemainingFp);
         fState.killed = true;
         return {
             fishId,
