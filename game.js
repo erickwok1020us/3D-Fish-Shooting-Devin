@@ -21995,19 +21995,22 @@ function updateBossCrosshair() {
                 const angle = rg.userData.angle;
                 
                 if (axis === 'x') {
-                    // Equatorial orbit: rotate around world X axis
-                    // Keep the base tilt (PI/2 on X) and add orbital rotation on Y
+                    // Equatorial orbit: ring in XZ plane, spinning around Y
                     rg.rotation.x = Math.PI / 2;
                     rg.rotation.y = angle;
                     rg.rotation.z = 0;
                 } else if (axis === 'y') {
-                    // Polar orbit: rotate around world Y axis
-                    // Keep base tilt (PI/2 on Y) and add orbital rotation on X
-                    rg.rotation.x = angle;
-                    rg.rotation.y = Math.PI / 2;
-                    rg.rotation.z = 0;
+                    // Polar orbit: ring in YZ plane, spinning around X
+                    // Use quaternion to avoid Euler gimbal lock that made the orange ring static
+                    if (!rg.userData._baseQ) {
+                        rg.userData._baseQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
+                        rg.userData._spinQ = new THREE.Quaternion();
+                        rg.userData._spinAxis = new THREE.Vector3(1, 0, 0);
+                    }
+                    rg.userData._spinQ.setFromAxisAngle(rg.userData._spinAxis, angle);
+                    rg.quaternion.copy(rg.userData._spinQ).multiply(rg.userData._baseQ);
                 } else if (axis === 'diagonal') {
-                    // Diagonal orbit: tilted 45° plane, rotating around its local normal
+                    // Diagonal orbit: tilted 45° plane, spinning around local normal
                     rg.rotation.x = Math.PI / 4;
                     rg.rotation.y = angle * 0.7;
                     rg.rotation.z = Math.PI / 4 + angle;
