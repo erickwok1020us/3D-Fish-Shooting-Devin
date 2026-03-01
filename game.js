@@ -1260,7 +1260,7 @@ const CONFIG = {
         // SWIMMING: Slow, steady, majestic cruise with minimal direction changes
         blueWhale: { 
             hp: 800, speedMin: 20, speedMax: 42, reward: 500, size: 140, 
-            color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, 
+            color: 0x4477aa, secondaryColor: 0x88aacc, count: 1, // Boss: spawn via bossTimer only 
             pattern: 'cruise', schoolSize: [1, 2], form: 'whale',
             category: 'largePredator',
             boidsStrength: 0.1,  // Almost no schooling, mother-calf only
@@ -1271,7 +1271,7 @@ const CONFIG = {
         // SWIMMING: Fast, agile, coordinated pack attacks
         killerWhale: { 
             hp: 700, speedMin: 50, speedMax: 88, reward: 450, size: 120, 
-            color: 0x111111, secondaryColor: 0xffffff, count: 1, 
+            color: 0x111111, secondaryColor: 0xffffff, count: 1, // Boss: spawn via bossTimer only 
             pattern: 'burstAttack', schoolSize: [2, 4], form: 'killerWhale',
             category: 'largePredator',
             boidsStrength: 1.8,  // Strong pod coordination
@@ -1282,7 +1282,7 @@ const CONFIG = {
         // SWIMMING: Slow patrol + explosive burst attacks
         greatWhiteShark: { 
             hp: 600, speedMin: 65, speedMax: 188, reward: 400, size: 100, 
-            color: 0x667788, secondaryColor: 0xcccccc, count: 1, 
+            color: 0x667788, secondaryColor: 0xcccccc, count: 1, // Boss: spawn via bossTimer only 
             pattern: 'burstAttack', schoolSize: [1, 1], form: 'shark',
             category: 'largePredator',
             boidsStrength: 0,   // Strictly solitary
@@ -1293,7 +1293,7 @@ const CONFIG = {
         // SWIMMING: High-speed sprints, fastest fish in the ocean
         marlin: { 
             hp: 400, speedMin: 110, speedMax: 310, reward: 300, size: 80, 
-            color: 0x2266aa, secondaryColor: 0x44aaff, count: 1, 
+            color: 0x2266aa, secondaryColor: 0x44aaff, count: 1, // T1: 1 Marlin 
             pattern: 'burstSprint', schoolSize: [1, 2], form: 'marlin',
             category: 'largePredator',
             boidsStrength: 0,   // Strictly solitary
@@ -1304,7 +1304,7 @@ const CONFIG = {
         // SWIMMING: S-shaped head sweeping motion for prey detection
         hammerheadShark: { 
             hp: 450, speedMin: 56, speedMax: 110, reward: 300, size: 85, 
-            color: 0x556677, secondaryColor: 0x889999, count: 1, 
+            color: 0x556677, secondaryColor: 0x889999, count: 1, // T1: 1 Hammerhead 
             pattern: 'sShape', schoolSize: [1, 1], form: 'hammerhead',
             category: 'largePredator',
             boidsStrength: 1.5, // School by day (unique among sharks)
@@ -1318,7 +1318,7 @@ const CONFIG = {
         // SWIMMING: Fast, powerful, highly synchronized with school
         yellowfinTuna: { 
             hp: 200, speedMin: 75, speedMax: 138, reward: 220, size: 50, 
-            color: 0x3355aa, secondaryColor: 0xffdd00, count: 6, 
+            color: 0x3355aa, secondaryColor: 0xffdd00, count: 5, // T2: 5 Tuna 
             pattern: 'synchronizedFast', schoolSize: [6, 15], form: 'tuna',
             category: 'mediumLarge',
             boidsStrength: 2.0  // Tight synchronized schooling
@@ -1328,7 +1328,7 @@ const CONFIG = {
         // SWIMMING: Fast, erratic, unpredictable direction changes
         mahiMahi: { 
             hp: 160, speedMin: 69, speedMax: 125, reward: 180, size: 45, 
-            color: 0x44aa44, secondaryColor: 0xffcc00, count: 5, 
+            color: 0x44aa44, secondaryColor: 0xffcc00, count: 5, // T2: 5 MahiMahi 
             pattern: 'irregularTurns', schoolSize: [3, 8], form: 'dolphinfish',
             category: 'mediumLarge',
             boidsStrength: 1.0  // Loose schooling
@@ -1338,7 +1338,7 @@ const CONFIG = {
         // SWIMMING: Slow bottom patrol + sudden short bursts
         grouper: { 
             hp: 250, speedMin: 19, speedMax: 56, reward: 200, size: 60, 
-            color: 0x886644, secondaryColor: 0x553322, count: 3, 
+            color: 0x886644, secondaryColor: 0x553322, count: 2, // T1: 2 Grouper 
             pattern: 'bottomBurst', schoolSize: [1, 1], form: 'grouper',
             category: 'mediumLarge',
             boidsStrength: 0  // Strictly solitary and territorial
@@ -1351,7 +1351,7 @@ const CONFIG = {
         // SWIMMING: Stop to graze, swim to next spot, repeat
         parrotfish: { 
             hp: 120, speedMin: 38, speedMax: 69, reward: 140, size: 35, 
-            color: 0x44ddaa, secondaryColor: 0xff66aa, count: 6, 
+            color: 0x44ddaa, secondaryColor: 0xff66aa, count: 5, // T2: 5 Parrotfish 
             pattern: 'stopAndGo', schoolSize: [3, 6], form: 'parrotfish',
             category: 'reefFish',
             boidsStrength: 1.2  // Loose harem grouping
@@ -1361,7 +1361,7 @@ const CONFIG = {
         // SWIMMING: Slow, elegant, vertical undulation
         angelfish: { 
             hp: 90, speedMin: 31, speedMax: 63, reward: 110, size: 30, 
-            color: 0xffdd44, secondaryColor: 0x4488ff, count: 8, 
+            color: 0xffdd44, secondaryColor: 0x4488ff, count: 10, // T3: 10 Angelfish 
             pattern: 'elegantGlide', schoolSize: [2, 4], form: 'angelfish',
             category: 'reefFish',
             boidsStrength: 0.8  // Paired/small group
@@ -1371,7 +1371,7 @@ const CONFIG = {
         // SWIMMING: Slow, deliberate, hovering near reef structures
         lionfish: { 
             hp: 80, speedMin: 25, speedMax: 56, reward: 100, size: 28, 
-            color: 0xcc3333, secondaryColor: 0xffffff, count: 8, 
+            color: 0xcc3333, secondaryColor: 0xffffff, count: 5, // T2: 5 Lionfish 
             pattern: 'ambush', schoolSize: [1, 2], form: 'lionfish',
             category: 'reefFish',
             boidsStrength: 0.2  // Mostly solitary
@@ -1381,7 +1381,7 @@ const CONFIG = {
         // SWIMMING: Coordinated group movement, gentle up-down motion
         blueTang: { 
             hp: 60, speedMin: 40, speedMax: 70, reward: 80, size: 20, 
-            color: 0x2288ff, secondaryColor: 0xffff00, count: 12, 
+            color: 0x2288ff, secondaryColor: 0xffff00, count: 10, // T3: 10 BlueTang 
             pattern: 'groupCoordination', schoolSize: [5, 12], form: 'tang',
             category: 'reefFish',
             boidsStrength: 2.0  // Strong schooling for grazing
@@ -1394,7 +1394,7 @@ const CONFIG = {
         // SWIMMING: Tight synchronized waves, rapid direction changes
         sardine: { 
             hp: 20, speedMin: 45, speedMax: 70, reward: 30, size: 10,
-            color: 0xccddee, secondaryColor: 0x88aacc, count: 15, 
+            color: 0xccddee, secondaryColor: 0x88aacc, count: 20, // T3: 20 Sardines (2 groups of 10) 
             pattern: 'waveFormation', schoolSize: [20, 40], form: 'sardine',
             category: 'smallSchool',
             boidsStrength: 3.0  // Extremely tight schooling
@@ -1404,7 +1404,7 @@ const CONFIG = {
         // SWIMMING: Swirling bait ball formation, very tight grouping
         anchovy: { 
             hp: 15, speedMin: 50, speedMax: 85, reward: 25, size: 8,
-            color: 0xaabbcc, secondaryColor: 0x778899, count: 15, 
+            color: 0xaabbcc, secondaryColor: 0x778899, count: 20, // T3: 20 Anchovies (2 groups of 10) 
             pattern: 'baitBall', schoolSize: [25, 45], form: 'anchovy',
             category: 'smallSchool',
             boidsStrength: 3.5  // Tightest schooling (bait ball)
@@ -1414,7 +1414,7 @@ const CONFIG = {
         // SWIMMING: Short darting movements within territory
         clownfish: { 
             hp: 50, speedMin: 20, speedMax: 40, reward: 70, size: 15, 
-            color: 0xff6600, secondaryColor: 0xffffff, count: 6, 
+            color: 0xff6600, secondaryColor: 0xffffff, count: 10, // T3: 10 Clownfish 
             pattern: 'territorial', schoolSize: [2, 3], form: 'clownfish',
             category: 'smallSchool',
             boidsStrength: 1.0  // Family group stays together
@@ -1424,7 +1424,7 @@ const CONFIG = {
         // SWIMMING: Quick defensive charges, aggressive darting
         damselfish: { 
             hp: 40, speedMin: 35, speedMax: 60, reward: 55, size: 12,
-            color: 0x6644ff, secondaryColor: 0xffdd00, count: 12, 
+            color: 0x6644ff, secondaryColor: 0xffdd00, count: 0, // T3: Damselfish excluded from pool to maintain 100 total 
             pattern: 'defensiveCharge', schoolSize: [3, 6], form: 'damselfish',
             category: 'smallSchool',
             boidsStrength: 0.8  // Loose territorial grouping
@@ -1437,7 +1437,7 @@ const CONFIG = {
         // SWIMMING: Slow, majestic wing flapping, gentle banking turns
         mantaRay: { 
             hp: 350, speedMin: 50, speedMax: 88, reward: 280, size: 90, 
-            color: 0x222233, secondaryColor: 0xeeeeee, count: 1, 
+            color: 0x222233, secondaryColor: 0xeeeeee, count: 1, // T1: 1 MantaRay 
             pattern: 'wingGlide', schoolSize: [1, 1], form: 'mantaRay',
             category: 'specialForm',
             boidsStrength: 0.3  // Mostly solitary, occasional pairs
@@ -1447,7 +1447,7 @@ const CONFIG = {
         // SWIMMING: Very slow, gentle rotation, fin-propelled
         pufferfish: { 
             hp: 100, speedMin: 13, speedMax: 38, reward: 120, size: 25, 
-            color: 0xddcc88, secondaryColor: 0x886644, count: 4, 
+            color: 0xddcc88, secondaryColor: 0x886644, count: 5, // T2: 5 Pufferfish 
             pattern: 'slowRotation', schoolSize: [1, 1], form: 'pufferfish',
             category: 'specialForm',
             boidsStrength: 0  // Strictly solitary
@@ -1457,7 +1457,7 @@ const CONFIG = {
         // SWIMMING: Vertical posture, dorsal fin vibration, drift with current
         seahorse: { 
             hp: 80, speedMin: 10, speedMax: 25, reward: 130, size: 20, 
-            color: 0xffaa44, secondaryColor: 0xcc8833, count: 4, 
+            color: 0xffaa44, secondaryColor: 0xcc8833, count: 0, // T3: Seahorse excluded from pool to maintain 100 total 
             pattern: 'verticalDrift', schoolSize: [1, 2], form: 'seahorse',
             category: 'specialForm',
             boidsStrength: 1.2  // Monogamous pair bonding
@@ -4606,12 +4606,14 @@ function valueNoise2D(x, y) {
 const FISH_BEHAVIOR_CONFIG = {
     // Depth bands (Y coordinates relative to tank)
     // Tank: floorY=-450, height=900, so range is -450 to 450
+    // UNIFIED SPATIAL LOGIC: All species swim in the same vertical range
+    // Per Gemini Balance spec: remove per-category depth bands, use unified Y: -200 to +250
     depthBands: {
-        surface: { min: 100, max: 350 },      // Near top (flying fish, mahi-mahi)
-        midWater: { min: -50, max: 200 },     // Middle — biased upward for visual leveling
-        reef: { min: -200, max: 0 },          // Reef zone — raised above turret level
-        bottom: { min: -220, max: -60 },      // Near bottom — clamped above fishFloorY (-260)
-        fullColumn: { min: -200, max: 300 }   // Anywhere — raised floor above turret
+        surface: { min: -200, max: 250 },      // UNIFIED: all species use full range
+        midWater: { min: -200, max: 250 },     // UNIFIED: all species use full range
+        reef: { min: -200, max: 250 },          // UNIFIED: all species use full range
+        bottom: { min: -200, max: 250 },        // UNIFIED: all species use full range
+        fullColumn: { min: -200, max: 250 }     // UNIFIED: all species use full range
     },
     
     // Default behavior parameters by category
@@ -4653,19 +4655,16 @@ const FISH_BEHAVIOR_CONFIG = {
         }
     },
     
-    // Species-specific overrides
+    // UNIFIED SPATIAL LOGIC: All species use full vertical range Y:-200 to +250
+    // Species overrides only affect movement style (amplitude, noise), NOT depth restriction
     speciesOverrides: {
-        // Bottom dwellers
-        grouper: { depthBand: 'bottom', verticalAmplitude: 10 },
-        seahorse: { depthBand: 'bottom', verticalAmplitude: 8 },
-        // Surface dwellers
-        mahiMahi: { depthBand: 'surface', verticalAmplitude: 35 },
-        // Full column predators
+        grouper: { depthBand: 'fullColumn', verticalAmplitude: 10 },
+        seahorse: { depthBand: 'fullColumn', verticalAmplitude: 8 },
+        mahiMahi: { depthBand: 'fullColumn', verticalAmplitude: 35 },
         blueWhale: { depthBand: 'fullColumn', verticalAmplitude: 60, noiseScale: 0.002 },
         greatWhiteShark: { depthBand: 'fullColumn', verticalAmplitude: 45 },
         marlin: { depthBand: 'fullColumn', verticalAmplitude: 40 },
-        // Manta ray - graceful glider
-        mantaRay: { depthBand: 'midWater', verticalAmplitude: 50, noiseScale: 0.003 }
+        mantaRay: { depthBand: 'fullColumn', verticalAmplitude: 50, noiseScale: 0.003 }
     }
 };
 
@@ -5048,6 +5047,16 @@ function updatePerformanceOptimizations(deltaTime) {
             if (distanceSquared > maxRenderDistSq) {
                 fish.group.visible = false;
                 fish.currentLodLevel = 3; // Mark as culled
+                // OFF-SCREEN LIFECYCLE: Track time invisible and stop animations
+                if (!fish._offScreenTime) fish._offScreenTime = 0;
+                fish._offScreenTime += PERFORMANCE_CONFIG.frustumCulling.updateInterval;
+                // Stop skeletal animation CPU cost for off-screen fish
+                if (fish.glbMixer && !fish._animStopped) {
+                    fish.glbMixer.stopAllAction();
+                    fish._animStopped = true;
+                }
+                // Disable boids flag for off-screen fish
+                fish._boidsDisabled = true;
                 culledCount++;
                 continue;
             }
@@ -5059,8 +5068,25 @@ function updatePerformanceOptimizations(deltaTime) {
                 
                 if (inFrustum) {
                     visibleCount++;
+                    // ON-SCREEN LIFECYCLE: Re-enable everything when visible
+                    if (fish._animStopped && fish.glbMixer && fish.glbAction) {
+                        fish.glbAction.play();
+                        fish._animStopped = false;
+                    }
+                    fish._boidsDisabled = false;
+                    fish._offScreenTime = 0;
                 } else {
                     fish.currentLodLevel = 3; // Mark as culled
+                    // OFF-SCREEN LIFECYCLE: Track time invisible and stop animations
+                    if (!fish._offScreenTime) fish._offScreenTime = 0;
+                    fish._offScreenTime += PERFORMANCE_CONFIG.frustumCulling.updateInterval;
+                    // Stop skeletal animation CPU cost for off-screen fish
+                    if (fish.glbMixer && !fish._animStopped) {
+                        fish.glbMixer.stopAllAction();
+                        fish._animStopped = true;
+                    }
+                    // Disable boids flag for off-screen fish
+                    fish._boidsDisabled = true;
                     culledCount++;
                     continue;  // Skip LOD processing for culled fish
                 }
@@ -5118,6 +5144,36 @@ function updatePerformanceOptimizations(deltaTime) {
         performanceState.lodHighCount = lodHighCount;
         performanceState.lodMediumCount = lodMediumCount;
         performanceState.lodLowCount = lodLowCount;
+        
+        // OFF-SCREEN RECYCLE: Teleport fish that have been off-screen for > 5 seconds
+        // to opposite edge of screen to maintain visual flow
+        const offScreenRecycleThreshold = 5.0; // seconds
+        for (let i = activeFish.length - 1; i >= 0; i--) {
+            const fish = activeFish[i];
+            if (!fish || !fish.isActive) continue;
+            if (fish._offScreenTime && fish._offScreenTime > offScreenRecycleThreshold) {
+                // Teleport to opposite edge spawn point
+                const pos = fish.group.position;
+                // Determine which edge to spawn at (opposite of current position)
+                pos.x = pos.x > 0 ? -620 : 620;
+                pos.z = pos.z > 0 ? -320 : 320;
+                pos.y = -200 + Math.random() * 450; // Random Y within unified range
+                // Reset velocity toward center for natural flow
+                fish.velocity.set(
+                    pos.x > 0 ? -(30 + Math.random() * 40) : (30 + Math.random() * 40),
+                    0,
+                    pos.z > 0 ? -(20 + Math.random() * 30) : (20 + Math.random() * 30)
+                );
+                // Reset off-screen tracking and re-enable systems
+                fish._offScreenTime = 0;
+                fish._boidsDisabled = false;
+                if (fish._animStopped && fish.glbMixer && fish.glbAction) {
+                    fish.glbAction.play();
+                    fish._animStopped = false;
+                }
+                fish.group.visible = true;
+            }
+        }
     }
 }
 
@@ -16053,22 +16109,26 @@ class Fish {
         
         // Apply boids behavior (stronger for schooling fish)
         // PERFORMANCE: Throttle boids update for distant fish (LOD 2/3)
-        // This saves significant CPU time with 180-200 fish
-        if (!this.boidsFrameCounter) this.boidsFrameCounter = 0;
-        this.boidsFrameCounter++;
-        
-        // LOD 0/1: Update every frame, LOD 2: Every 2 frames, LOD 3: Every 3 frames
-        const boidsUpdateInterval = this.currentLodLevel <= 1 ? 1 : (this.currentLodLevel === 2 ? 2 : 3);
-        const shouldUpdateBoids = this.boidsFrameCounter % boidsUpdateInterval === 0;
-        
-        if (shouldUpdateBoids) {
-            this.applyDodgeManeuver(deltaTime);
-            this.applyHardSeparation();
-            const boidsStrength = this.config.boidsStrength !== undefined ? this.config.boidsStrength : 1.0;
-            if (boidsStrength > 0) {
-                this.applyBoids(allFish, boidsStrength);
+        // OFF-SCREEN LIFECYCLE: Skip boids entirely for off-screen fish (simple linear movement only)
+        if (!this._boidsDisabled) {
+            if (!this.boidsFrameCounter) this.boidsFrameCounter = 0;
+            this.boidsFrameCounter++;
+            
+            // LOD 0/1: Update every frame, LOD 2: Every 2 frames, LOD 3: Every 3 frames
+            const boidsUpdateInterval = this.currentLodLevel <= 1 ? 1 : (this.currentLodLevel === 2 ? 2 : 3);
+            const shouldUpdateBoids = this.boidsFrameCounter % boidsUpdateInterval === 0;
+            
+            if (shouldUpdateBoids) {
+                this.applyDodgeManeuver(deltaTime);
+                this.applyHardSeparation();
+                const boidsStrength = this.config.boidsStrength !== undefined ? this.config.boidsStrength : 1.0;
+                if (boidsStrength > 0) {
+                    this.applyBoids(allFish, boidsStrength);
+                }
             }
         }
+        // OFF-SCREEN: Still apply boundary forces even when boids disabled
+        // to prevent fish from drifting out of bounds
         
         // Apply boundary forces
         this.applyBoundaryForces();
@@ -16982,12 +17042,10 @@ class Fish {
     }
     
     applyBoundaryForces() {
-        // IMPROVED BOUNDARY AVOIDANCE with predictive look-ahead
-        // Instead of only reacting when already at boundary, look ahead 1-2 seconds
-        // and start turning early for smoother, more natural avoidance
+        // UNIFIED SPATIAL LOGIC: Fixed boundary turn-back limits
+        // Per Gemini spec: X: ±650, Z: ±350, Y: -200 to +250
+        // Fish turn back at these hard limits to avoid camera edge clipping
         
-        const { width, height, depth, floorY } = CONFIG.aquarium;
-        const { marginX, marginY, marginZ } = CONFIG.fishArena;
         const pos = this.group.position;
         const vel = this.velocity;
         
@@ -16995,13 +17053,17 @@ class Fish {
         const force = fishTempVectors.boundaryForce;
         force.set(0, 0, 0);
         
-        // Calculate bounds inside the tank with margins
-        const minX = -width / 2 + marginX;
-        const maxX = width / 2 - marginX;
-        const minY = Math.max(floorY + marginY, getDynamicFishFloorY(pos.x, pos.z));
-        const maxY = floorY + height - marginY;
-        const minZ = -depth / 2 + marginZ;
-        const maxZ = depth / 2 - marginZ;
+        // UNIFIED BOUNDARY LIMITS (Gemini Balance spec)
+        const minX = -650;
+        const maxX = 650;
+        const minY = -200;
+        const maxY = 250;
+        const minZ = -350;
+        const maxZ = 350;
+        // Margin for predictive avoidance calculations
+        const marginX = 100;
+        const marginY = 80;
+        const marginZ = 80;
         
         // PREDICTIVE AVOIDANCE: Look ahead 1.5 seconds
         const lookAheadTime = 1.5;
@@ -17845,14 +17907,14 @@ function createFishPool() {
 // Get random position inside the aquarium tank (rectangular bounds)
 // Issue #1: Fish spawn in full 3D space around cannon (which is in center)
 function getRandomFishPositionIn3DSpace() {
-    const { width, height, depth, floorY } = CONFIG.aquarium;
-    const { marginX, marginY, marginZ } = CONFIG.fishArena;
-    
-    const minX = -width / 2 + marginX;
-    const maxX = width / 2 - marginX;
-    const maxY = floorY + height - marginY;
-    const minZ = -depth / 2 + marginZ;
-    const maxZ = depth / 2 - marginZ;
+    // UNIFIED SPATIAL LOGIC: Use fixed boundary limits from Gemini spec
+    // X: ±650, Z: ±350, Y: -200 to +250
+    const minX = -650;
+    const maxX = 650;
+    const minY = -200;
+    const maxY = 250;
+    const minZ = -350;
+    const maxZ = 350;
     
     const minHorizontalDistFromCannon = 150;
     const minFishSpawnDist = 60;
@@ -17865,8 +17927,8 @@ function getRandomFishPositionIn3DSpace() {
         do {
             x = minX + Math.random() * (maxX - minX);
             z = minZ + Math.random() * (maxZ - minZ);
-            const spawnFloor = Math.max(getDynamicFishFloorY(x, z) + 90, CONFIG.aquarium.floorY + 230);
-            y = spawnFloor + Math.random() * (maxY - spawnFloor);
+            // UNIFIED SPATIAL: Use fixed Y range -200 to +250
+            y = minY + Math.random() * (maxY - minY);
             horizontalDist = Math.sqrt(x*x + z*z);
         } while (horizontalDist < minHorizontalDistFromCannon);
         
@@ -17945,12 +18007,12 @@ function spawnInitialFish() {
 // ==================== DYNAMIC FISH RESPAWN SYSTEM ====================
 // Maintains target fish count and adjusts spawn rate based on kill rate
 const FISH_SPAWN_CONFIG = {
-    targetCount: 80,        // Target number of fish on screen
-    minCount: 60,           // Minimum fish count before emergency spawn
-    maxCount: 100,          // Maximum fish count - HARD CAP to prevent performance issues (reduced from 120 for memory optimization)
-    normalSpawnInterval: 1.0,    // Normal spawn interval (seconds)
-    emergencySpawnInterval: 0.3, // Emergency spawn interval when fish < minCount
-    maintainSpawnInterval: 2.0   // Slow spawn when at target
+    targetCount: 100,       // GEMINI BALANCE: Maintain 100 active fish at all times
+    minCount: 80,           // Emergency spawn when below 80
+    maxCount: 100,          // Pool is exactly 100 (T3=70, T2=25, T1=5) - all should be active
+    normalSpawnInterval: 0.5,    // Faster spawn to maintain 100 count
+    emergencySpawnInterval: 0.2, // Emergency spawn interval when fish < minCount
+    maintainSpawnInterval: 1.0   // Slow spawn when at target
 };
 
 let dynamicSpawnTimer = 0;
