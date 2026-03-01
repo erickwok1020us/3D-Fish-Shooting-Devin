@@ -1073,10 +1073,10 @@ const WEAPON_CONFIG = {
         fpsCameraBackDist: 150, fpsCameraUpOffset: 75,
         emissiveBoost: 0.4,
 
-        color: 0xffdd00, size: 0.8,
-        cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-        muzzleColor: 0xffdd00, trailColor: 0xffcc00,
-        hitColor: 0xffdd00, ringColor: 0xffdd00,
+        color: 0xbf00ff, size: 0.8,
+        cannonColor: 0x8800ff, cannonEmissive: 0x6600cc,
+        muzzleColor: 0xbf00ff, trailColor: 0x8800ff,
+        hitColor: 0xbf00ff, ringColor: 0xbf00ff,
         recoilStrength: 12, screenShakeOnHit: 1.5,
         chargeTime: 0.2,
     },
@@ -5433,8 +5433,8 @@ function triggerWeaponHitEffects(weaponKey, position) {
         // Orange flash for 8x
         triggerScreenFlash(0xff4400, 50, 0.1);  // 8x screen flash: opacity 0.1, duration 50ms (barely noticeable flicker)
     } else if (weaponKey === '5x') {
-        // Subtle gold flash for 5x
-        triggerScreenFlash(0xffdd00, 0.1);
+        // Subtle purple flash for 5x
+        triggerScreenFlash(0xbf00ff, 50, 0.1);
     }
 }
 
