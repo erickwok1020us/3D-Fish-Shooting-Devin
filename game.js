@@ -21927,8 +21927,10 @@ function createBossCrosshair(bossFish) {
             // Equatorial orbit — ring lies in XZ plane (rotate 90° on X to make it horizontal)
             ringGroup.rotation.x = Math.PI / 2;
         } else if (def.rotAxis === 'y') {
-            // Polar orbit — ring lies in YZ plane (rotate 90° on Y)
-            ringGroup.rotation.y = Math.PI / 2;
+            // Polar orbit — ring stands vertical (rotate 90° on Z)
+            // NOTE: DO NOT use rotation.y = PI/2 here — that causes Euler gimbal lock
+            // and makes the ring rotate around its own symmetry axis (invisible)
+            ringGroup.rotation.z = Math.PI / 2;
         } else if (def.rotAxis === 'diagonal') {
             // Diagonal orbit — tilted 45° on both X and Z for interlaced look
             ringGroup.rotation.x = Math.PI / 4;
@@ -22000,15 +22002,11 @@ function updateBossCrosshair() {
                     rg.rotation.y = angle;
                     rg.rotation.z = 0;
                 } else if (axis === 'y') {
-                    // Polar orbit: ring in YZ plane, spinning around X
-                    // Use quaternion to avoid Euler gimbal lock that made the orange ring static
-                    if (!rg.userData._baseQ) {
-                        rg.userData._baseQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
-                        rg.userData._spinQ = new THREE.Quaternion();
-                        rg.userData._spinAxis = new THREE.Vector3(1, 0, 0);
-                    }
-                    rg.userData._spinQ.setFromAxisAngle(rg.userData._spinAxis, angle);
-                    rg.quaternion.copy(rg.userData._spinQ).multiply(rg.userData._baseQ);
+                    // Polar orbit: ring stands vertical (Z=PI/2), orbits around Y
+                    // This produces visible tumbling — the ring sweeps through vertical planes
+                    rg.rotation.x = 0;
+                    rg.rotation.y = angle;
+                    rg.rotation.z = Math.PI / 2;
                 } else if (axis === 'diagonal') {
                     // Diagonal orbit: tilted 45° plane, spinning around local normal
                     rg.rotation.x = Math.PI / 4;
