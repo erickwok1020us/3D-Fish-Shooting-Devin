@@ -2890,6 +2890,172 @@ function returnCoinModelToPool(model) {
     model.scale.setScalar(COIN_GLB_CONFIG.scale);  // Restore original scale (50)
 }
 
+// ==================== UNIQUE TIER LOOT MODEL SYSTEM ====================
+// Each fish tier drops x1 unique loot model instead of generic coins:
+// Boss: Large Red Ruby | T1: Multi-colored Gems | T2: Cyber Cash Stack | T3: Gold Coin
+const LOOT_SCALE = 0.82; // 18% size reduction per user request
+const LOOT_EMISSIVE = 1.0; // Reduced from 2.5 (60% reduction)
+
+// Cached geometries for reuse
+let _rubyGeo = null, _gemGeos = {}, _billGeo = null, _coinGeo = null;
+
+function getLootTier(fishForm, isBoss) {
+    if (isBoss) return 'boss';
+    const tier = FISH_FORM_TO_TIER[fishForm];
+    if (tier === 'boss') return 'boss';
+    if (tier === 't1') return 't1';
+    if (tier === 't2') return 't2';
+    return 't3'; // default
+}
+
+// --- BOSS: Large Red Ruby (Octahedron) ---
+function createBossRubyMesh() {
+    if (!_rubyGeo) _rubyGeo = new THREE.OctahedronGeometry(12, 1);
+    const group = new THREE.Group();
+    const rubyMat = new THREE.MeshStandardMaterial({
+        color: 0xcc0000, emissive: 0xff1111, emissiveIntensity: LOOT_EMISSIVE,
+        metalness: 0.25, roughness: 0.1, transparent: true, opacity: 0.88
+    });
+    const ruby = new THREE.Mesh(_rubyGeo, rubyMat);
+    ruby.scale.set(1, 1.35, 1);
+    group.add(ruby);
+    const coreMat = new THREE.MeshBasicMaterial({
+        color: 0xff3333, transparent: true, opacity: 0.3,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const coreGeo = new THREE.OctahedronGeometry(7, 1);
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.scale.set(1, 1.35, 1);
+    group.add(core);
+    const edgeGeo = new THREE.EdgesGeometry(_rubyGeo);
+    const edges = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: 0xff8888, transparent: true, opacity: 0.5 }));
+    edges.scale.set(1, 1.35, 1);
+    group.add(edges);
+    group.scale.setScalar(LOOT_SCALE);
+    group.userData.lootType = 'boss';
+    group.userData.lootMaterials = [rubyMat, coreMat];
+    return group;
+}
+
+// --- T1: Multi-colored Gems cluster ---
+function createT1GemsMesh() {
+    const group = new THREE.Group();
+    const defs = [
+        { color: 0x4488ff, emissive: 0x2266dd, pos: [0,5,0], size: 4, shape: 'oct' },
+        { color: 0x44dd44, emissive: 0x22aa22, pos: [-6,-2,2], size: 3.5, shape: 'dodec' },
+        { color: 0xdd44dd, emissive: 0xaa22aa, pos: [6,-2,-2], size: 3.5, shape: 'ico' },
+        { color: 0xff8844, emissive: 0xdd6622, pos: [-3,-5,-4], size: 2.8, shape: 'oct' },
+        { color: 0x44dddd, emissive: 0x22aaaa, pos: [4,-5,3], size: 2.8, shape: 'dodec' },
+    ];
+    defs.forEach(function(d) {
+        var geo;
+        if (d.shape === 'oct') {
+            if (!_gemGeos.oct) _gemGeos.oct = {};
+            if (!_gemGeos.oct[d.size]) _gemGeos.oct[d.size] = new THREE.OctahedronGeometry(d.size, 0);
+            geo = _gemGeos.oct[d.size];
+        } else if (d.shape === 'dodec') {
+            if (!_gemGeos.dodec) _gemGeos.dodec = {};
+            if (!_gemGeos.dodec[d.size]) _gemGeos.dodec[d.size] = new THREE.DodecahedronGeometry(d.size, 0);
+            geo = _gemGeos.dodec[d.size];
+        } else {
+            if (!_gemGeos.ico) _gemGeos.ico = {};
+            if (!_gemGeos.ico[d.size]) _gemGeos.ico[d.size] = new THREE.IcosahedronGeometry(d.size, 0);
+            geo = _gemGeos.ico[d.size];
+        }
+        var mat = new THREE.MeshStandardMaterial({
+            color: d.color, emissive: d.emissive, emissiveIntensity: LOOT_EMISSIVE * 0.7,
+            metalness: 0.35, roughness: 0.1, transparent: true, opacity: 0.85
+        });
+        var gem = new THREE.Mesh(geo, mat);
+        gem.position.set(d.pos[0], d.pos[1], d.pos[2]);
+        gem.rotation.set(Math.random()*2, Math.random()*2, Math.random()*2);
+        group.add(gem);
+        var eGeo = new THREE.EdgesGeometry(geo);
+        var edges = new THREE.LineSegments(eGeo, new THREE.LineBasicMaterial({ color: d.color, transparent: true, opacity: 0.35 }));
+        edges.position.copy(gem.position);
+        edges.rotation.copy(gem.rotation);
+        group.add(edges);
+    });
+    group.scale.setScalar(LOOT_SCALE);
+    group.userData.lootType = 't1';
+    return group;
+}
+
+// --- T2: Cyber Cash Stack ---
+function createT2CashMesh() {
+    if (!_billGeo) _billGeo = new THREE.BoxGeometry(14, 0.6, 7);
+    const group = new THREE.Group();
+    for (var i = 0; i < 5; i++) {
+        var billMat = new THREE.MeshStandardMaterial({
+            color: 0x22bb77, emissive: 0x119955, emissiveIntensity: LOOT_EMISSIVE * 0.5,
+            metalness: 0.15, roughness: 0.35, transparent: true, opacity: 0.88
+        });
+        var bill = new THREE.Mesh(_billGeo, billMat);
+        bill.position.set((Math.random()-0.5)*3, -4+i*1.8, (Math.random()-0.5)*1.5);
+        bill.rotation.y = (Math.random()-0.5)*0.12;
+        bill.rotation.z = (Math.random()-0.5)*0.06;
+        group.add(bill);
+        var lineGeo = new THREE.BoxGeometry(11, 0.12, 0.12);
+        var lineMat = new THREE.MeshBasicMaterial({
+            color: 0x44ffcc, transparent: true, opacity: 0.5,
+            blending: THREE.AdditiveBlending, depthWrite: false
+        });
+        var line = new THREE.Mesh(lineGeo, lineMat);
+        line.position.copy(bill.position);
+        line.position.y += 0.4;
+        line.rotation.copy(bill.rotation);
+        group.add(line);
+    }
+    group.scale.setScalar(LOOT_SCALE);
+    group.userData.lootType = 't2';
+    return group;
+}
+
+// --- T3: Gold Coin ---
+function createT3CoinMesh() {
+    if (!_coinGeo) _coinGeo = new THREE.CylinderGeometry(6, 6, 1.2, 32);
+    const group = new THREE.Group();
+    var coinMat = new THREE.MeshStandardMaterial({
+        color: 0xffd700, emissive: 0xdaa520, emissiveIntensity: LOOT_EMISSIVE * 0.4,
+        metalness: 0.9, roughness: 0.12, transparent: true, opacity: 0.92
+    });
+    var coin = new THREE.Mesh(_coinGeo, coinMat);
+    coin.rotation.x = Math.PI / 2;
+    group.add(coin);
+    var rimGeo = new THREE.TorusGeometry(6, 0.25, 8, 32);
+    var rimMat = new THREE.MeshBasicMaterial({
+        color: 0xffee44, transparent: true, opacity: 0.2,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    var rim = new THREE.Mesh(rimGeo, rimMat);
+    rim.rotation.x = Math.PI / 2;
+    group.add(rim);
+    group.scale.setScalar(LOOT_SCALE);
+    group.userData.lootType = 't3';
+    return group;
+}
+
+// Factory: create loot mesh by tier
+function createLootMeshForTier(tier) {
+    switch (tier) {
+        case 'boss': return createBossRubyMesh();
+        case 't1':   return createT1GemsMesh();
+        case 't2':   return createT2CashMesh();
+        case 't3':   return createT3CoinMesh();
+        default:     return createT3CoinMesh(); // fallback
+    }
+}
+
+// Cleanup helper: dispose procedural loot mesh materials
+function disposeLootMesh(group) {
+    if (!group) return;
+    group.traverse(function(child) {
+        if (child.isMesh && child.material) {
+            child.material.dispose();
+        }
+    });
+}
+
 function cloneCoinModel() {
     // Use pooled model for better performance
     return getCoinModelFromPool();
@@ -9392,7 +9558,7 @@ function spawnCoinBurst(position, count) {
 const coinCollectionSystem = {
     waitingCoins: [],           // Coins waiting to be collected
     collectionTimer: 0,         // Time until next collection
-    collectionInterval: 4000,   // Wait 4 seconds before coins fly to cannon
+    collectionInterval: 3000,   // Wait 3 seconds before loot flies to cannon (reduced from 4s)
     isCollecting: false,        // Whether collection animation is in progress
     initialized: false,
     pendingReward: 0,           // Total reward waiting to be collected (balance updates on coin arrival)
@@ -9407,39 +9573,40 @@ function initCoinCollectionSystem() {
     coinCollectionSystem.initialized = true;
 }
 
-function spawnWaitingCoin(position, rewardPerCoin = 0) {
+function spawnWaitingCoin(position, rewardPerCoin = 0, lootTier = 't3') {
     if (!particleGroup) return;
-    
-    const useCoinGLB = coinGLBState.loaded && coinGLBState.model;
-    if (!useCoinGLB) return;
     
     if (coinCollectionSystem.waitingCoins.length === 0 && !coinCollectionSystem.isCollecting) {
         coinCollectionSystem.collectionTimer = coinCollectionSystem.collectionInterval;
     }
     
-    const coinModel = cloneCoinModel();
-    if (!coinModel) return;
+    // UNIQUE LOOT: Create tier-specific procedural mesh (Boss Ruby / T1 Gems / T2 Cash / T3 Coin)
+    const lootMesh = createLootMeshForTier(lootTier);
+    if (!lootMesh) return;
     
-    const offsetX = (Math.random() - 0.5) * 60;
-    const offsetY = (Math.random() - 0.5) * 60;
-    const offsetZ = (Math.random() - 0.5) * 60;
+    // Small spread around death position
+    const spreadRadius = 30;
+    const offsetX = (Math.random() - 0.5) * spreadRadius;
+    const offsetY = (Math.random() - 0.5) * spreadRadius;
+    const offsetZ = (Math.random() - 0.5) * spreadRadius;
     
-    coinModel.position.set(
+    lootMesh.position.set(
         position.x + offsetX,
         position.y + offsetY,
         position.z + offsetZ
     );
-    coinModel.scale.setScalar(COIN_GLB_CONFIG.scale);
-    particleGroup.add(coinModel);
+    particleGroup.add(lootMesh);
     
     coinCollectionSystem.waitingCoins.push({
-        mesh: coinModel,
+        mesh: lootMesh,
+        isProceduralLoot: true,    // Flag for cleanup (dispose materials, not return to GLB pool)
+        lootType: lootTier,        // Track loot type for potential per-type effects
         spinAngle: Math.random() * Math.PI * 2,
-        spinSpeed: 1.5 + Math.random() * 1.0, // Gentle spin: 1.5-2.5 rad/s
+        spinSpeed: 1.5 + Math.random() * 1.0,
         bobOffset: Math.random() * Math.PI * 2,
-        baseY: coinModel.position.y,
-        state: 'waiting', // 'waiting' or 'collecting'
-        reward: rewardPerCoin // Reward value for this coin (balance updates when coin reaches cannon)
+        baseY: lootMesh.position.y,
+        state: 'waiting',
+        reward: rewardPerCoin
     });
 }
 
@@ -9614,7 +9781,7 @@ function triggerCoinCollection() {
                 }
                 
                 // Scale up slightly as it approaches
-                const baseScale = COIN_GLB_CONFIG.scale;
+                const baseScale = this.coin.isProceduralLoot ? LOOT_SCALE : COIN_GLB_CONFIG.scale;
                 const scale = baseScale * (1 + t * 0.3);
                 this.coin.mesh.scale.setScalar(scale);
                 
@@ -9631,7 +9798,12 @@ function triggerCoinCollection() {
             cleanup() {
                 if (this.coin && this.coin.mesh) {
                     particleGroup.remove(this.coin.mesh);
-                    returnCoinModelToPool(this.coin.mesh);
+                    // UNIQUE LOOT: Dispose procedural mesh materials instead of returning to GLB pool
+                    if (this.coin.isProceduralLoot) {
+                        disposeLootMesh(this.coin.mesh);
+                    } else {
+                        returnCoinModelToPool(this.coin.mesh);
+                    }
                     
                     // Remove from waiting coins array
                     const idx = coinCollectionSystem.waitingCoins.indexOf(this.coin);
@@ -11053,10 +11225,9 @@ window.startMultiplayerGame = function(manager) {
                 spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
                 
                 if (data.killedBy === multiplayerManager.playerId) {
-                    const coinCount = (data.reward || 0) >= 50 ? 3 : (data.reward || 0) >= 20 ? 2 : 1;
-                    for (let ci = 0; ci < coinCount; ci++) {
-                        spawnWaitingCoin(fish.position.clone(), 0);
-                    }
+                    // UNIQUE LOOT: x1 tier-specific loot model per kill
+                    const lootTier = getLootTier(fish.userData.form, fish.userData.isBoss || false);
+                    spawnWaitingCoin(fish.position.clone(), 0, lootTier);
                     playSound('coin');
                 }
                 
@@ -16756,10 +16927,9 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            const coinCount = fishSize === 'boss' ? 3 : fishSize === 'large' ? 2 : 1;
-            for (let ci = 0; ci < coinCount; ci++) {
-                spawnWaitingCoin(deathPosition, 0);
-            }
+            // UNIQUE LOOT: x1 tier-specific loot model per kill
+            const mpLootTier = getLootTier(this.form, this.isBoss);
+            spawnWaitingCoin(deathPosition, 0, mpLootTier);
             // SYNC FIX: Defer reward popup until coins reach turret (same as single-player)
             // In multiplayer, balance comes from server, so winFp=0 here
             coinCollectionSystem.pendingRewards.push({
@@ -16790,10 +16960,9 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            const coinCount = fishSize === 'boss' ? 3 : fishSize === 'large' ? 2 : 1;
-            for (let ci = 0; ci < coinCount; ci++) {
-                spawnWaitingCoin(deathPosition, 0);
-            }
+            // UNIQUE LOOT: x1 tier-specific loot model per kill
+            const spLootTier = getLootTier(this.form, this.isBoss);
+            spawnWaitingCoin(deathPosition, 0, spLootTier);
             
             // SYNC FIX: Defer balance update + reward popup until coins physically reach the turret
             // recordWin() is called immediately for RTP stats tracking (does not affect UI)
