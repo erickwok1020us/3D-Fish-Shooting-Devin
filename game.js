@@ -1073,10 +1073,10 @@ const WEAPON_CONFIG = {
         fpsCameraBackDist: 150, fpsCameraUpOffset: 75,
         emissiveBoost: 0.4,
 
-        color: 0xffdd00, size: 0.8,
-        cannonColor: 0xffcc00, cannonEmissive: 0xffaa00,
-        muzzleColor: 0xffdd00, trailColor: 0xffcc00,
-        hitColor: 0xffdd00, ringColor: 0xffdd00,
+        color: 0xbf00ff, size: 0.8,
+        cannonColor: 0x8800ff, cannonEmissive: 0x6600cc,
+        muzzleColor: 0xbf00ff, trailColor: 0x8800ff,
+        hitColor: 0xbf00ff, ringColor: 0xbf00ff,
         recoilStrength: 12, screenShakeOnHit: 1.5,
         chargeTime: 0.2,
     },
@@ -4365,7 +4365,8 @@ function returnCoinToPool(item) {
 function initEffectPool() {
     if (effectPool.initialized) return;
     
-    const sphereGeometry = new THREE.SphereGeometry(15, 8, 8);
+    // ZERO-BLOB: Replace effect pool sphere with sharp octahedron
+    const effectGeo = new THREE.OctahedronGeometry(15, 0);
     
     for (let i = 0; i < effectPool.poolSize; i++) {
         const material = new THREE.MeshBasicMaterial({
@@ -4373,7 +4374,7 @@ function initEffectPool() {
             transparent: true,
             opacity: 0.8
         });
-        const mesh = new THREE.Mesh(sphereGeometry, material);
+        const mesh = new THREE.Mesh(effectGeo, material);
         mesh.visible = false;
         
         const effectItem = {
@@ -5486,10 +5487,10 @@ function triggerWeaponHitEffects(weaponKey, position) {
         // Red pulse border effect for 8x (highest tier)
         triggerRedBorder();
         // Orange flash for 8x
-        triggerScreenFlash(0xff4400, 0.15);
+        triggerScreenFlash(0xff4400, 50, 0.1);  // 8x screen flash: opacity 0.1, duration 50ms (barely noticeable flicker)
     } else if (weaponKey === '5x') {
-        // Subtle gold flash for 5x
-        triggerScreenFlash(0xffdd00, 0.1);
+        // Subtle purple flash for 5x
+        triggerScreenFlash(0xbf00ff, 50, 0.1);
     }
 }
 
@@ -5580,7 +5581,7 @@ const WEAPON_VFX_CONFIG = _buildLegacyVFXConfig();
 const NEON_ABYSS_COLORS = {
     '1x': { primary: 0x00ddff, secondary: 0x0088ff, glow: 0x44eeff },  // Cyan
     '3x': { primary: 0xff44aa, secondary: 0xff0088, glow: 0xff88cc },  // Pink
-    '5x': { primary: 0xffdd00, secondary: 0xffaa00, glow: 0xffee44 },  // Gold
+    '5x': { primary: 0xbf00ff, secondary: 0x8800ff, glow: 0xdf80ff },  // Vibrant Neon Purple / Violet
     '8x': { primary: 0xff4444, secondary: 0xff0000, glow: 0xff8888 },  // Red
 };
 
@@ -5598,11 +5599,11 @@ const DIGITAL_RIBBON_CONFIG = {
 
 // Pixel Shatter hit config (Hit Effect Option A)
 const PIXEL_SHATTER_CONFIG = {
-    cubeCount: { '1x': 10, '3x': 12, '5x': 14, '8x': 16 },
+    cubeCount: { '1x': 10, '3x': 12, '5x': 24, '8x': 16 },  // 5x: 32→24 (denser, higher-impact fragments)
     cubeSize: 5,                // Neon pixel cube size (units) — boosted for visibility
-    cubeSpeed: { min: 250, max: 500 },  // Ejection speed range
+    cubeSpeed: { min: 400, max: 700 },  // BUFFED: 250-500→400-700 (faster shatter burst)
     cubeLifetime: 0.6,          // Seconds before fade out — longer for visibility
-    cubeGravity: -120,          // Slight downward pull
+    cubeGravity: -60,           // LIGHTER gravity: -120→-60 (fragments float longer)
     ringMaxRadius: 25,          // Shockwave ring max expansion (≤ Mid Splash)
     ringExpandTime: 0.2,        // Ring expansion duration (seconds)
     ringWidth: 1,               // Ring line thickness
@@ -6084,22 +6085,26 @@ function initVfxGeometryCache() {
     initSharedMaterials();
     
     vfxGeometryCache.ring = new THREE.TorusGeometry(1, 3, 8, 32);
-    vfxGeometryCache.sphere = new THREE.SphereGeometry(1, 16, 16);
-    vfxGeometryCache.smallSphere = new THREE.SphereGeometry(1, 8, 8);
+    // ZERO-BLOB: Replace VFX spheres with sharp cubes for hard-edged effects
+    vfxGeometryCache.sphere = new THREE.BoxGeometry(1, 1, 1);          // Hard-edged cube replaces sphere
+    vfxGeometryCache.smallSphere = new THREE.BoxGeometry(0.8, 0.8, 0.8); // Small hard-edged cube replaces sphere
     vfxGeometryCache.shockwaveRing = new THREE.RingGeometry(1, 5, 32);
     vfxGeometryCache.coinCylinder = new THREE.CylinderGeometry(8, 8, 3, 8);
     vfxGeometryCache.coinSphere = new THREE.SphereGeometry(12, 8, 8);
-    vfxGeometryCache.smokeCloud = new THREE.SphereGeometry(1, 8, 8);
+    // ZERO-BLOB: Replace smoke sphere with icosahedron for sharp faceted look
+    vfxGeometryCache.smokeCloud = new THREE.IcosahedronGeometry(1, 0);  // Sharp faceted shape replaces soft sphere
     // PERFORMANCE: Additional cached geometries for VFX effects
-    vfxGeometryCache.fireballSphere = new THREE.SphereGeometry(1, 16, 16);  // Scale to 25 for fireball
-    vfxGeometryCache.fireballCore = new THREE.SphereGeometry(1, 12, 12);    // Scale to 15 for core
-    vfxGeometryCache.megaCore = new THREE.SphereGeometry(1, 16, 16);        // Scale to 20 for mega core
-    vfxGeometryCache.megaFireball = new THREE.SphereGeometry(1, 16, 16);    // Scale to 30 for mega fireball
-    vfxGeometryCache.megaInner = new THREE.SphereGeometry(1, 12, 12);       // Scale to 20 for mega inner
+    // ZERO-BLOB: Replace all fireball/mega spheres with sharp octahedrons
+    vfxGeometryCache.fireballSphere = new THREE.OctahedronGeometry(1, 0);  // Sharp diamond replaces soft sphere
+    vfxGeometryCache.fireballCore = new THREE.OctahedronGeometry(1, 0);    // Sharp core replaces soft sphere
+    vfxGeometryCache.megaCore = new THREE.OctahedronGeometry(1, 0);        // Sharp mega core
+    vfxGeometryCache.megaFireball = new THREE.OctahedronGeometry(1, 0);    // Sharp mega fireball
+    vfxGeometryCache.megaInner = new THREE.OctahedronGeometry(1, 0);       // Sharp mega inner
     // NEON ABYSS: Cached geometries for Pixel Shatter + Digital Ribbon VFX
     vfxGeometryCache.neonCube = new THREE.BoxGeometry(1, 1, 1);            // Pixel shatter cubes
     vfxGeometryCache.neonRing = new THREE.RingGeometry(0.9, 1.0, 32);     // Thin shockwave ring
-    vfxGeometryCache.neonGhost = new THREE.SphereGeometry(1, 6, 6);       // Ghost frame sphere
+    // ZERO-BLOB: Replace ghost sphere with sharp cube
+    vfxGeometryCache.neonGhost = new THREE.BoxGeometry(1, 1, 1);       // Ghost frame cube (hard-edged)
     // PULSE DIAMOND: Octahedron geometry for diamond projectile (Option B)
     vfxGeometryCache.pulseDiamond = new THREE.OctahedronGeometry(1, 0);   // Unit diamond, scaled at runtime
     vfxGeometryCache.microSquare = new THREE.PlaneGeometry(1, 1);          // Micro-square burst particle
@@ -8934,7 +8939,10 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     if (!config) return;
     
     // NEON ABYSS: Option A (Neon Cross Flash) — scaled-down subtle version
-    spawnNeonCrossFlash(hitPos, weaponKey);
+    // 5x EXCLUDED: 5x uses ONLY Pixel Shatter + faint Atomic Pop rings (no diamond/cross)
+    if (weaponKey !== '5x') {
+        spawnNeonCrossFlash(hitPos, weaponKey);
+    }
     
     // Always spawn Pixel Shatter cubes (the neon cube burst everyone likes)
     spawnNeonPixelShatter(hitPos, weaponKey);
@@ -8951,7 +8959,7 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         triggerScreenShakeWithStrength(1);
     } else if (weaponKey === '8x') {
         triggerScreenShakeWithStrength(3);
-        triggerScreenFlash(NEON_ABYSS_COLORS['8x'].glow, 100, 0.15);
+        triggerScreenFlash(NEON_ABYSS_COLORS['8x'].glow, 50, 0.1);  // 8x hit flash: opacity 0.1, duration 50ms (barely noticeable flicker)
         applyExplosionKnockback(hitPos, 200, 150);
     }
     
@@ -9445,32 +9453,41 @@ function spawnNeonCrossFlash(position, weaponKey) {
         });
     }
     
-    // === Center glow: small additive sphere flash (scaled down) ===
-    const glowGeo = new THREE.SphereGeometry(2, 8, 8); // was 4, reduced
-    const glowMat = new THREE.MeshBasicMaterial({
+    // === Center flash: ZERO-BLOB — sharp diamond geometry replaces soft sphere ===
+    // Creates a flat diamond (rotated square) instead of SphereGeometry blob
+    const diamondShape = new THREE.Shape();
+    diamondShape.moveTo(0, 2.5);    // top
+    diamondShape.lineTo(2.5, 0);    // right
+    diamondShape.lineTo(0, -2.5);   // bottom
+    diamondShape.lineTo(-2.5, 0);   // left
+    diamondShape.lineTo(0, 2.5);    // close
+    const diamondGeo = new THREE.ShapeGeometry(diamondShape);
+    const diamondMat = new THREE.MeshBasicMaterial({
         color: colors.glow,
         transparent: true,
-        opacity: 0.5, // was 0.9, reduced for subtlety
+        opacity: 0.6,
         blending: THREE.AdditiveBlending,
-        depthWrite: false
+        depthWrite: false,
+        side: THREE.DoubleSide
     });
-    const glow = new THREE.Mesh(glowGeo, glowMat);
-    glow.position.copy(position);
-    scene.add(glow);
+    const diamond = new THREE.Mesh(diamondGeo, diamondMat);
+    diamond.position.copy(position);
+    if (camera) diamond.lookAt(camera.position);
+    scene.add(diamond);
     
     addVfxEffect({
-        type: 'neonCrossGlow',
-        mesh: glow,
-        material: glowMat,
-        duration: 150, // was 200
+        type: 'neonCrossDiamond',
+        mesh: diamond,
+        material: diamondMat,
+        duration: 150,
         
         update(dt, elapsed) {
             const progress = Math.min(elapsed / this.duration, 1);
             
-            // Quick expand + fade (smaller scale)
-            const scale = 1.0 + progress * 1.0; // was 2.0
+            // Quick expand + fade (sharp diamond, no soft glow)
+            const scale = 1.0 + progress * 0.8;
             this.mesh.scale.set(scale, scale, scale);
-            this.material.opacity = 0.5 * (1.0 - progress);
+            this.material.opacity = 0.6 * (1.0 - progress);
             
             return progress < 1;
         },
@@ -9537,59 +9554,58 @@ function spawnNeonCrossFlash(position, weaponKey) {
     }
 }
 
-// ==================== 5X WEAPON: AOE NEON SHOCKWAVE ====================
-// Subtle expanding neon shockwave ring for 5x weapon AOE impact
-// HARD CONSTRAINT: Total diameter MUST NOT exceed 10 units (max radius = 5)
+// ==================== 5X WEAPON: ATOMIC POP (Quick Energy Ball) ====================
+// Two thin, sharp neon rings intersecting at 90° forming a spherical wireframe.
+// Pops/expands very quickly and disappears. Total duration < 0.2s (200ms).
+// ANTI-BLOB: MeshBasicMaterial only — sharp, non-glowy edges.
+// Spawns at exact 3D collision point (hitPos), NOT crosshair/UI.
 function spawnAoeNeonShockwave(position, weaponKey) {
     if (!scene) return;
     
     const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
     
-    // === Outer ring: subtle expanding neon circle ===
-    const segments = 64;
-    const ringPositions = new Float32Array(segments * 3);
-    const initialRadius = 1;
-    const maxRadius = 6; // HARD LIMIT: max 6 units radius (was 50)
+    const segments = 48;
+    const initialRadius = 2;
+    const maxRadius = 4; // very small atomic pop radius (2→4 units, 好細)
+    const duration = 180; // < 0.2s total
     
+    // === RING 1: Horizontal plane (XZ) ===
+    const ring1Positions = new Float32Array(segments * 3);
     for (let i = 0; i < segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
-        ringPositions[i * 3] = position.x + Math.cos(angle) * initialRadius;
-        ringPositions[i * 3 + 1] = position.y;
-        ringPositions[i * 3 + 2] = position.z + Math.sin(angle) * initialRadius;
+        ring1Positions[i * 3] = position.x + Math.cos(angle) * initialRadius;
+        ring1Positions[i * 3 + 1] = position.y;
+        ring1Positions[i * 3 + 2] = position.z + Math.sin(angle) * initialRadius;
     }
-    
-    const ringGeo = new THREE.BufferGeometry();
-    ringGeo.setAttribute('position', new THREE.BufferAttribute(ringPositions, 3));
-    
-    const ringMat = new THREE.LineBasicMaterial({
-        color: colors.glow,
+    const ring1Geo = new THREE.BufferGeometry();
+    ring1Geo.setAttribute('position', new THREE.BufferAttribute(ring1Positions, 3));
+    const ring1Mat = new THREE.MeshBasicMaterial({
+        color: colors.primary,
         transparent: true,
-        opacity: 0.35, // REDUCED: faint subtle energy ripple (was 1.0)
-        blending: THREE.AdditiveBlending,
+        opacity: 0.2,
         depthWrite: false,
-        linewidth: 1
+        wireframe: true
     });
-    
-    const ring = new THREE.LineLoop(ringGeo, ringMat);
-    scene.add(ring);
+    const ring1 = new THREE.LineLoop(ring1Geo, ring1Mat);
+    scene.add(ring1);
     
     addVfxEffect({
-        type: 'aoeShockwaveOuter',
-        mesh: ring,
-        geometry: ringGeo,
-        material: ringMat,
+        type: 'atomicPopRing1',
+        mesh: ring1,
+        geometry: ring1Geo,
+        material: ring1Mat,
         centerX: position.x,
         centerY: position.y,
         centerZ: position.z,
         segments: segments,
         initialRadius: initialRadius,
         maxRadius: maxRadius,
-        duration: 300, // 0.3s expansion (was 400)
+        duration: duration,
         
         update(dt, elapsed) {
             const progress = Math.min(elapsed / this.duration, 1);
-            
-            const r = this.initialRadius + (this.maxRadius - this.initialRadius) * Math.pow(progress, 0.6);
+            // Quick pop: fast ease-out expansion
+            const r = this.initialRadius + (this.maxRadius - this.initialRadius) * (1 - Math.pow(1 - progress, 3));
             const pos = this.geometry.attributes.position.array;
             for (let i = 0; i < this.segments; i++) {
                 const angle = (i / this.segments) * Math.PI * 2;
@@ -9598,9 +9614,8 @@ function spawnAoeNeonShockwave(position, weaponKey) {
                 pos[i * 3 + 2] = this.centerZ + Math.sin(angle) * r;
             }
             this.geometry.attributes.position.needsUpdate = true;
-            
-            this.material.opacity = 0.35 * (1.0 - progress * progress); // faint ripple
-            
+            // Quick fade: sharp pop then vanish
+            this.material.opacity = 0.2 * (1.0 - progress * progress);
             return progress < 1;
         },
         
@@ -9611,104 +9626,57 @@ function spawnAoeNeonShockwave(position, weaponKey) {
         }
     });
     
-    // === Inner ring: secondary color, slightly delayed ===
-    const innerPositions = new Float32Array(segments * 3);
+    // === RING 2: Vertical plane (XY) — 90° to Ring 1 ===
+    const ring2Positions = new Float32Array(segments * 3);
     for (let i = 0; i < segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
-        innerPositions[i * 3] = position.x + Math.cos(angle) * initialRadius;
-        innerPositions[i * 3 + 1] = position.y;
-        innerPositions[i * 3 + 2] = position.z + Math.sin(angle) * initialRadius;
+        ring2Positions[i * 3] = position.x + Math.cos(angle) * initialRadius;
+        ring2Positions[i * 3 + 1] = position.y + Math.sin(angle) * initialRadius;
+        ring2Positions[i * 3 + 2] = position.z;
     }
-    
-    const innerGeo = new THREE.BufferGeometry();
-    innerGeo.setAttribute('position', new THREE.BufferAttribute(innerPositions, 3));
-    
-    const innerMat = new THREE.LineBasicMaterial({
+    const ring2Geo = new THREE.BufferGeometry();
+    ring2Geo.setAttribute('position', new THREE.BufferAttribute(ring2Positions, 3));
+    const ring2Mat = new THREE.MeshBasicMaterial({
         color: colors.secondary,
         transparent: true,
-        opacity: 0.25, // REDUCED: faint subtle energy ripple (was 0.8)
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
+        opacity: 0.2,
+        depthWrite: false,
+        wireframe: true
     });
-    
-    const innerRing = new THREE.LineLoop(innerGeo, innerMat);
-    scene.add(innerRing);
+    const ring2 = new THREE.LineLoop(ring2Geo, ring2Mat);
+    scene.add(ring2);
     
     addVfxEffect({
-        type: 'aoeShockwaveInner',
-        mesh: innerRing,
-        geometry: innerGeo,
-        material: innerMat,
+        type: 'atomicPopRing2',
+        mesh: ring2,
+        geometry: ring2Geo,
+        material: ring2Mat,
         centerX: position.x,
         centerY: position.y,
         centerZ: position.z,
         segments: segments,
         initialRadius: initialRadius,
-        maxRadius: 3, // HARD LIMIT: max 3 units radius (was maxRadius * 0.7 = 35)
-        duration: 250, // was 350
+        maxRadius: maxRadius,
+        duration: duration,
         
         update(dt, elapsed) {
             const progress = Math.min(elapsed / this.duration, 1);
-            
-            // Slight delay: don't start expanding until 50ms
-            const adjustedProgress = Math.max(0, (elapsed - 50) / (this.duration - 50));
-            if (adjustedProgress <= 0) return true;
-            
-            const r = this.initialRadius + (this.maxRadius - this.initialRadius) * Math.pow(adjustedProgress, 0.6);
+            const r = this.initialRadius + (this.maxRadius - this.initialRadius) * (1 - Math.pow(1 - progress, 3));
             const pos = this.geometry.attributes.position.array;
             for (let i = 0; i < this.segments; i++) {
                 const angle = (i / this.segments) * Math.PI * 2;
                 pos[i * 3] = this.centerX + Math.cos(angle) * r;
-                pos[i * 3 + 1] = this.centerY;
-                pos[i * 3 + 2] = this.centerZ + Math.sin(angle) * r;
+                pos[i * 3 + 1] = this.centerY + Math.sin(angle) * r;
+                pos[i * 3 + 2] = this.centerZ;
             }
             this.geometry.attributes.position.needsUpdate = true;
-            
-            this.material.opacity = 0.25 * (1.0 - adjustedProgress); // faint ripple
-            
+            this.material.opacity = 0.2 * (1.0 - progress * progress);
             return progress < 1;
         },
         
         cleanup() {
             scene.remove(this.mesh);
             this.geometry.dispose();
-            this.material.dispose();
-        }
-    });
-    
-    // === Ground flash: small flat disc at impact (scaled down) ===
-    const discGeo = new THREE.CircleGeometry(2, 16); // was maxRadius*0.3=15, now 2 units
-    const discMat = new THREE.MeshBasicMaterial({
-        color: colors.glow,
-        transparent: true,
-        opacity: 0.15, // REDUCED: very faint (was 0.4)
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide
-    });
-    const disc = new THREE.Mesh(discGeo, discMat);
-    disc.position.copy(position);
-    disc.rotation.x = -Math.PI / 2; // flat on XZ plane
-    scene.add(disc);
-    
-    addVfxEffect({
-        type: 'aoeGroundFlash',
-        mesh: disc,
-        material: discMat,
-        duration: 200, // was 300
-        
-        update(dt, elapsed) {
-            const progress = Math.min(elapsed / this.duration, 1);
-            
-            const scale = 1.0 + progress * 1.5; // was 3.0
-            this.mesh.scale.set(scale, scale, scale);
-            this.material.opacity = 0.15 * (1.0 - progress * progress);
-            
-            return progress < 1;
-        },
-        
-        cleanup() {
-            scene.remove(this.mesh);
             this.material.dispose();
         }
     });
@@ -19057,19 +19025,28 @@ class Bullet {
             this._glitchTimer = 0;
             this._flickerTimer = 0;
             
-            // PULSE DIAMOND: Activate diamond visual for all projectile weapons
-            this.diamondMat.color.setHex(neonColors.primary);
-            this.diamondGlowMat.color.setHex(neonColors.glow);
-            this.diamondMesh.visible = true;
-            this.diamondGlow.visible = true;
-            this.diamondMesh.rotation.set(0, 0, 0);
-            this.diamondGlow.rotation.set(0, 0, 0);
-            this._pulseElapsed = 0;
-            this._dustTimer = 0;
-            this._lastMicroBurst = 0;
-            // Hide legacy sphere bullet when diamond is active
-            this.bullet.visible = false;
-            this.trail.visible = false;
+            // PULSE DIAMOND: Activate diamond visual for projectile weapons (EXCEPT 5x)
+            // 5x uses ONLY Pixel Shatter + faint Atomic Pop — no diamond projectile
+            if (weaponKey !== '5x') {
+                this.diamondMat.color.setHex(neonColors.primary);
+                this.diamondGlowMat.color.setHex(neonColors.glow);
+                this.diamondMesh.visible = true;
+                this.diamondGlow.visible = true;
+                this.diamondMesh.rotation.set(0, 0, 0);
+                this.diamondGlow.rotation.set(0, 0, 0);
+                this._pulseElapsed = 0;
+                this._dustTimer = 0;
+                this._lastMicroBurst = 0;
+                // Hide legacy sphere bullet when diamond is active
+                this.bullet.visible = false;
+                this.trail.visible = false;
+            } else {
+                // 5x: Hide diamond, show legacy bullet trail (colored purple via NEON_ABYSS_COLORS)
+                this.diamondMesh.visible = false;
+                this.diamondGlow.visible = false;
+                this.bullet.visible = false;
+                this.trail.visible = false;
+            }
         } else {
             this.glowTrail.visible = false;
             // Hide diamond for non-projectile types
@@ -19979,9 +19956,10 @@ const lightningArcTempVectors = {
 let lightningSharedGeometries = null;
 function getLightningSharedGeometries() {
     if (!lightningSharedGeometries) {
+        // ZERO-BLOB: Replace lightning flash/spark spheres with hard-edged geometries
         lightningSharedGeometries = {
-            flash: new THREE.SphereGeometry(40, 8, 8),  // Reduced from 12,12 to 8,8
-            spark: new THREE.SphereGeometry(8, 4, 4)   // Reduced from 6,6 to 4,4
+            flash: new THREE.OctahedronGeometry(40, 0),  // Sharp diamond flash replaces soft sphere
+            spark: new THREE.BoxGeometry(8, 8, 8)        // Sharp cube sparks replace soft sphere
         };
     }
     return lightningSharedGeometries;
@@ -20590,9 +20568,9 @@ function fireLaserBeam(origin, direction, weaponKey) {
             hit.fish.flashHit();
             showCrosshairRingFlash();
             // REVISED: Removed createHitParticles (white circle artifact)
-            // WEAPON AUDIT: 8x laser now triggers Pixel Shatter + Diamond impact at each hit point
+            // WEAPON AUDIT: 8x laser now triggers Pixel Shatter at each hit point
+            // Diamond impact removed from hit path — hit effects ONLY at hitPos (on fish)
             spawnWeaponHitEffect(weaponKey, hit.hitPoint.clone(), hit.fish, laserDirection);
-            spawnPulseDiamondAtImpact(hit.hitPoint, weaponKey);
             playWeaponHitSound(weaponKey);
             if (i < results.length) {
                 const result = results[i];
@@ -20606,8 +20584,8 @@ function fireLaserBeam(origin, direction, weaponKey) {
             hit.fish.takeDamage(damage, weaponKey);
             // REVISED: Removed createHitParticles (white circle artifact)
             // WEAPON AUDIT: 8x laser multiplayer — trigger hit VFX at impact point
+            // Diamond impact removed — hit effects ONLY at hitPos (on fish)
             spawnWeaponHitEffect(weaponKey, hit.hitPoint.clone(), hit.fish, laserDirection);
-            spawnPulseDiamondAtImpact(hit.hitPoint, weaponKey);
             playWeaponHitSound(weaponKey);
         }
     }
@@ -20621,21 +20599,16 @@ function fireLaserBeam(origin, direction, weaponKey) {
 function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
     const flashRadius = 30;
     
-    const muzzleFlashGeometry = new THREE.SphereGeometry(flashRadius, 16, 16);
-    const muzzleFlashMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0.95
-    });
+    // 8x TURRET CLEAN-UP: Muzzle diamond/octahedron removed — no shapes at turret position
+    // Hit effects ONLY appear at hitPos (on the fish), not at the cannon
+    // Create invisible placeholder meshes to maintain VFX manager compatibility
+    const muzzleFlashGeometry = new THREE.BufferGeometry();
+    const muzzleFlashMaterial = new THREE.MeshBasicMaterial({ visible: false });
     const muzzleFlash = new THREE.Mesh(muzzleFlashGeometry, muzzleFlashMaterial);
-    muzzleFlash.position.copy(muzzlePos);
-    scene.add(muzzleFlash);
     
-    const glowGeometry = new THREE.SphereGeometry(flashRadius * 2, 16, 16);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-        color: color, transparent: true, opacity: 0.5
-    });
+    const glowGeometry = new THREE.BufferGeometry();
+    const glowMaterial = new THREE.MeshBasicMaterial({ visible: false });
     const glowSphere = new THREE.Mesh(glowGeometry, glowMaterial);
-    glowSphere.position.copy(muzzlePos);
-    scene.add(glowSphere);
     
     const beamDir = new THREE.Vector3().subVectors(beamEnd, muzzlePos);
     const beamLength = beamDir.length();
@@ -20676,16 +20649,27 @@ function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
     beamOuter.rotateX(Math.PI / 2);
     scene.add(beamOuter);
     
-    const impactFlashGeo = new THREE.SphereGeometry(20, 12, 12);
-    const impactFlashMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0.9
+    // ZERO-BLOB: Replace SphereGeometry impact flash with sharp cross shape
+    const impactCrossSize = 20;
+    const impactCrossGeo = new THREE.BufferGeometry();
+    const impactCrossVerts = new Float32Array([
+        -impactCrossSize, 0, 0,  impactCrossSize, 0, 0,  // horizontal
+        0, -impactCrossSize, 0,  0, impactCrossSize, 0,  // vertical
+        0, 0, -impactCrossSize,  0, 0, impactCrossSize   // depth
+    ]);
+    impactCrossGeo.setAttribute('position', new THREE.BufferAttribute(impactCrossVerts, 3));
+    const impactFlashMat = new THREE.LineBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.9,
+        blending: THREE.AdditiveBlending, depthWrite: false
     });
-    const impactFlash = new THREE.Mesh(impactFlashGeo, impactFlashMat);
+    const impactFlash = new THREE.LineSegments(impactCrossGeo, impactFlashMat);
     impactFlash.position.copy(beamEnd);
     scene.add(impactFlash);
+    const impactFlashGeo = impactCrossGeo;
     
     const allSparks = [];
-    const sparkGeometry = new THREE.SphereGeometry(3, 6, 6);
+    // ZERO-BLOB: Replace SphereGeometry sparks with sharp cube geometry
+    const sparkGeometry = new THREE.BoxGeometry(3, 3, 3);
     const brightRed = 0xff0000;
     
     for (const hitPt of hitPoints) {
@@ -20729,14 +20713,8 @@ function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
         update(dt, elapsed) {
             const progress = elapsed / this.duration;
             
-            const muzzleFade = Math.max(0, 1.0 - progress * 5);
-            this.muzzleFlashMaterial.opacity = 0.95 * muzzleFade;
-            const muzzleScale = 1.0 + progress * 2;
-            this.muzzleFlash.scale.set(muzzleScale, muzzleScale, muzzleScale);
-            
-            this.glowMaterial.opacity = 0.5 * Math.max(0, 1.0 - progress * 3);
-            const glowScale = 1.0 + progress * 3;
-            this.glowSphere.scale.set(glowScale, glowScale, glowScale);
+            // Muzzle flash diamond removed — turret stays clean
+            // (muzzleFlash and glowSphere are invisible placeholders)
             
             const beamFade = Math.max(0, 1.0 - progress * 4);
             this.beamCoreMat.opacity = 0.95 * beamFade;
@@ -20863,8 +20841,8 @@ function triggerExplosion(center, weaponKey) {
 // Spawn explosion visual effect
 // FIX: Removed ring effect (user feedback: remove all ring effects)
 function spawnExplosionEffect(center, radius, color) {
-    // Create expanding sphere
-    const geometry = new THREE.SphereGeometry(1, 16, 16);
+    // ZERO-BLOB: Replace expanding sphere with sharp octahedron
+    const geometry = new THREE.OctahedronGeometry(1, 0);
     const material = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
