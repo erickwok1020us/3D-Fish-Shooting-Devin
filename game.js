@@ -3536,7 +3536,7 @@ const DEBUG_SHOOTING = false;
 // Debug flag for aim direction verification (set to true to verify crosshair accuracy)
 // When enabled, logs aim direction data to console for all 4 weapons
 // In FPS mode, rayDir and direction should be identical (diff = 0)
-const DEBUG_AIM = true;
+const DEBUG_AIM = false;
 
 // PERFORMANCE: Cached geometry and pooled meshes for muzzle flash rings
 // IMPROVED: Object pool to avoid per-shot material creation (reduces GC stutter)
@@ -11843,7 +11843,8 @@ window.startMultiplayerGame = function(manager) {
         };
 
         multiplayerManager.onFishKilled = function(data) {
-            console.log('[GAME] Fish killed event received:', data.fishId, data.typeName, 'killedBy:', data.killedBy, 'reward:', data.reward);
+            // [PROD] verbose kill log disabled for performance
+            // console.log('[GAME] Fish killed event received:', data.fishId, data.typeName, 'killedBy:', data.killedBy, 'reward:', data.reward);
             
             if (data.killedBy === multiplayerManager.playerId && data.reward && window._killDebug) {
                 window._killDebug.kills++;
@@ -11861,7 +11862,8 @@ window.startMultiplayerGame = function(manager) {
             
             const fish = gameState.fish.find(f => f.userData && f.userData.serverId === data.fishId);
             if (fish) {
-                console.log('[GAME] Found fish mesh to remove:', data.fishId);
+                // [PROD] verbose log disabled for performance
+                // console.log('[GAME] Found fish mesh to remove:', data.fishId);
                 
                 spawnFishDeathEffect(fish.position.clone(), fish.userData.size || 30, fish.userData.color || 0xffffff);
                 
@@ -11878,10 +11880,12 @@ window.startMultiplayerGame = function(manager) {
                 const index = gameState.fish.indexOf(fish);
                 if (index > -1) {
                     gameState.fish.splice(index, 1);
-                    console.log('[GAME] Fish removed from gameState.fish, remaining:', gameState.fish.length);
+                    // [PROD] verbose log disabled for performance
+                    // console.log('[GAME] Fish removed from gameState.fish, remaining:', gameState.fish.length);
                 }
             } else {
-                console.log('[GAME] Fish mesh not found for fishId:', data.fishId, '- may have already been removed by gameState update');
+                // [PROD] verbose log disabled for performance
+                // console.log('[GAME] Fish mesh not found for fishId:', data.fishId, '- may have already been removed by gameState update');
             }
         };
         
@@ -23473,7 +23477,8 @@ function updateFishFromServer(serverFish) {
     if (!serverFish || !Array.isArray(serverFish)) return;
     
     // DEBUG: Log fish counts for debugging multiplayer fish spawn issue
-    console.log(`[GAME] updateFishFromServer: serverFish.len=${serverFish.length}, meshes.before=${gameState.fish.length}`);
+    // [PROD] verbose log disabled for performance
+    // console.log(`[GAME] updateFishFromServer: serverFish.len=${serverFish.length}, meshes.before=${gameState.fish.length}`);
     
     // Create a map of existing fish by server ID
     const existingFish = new Map();
@@ -23548,7 +23553,8 @@ function updateFishFromServer(serverFish) {
     
     // DEBUG: Log summary of fish update
     if (created > 0 || removed > 0 || unknown > 0) {
-        console.log(`[GAME] Fish update: created=${created}, updated=${updated}, removed=${removed}, unknown=${unknown}, meshes.after=${gameState.fish.length}`);
+        // [PROD] verbose log disabled for performance
+        // console.log(`[GAME] Fish update: created=${created}, updated=${updated}, removed=${removed}, unknown=${unknown}, meshes.after=${gameState.fish.length}`);
     }
 }
 
@@ -23600,7 +23606,8 @@ function updateBulletsFromServer(serverBullets) {
     
     // Debug: Log when we receive bullets
     if (serverBullets.length > 0) {
-        console.log(`[GAME] updateBulletsFromServer called with ${serverBullets.length} bullets, my playerId: ${multiplayerManager ? multiplayerManager.playerId : 'none'}`);
+        // [PROD] verbose log disabled for performance
+        // console.log(`[GAME] updateBulletsFromServer called with ${serverBullets.length} bullets, my playerId: ${multiplayerManager ? multiplayerManager.playerId : 'none'}`);
     }
     
     // Create a set of current server bullet IDs
@@ -23638,12 +23645,14 @@ function updateBulletsFromServer(serverBullets) {
             // Create new bullet mesh for other players' bullets
             // Skip our own bullets (we already have local visuals)
             if (multiplayerManager && sb.owner === multiplayerManager.playerId) {
-                console.log(`[GAME] Skipping own bullet: owner=${sb.owner}, myId=${multiplayerManager.playerId}`);
+                // [PROD] verbose log disabled for performance
+                // console.log(`[GAME] Skipping own bullet: owner=${sb.owner}, myId=${multiplayerManager.playerId}`);
                 return;
             }
             
             // Debug: Log when creating bullet for other player
-            console.log(`[GAME] Creating bullet mesh for other player: id=${sb.id}, owner=${sb.owner}, weapon=${sb.weapon}, pos=(${sb.x}, ${sb.z})`);
+            // [PROD] verbose log disabled for performance
+            // console.log(`[GAME] Creating bullet mesh for other player: id=${sb.id}, owner=${sb.owner}, weapon=${sb.weapon}, pos=(${sb.x}, ${sb.z})`);
             
             // Create bullet with same visual style as local bullets
             // Use weapon info from server if available, default to '1x'
@@ -23656,7 +23665,8 @@ function updateBulletsFromServer(serverBullets) {
             newBulletData.group.userData.serverId = sb.id;
             newBulletData.group.userData.owner = sb.owner;
             
-            console.log(`[GAME] Bullet mesh created at position: (${sb.x * 10}, ${bulletY}, ${sb.z * 10})`);
+            // [PROD] verbose log disabled for performance
+            // console.log(`[GAME] Bullet mesh created at position: (${sb.x * 10}, ${bulletY}, ${sb.z * 10})`);
             
             // Orient bullet in direction of travel
             if (sb.vx !== undefined && sb.vz !== undefined) {
