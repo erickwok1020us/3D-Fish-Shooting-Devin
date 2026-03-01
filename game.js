@@ -5533,6 +5533,32 @@ const BOSS_FISH_TYPES = [
 // T1 Elites (hammerheadShark, marlin, mantaRay) are NOT boss-only — they swim as normal T1 fish
 const BOSS_ONLY_SPECIES = ['blueWhale', 'killerWhale', 'greatWhiteShark'];
 
+// ==================== 19-SPECIES WHITELIST (SSOT) ====================
+// ONLY these 19 species are allowed in the game. Any species not on this list
+// must be blocked from spawning. Keys match CONFIG.fishTiers keys (species IDs).
+const WHITELIST_19_SPECIES = [
+    // Boss (39.2x)
+    'blueWhale', 'killerWhale', 'greatWhiteShark',
+    // T1 (15.33x)
+    'hammerheadShark', 'mantaRay', 'marlin', 'grouper',
+    // T2 (9.20x)
+    'yellowfinTuna', 'mahiMahi', 'lionfish', 'parrotfish', 'pufferfish',
+    // T3
+    'seahorse', 'blueTang', 'angelfish', 'damselfish', 'clownfish', 'anchovy', 'sardine'
+];
+
+// Form name → full display name overrides for Kill Log
+// GLB model forms (e.g. 'whale') differ from species names (e.g. 'blueWhale')
+// This map ensures the Kill Log shows the correct species name
+const FISH_FORM_DISPLAY_NAMES = {
+    whale: 'BLUE WHALE',
+    shark: 'GREAT WHITE SHARK',
+    hammerhead: 'HAMMERHEAD SHARK',
+    tuna: 'YELLOWFIN TUNA',
+    dolphinfish: 'MAHI-MAHI',
+    tang: 'BLUE TANG'
+};
+
 // T1 Elite species: max ONE of each in pool at any time, 8-second respawn delay after kill
 const T1_ELITE_SPECIES = ['hammerheadShark', 'marlin', 'mantaRay'];
 const T1_ELITE_RESPAWN_DELAY = 8000; // 8 seconds in milliseconds
@@ -18195,8 +18221,14 @@ class Fish {
             return;
         }
         
-        // BUG FIX: Boss-only species should NOT respawn after Boss Mode ends
+        // WHITELIST GUARD: Block unauthorized species from respawning
         const fishSpecies = this.tier || this.config?.species || this.form;
+        if (!WHITELIST_19_SPECIES.includes(fishSpecies)) {
+            console.error(`[WHITELIST] Unauthorized species respawn blocked: ${fishSpecies}`);
+            return;
+        }
+        
+        // BUG FIX: Boss-only species should NOT respawn after Boss Mode ends
         if (BOSS_ONLY_SPECIES.includes(fishSpecies) && !gameState.bossActive) {
             console.log(`[FISH] Boss-only species ${fishSpecies} not respawning outside Boss Mode`);
             return;
@@ -18237,6 +18269,12 @@ function createFishPool() {
     // T1 Elites (hammerheadShark, marlin, mantaRay) now spawn as normal fish (count=1 each)
     // Ability fish (bombCrab, electricEel, goldFish, shieldTurtle) excluded for RTP compliance
     Object.entries(CONFIG.fishTiers).forEach(([tier, config]) => {
+        // WHITELIST GUARD: Block any species not in the 19-species whitelist
+        if (!WHITELIST_19_SPECIES.includes(tier)) {
+            console.error(`[WHITELIST] Unauthorized species attempt: ${tier}. Blocking spawn.`);
+            return;
+        }
+        
         // Skip boss-only species during normal gameplay
         if (BOSS_ONLY_SPECIES.includes(tier)) {
             return; // Don't create these fish in the normal pool
@@ -21156,6 +21194,8 @@ const FISH_KILLLOG_IMAGES = {
 
 function formatFishName(form) {
     if (!form) return 'FISH';
+    // Use display name override if available (e.g. 'whale' → 'BLUE WHALE')
+    if (FISH_FORM_DISPLAY_NAMES[form]) return FISH_FORM_DISPLAY_NAMES[form];
     return form.replace(/([A-Z])/g, ' $1').trim().toUpperCase();
 }
 
