@@ -5499,7 +5499,7 @@ const WEAPON_VFX_CONFIG = _buildLegacyVFXConfig();
 const NEON_ABYSS_COLORS = {
     '1x': { primary: 0x00ddff, secondary: 0x0088ff, glow: 0x44eeff },  // Cyan
     '3x': { primary: 0xff44aa, secondary: 0xff0088, glow: 0xff88cc },  // Pink
-    '5x': { primary: 0x00ccff, secondary: 0x0066ff, glow: 0x44ddff },  // Vibrant Cyan / Electric Blue
+    '5x': { primary: 0xbf00ff, secondary: 0x8800ff, glow: 0xdf80ff },  // Vibrant Neon Purple / Violet
     '8x': { primary: 0xff4444, secondary: 0xff0000, glow: 0xff8888 },  // Red
 };
 
@@ -5517,7 +5517,7 @@ const DIGITAL_RIBBON_CONFIG = {
 
 // Pixel Shatter hit config (Hit Effect Option A)
 const PIXEL_SHATTER_CONFIG = {
-    cubeCount: { '1x': 10, '3x': 12, '5x': 32, '8x': 16 },  // 5x BUFFED: 14→32 (Strong Pixel Shatter, 30+ fragments)
+    cubeCount: { '1x': 10, '3x': 12, '5x': 24, '8x': 16 },  // 5x: 32→24 (denser, higher-impact fragments)
     cubeSize: 5,                // Neon pixel cube size (units) — boosted for visibility
     cubeSpeed: { min: 400, max: 700 },  // BUFFED: 250-500→400-700 (faster shatter burst)
     cubeLifetime: 0.6,          // Seconds before fade out — longer for visibility
@@ -8522,7 +8522,10 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
     if (!config) return;
     
     // NEON ABYSS: Option A (Neon Cross Flash) — scaled-down subtle version
-    spawnNeonCrossFlash(hitPos, weaponKey);
+    // 5x EXCLUDED: 5x uses ONLY Pixel Shatter + faint Atomic Pop rings (no diamond/cross)
+    if (weaponKey !== '5x') {
+        spawnNeonCrossFlash(hitPos, weaponKey);
+    }
     
     // Always spawn Pixel Shatter cubes (the neon cube burst everyone likes)
     spawnNeonPixelShatter(hitPos, weaponKey);
@@ -9146,7 +9149,7 @@ function spawnAoeNeonShockwave(position, weaponKey) {
     
     const segments = 48;
     const initialRadius = 2;
-    const maxRadius = 8; // small atomic pop radius
+    const maxRadius = 4; // very small atomic pop radius (2→4 units, 好細)
     const duration = 180; // < 0.2s total
     
     // === RING 1: Horizontal plane (XZ) ===
@@ -9162,7 +9165,7 @@ function spawnAoeNeonShockwave(position, weaponKey) {
     const ring1Mat = new THREE.MeshBasicMaterial({
         color: colors.primary,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.2,
         depthWrite: false,
         wireframe: true
     });
@@ -9195,7 +9198,7 @@ function spawnAoeNeonShockwave(position, weaponKey) {
             }
             this.geometry.attributes.position.needsUpdate = true;
             // Quick fade: sharp pop then vanish
-            this.material.opacity = 0.9 * (1.0 - progress * progress);
+            this.material.opacity = 0.2 * (1.0 - progress * progress);
             return progress < 1;
         },
         
@@ -9219,7 +9222,7 @@ function spawnAoeNeonShockwave(position, weaponKey) {
     const ring2Mat = new THREE.MeshBasicMaterial({
         color: colors.secondary,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.2,
         depthWrite: false,
         wireframe: true
     });
@@ -9250,7 +9253,7 @@ function spawnAoeNeonShockwave(position, weaponKey) {
                 pos[i * 3 + 2] = this.centerZ;
             }
             this.geometry.attributes.position.needsUpdate = true;
-            this.material.opacity = 0.8 * (1.0 - progress * progress);
+            this.material.opacity = 0.2 * (1.0 - progress * progress);
             return progress < 1;
         },
         
