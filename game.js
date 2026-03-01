@@ -10970,38 +10970,35 @@ function onCoinCollectionComplete() {
     coinCollectionSystem.isCollecting = false;
     coinCollectionSystem.coinsBeingCollected = 0;
     
-    // SYNC FIX: Process all pending rewards NOW that coins have physically reached the turret
-    // This creates the "money payout feels like coins hitting the turret" effect
+    // STAGGERED POPUPS: "Rapid-Fire Machine Gun" effect — each reward pops with 0.12s delay
+    // Balance increments in steps corresponding to each staggered popup
     if (coinCollectionSystem.pendingRewards.length > 0) {
-        let totalWinFp = 0;
-        let totalWinDisplay = 0;
-        const pendingRewards = coinCollectionSystem.pendingRewards;
+        const POPUP_STAGGER_DELAY = 120; // 0.12s between each popup (0.1-0.15s range)
         
-        // Aggregate all pending balance updates
-        for (let i = 0; i < pendingRewards.length; i++) {
-            const pr = pendingRewards[i];
-            if (pr.winFp > 0) {
-                totalWinFp += pr.winFp;
-                totalWinDisplay += pr.winDisplay;
-            }
+        // Copy pending rewards before clearing (setTimeout needs stable references)
+        const rewardsToProcess = coinCollectionSystem.pendingRewards.slice();
+        coinCollectionSystem.pendingRewards.length = 0;
+        
+        // Stagger each popup + balance increment with "Pop-Pop-Pop" timing
+        for (let i = 0; i < rewardsToProcess.length; i++) {
+            (function(index) {
+                const pr = rewardsToProcess[index];
+                setTimeout(function() {
+                    // Apply THIS reward's balance increment (step-by-step, not all at once)
+                    if (pr.winFp > 0) {
+                        gameState.balance += pr.winFp;
+                        gameState.score += Math.floor(pr.winDisplay);
+                    }
+                    // Show popup + update balance display for this step
+                    const displayAmt = Math.round(pr.winDisplay);
+                    if (displayAmt > 0) {
+                        onScoreConfirmed(pr.fishForm, pr.winDisplay);
+                    }
+                }, index * POPUP_STAGGER_DELAY);
+            })(i);
         }
-        
-        // Apply aggregated balance update (single atomic update)
-        if (totalWinFp > 0) {
-            gameState.balance += totalWinFp;
-            gameState.score += Math.floor(totalWinDisplay);
-        }
-        
-        // Show individual reward popups + kill feed entries for each fish kill
-        for (let i = 0; i < pendingRewards.length; i++) {
-            const pr = pendingRewards[i];
-            const displayAmt = Math.round(pr.winDisplay);
-            if (displayAmt > 0) {
-                onScoreConfirmed(pr.fishForm, pr.winDisplay);
-            }
-        }
-        
-        // Clear the pending queue
+    } else {
+        // No pending rewards — clear queue normally
         coinCollectionSystem.pendingRewards.length = 0;
     }
     
