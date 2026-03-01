@@ -18569,19 +18569,28 @@ class Bullet {
             this._glitchTimer = 0;
             this._flickerTimer = 0;
             
-            // PULSE DIAMOND: Activate diamond visual for all projectile weapons
-            this.diamondMat.color.setHex(neonColors.primary);
-            this.diamondGlowMat.color.setHex(neonColors.glow);
-            this.diamondMesh.visible = true;
-            this.diamondGlow.visible = true;
-            this.diamondMesh.rotation.set(0, 0, 0);
-            this.diamondGlow.rotation.set(0, 0, 0);
-            this._pulseElapsed = 0;
-            this._dustTimer = 0;
-            this._lastMicroBurst = 0;
-            // Hide legacy sphere bullet when diamond is active
-            this.bullet.visible = false;
-            this.trail.visible = false;
+            // PULSE DIAMOND: Activate diamond visual for projectile weapons (EXCEPT 5x)
+            // 5x uses ONLY Pixel Shatter + faint Atomic Pop — no diamond projectile
+            if (weaponKey !== '5x') {
+                this.diamondMat.color.setHex(neonColors.primary);
+                this.diamondGlowMat.color.setHex(neonColors.glow);
+                this.diamondMesh.visible = true;
+                this.diamondGlow.visible = true;
+                this.diamondMesh.rotation.set(0, 0, 0);
+                this.diamondGlow.rotation.set(0, 0, 0);
+                this._pulseElapsed = 0;
+                this._dustTimer = 0;
+                this._lastMicroBurst = 0;
+                // Hide legacy sphere bullet when diamond is active
+                this.bullet.visible = false;
+                this.trail.visible = false;
+            } else {
+                // 5x: Hide diamond, show legacy bullet trail (colored purple via NEON_ABYSS_COLORS)
+                this.diamondMesh.visible = false;
+                this.diamondGlow.visible = false;
+                this.bullet.visible = false;
+                this.trail.visible = false;
+            }
         } else {
             this.glowTrail.visible = false;
             // Hide diamond for non-projectile types
@@ -20103,9 +20112,9 @@ function fireLaserBeam(origin, direction, weaponKey) {
             hit.fish.flashHit();
             showCrosshairRingFlash();
             // REVISED: Removed createHitParticles (white circle artifact)
-            // WEAPON AUDIT: 8x laser now triggers Pixel Shatter + Diamond impact at each hit point
+            // WEAPON AUDIT: 8x laser now triggers Pixel Shatter at each hit point
+            // Diamond impact removed from hit path — hit effects ONLY at hitPos (on fish)
             spawnWeaponHitEffect(weaponKey, hit.hitPoint.clone(), hit.fish, laserDirection);
-            spawnPulseDiamondAtImpact(hit.hitPoint, weaponKey);
             playWeaponHitSound(weaponKey);
             if (i < results.length) {
                 const result = results[i];
@@ -20119,8 +20128,8 @@ function fireLaserBeam(origin, direction, weaponKey) {
             hit.fish.takeDamage(damage, weaponKey);
             // REVISED: Removed createHitParticles (white circle artifact)
             // WEAPON AUDIT: 8x laser multiplayer — trigger hit VFX at impact point
+            // Diamond impact removed — hit effects ONLY at hitPos (on fish)
             spawnWeaponHitEffect(weaponKey, hit.hitPoint.clone(), hit.fish, laserDirection);
-            spawnPulseDiamondAtImpact(hit.hitPoint, weaponKey);
             playWeaponHitSound(weaponKey);
         }
     }
@@ -20134,23 +20143,16 @@ function fireLaserBeam(origin, direction, weaponKey) {
 function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
     const flashRadius = 30;
     
-    // ZERO-BLOB: Replace muzzle flash sphere with sharp octahedron
-    const muzzleFlashGeometry = new THREE.OctahedronGeometry(flashRadius, 0);
-    const muzzleFlashMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0.95
-    });
+    // 8x TURRET CLEAN-UP: Muzzle diamond/octahedron removed — no shapes at turret position
+    // Hit effects ONLY appear at hitPos (on the fish), not at the cannon
+    // Create invisible placeholder meshes to maintain VFX manager compatibility
+    const muzzleFlashGeometry = new THREE.BufferGeometry();
+    const muzzleFlashMaterial = new THREE.MeshBasicMaterial({ visible: false });
     const muzzleFlash = new THREE.Mesh(muzzleFlashGeometry, muzzleFlashMaterial);
-    muzzleFlash.position.copy(muzzlePos);
-    scene.add(muzzleFlash);
     
-    // ZERO-BLOB: Replace glow sphere with sharp diamond shape
-    const glowGeometry = new THREE.OctahedronGeometry(flashRadius * 2, 0);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-        color: color, transparent: true, opacity: 0.5
-    });
+    const glowGeometry = new THREE.BufferGeometry();
+    const glowMaterial = new THREE.MeshBasicMaterial({ visible: false });
     const glowSphere = new THREE.Mesh(glowGeometry, glowMaterial);
-    glowSphere.position.copy(muzzlePos);
-    scene.add(glowSphere);
     
     const beamDir = new THREE.Vector3().subVectors(beamEnd, muzzlePos);
     const beamLength = beamDir.length();
@@ -20255,14 +20257,8 @@ function spawnLaserHitscanVFX(muzzlePos, beamEnd, hitPoints, color) {
         update(dt, elapsed) {
             const progress = elapsed / this.duration;
             
-            const muzzleFade = Math.max(0, 1.0 - progress * 5);
-            this.muzzleFlashMaterial.opacity = 0.95 * muzzleFade;
-            const muzzleScale = 1.0 + progress * 2;
-            this.muzzleFlash.scale.set(muzzleScale, muzzleScale, muzzleScale);
-            
-            this.glowMaterial.opacity = 0.5 * Math.max(0, 1.0 - progress * 3);
-            const glowScale = 1.0 + progress * 3;
-            this.glowSphere.scale.set(glowScale, glowScale, glowScale);
+            // Muzzle flash diamond removed — turret stays clean
+            // (muzzleFlash and glowSphere are invisible placeholders)
             
             const beamFade = Math.max(0, 1.0 - progress * 4);
             this.beamCoreMat.opacity = 0.95 * beamFade;
