@@ -22955,6 +22955,17 @@ function transferBossHint(deadFish, newFish) {
 }
 
 function spawnBossFish() {
+    // BOSS GUARD: Prevent multiple boss spawns — only ONE boss-tier fish at a time
+    if (gameState.bossActive) {
+        console.log('[BOSS] Boss already active (bossActive=true). Skipping spawn.');
+        return;
+    }
+    const activeBoss = activeFish.find(f => f.isBoss && f.isActive);
+    if (activeBoss) {
+        console.log(`[BOSS] Boss already exists in activeFish: ${activeBoss.form || activeBoss.tier}. Skipping spawn.`);
+        return;
+    }
+    
     // Select random boss type
     const bossType = BOSS_FISH_TYPES[Math.floor(Math.random() * BOSS_FISH_TYPES.length)];
     const baseConfig = CONFIG.fishTiers[bossType.baseSpecies];
