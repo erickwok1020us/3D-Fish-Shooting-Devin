@@ -1021,7 +1021,7 @@ const WEAPON_CONFIG = {
     },
     '3x': {
         multiplier: 3, cost: 3, damage: 100, shotsPerSecond: 2.5,
-        type: 'burst', speed: 4000,
+        type: 'burst', speed: 7200,  // REVISED: 1.8x faster than 1x (4000 × 1.8 = 7200)
         burstCount: 3,
         piercing: false, spreadAngle: 0, aoeRadius: 0, damageEdge: 0, laserWidth: 0,
         convergenceDistance: 1400,
@@ -5529,6 +5529,40 @@ const PIXEL_SHATTER_CONFIG = {
     residualLifetime: 0.7,      // Seconds before residual fades — longer
 };
 
+// ==================== PULSE DIAMOND PROJECTILE CONFIG (Option B) ====================
+// Universal projectile visual for ALL weapons (1x, 3x, 5x, 8x)
+// Core: Rotating Glowing Diamond (~6x6) with Z-axis rotation (360°/s)
+// Pulse: Scale oscillation (1.0→1.3→1.0) every 0.2s + 4 micro-square bursts
+// Trail: Digital Dust (2x2 squares) every 20ms with ±15° hue shift and 0.3s decay
+const PULSE_DIAMOND_CONFIG = {
+    diamondSize: 6,             // Diamond core size (units) — ≤15 unit footprint
+    rotationSpeed: Math.PI * 2, // 360°/s Z-axis rotation
+    pulseFrequency: 5.0,        // 1/0.2s = 5 Hz pulse cycle
+    pulseMinScale: 1.0,         // Scale oscillation min
+    pulseMaxScale: 1.3,         // Scale oscillation max
+    microSquareCount: 4,        // Micro-square bursts per pulse peak
+    microSquareSize: 2,         // 2x2 unit squares
+    microSquareSpeed: 80,       // Ejection speed (units/s)
+    microSquareLifetime: 150,   // ms before fade
+    trailInterval: 0.02,        // Spawn digital dust every 20ms
+    trailSize: 2,               // 2x2 dust squares
+    trailLifetime: 300,         // 0.3s decay
+    trailHueShift: 15,          // ±15° hue shift on trail particles
+    trailCount: 1,              // Dust particles per spawn
+};
+
+// ==================== HIT EFFECT STYLE TOGGLE ====================
+// Hit Effect: Option A (Neon Cross Flash) permanently selected + Pixel Shatter combo
+
+// ==================== WEAPON-SPECIFIC TRAJECTORY CONFIG ====================
+// Overrides per-weapon for Pulse Diamond projectile behavior
+const WEAPON_TRAJECTORY_CONFIG = {
+    '1x': { speedMultiplier: 1.0, trailIntervalMult: 1.0, dustCountMult: 1.0 },      // Normal baseline
+    '3x': { speedMultiplier: 1.8, trailIntervalMult: 2.5, dustCountMult: 0.5 },      // Fast: 1.8x speed, sparser trail
+    '5x': { speedMultiplier: 1.0, trailIntervalMult: 1.0, dustCountMult: 1.0, aoeOnImpact: true }, // AOE shockwave on hit
+    '8x': { speedMultiplier: 1.0, trailIntervalMult: 1.0, dustCountMult: 1.0 },      // Laser (hitscan, no projectile)
+};
+
 // ==================== 3X WEAPON FIRE PARTICLE SYSTEM ====================
 // Uses Unity-extracted textures for fire trail and hit effects
 const FIRE_PARTICLE_CONFIG = {
@@ -5984,7 +6018,11 @@ function initVfxGeometryCache() {
     vfxGeometryCache.neonCube = new THREE.BoxGeometry(1, 1, 1);            // Pixel shatter cubes
     vfxGeometryCache.neonRing = new THREE.RingGeometry(0.9, 1.0, 32);     // Thin shockwave ring
     vfxGeometryCache.neonGhost = new THREE.SphereGeometry(1, 6, 6);       // Ghost frame sphere
-    console.log('[VFX] Geometry cache initialized with extended geometries + Neon Abyss');
+    // PULSE DIAMOND: Octahedron geometry for diamond projectile (Option B)
+    vfxGeometryCache.pulseDiamond = new THREE.OctahedronGeometry(1, 0);   // Unit diamond, scaled at runtime
+    vfxGeometryCache.microSquare = new THREE.PlaneGeometry(1, 1);          // Micro-square burst particle
+    vfxGeometryCache.dustSquare = new THREE.PlaneGeometry(1, 1);           // Digital dust trail particle
+    console.log('[VFX] Geometry cache initialized with extended geometries + Neon Abyss + Pulse Diamond');
 }
 
 // Update all active VFX effects from main animate() loop
@@ -8472,14 +8510,23 @@ function spawnFireballMuzzleFlash(position, direction) {
 }
 
 // Enhanced hit effect based on weapon type
+// REVISED: Hardcoded Option A (Neon Cross Flash) + Pixel Shatter combo
+// White circle artifact removed, Option B discarded
 async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection) {
     const config = WEAPON_VFX_CONFIG[weaponKey];
-    const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     if (!config) return;
     
-    // NEON ABYSS: Always spawn Pixel Shatter hit effects for all weapons
-    // These neon effects run alongside any GLB hit effects for maximum visual impact
+    // NEON ABYSS: Option A (Neon Cross Flash) — scaled-down subtle version
+    spawnNeonCrossFlash(hitPos, weaponKey);
+    
+    // Always spawn Pixel Shatter cubes (the neon cube burst everyone likes)
     spawnNeonPixelShatter(hitPos, weaponKey);
+    
+    // 5x AOE: Expanding neon shockwave ring on impact
+    const trajConfig = WEAPON_TRAJECTORY_CONFIG[weaponKey];
+    if (trajConfig && trajConfig.aoeOnImpact) {
+        spawnAoeNeonShockwave(hitPos, weaponKey);
+    }
     
     // Extra effects for higher-tier weapons
     if (weaponKey === '5x') {
@@ -8491,10 +8538,7 @@ async function spawnWeaponHitEffect(weaponKey, hitPos, hitFish, bulletDirection)
         applyExplosionKnockback(hitPos, 200, 150);
     }
     
-    // Try to spawn GLB hit effect as well (visual overlay)
-    if (weaponGLBState.enabled && glbConfig) {
-        await spawnGLBHitEffect(weaponKey, hitPos, bulletDirection, hitFish);
-    }
+    // NOTE: GLB hit effect (white circle overlay) intentionally removed per user feedback
 }
 
 // Spawn GLB hit effect model - REFACTORED to use VFX manager
@@ -8921,6 +8965,338 @@ function spawnNeonShockwaveRing(position, weaponKey) {
     });
 }
 
+// ==================== HIT EFFECT OPTION A: NEON CROSS FLASH ====================
+// Sharp neon cross/star burst that expands and fades, with small pixel fragments
+// Clean Neon Abyss style — spawns at fish impact point, NOT on UI
+function spawnNeonCrossFlash(position, weaponKey) {
+    if (!scene) return;
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    
+    // === Cross beams: 4 thin rectangles arranged as a + shape (scaled down for subtlety) ===
+    const armCount = 4;
+    const armLength = 8;   // Max length of each arm (was 18, reduced for subtlety)
+    const armWidth = 1;    // Thin neon line (was 2)
+    
+    for (let i = 0; i < armCount; i++) {
+        const angle = (i / armCount) * Math.PI * 2 + Math.random() * 0.2; // slight randomness
+        
+        const armGeo = new THREE.PlaneGeometry(armWidth, armLength);
+        const armMat = new THREE.MeshBasicMaterial({
+            color: colors.primary,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        
+        const arm = new THREE.Mesh(armGeo, armMat);
+        arm.position.copy(position);
+        arm.rotation.z = angle;
+        
+        // Face camera
+        if (camera) arm.lookAt(camera.position);
+        arm.rotateZ(angle);
+        
+        scene.add(arm);
+        
+        addVfxEffect({
+            type: 'neonCrossArm',
+            mesh: arm,
+            material: armMat,
+            duration: 200, // 0.2s fast flash (was 250)
+            maxLength: armLength,
+            
+            update(dt, elapsed) {
+                const progress = Math.min(elapsed / this.duration, 1);
+                
+                // Scale out fast, then fade
+                const scalePhase = progress < 0.3 ? (progress / 0.3) : 1.0;
+                this.mesh.scale.set(1, scalePhase, 1);
+                
+                // Fade out after peak (subtle)
+                this.material.opacity = progress < 0.3 ? 0.7 : (0.7 * (1.0 - (progress - 0.3) / 0.7));
+                
+                return progress < 1;
+            },
+            
+            cleanup() {
+                scene.remove(this.mesh);
+                this.material.dispose();
+            }
+        });
+    }
+    
+    // === Center glow: small additive sphere flash (scaled down) ===
+    const glowGeo = new THREE.SphereGeometry(2, 8, 8); // was 4, reduced
+    const glowMat = new THREE.MeshBasicMaterial({
+        color: colors.glow,
+        transparent: true,
+        opacity: 0.5, // was 0.9, reduced for subtlety
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.position.copy(position);
+    scene.add(glow);
+    
+    addVfxEffect({
+        type: 'neonCrossGlow',
+        mesh: glow,
+        material: glowMat,
+        duration: 150, // was 200
+        
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            
+            // Quick expand + fade (smaller scale)
+            const scale = 1.0 + progress * 1.0; // was 2.0
+            this.mesh.scale.set(scale, scale, scale);
+            this.material.opacity = 0.5 * (1.0 - progress);
+            
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            this.material.dispose();
+        }
+    });
+    
+    // === 4 tiny neon shards flying outward (was 6, reduced) ===
+    for (let i = 0; i < 4; i++) {
+        const shardGeo = new THREE.PlaneGeometry(1, 2.5); // was 1.5x4, reduced
+        const shardMat = new THREE.MeshBasicMaterial({
+            color: i % 2 === 0 ? colors.primary : colors.secondary,
+            transparent: true,
+            opacity: 0.6, // was 0.9
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        
+        const shard = new THREE.Mesh(shardGeo, shardMat);
+        shard.position.copy(position);
+        
+        const theta = Math.random() * Math.PI * 2;
+        const phi = (Math.random() - 0.5) * Math.PI;
+        const speed = 80 + Math.random() * 100; // was 150+200, reduced
+        
+        scene.add(shard);
+        
+        addVfxEffect({
+            type: 'neonCrossShard',
+            mesh: shard,
+            material: shardMat,
+            vx: Math.cos(theta) * Math.cos(phi) * speed,
+            vy: Math.sin(phi) * speed * 0.5 + 50,
+            vz: Math.sin(theta) * Math.cos(phi) * speed,
+            duration: 300, // was 400
+            spin: (Math.random() - 0.5) * 20,
+            
+            update(dt, elapsed) {
+                const progress = Math.min(elapsed / this.duration, 1);
+                
+                this.mesh.position.x += this.vx * dt;
+                this.mesh.position.y += this.vy * dt;
+                this.mesh.position.z += this.vz * dt;
+                this.vy -= 200 * dt; // gravity
+                
+                this.mesh.rotation.z += this.spin * dt;
+                this.material.opacity = 0.6 * (1.0 - progress); // was 0.9
+                
+                const shrink = 1.0 - progress * 0.7;
+                this.mesh.scale.set(shrink, shrink, shrink);
+                
+                return progress < 1;
+            },
+            
+            cleanup() {
+                scene.remove(this.mesh);
+                this.material.dispose();
+            }
+        });
+    }
+}
+
+// ==================== 5X WEAPON: AOE NEON SHOCKWAVE ====================
+// Subtle expanding neon shockwave ring for 5x weapon AOE impact
+// HARD CONSTRAINT: Total diameter MUST NOT exceed 10 units (max radius = 5)
+function spawnAoeNeonShockwave(position, weaponKey) {
+    if (!scene) return;
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    
+    // === Outer ring: subtle expanding neon circle ===
+    const segments = 64;
+    const ringPositions = new Float32Array(segments * 3);
+    const initialRadius = 1;
+    const maxRadius = 6; // HARD LIMIT: max 6 units radius (was 50)
+    
+    for (let i = 0; i < segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        ringPositions[i * 3] = position.x + Math.cos(angle) * initialRadius;
+        ringPositions[i * 3 + 1] = position.y;
+        ringPositions[i * 3 + 2] = position.z + Math.sin(angle) * initialRadius;
+    }
+    
+    const ringGeo = new THREE.BufferGeometry();
+    ringGeo.setAttribute('position', new THREE.BufferAttribute(ringPositions, 3));
+    
+    const ringMat = new THREE.LineBasicMaterial({
+        color: colors.glow,
+        transparent: true,
+        opacity: 0.35, // REDUCED: faint subtle energy ripple (was 1.0)
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        linewidth: 1
+    });
+    
+    const ring = new THREE.LineLoop(ringGeo, ringMat);
+    scene.add(ring);
+    
+    addVfxEffect({
+        type: 'aoeShockwaveOuter',
+        mesh: ring,
+        geometry: ringGeo,
+        material: ringMat,
+        centerX: position.x,
+        centerY: position.y,
+        centerZ: position.z,
+        segments: segments,
+        initialRadius: initialRadius,
+        maxRadius: maxRadius,
+        duration: 300, // 0.3s expansion (was 400)
+        
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            
+            const r = this.initialRadius + (this.maxRadius - this.initialRadius) * Math.pow(progress, 0.6);
+            const pos = this.geometry.attributes.position.array;
+            for (let i = 0; i < this.segments; i++) {
+                const angle = (i / this.segments) * Math.PI * 2;
+                pos[i * 3] = this.centerX + Math.cos(angle) * r;
+                pos[i * 3 + 1] = this.centerY;
+                pos[i * 3 + 2] = this.centerZ + Math.sin(angle) * r;
+            }
+            this.geometry.attributes.position.needsUpdate = true;
+            
+            this.material.opacity = 0.35 * (1.0 - progress * progress); // faint ripple
+            
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.material.dispose();
+        }
+    });
+    
+    // === Inner ring: secondary color, slightly delayed ===
+    const innerPositions = new Float32Array(segments * 3);
+    for (let i = 0; i < segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        innerPositions[i * 3] = position.x + Math.cos(angle) * initialRadius;
+        innerPositions[i * 3 + 1] = position.y;
+        innerPositions[i * 3 + 2] = position.z + Math.sin(angle) * initialRadius;
+    }
+    
+    const innerGeo = new THREE.BufferGeometry();
+    innerGeo.setAttribute('position', new THREE.BufferAttribute(innerPositions, 3));
+    
+    const innerMat = new THREE.LineBasicMaterial({
+        color: colors.secondary,
+        transparent: true,
+        opacity: 0.25, // REDUCED: faint subtle energy ripple (was 0.8)
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    
+    const innerRing = new THREE.LineLoop(innerGeo, innerMat);
+    scene.add(innerRing);
+    
+    addVfxEffect({
+        type: 'aoeShockwaveInner',
+        mesh: innerRing,
+        geometry: innerGeo,
+        material: innerMat,
+        centerX: position.x,
+        centerY: position.y,
+        centerZ: position.z,
+        segments: segments,
+        initialRadius: initialRadius,
+        maxRadius: 3, // HARD LIMIT: max 3 units radius (was maxRadius * 0.7 = 35)
+        duration: 250, // was 350
+        
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            
+            // Slight delay: don't start expanding until 50ms
+            const adjustedProgress = Math.max(0, (elapsed - 50) / (this.duration - 50));
+            if (adjustedProgress <= 0) return true;
+            
+            const r = this.initialRadius + (this.maxRadius - this.initialRadius) * Math.pow(adjustedProgress, 0.6);
+            const pos = this.geometry.attributes.position.array;
+            for (let i = 0; i < this.segments; i++) {
+                const angle = (i / this.segments) * Math.PI * 2;
+                pos[i * 3] = this.centerX + Math.cos(angle) * r;
+                pos[i * 3 + 1] = this.centerY;
+                pos[i * 3 + 2] = this.centerZ + Math.sin(angle) * r;
+            }
+            this.geometry.attributes.position.needsUpdate = true;
+            
+            this.material.opacity = 0.25 * (1.0 - adjustedProgress); // faint ripple
+            
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.material.dispose();
+        }
+    });
+    
+    // === Ground flash: small flat disc at impact (scaled down) ===
+    const discGeo = new THREE.CircleGeometry(2, 16); // was maxRadius*0.3=15, now 2 units
+    const discMat = new THREE.MeshBasicMaterial({
+        color: colors.glow,
+        transparent: true,
+        opacity: 0.15, // REDUCED: very faint (was 0.4)
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    disc.position.copy(position);
+    disc.rotation.x = -Math.PI / 2; // flat on XZ plane
+    scene.add(disc);
+    
+    addVfxEffect({
+        type: 'aoeGroundFlash',
+        mesh: disc,
+        material: discMat,
+        duration: 200, // was 300
+        
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            
+            const scale = 1.0 + progress * 1.5; // was 3.0
+            this.mesh.scale.set(scale, scale, scale);
+            this.material.opacity = 0.15 * (1.0 - progress * progress);
+            
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            this.material.dispose();
+        }
+    });
+}
+
 // ==================== NEON ABYSS: DIGITAL RIBBON GHOST SPAWNER ====================
 // Spawns ghost frame VFX at bullet position (called from Bullet.update)
 function spawnDigitalRibbonGhost(position, weaponKey, ghostIndex) {
@@ -9029,6 +9405,191 @@ function spawnDigitalRibbonGlitch(position, direction, weaponKey) {
             }
         });
     }
+}
+
+// ==================== PULSE DIAMOND: DIGITAL DUST TRAIL SPAWNER ====================
+// Spawns 2x2 glowing squares behind the bullet every 20ms with ±15° hue shift
+// PERFORMANCE: Uses cached geometry from vfxGeometryCache.dustSquare
+function spawnPulseDiamondDust(position, weaponKey) {
+    if (!scene) return;
+    if (!vfxGeometryCache.dustSquare) initVfxGeometryCache();
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    const cfg = PULSE_DIAMOND_CONFIG;
+    
+    for (let i = 0; i < cfg.trailCount; i++) {
+        // Apply ±15° hue shift to primary color
+        const baseColor = new THREE.Color(colors.primary);
+        const hsl = {};
+        baseColor.getHSL(hsl);
+        hsl.h += ((Math.random() - 0.5) * 2 * cfg.trailHueShift) / 360;
+        if (hsl.h < 0) hsl.h += 1;
+        if (hsl.h > 1) hsl.h -= 1;
+        const dustColor = new THREE.Color().setHSL(hsl.h, hsl.s, hsl.l);
+        
+        const dustMat = new THREE.MeshBasicMaterial({
+            color: dustColor,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        
+        const dust = new THREE.Mesh(vfxGeometryCache.dustSquare, dustMat);
+        const s = cfg.trailSize;
+        dust.scale.set(s, s, s);
+        dust.position.copy(position);
+        // Small random offset
+        dust.position.x += (Math.random() - 0.5) * 4;
+        dust.position.y += (Math.random() - 0.5) * 4;
+        dust.position.z += (Math.random() - 0.5) * 4;
+        // Random rotation for variety
+        dust.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        
+        scene.add(dust);
+        
+        addVfxEffect({
+            type: 'pulseDiamondDust',
+            mesh: dust,
+            material: dustMat,
+            duration: cfg.trailLifetime, // 300ms
+            
+            update(dt, elapsed) {
+                const progress = Math.min(elapsed / this.duration, 1);
+                // Fade out + slight shrink
+                this.material.opacity = 0.9 * (1 - progress);
+                const shrink = s * (1 - progress * 0.6);
+                this.mesh.scale.set(shrink, shrink, shrink);
+                // Slow spin
+                this.mesh.rotation.z += 3 * dt;
+                return progress < 1;
+            },
+            
+            cleanup() {
+                scene.remove(this.mesh);
+                this.material.dispose();
+            }
+        });
+    }
+}
+
+// ==================== PULSE DIAMOND: MICRO-SQUARE BURST SPAWNER ====================
+// Spawns 4 tiny 2x2 squares ejecting outward on each pulse peak
+// PERFORMANCE: Uses cached geometry from vfxGeometryCache.microSquare
+function spawnPulseDiamondMicroBurst(position, weaponKey) {
+    if (!scene) return;
+    if (!vfxGeometryCache.microSquare) initVfxGeometryCache();
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    const cfg = PULSE_DIAMOND_CONFIG;
+    
+    for (let i = 0; i < cfg.microSquareCount; i++) {
+        const burstMat = new THREE.MeshBasicMaterial({
+            color: colors.glow,
+            transparent: true,
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        
+        const sq = new THREE.Mesh(vfxGeometryCache.microSquare, burstMat);
+        const ms = cfg.microSquareSize;
+        sq.scale.set(ms, ms, ms);
+        sq.position.copy(position);
+        sq.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
+        
+        scene.add(sq);
+        
+        // Random outward velocity
+        const angle = (i / cfg.microSquareCount) * Math.PI * 2 + Math.random() * 0.5;
+        const vx = Math.cos(angle) * cfg.microSquareSpeed;
+        const vy = (Math.random() - 0.5) * cfg.microSquareSpeed * 0.5;
+        const vz = Math.sin(angle) * cfg.microSquareSpeed;
+        
+        addVfxEffect({
+            type: 'pulseDiamondMicroBurst',
+            mesh: sq,
+            material: burstMat,
+            vx: vx, vy: vy, vz: vz,
+            duration: cfg.microSquareLifetime, // 150ms
+            
+            update(dt, elapsed) {
+                const progress = Math.min(elapsed / this.duration, 1);
+                this.mesh.position.x += this.vx * dt;
+                this.mesh.position.y += this.vy * dt;
+                this.mesh.position.z += this.vz * dt;
+                this.mesh.rotation.z += 10 * dt;
+                this.material.opacity = 1.0 - progress;
+                const shrink = ms * (1 - progress * 0.5);
+                this.mesh.scale.set(shrink, shrink, shrink);
+                return progress < 1;
+            },
+            
+            cleanup() {
+                scene.remove(this.mesh);
+                this.material.dispose();
+            }
+        });
+    }
+}
+
+// ==================== PULSE DIAMOND: IMPACT DIAMOND (for 8x Laser) ====================
+// Spawns a pulsing diamond at the 8x laser impact point
+function spawnPulseDiamondAtImpact(position, weaponKey) {
+    if (!scene) return;
+    if (!vfxGeometryCache.pulseDiamond) initVfxGeometryCache();
+    
+    const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
+    const cfg = PULSE_DIAMOND_CONFIG;
+    
+    const diamondMat = new THREE.MeshBasicMaterial({
+        color: colors.primary,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    
+    const diamond = new THREE.Mesh(vfxGeometryCache.pulseDiamond, diamondMat);
+    const ds = cfg.diamondSize;
+    diamond.scale.set(ds, ds, ds);
+    diamond.position.copy(position);
+    
+    scene.add(diamond);
+    
+    addVfxEffect({
+        type: 'pulseDiamondImpact',
+        mesh: diamond,
+        material: diamondMat,
+        duration: 400, // 400ms visible at impact
+        
+        update(dt, elapsed) {
+            const progress = Math.min(elapsed / this.duration, 1);
+            // Z-axis rotation (360°/s)
+            this.mesh.rotation.z += cfg.rotationSpeed * dt;
+            // Scale pulse (1.0 → 1.3 → 1.0)
+            const pulsePhase = (elapsed / 1000) * cfg.pulseFrequency * Math.PI * 2;
+            const pulseFactor = cfg.pulseMinScale + (cfg.pulseMaxScale - cfg.pulseMinScale) * (0.5 + 0.5 * Math.sin(pulsePhase));
+            const s = ds * pulseFactor * (1 - progress * 0.3);
+            this.mesh.scale.set(s, s, s);
+            // Fade out in last 40%
+            if (progress > 0.6) {
+                this.material.opacity = 1.0 - ((progress - 0.6) / 0.4);
+            }
+            // Spawn micro-squares at pulse peaks
+            if (Math.sin(pulsePhase) > 0.95 && elapsed > 50) {
+                spawnPulseDiamondMicroBurst(this.mesh.position, weaponKey);
+            }
+            return progress < 1;
+        },
+        
+        cleanup() {
+            scene.remove(this.mesh);
+            this.material.dispose();
+        }
+    });
 }
 
 // Spawn mega explosion (three-stage for 8x weapon) - REFACTORED to use VFX manager
@@ -17833,6 +18394,11 @@ class Bullet {
         this._glitchTimer = 0;      // Accumulator for glitch spawn interval
         this._flickerTimer = 0;     // Accumulator for CRT flicker
         
+        // PULSE DIAMOND: Projectile state (Option B)
+        this._pulseElapsed = 0;     // Elapsed time for pulse oscillation
+        this._dustTimer = 0;        // Accumulator for digital dust trail
+        this._lastMicroBurst = 0;   // Prevent double micro-burst in same frame
+        
         this.createMesh();
     }
     
@@ -17880,6 +18446,36 @@ class Bullet {
         this.glowTrail = new THREE.Mesh(glowTrailGeo, this.glowTrailMat);
         this.glowTrail.visible = false;
         this.group.add(this.glowTrail);
+        
+        // PULSE DIAMOND: Rotating glowing diamond projectile (Option B)
+        // Uses OctahedronGeometry for diamond shape — added to proceduralGroup
+        if (!vfxGeometryCache.pulseDiamond) initVfxGeometryCache();
+        this.diamondMat = new THREE.MeshBasicMaterial({
+            color: 0x00ddff,
+            transparent: true,
+            opacity: 0.95,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        this.diamondMesh = new THREE.Mesh(vfxGeometryCache.pulseDiamond, this.diamondMat);
+        this.diamondMesh.visible = false;
+        const ds = PULSE_DIAMOND_CONFIG.diamondSize;
+        this.diamondMesh.scale.set(ds, ds, ds);
+        this.proceduralGroup.add(this.diamondMesh);
+        
+        // Inner glow core for diamond (smaller, brighter)
+        this.diamondGlowMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        this.diamondGlow = new THREE.Mesh(vfxGeometryCache.pulseDiamond, this.diamondGlowMat);
+        this.diamondGlow.visible = false;
+        const gs = ds * 0.5;
+        this.diamondGlow.scale.set(gs, gs, gs);
+        this.proceduralGroup.add(this.diamondGlow);
         
         this.group.visible = false;
         bulletGroup.add(this.group);
@@ -18004,8 +18600,25 @@ class Bullet {
             this._ghostIndex = 0;
             this._glitchTimer = 0;
             this._flickerTimer = 0;
+            
+            // PULSE DIAMOND: Activate diamond visual for all projectile weapons
+            this.diamondMat.color.setHex(neonColors.primary);
+            this.diamondGlowMat.color.setHex(neonColors.glow);
+            this.diamondMesh.visible = true;
+            this.diamondGlow.visible = true;
+            this.diamondMesh.rotation.set(0, 0, 0);
+            this.diamondGlow.rotation.set(0, 0, 0);
+            this._pulseElapsed = 0;
+            this._dustTimer = 0;
+            this._lastMicroBurst = 0;
+            // Hide legacy sphere bullet when diamond is active
+            this.bullet.visible = false;
+            this.trail.visible = false;
         } else {
             this.glowTrail.visible = false;
+            // Hide diamond for non-projectile types
+            this.diamondMesh.visible = false;
+            this.diamondGlow.visible = false;
         }
     }
     
@@ -18052,6 +18665,37 @@ class Bullet {
             if (this._glitchTimer >= 0.08) {
                 this._glitchTimer = 0;
                 spawnDigitalRibbonGlitch(this.group.position, this.velocity, this.weaponKey);
+            }
+        }
+        
+        // PULSE DIAMOND: Rotation, scale oscillation, micro-square bursts, digital dust trail
+        if (this.diamondMesh.visible) {
+            const pdCfg = PULSE_DIAMOND_CONFIG;
+            this._pulseElapsed += deltaTime * 1000; // Convert to ms
+            
+            // Z-axis rotation (360°/s) — independent of group lookAt
+            this.diamondMesh.rotation.z += pdCfg.rotationSpeed * deltaTime;
+            this.diamondGlow.rotation.z -= pdCfg.rotationSpeed * deltaTime * 0.7; // Counter-rotate inner
+            
+            // Scale oscillation (1.0→1.3→1.0 every 0.2s)
+            const pulsePhase = (this._pulseElapsed / 1000) * pdCfg.pulseFrequency * Math.PI * 2;
+            const pulseFactor = pdCfg.pulseMinScale + (pdCfg.pulseMaxScale - pdCfg.pulseMinScale) * (0.5 + 0.5 * Math.sin(pulsePhase));
+            const ds = pdCfg.diamondSize * pulseFactor;
+            this.diamondMesh.scale.set(ds, ds, ds);
+            const gs = ds * 0.5;
+            this.diamondGlow.scale.set(gs, gs, gs);
+            
+            // Micro-square bursts at pulse peaks (sin > 0.95)
+            if (Math.sin(pulsePhase) > 0.95 && this._pulseElapsed - this._lastMicroBurst > 100) {
+                this._lastMicroBurst = this._pulseElapsed;
+                spawnPulseDiamondMicroBurst(this.group.position, this.weaponKey);
+            }
+            
+            // Digital Dust trail: 2x2 squares every 20ms
+            this._dustTimer += deltaTime;
+            if (this._dustTimer >= pdCfg.trailInterval) {
+                this._dustTimer = 0;
+                spawnPulseDiamondDust(this.group.position, this.weaponKey);
             }
         }
         
@@ -18136,6 +18780,8 @@ class Bullet {
                     // 5X ROCKET: Straight line projectile with explosion on impact
                     // Trigger explosion at hit point (damages all fish in radius)
                     triggerExplosion(bulletTempVectors.hitPos, this.weaponKey);
+                    // WEAPON AUDIT: 5x rocket also triggers Neon Abyss hit effect (including AOE shockwave)
+                    spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                     
                     // Screen shake for rocket impact
                     triggerScreenShakeWithStrength(6, 80);
@@ -18147,7 +18793,7 @@ class Bullet {
                     // Trigger chain lightning effect (always show for visual feedback)
                     triggerChainLightning(fish, this.weaponKey, weapon.damage);
                     
-                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
+                    // REVISED: Removed createHitParticles (white circle artifact)
                     spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                     playWeaponHitSound(this.weaponKey);
                     
@@ -18166,7 +18812,7 @@ class Bullet {
                 } else if (weapon.type === 'laser') {
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey);
                     
-                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 8);
+                    // REVISED: Removed createHitParticles (white circle artifact)
                     spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                     playWeaponHitSound(this.weaponKey);
                     continue;
@@ -18174,7 +18820,7 @@ class Bullet {
                     // Standard projectile or spread: single target damage
                     const killed = fish.takeDamage(weapon.damage, this.weaponKey, this.spreadIndex);
                     
-                    createHitParticles(bulletTempVectors.hitPos, weapon.color, 5);
+                    // REVISED: Removed createHitParticles (white circle artifact)
                     spawnWeaponHitEffect(this.weaponKey, bulletTempVectors.hitPos, fish, bulletTempVectors.bulletDir);
                     playWeaponHitSound(this.weaponKey);
                 }
@@ -19487,7 +20133,10 @@ function fireLaserBeam(origin, direction, weaponKey) {
             hit.fish.hp -= damage;
             hit.fish.flashHit();
             showCrosshairRingFlash();
-            createHitParticles(hit.hitPoint, weapon.color, 12);
+            // REVISED: Removed createHitParticles (white circle artifact)
+            // WEAPON AUDIT: 8x laser now triggers Pixel Shatter + Diamond impact at each hit point
+            spawnWeaponHitEffect(weaponKey, hit.hitPoint.clone(), hit.fish, laserDirection);
+            spawnPulseDiamondAtImpact(hit.hitPoint, weaponKey);
             playWeaponHitSound(weaponKey);
             if (i < results.length) {
                 const result = results[i];
@@ -19499,7 +20148,10 @@ function fireLaserBeam(origin, direction, weaponKey) {
     } else if (pierceTargets.length > 0) {
         for (const hit of pierceTargets) {
             hit.fish.takeDamage(damage, weaponKey);
-            createHitParticles(hit.hitPoint, weapon.color, 12);
+            // REVISED: Removed createHitParticles (white circle artifact)
+            // WEAPON AUDIT: 8x laser multiplayer — trigger hit VFX at impact point
+            spawnWeaponHitEffect(weaponKey, hit.hitPoint.clone(), hit.fish, laserDirection);
+            spawnPulseDiamondAtImpact(hit.hitPoint, weaponKey);
             playWeaponHitSound(weaponKey);
         }
     }
