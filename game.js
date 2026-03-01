@@ -18186,8 +18186,8 @@ class ClientRTPPhase1 {
         pState.budgetRemainingFp += budgetTotalFp;
         fState.sumCostFp += weaponCostFp * coinValue;
 
-        const hardPityThreshold = Math.floor(config.n1Fp * coinValue / weaponMult);
-        if (fState.sumCostFp >= hardPityThreshold) {
+        const hardPityThreshold = Math.floor(config.n1Fp * coinValue);
+        if (fState.sumCostFp >= hardPityThreshold && pState.budgetRemainingFp >= 0) {
             return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto, coinValue);
         }
 
@@ -18238,7 +18238,7 @@ class ClientRTPPhase1 {
             }
 
             const hardPityThreshold = Math.floor(config.n1Fp * coinValue);
-            if (fState.sumCostFp >= hardPityThreshold) {
+            if (fState.sumCostFp >= hardPityThreshold && pState.budgetRemainingFp >= 0) {
                 const killResult = this._executeKill(fState, pState, config, entry.fishId, 'hard_pity', isAuto, coinValue);
                 results.push(killResult);
                 energyCarry = true;
@@ -18276,9 +18276,6 @@ class ClientRTPPhase1 {
         const config = RTP_TIER_CONFIG[tier];
         if (!config) return { kill: false, error: 'invalid_tier' };
 
-        const fState = this._getOrCreateFishState(playerId, fishId);
-        if (fState.killed) return { kill: false, reason: 'already_killed' };
-
         const pState = this._getOrCreatePlayerState(playerId);
         const pelletCostFp = 1000;
         const coinValue = gameState.coinValue || 1;
@@ -18286,10 +18283,14 @@ class ClientRTPPhase1 {
 
         const budgetTotalFp = Math.floor(pelletCostFp * coinValue * rtpWeaponFp / RTP_SCALE);
         pState.budgetRemainingFp += budgetTotalFp;
+
+        const fState = this._getOrCreateFishState(playerId, fishId);
+        if (fState.killed) return { kill: false, reason: 'already_killed' };
+
         fState.sumCostFp += pelletCostFp * coinValue;
 
-        const hardPityThreshold = Math.floor(config.n1Fp * coinValue / 3);
-        if (fState.sumCostFp >= hardPityThreshold) {
+        const hardPityThreshold = Math.floor(config.n1Fp * coinValue);
+        if (fState.sumCostFp >= hardPityThreshold && pState.budgetRemainingFp >= 0) {
             return this._executeKill(fState, pState, config, fishId, 'hard_pity', isAuto, coinValue);
         }
 
@@ -18312,7 +18313,6 @@ class ClientRTPPhase1 {
 
         const rewardFp = (isAuto ? config.rewardAutoFp : config.rewardManualFp) * M;
         pState.budgetRemainingFp -= rewardFp;
-        pState.budgetRemainingFp = Math.max(-(config.rewardManualFp * M), pState.budgetRemainingFp);
         fState.killed = true;
         return {
             fishId,
