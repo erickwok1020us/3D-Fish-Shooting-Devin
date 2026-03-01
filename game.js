@@ -2115,6 +2115,7 @@ function updatePerfDisplay() {
         <div style="margin-left: 20px; color: #777; font-size: 10px;">HitEffects: ${cannonDetail.hitEffects.toLocaleString()}</div>
         <div>Textures: ${textures}</div>
         <div>Geometries: ${geometries}</div>
+        <div style="color: ${(textures * 4 + geometries * 0.5) > 500 ? '#ff0000' : '#00ff00'};">VRAM Est: ~${Math.round(textures * 4 + geometries * 0.5)}MB</div>
         <div style="margin-top: 6px; color: #888;">--- CPU ---</div>
         <div>Fish: ${activeFish.length} / ${maxFishCount}</div>
         <div>GLB Mixers: ${fishWithMixers}</div>
@@ -3135,8 +3136,16 @@ function createLootMeshForTier(tier) {
 function disposeLootMesh(group) {
     if (!group) return;
     group.traverse(function(child) {
-        if (child.isMesh && child.material) {
-            child.material.dispose();
+        if (child.isMesh) {
+            // VRAM FIX: Dispose geometry (was missing — leaked GPU geometry on every fish kill)
+            if (child.geometry) {
+                child.geometry.dispose();
+            }
+            // Dispose material and its textures
+            if (child.material) {
+                if (child.material.map) child.material.map.dispose();
+                child.material.dispose();
+            }
         }
     });
 }
@@ -13296,6 +13305,24 @@ function disposeMaterial(material) {
     material.dispose();
 }
 
+// VRAM FIX: Dispose cloned materials/textures from SkeletonUtils.clone() GLB models
+// These are per-instance clones that accumulate in VRAM if not explicitly freed.
+// Geometries are shared (instanced) so we do NOT dispose them here.
+function disposeGLBCloneMaterials(glbRoot) {
+    if (!glbRoot) return;
+    glbRoot.traverse(function(child) {
+        if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+                child.material.forEach(mat => disposeMaterial(mat));
+            } else {
+                disposeMaterial(child.material);
+            }
+            // Null out material reference to help GC
+            child.material = null;
+        }
+    });
+}
+
 async function buildCannonGeometryForWeapon(weaponKey) {
     const glbConfig = WEAPON_GLB_CONFIG.weapons[weaponKey];
     
@@ -22612,7 +22639,10 @@ function animate() {
         updatePerfDisplay();
     
         // DIAGNOSTIC: Log performance metrics every 60 frames (~1 second at 60fps)
+        // VRAM LEAK DETECTION: Track geometry/texture counts over time to detect leaks
         if (!window._perfDiagFrame) window._perfDiagFrame = 0;
+        if (!window._memoryBaseline) window._memoryBaseline = null;
+        if (!window._memoryLeakLog) window._memoryLeakLog = [];
         window._perfDiagFrame++;
         if (window._perfDiagFrame % 60 === 0) {
             // Count fish with active animations
@@ -22627,16 +22657,42 @@ function animate() {
                 }
             }
             
+            const currentGeo = renderer.info.memory.geometries;
+            const currentTex = renderer.info.memory.textures;
+            
             console.log('[PERF-DIAG] === Performance Diagnostics ===');
             console.log('[PERF-DIAG] Draw calls:', renderer.info.render.calls);
             console.log('[PERF-DIAG] Triangles:', renderer.info.render.triangles.toLocaleString());
-            console.log('[PERF-DIAG] Textures:', renderer.info.memory.textures);
-            console.log('[PERF-DIAG] Geometries:', renderer.info.memory.geometries);
+            console.log('[PERF-DIAG] Textures:', currentTex);
+            console.log('[PERF-DIAG] Geometries:', currentGeo);
             console.log('[PERF-DIAG] Fish count:', activeFish.length, '/ max:', CONFIG.maxFish);
             console.log('[PERF-DIAG] Fish with mixers:', totalMixers, ', with active animations:', fishWithAnimations);
             console.log('[PERF-DIAG] Active bullets:', activeBullets.length);
             console.log('[PERF-DIAG] Active particles:', activeParticles.length);
+            console.log('[PERF-DIAG] Active VFX:', typeof activeVfxEffects !== 'undefined' ? activeVfxEffects.length : 0);
+            console.log('[PERF-DIAG] Waiting coins:', typeof coinCollectionSystem !== 'undefined' ? coinCollectionSystem.waitingCoins.length : 0);
             console.log('[PERF-DIAG] FPS:', Math.round(1 / deltaTime));
+            
+            // VRAM LEAK DETECTION: Log every 30 seconds (1800 frames at 60fps)
+            if (window._perfDiagFrame % 1800 === 0) {
+                if (!window._memoryBaseline) {
+                    window._memoryBaseline = { geometries: currentGeo, textures: currentTex, time: Date.now() };
+                    console.log('[VRAM-AUDIT] Baseline set — Geometries:', currentGeo, 'Textures:', currentTex);
+                } else {
+                    const geoDelta = currentGeo - window._memoryBaseline.geometries;
+                    const texDelta = currentTex - window._memoryBaseline.textures;
+                    const elapsed = ((Date.now() - window._memoryBaseline.time) / 1000).toFixed(0);
+                    window._memoryLeakLog.push({ elapsed, geometries: currentGeo, textures: currentTex, geoDelta, texDelta });
+                    
+                    const leakStatus = (geoDelta > 50 || texDelta > 20) ? '⚠️ POTENTIAL LEAK' : '✅ STABLE';
+                    console.log(`[VRAM-AUDIT] ${leakStatus} — T+${elapsed}s | Geo: ${currentGeo} (${geoDelta >= 0 ? '+' : ''}${geoDelta}) | Tex: ${currentTex} (${texDelta >= 0 ? '+' : ''}${texDelta})`);
+                    
+                    // Log full history every 2 minutes
+                    if (window._memoryLeakLog.length % 4 === 0) {
+                        console.log('[VRAM-AUDIT] History:', JSON.stringify(window._memoryLeakLog));
+                    }
+                }
+            }
         }
         
         // Render (use EffectComposer if available, otherwise fallback to direct render)
