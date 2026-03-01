@@ -5607,11 +5607,15 @@ const DIGITAL_RIBBON_CONFIG = {
 
 // Pixel Shatter hit config (Hit Effect Option A)
 const PIXEL_SHATTER_CONFIG = {
-    cubeCount: { '1x': 10, '3x': 12, '5x': 30, '8x': 16 },  // 5x: 3x of 1x count (massive molecular shard cluster)
-    cubeSize: 5,                // Neon pixel cube size (units) — boosted for visibility
+    cubeCount: { '1x': 10, '3x': 12, '5x': 40, '8x': 16 },  // 5x: 4x of 1x count (massive square voxel cluster)
+    cubeSize: 5,                // Default neon pixel cube size (units)
+    cubeSizeOverride: { '5x': 8 },  // Per-weapon cube size override: 5x = larger solid squares
     cubeSpeed: { min: 250, max: 500 },  // Ejection speed range
-    cubeLifetime: 0.6,          // Seconds before fade out — longer for visibility
+    cubeLifetime: 0.6,          // Default seconds before fade out
+    cubeLifetimeOverride: { '5x': 0.9 },  // 5x cubes stay visible longer (solid feel)
     cubeGravity: -120,          // Slight downward pull
+    // 5x blending override: NormalBlending for solid opaque squares (not glowing/additive)
+    cubeBlendingOverride: { '5x': 'normal' },
     ringMaxRadius: 25,          // Shockwave ring max expansion (≤ Mid Splash)
     ringExpandTime: 0.2,        // Ring expansion duration (seconds)
     ringWidth: 1,               // Ring line thickness
@@ -5650,7 +5654,7 @@ const PULSE_DIAMOND_CONFIG = {
 const WEAPON_TRAJECTORY_CONFIG = {
     '1x': { speedMultiplier: 1.0, trailIntervalMult: 1.0, dustCountMult: 1.0 },      // Normal baseline
     '3x': { speedMultiplier: 1.8, trailIntervalMult: 2.5, dustCountMult: 0.5 },      // Fast: 1.8x speed, sparser trail
-    '5x': { speedMultiplier: 1.0, trailIntervalMult: 1.0, dustCountMult: 1.0, aoeOnImpact: true }, // AOE shockwave on hit
+    '5x': { speedMultiplier: 1.0, trailIntervalMult: 1.0, dustCountMult: 1.0, aoeOnImpact: false }, // FIX: Disabled AOE shockwave ring (looked like water splash, not square particles)
     '8x': { speedMultiplier: 1.0, trailIntervalMult: 1.0, dustCountMult: 1.0 },      // Laser (hitscan, no projectile)
 };
 
@@ -9163,8 +9167,14 @@ function spawnNeonPixelShatter(position, weaponKey) {
     const colors = NEON_ABYSS_COLORS[weaponKey] || NEON_ABYSS_COLORS['1x'];
     const cfg = PIXEL_SHATTER_CONFIG;
     const cubeCount = cfg.cubeCount[weaponKey] || 8;
+    // Per-weapon cube size: 5x uses larger cubes for visual parity as "Giant 1X"
+    const cubeSize = (cfg.cubeSizeOverride && cfg.cubeSizeOverride[weaponKey]) || cfg.cubeSize;
+    // Per-weapon lifetime: 5x cubes stay solid longer
+    const cubeLifetime = (cfg.cubeLifetimeOverride && cfg.cubeLifetimeOverride[weaponKey]) || cfg.cubeLifetime;
+    // Per-weapon blending: 5x uses NormalBlending for solid opaque squares (not glowing/misty)
+    const useNormalBlending = cfg.cubeBlendingOverride && cfg.cubeBlendingOverride[weaponKey] === 'normal';
     
-    // === Stage 1: Neon Pixel Cubes (8-12 glowing cubes burst outward) ===
+    // === Stage 1: Neon Pixel Cubes (burst outward as distinct squares/voxels) ===
     for (let i = 0; i < cubeCount; i++) {
         // Random brightness variation on the primary color
         const brightnessShift = 0.7 + Math.random() * 0.6; // 0.7–1.3
@@ -9175,13 +9185,13 @@ function spawnNeonPixelShatter(position, weaponKey) {
             color: cubeColor,
             transparent: true,
             opacity: 1.0,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
+            // FIX: 5x uses NormalBlending for solid hard-edged squares (not glowing/additive)
+            blending: useNormalBlending ? THREE.NormalBlending : THREE.AdditiveBlending,
+            depthWrite: useNormalBlending  // Solid squares write to depth buffer
         });
         
         const cube = new THREE.Mesh(vfxGeometryCache.neonCube, cubeMaterial);
-        const s = cfg.cubeSize;
-        cube.scale.set(s, s, s);
+        cube.scale.set(cubeSize, cubeSize, cubeSize);
         cube.position.copy(position);
         
         // Random rotation for visual variety
@@ -9201,14 +9211,16 @@ function spawnNeonPixelShatter(position, weaponKey) {
         const vy = Math.sin(phi) * speed * 0.5 + Math.random() * 100; // bias upward slightly
         const vz = Math.sin(theta) * Math.cos(phi) * speed;
         
+        const cubeDuration = cubeLifetime * 1000; // convert to ms
         addVfxEffect({
             type: 'neonPixelCube',
             mesh: cube,
             material: cubeMaterial,
             vx: vx, vy: vy, vz: vz,
             gravity: cfg.cubeGravity,
-            duration: cfg.cubeLifetime * 1000, // convert to ms
+            duration: cubeDuration,
             spinSpeed: (Math.random() - 0.5) * 15, // random spin
+            _cubeSize: cubeSize,  // store per-cube size for shrink calc
             
             update(dt, elapsed) {
                 const progress = Math.min(elapsed / this.duration, 1);
@@ -9226,7 +9238,7 @@ function spawnNeonPixelShatter(position, weaponKey) {
                 // Fade out + shrink
                 this.material.opacity = 1.0 - progress;
                 const shrink = 1.0 - progress * 0.5;
-                const sc = cfg.cubeSize * shrink;
+                const sc = this._cubeSize * shrink;
                 this.mesh.scale.set(sc, sc, sc);
                 
                 return progress < 1;
