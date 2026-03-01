@@ -7827,9 +7827,62 @@ let _rewardPopupStyle = 'neon_abyss_suction';
 function onScoreConfirmed(fishForm, rewardAmount) {
     const rewardInt = Math.round(rewardAmount);
     if (rewardInt <= 0) return;
-    addKillFeedEntry(fishForm, rewardInt);
+    // DELAYED GRATIFICATION: Kill log is now shown immediately in die() at T=0
+    // Only show reward popup and update balance UI here at T=1.2s (when coins reach cannon)
     showRewardFloat(rewardInt);
     updateUI();
+    // DELAYED GRATIFICATION: Balance scale-up animation on coin arrival
+    animateBalanceCollect();
+}
+
+// DELAYED GRATIFICATION Phase 3: Balance scale-up animation when coins reach cannon
+// Creates a satisfying "collect" feel with a quick scale pulse on the balance display
+function animateBalanceCollect() {
+    const balanceDisplay = document.getElementById('balance-display');
+    if (!balanceDisplay) return;
+    
+    // Play collect sound effect (reuse coin receive sound for satisfying feedback)
+    playCollectSound();
+    
+    // CSS scale-up pulse: 1.0 → 1.15 → 1.0 over 300ms
+    balanceDisplay.style.transition = 'transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    balanceDisplay.style.transform = 'scale(1.15)';
+    
+    // Add a brief glow effect
+    const origFilter = balanceDisplay.style.filter || '';
+    balanceDisplay.style.filter = 'drop-shadow(0 0 8px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 16px rgba(255, 180, 0, 0.4))';
+    
+    setTimeout(() => {
+        balanceDisplay.style.transition = 'transform 0.15s ease-out, filter 0.3s ease-out';
+        balanceDisplay.style.transform = 'scale(1.0)';
+        balanceDisplay.style.filter = origFilter;
+    }, 150);
+}
+
+// "Collect" sound effect — short, satisfying coin-receive chirp
+function playCollectSound() {
+    if (!audioContext) return;
+    try {
+        // Use the existing playCoinReceiveSound if available, or create a simple chirp
+        if (typeof playCoinReceiveSound === 'function') {
+            playCoinReceiveSound();
+            return;
+        }
+        // Fallback: simple collect chirp using oscillator
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioContext.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.15, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
+        osc.start(audioContext.currentTime);
+        osc.stop(audioContext.currentTime + 0.15);
+    } catch (e) {
+        // Audio not available, skip silently
+    }
 }
 
 function showRewardFloat(amount) {
@@ -10255,7 +10308,7 @@ function spawnCoinBurst(position, count) {
 const coinCollectionSystem = {
     waitingCoins: [],           // Coins waiting to be collected
     collectionTimer: 0,         // Time until next collection
-    collectionInterval: 3000,   // Wait 3 seconds before loot flies to cannon (reduced from 4s)
+    collectionInterval: 0,      // DELAYED GRATIFICATION: No batch wait — loot flies immediately after spawn (T=0.2s delay is in die())
     isCollecting: false,        // Whether collection animation is in progress
     initialized: false,
     pendingReward: 0,           // Total reward waiting to be collected (balance updates on coin arrival)
@@ -10445,7 +10498,7 @@ function triggerCoinCollection() {
             targetX: targetPos.x,
             targetY: targetPos.y,
             targetZ: targetPos.z,
-            duration: (0.6 + Math.random() * 0.3) * 1000, // 0.6-0.9s flight time
+            duration: 1000, // DELAYED GRATIFICATION: Fixed 1-second parabolic curve (T=0.2s spawn + 1.0s flight = T=1.2s balance update)
             elapsedSinceStart: 0,
             
             update(dt, elapsed) {
@@ -17636,9 +17689,15 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            // UNIQUE LOOT: x1 tier-specific loot model per kill
+            // DELAYED GRATIFICATION Phase 1 (T=0): Immediate Kill Log
+            addKillFeedEntry(this.form, Math.round(this.config.reward));
+            
+            // DELAYED GRATIFICATION Phase 2 (T=0.2s): Delayed loot spawn + fly to cannon
             const lootTierMP = getLootTier(this.form, this.isBoss);
-            spawnWaitingCoin(deathPosition, 0, lootTierMP);
+            const deathPosMP = deathPosition.clone();
+            setTimeout(() => {
+                spawnWaitingCoin(deathPosMP, 0, lootTierMP);
+            }, 200);
             // SYNC FIX: Defer reward popup until coins reach turret (same as single-player)
             // In multiplayer, balance comes from server, so winFp=0 here
             coinCollectionSystem.pendingRewards.push({
@@ -17669,9 +17728,17 @@ class Fish {
             // Play coin sound on fish kill (not on collection)
             playCoinSound(fishSize);
             
-            // UNIQUE LOOT: x1 tier-specific loot model per kill
+            // DELAYED GRATIFICATION Phase 1 (T=0): Immediate Kill Log
+            // Show fish image + reward text in kill feed right away
+            const killLogReward = winDisplay > 0 ? winDisplay : Math.round(this.config.reward);
+            addKillFeedEntry(this.form, killLogReward);
+            
+            // DELAYED GRATIFICATION Phase 2 (T=0.2s): Delayed loot spawn + fly to cannon
             const lootTierSP = getLootTier(this.form, this.isBoss);
-            spawnWaitingCoin(deathPosition, 0, lootTierSP);
+            const deathPosSP = deathPosition.clone();
+            setTimeout(() => {
+                spawnWaitingCoin(deathPosSP, 0, lootTierSP);
+            }, 200);
             
             // SYNC FIX: Defer balance update + reward popup until coins physically reach the turret
             // recordWin() is called immediately for RTP stats tracking (does not affect UI)
@@ -17686,7 +17753,7 @@ class Fish {
                 winDisplay: winDisplay,
                 fishForm: this.form
             });
-            // Note: No immediate balance/popup — synced with coin arrival
+            // Note: No immediate balance/popup — synced with coin arrival at T=1.2s
         }
         
         // BOSS SPECIES: Do NOT schedule respawn timer for boss-only species.
